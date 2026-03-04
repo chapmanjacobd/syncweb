@@ -2,6 +2,7 @@ const state = {
     folders: [],
     devices: [],
     pendingDevices: {},
+    mounts: [],
     currentFolder: null,
     currentPath: '/',
     files: [],
@@ -193,6 +194,92 @@ async function deleteFolder(id) {
     }
 }
 
+
+async function loadMounts() {
+    try {
+        const resp = await fetchAPI('/api/mounts');
+        state.mounts = await resp.json();
+        renderMounts();
+    } catch (e) {
+        showToast("Failed to load mounts", true);
+    }
+}
+
+function renderMounts() {
+    const list = document.getElementById('mount-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const flatten = (devices) => {
+        devices.forEach(d => {
+            if (d.mountpoints && d.mountpoints.length > 0) {
+                d.mountpoints.forEach(mp => {
+                    if (mp && !mp.startsWith('[')) {
+                        const li = document.createElement('li');
+                        li.className = 'folder-item';
+                        li.innerHTML = `<span class="icon">💾</span> ${mp} (${d.size})`;
+                        li.title = `${d.name} - ${d.label || 'no label'}`;
+                        li.oncontextmenu = (e) => {
+                            e.preventDefault();
+                            if (confirm(`Unmount ${mp}?`)) {
+                                unmountPoint(mp);
+                            }
+                        };
+                        list.appendChild(li);
+                    }
+                });
+            } else if (d.fstype && d.type === 'part') {
+                const li = document.createElement('li');
+                li.className = 'folder-item';
+                li.innerHTML = `<span class="icon">🔌</span> ${d.name} (${d.size}) [Unmounted]`;
+                li.style.opacity = '0.6';
+                li.onclick = () => {
+                    const mp = prompt("Enter mountpoint path:", `/mnt/${d.label || d.name}`);
+                    if (mp) mountDevice(`/dev/${d.name}`, mp);
+                };
+                list.appendChild(li);
+            }
+
+            if (d.children) flatten(d.children);
+        });
+    };
+
+    flatten(state.mounts);
+}
+
+async function mountDevice(device, mountpoint) {
+    try {
+        const resp = await fetchAPI('/api/mount', {
+            method: 'POST',
+            body: JSON.stringify({ device, mountpoint })
+        });
+        if (resp.ok) {
+            showToast("Mounted successfully");
+            loadMounts();
+        } else {
+            showToast("Mount failed", true);
+        }
+    } catch (e) {
+        showToast("Error mounting", true);
+    }
+}
+
+async function unmountPoint(mountpoint) {
+    try {
+        const resp = await fetchAPI('/api/unmount', {
+            method: 'POST',
+            body: JSON.stringify({ mountpoint })
+        });
+        if (resp.ok) {
+            showToast("Unmounted successfully");
+            loadMounts();
+        } else {
+            showToast("Unmount failed", true);
+        }
+    } catch (e) {
+        showToast("Error unmounting", true);
+    }
+}
 
 async function selectFolder(id) {
     if (id === null) {
@@ -399,7 +486,7 @@ function showToast(msg, isError = false) {
     setTimeout(() => t.style.display = 'none', 3000);
 }
 
-function refresh() { loadFolders(); loadDevices(); loadFiles(); loadStatus(); }
+function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); }
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
@@ -424,12 +511,16 @@ if (typeof module !== 'undefined' && module.exports) {
         deleteDevice,
         showFileProperties,
         addFolder,
-        deleteFolder
+        deleteFolder,
+        loadMounts,
+        mountDevice,
+        unmountPoint
     };
 } else {
     // Start app
     loadFolders();
     loadDevices();
+    loadMounts();
     loadStatus();
 
     // Add search listener for "Enter" key

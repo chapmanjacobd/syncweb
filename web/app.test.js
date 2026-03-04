@@ -15,7 +15,10 @@ import {
     deleteDevice,
     showFileProperties,
     addFolder,
-    deleteFolder
+    deleteFolder,
+    loadMounts,
+    mountDevice,
+    unmountPoint
 } from './app.js';
 
 // Mock fetch
@@ -30,6 +33,7 @@ describe('Syncweb UI', () => {
         document.body.innerHTML = `
             <ul id="folder-list"></ul>
             <ul id="device-list"></ul>
+            <ul id="mount-list"></ul>
             <ul id="file-list"></ul>
             <h2 id="current-path">/</h2>
             <button id="offline-btn">Go Offline</button>
@@ -269,6 +273,55 @@ describe('Syncweb UI', () => {
                 expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('Name'), '');
                 expect(fetch).toHaveBeenCalledWith('/api/syncweb/devices/add', expect.objectContaining({
                     body: JSON.stringify({ id: 'pending-id', name: 'new-name', introducer: false })
+                }));
+            });
+        });
+
+        describe('Mountpoint Management', () => {
+            it('loadMounts() fetches and renders mounts', async () => {
+                const mockMounts = [
+                    { name: 'sda1', mountpoints: ['/mnt/data'], size: '1T', type: 'part' },
+                    { name: 'sdb1', mountpoints: [], size: '2T', type: 'part', fstype: 'ext4' }
+                ];
+
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockMounts
+                });
+
+                await loadMounts();
+
+                expect(fetch).toHaveBeenCalledWith('/api/mounts', expect.any(Object));
+                
+                const mountList = document.getElementById('mount-list');
+                const items = mountList.getElementsByTagName('li');
+                expect(items.length).toBe(2);
+                expect(items[0].textContent).toContain('/mnt/data');
+                expect(items[1].textContent).toContain('sdb1');
+                expect(items[1].textContent).toContain('[Unmounted]');
+            });
+
+            it('mountDevice() sends POST request', async () => {
+                fetch.mockResolvedValueOnce({ ok: true }); // Mount
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload mounts
+
+                await mountDevice('/dev/sdb1', '/mnt/new');
+
+                expect(fetch).toHaveBeenCalledWith('/api/mount', expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ device: '/dev/sdb1', mountpoint: '/mnt/new' })
+                }));
+            });
+
+            it('unmountPoint() sends POST request', async () => {
+                fetch.mockResolvedValueOnce({ ok: true }); // Unmount
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload mounts
+
+                await unmountPoint('/mnt/data');
+
+                expect(fetch).toHaveBeenCalledWith('/api/unmount', expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ mountpoint: '/mnt/data' })
                 }));
             });
         });

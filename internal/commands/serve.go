@@ -53,6 +53,9 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/pending", c.authMiddleware(c.handleSyncwebPendingDevices))
 	mux.HandleFunc("/api/syncweb/devices/add", c.authMiddleware(c.handleSyncwebDevicesAdd))
 	mux.HandleFunc("/api/syncweb/devices/delete", c.authMiddleware(c.handleSyncwebDevicesDelete))
+	mux.HandleFunc("/api/mounts", c.authMiddleware(c.handleMounts))
+	mux.HandleFunc("/api/mount", c.authMiddleware(c.handleMount))
+	mux.HandleFunc("/api/unmount", c.authMiddleware(c.handleUnmount))
 	mux.HandleFunc("/api/raw", c.authMiddleware(c.handleRaw))
 
 	// File Management Routes
@@ -237,4 +240,55 @@ func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
 func (c *ServeCmd) isPathBlacklisted(path string) bool {
 	// Add implementation for path blacklisting
 	return false
+}
+
+func (c *ServeCmd) handleMounts(w http.ResponseWriter, r *http.Request) {
+	devices, err := utils.GetBlockDevices()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
+}
+
+func (c *ServeCmd) handleMount(w http.ResponseWriter, r *http.Request) {
+	if c.ReadOnly {
+		http.Error(w, "Read-only mode", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Device     string `json:"device"`
+		Mountpoint string `json:"mountpoint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := utils.Mount(req.Device, req.Mountpoint); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (c *ServeCmd) handleUnmount(w http.ResponseWriter, r *http.Request) {
+	if c.ReadOnly {
+		http.Error(w, "Read-only mode", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Mountpoint string `json:"mountpoint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := utils.Unmount(req.Mountpoint); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

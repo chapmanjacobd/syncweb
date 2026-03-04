@@ -64,6 +64,25 @@ type FilterBinsResponse struct {
 
 type PlaylistResponse []string
 
+type Mountpoint struct {
+	Name        string   `json:"name"`
+	Mountpoints []string `json:"mountpoints"`
+	Size        string   `json:"size"`
+	Type        string   `json:"type"`
+	Label       string   `json:"label"`
+	FSType      string   `json:"fstype"`
+}
+
+type BlockDevice struct {
+	Name        string        `json:"name"`
+	Mountpoints []string      `json:"mountpoints"`
+	Size        string        `json:"size"`
+	Type        string        `json:"type"`
+	Label       string        `json:"label"`
+	FSType      string        `json:"fstype"`
+	Children    []BlockDevice `json:"children,omitempty"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }

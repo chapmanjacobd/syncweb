@@ -12,9 +12,10 @@
             --accent-color: #00d4ff;
             --border-color: #2d324d;
             --hover-color: #25293d;
+            --secondary-text: #8f93a2;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
@@ -23,25 +24,42 @@
             overflow: hidden;
         }
         aside {
-            width: 250px;
+            width: 280px;
             background-color: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            padding: 1rem;
+            padding: 1.5rem;
+            transition: width 0.3s ease;
         }
         main {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 1rem;
+            padding: 1.5rem;
             overflow-y: auto;
+        }
+        h2, h3 {
+            margin-top: 0;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--secondary-text);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
         }
         .folder-list, .file-list {
             list-style: none;
@@ -49,13 +67,16 @@
             margin: 0;
         }
         .folder-item, .file-item {
-            padding: 0.5rem;
-            border-radius: 4px;
+            padding: 0.6rem 0.75rem;
+            border-radius: 6px;
             cursor: pointer;
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.25rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            user-select: none;
         }
         .folder-item:hover, .file-item:hover {
             background-color: var(--hover-color);
@@ -63,6 +84,7 @@
         .folder-item.active {
             background-color: var(--accent-color);
             color: var(--bg-color);
+            font-weight: 500;
         }
         .file-item {
             border: 1px solid transparent;
@@ -71,65 +93,158 @@
             border: 1px dashed var(--accent-color);
             background-color: var(--hover-color);
         }
-        .icon { font-size: 1.2rem; }
+        .icon { 
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .btn {
-            background: var(--sidebar-bg);
+            background: var(--hover-color);
             border: 1px solid var(--border-color);
             color: var(--text-color);
-            padding: 0.4rem 0.8rem;
-            border-radius: 4px;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
             cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
         }
-        .btn:hover { background: var(--hover-color); }
-        #toast {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
+        .btn:hover { 
+            background: var(--border-color);
+            border-color: var(--accent-color);
+        }
+        .btn-primary {
             background: var(--accent-color);
             color: var(--bg-color);
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
+            border-color: var(--accent-color);
+            font-weight: 500;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        #toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--accent-color);
+            color: var(--bg-color);
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
             display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 2000;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .secondary-info {
+            font-size: 0.8rem;
+            color: var(--secondary-text);
+            margin-left: auto;
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--hover-color);
+        }
+
+        @media (max-width: 768px) {
+            aside {
+                position: absolute;
+                left: -280px;
+                height: 100%;
+                z-index: 100;
+            }
+            aside.open {
+                left: 0;
+            }
+            #menu-btn {
+                display: flex !important;
+            }
         }
     </style>
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <aside>
         <h2>Syncweb</h2>
         <div id="folder-container">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>Folders</h3>
-                <button class="btn" style="padding: 0.1rem 0.4rem;" onclick="addFolder()">+</button>
+                <h3><i data-lucide="folders" style="width: 16px;"></i> Folders</h3>
+                <button class="btn" style="padding: 0.2rem 0.5rem;" onclick="addFolder()"><i data-lucide="plus"></i></button>
             </div>
             <ul id="folder-list" class="folder-list"></ul>
         </div>
         <div id="device-container" style="margin-top: 1rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>Devices</h3>
-                <button class="btn" style="padding: 0.1rem 0.4rem;" onclick="addDevice()">+</button>
+                <h3><i data-lucide="laptop" style="width: 16px;"></i> Devices</h3>
+                <button class="btn" style="padding: 0.2rem 0.5rem;" onclick="addDevice()"><i data-lucide="plus"></i></button>
             </div>
             <ul id="device-list" class="folder-list"></ul>
         </div>
         <div id="mount-container" style="margin-top: 1rem;">
-            <h3>Mountpoints</h3>
+            <h3><i data-lucide="database" style="width: 16px;"></i> Mountpoints</h3>
             <ul id="mount-list" class="folder-list"></ul>
         </div>
         <div style="margin-top: auto;">
-            <button class="btn" onclick="toggleOffline()" id="offline-btn">Go Offline</button>
+            <button class="btn" onclick="toggleOffline()" id="offline-btn" style="width: 100%;">
+                <i data-lucide="power"></i> <span>Go Offline</span>
+            </button>
         </div>
     </aside>
     <main>
         <div class="header">
-            <h2 id="current-path">Select a folder</h2>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <button id="menu-btn" class="btn" style="display: none; padding: 0.4rem;" onclick="toggleSidebar()">
+                    <i data-lucide="menu"></i>
+                </button>
+                <h2 id="current-path" style="margin: 0; font-size: 1.2rem;">Select a folder</h2>
+            </div>
             <div style="display: flex; gap: 0.5rem;">
                 <input type="text" id="search-input" placeholder="Search files..." class="btn" style="background: var(--bg-color); cursor: text;">
-                <button class="btn" onclick="searchFiles()">Search</button>
-                <button class="btn" onclick="refresh()">Refresh</button>
+                <button class="btn" onclick="searchFiles()"><i data-lucide="search"></i></button>
+                <button class="btn" onclick="refresh()"><i data-lucide="rotate-cw"></i></button>
             </div>
         </div>
         <ul id="file-list" class="file-list"></ul>
     </main>
     <div id="toast"></div>
+
+    <div id="add-folder-ui" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--sidebar-bg); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; z-index: 1000; width: 400px; max-height: 80vh; overflow-y: auto;">
+        <h3>Add Sync Folder</h3>
+        <div style="margin-bottom: 1rem;">
+            <label>Folder ID:</label><br>
+            <input type="text" id="new-folder-id" class="btn" style="width: 100%; background: var(--bg-color); cursor: text;">
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <label>Local Path:</label><br>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="new-folder-path" class="btn" style="flex: 1; background: var(--bg-color); cursor: text;" placeholder="/home/user/data">
+                <button class="btn" onclick="previewLocalPath()">Preview</button>
+            </div>
+        </div>
+        <div id="path-preview" style="margin-bottom: 1rem; font-size: 0.9rem; color: #888;"></div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <button class="btn" onclick="document.getElementById('add-folder-ui').style.display='none'">Cancel</button>
+            <button class="btn" style="background: var(--accent-color); color: var(--bg-color);" onclick="confirmAddFolder()">Confirm Add</button>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

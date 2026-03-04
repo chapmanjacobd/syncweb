@@ -31,6 +31,11 @@ async function fetchAPI(url, options = {}) {
     return resp;
 }
 
+function toggleSidebar() {
+    const sidebar = document.querySelector('aside');
+    sidebar.classList.toggle('open');
+}
+
 async function loadFolders() {
     try {
         const resp = await fetchAPI('/api/syncweb/folders');
@@ -65,7 +70,7 @@ function renderDevices() {
         const li = document.createElement('li');
         li.className = 'folder-item';
         li.style.color = 'var(--accent-color)';
-        li.innerHTML = `<span class="icon">🔔</span> Pending: ${id.substring(0, 7)}...`;
+        li.innerHTML = `<span class="icon"><i data-lucide="bell"></i></span> Pending: ${id.substring(0, 7)}...`;
         li.title = `Click to accept device: ${id}`;
         li.onclick = () => addDevice(id);
         list.appendChild(li);
@@ -74,8 +79,8 @@ function renderDevices() {
     state.devices.forEach(d => {
         const li = document.createElement('li');
         li.className = 'folder-item';
-        const statusIcon = d.paused ? '⏸️' : '💻';
-        li.innerHTML = `<span class="icon">${statusIcon}</span> ${d.name || d.id.substring(0, 7) + '...'}`;
+        const statusIcon = d.paused ? 'pause-circle' : 'monitor';
+        li.innerHTML = `<span class="icon"><i data-lucide="${statusIcon}"></i></span> ${d.name || d.id.substring(0, 7) + '...'}`;
         li.title = d.id;
         li.oncontextmenu = (e) => {
             e.preventDefault();
@@ -85,6 +90,7 @@ function renderDevices() {
         };
         list.appendChild(li);
     });
+    if (window.lucide) lucide.createIcons();
 }
 
 async function addDevice(suggestedId = '') {
@@ -134,14 +140,14 @@ function renderFolders() {
 
     const rootLi = document.createElement('li');
     rootLi.className = 'folder-item' + (state.currentFolder === null ? ' active' : '');
-    rootLi.innerHTML = `<span class="icon">🏠</span> [Root]`;
+    rootLi.innerHTML = `<span class="icon"><i data-lucide="home"></i></span> [Root]`;
     rootLi.onclick = () => selectFolder(null);
     list.appendChild(rootLi);
 
     state.folders.forEach(f => {
         const li = document.createElement('li');
         li.className = 'folder-item' + (state.currentFolder === f.id ? ' active' : '');
-        li.innerHTML = `<span class="icon">📂</span> ${f.id}`;
+        li.innerHTML = `<span class="icon"><i data-lucide="folder"></i></span> ${f.id}`;
         li.onclick = () => selectFolder(f.id);
         li.oncontextmenu = (e) => {
             e.preventDefault();
@@ -151,13 +157,49 @@ function renderFolders() {
         };
         list.appendChild(li);
     });
+    if (window.lucide) lucide.createIcons();
 }
 
 async function addFolder() {
-    const id = prompt("Enter Folder ID:");
-    if (!id) return;
-    const path = prompt("Enter Local Path:");
+    document.getElementById('add-folder-ui').style.display = 'block';
+    document.getElementById('path-preview').innerHTML = '';
+    document.getElementById('new-folder-id').value = '';
+    document.getElementById('new-folder-path').value = '';
+}
+
+async function previewLocalPath() {
+    const path = document.getElementById('new-folder-path').value;
     if (!path) return;
+    
+    try {
+        const resp = await fetchAPI(`/api/local/ls?path=${encodeURIComponent(path)}`);
+        if (resp.ok) {
+            const files = await resp.json();
+            let html = '<strong>Contents:</strong><div style="margin-top: 0.5rem;">';
+            files.slice(0, 5).forEach(f => {
+                const icon = f.is_dir ? 'folder' : 'file-text';
+                html += `<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;"><i data-lucide="${icon}" style="width: 14px; height: 14px;"></i> ${f.name}</div>`;
+            });
+            if (files.length > 5) html += `<div style="font-size: 0.8rem; margin-top: 0.2rem; color: var(--secondary-text);">... and ${files.length - 5} more</div>`;
+            html += '</div>';
+            document.getElementById('path-preview').innerHTML = html;
+            if (window.lucide) lucide.createIcons();
+        } else {
+            document.getElementById('path-preview').innerHTML = '<span style="color: #ff4444;">Path not found or inaccessible</span>';
+        }
+    } catch (e) {
+        document.getElementById('path-preview').innerHTML = '<span style="color: #ff4444;">Error accessing path</span>';
+    }
+}
+
+async function confirmAddFolder() {
+    const id = document.getElementById('new-folder-id').value;
+    const path = document.getElementById('new-folder-path').value;
+    
+    if (!id || !path) {
+        showToast("ID and Path required", true);
+        return;
+    }
 
     try {
         const resp = await fetchAPI('/api/syncweb/folders/add', {
@@ -166,6 +208,7 @@ async function addFolder() {
         });
         if (resp.ok) {
             showToast("Folder added");
+            document.getElementById('add-folder-ui').style.display = 'none';
             loadFolders();
         } else {
             const data = await resp.json();
@@ -175,6 +218,7 @@ async function addFolder() {
         showToast("Error adding folder", true);
     }
 }
+
 
 async function deleteFolder(id) {
     try {
@@ -217,7 +261,7 @@ function renderMounts() {
                     if (mp && !mp.startsWith('[')) {
                         const li = document.createElement('li');
                         li.className = 'folder-item';
-                        li.innerHTML = `<span class="icon">💾</span> ${mp} (${d.size})`;
+                        li.innerHTML = `<span class="icon"><i data-lucide="hard-drive"></i></span> ${mp} <span class="secondary-info">${d.size}</span>`;
                         li.title = `${d.name} - ${d.label || 'no label'}`;
                         li.oncontextmenu = (e) => {
                             e.preventDefault();
@@ -231,7 +275,7 @@ function renderMounts() {
             } else if (d.fstype && d.type === 'part') {
                 const li = document.createElement('li');
                 li.className = 'folder-item';
-                li.innerHTML = `<span class="icon">🔌</span> ${d.name} (${d.size}) [Unmounted]`;
+                li.innerHTML = `<span class="icon"><i data-lucide="plug-zap"></i></span> ${d.name} <span class="secondary-info">[Unmounted]</span>`;
                 li.style.opacity = '0.6';
                 li.onclick = () => {
                     const mp = prompt("Enter mountpoint path:", `/mnt/${d.label || d.name}`);
@@ -245,6 +289,7 @@ function renderMounts() {
     };
 
     flatten(state.mounts);
+    if (window.lucide) lucide.createIcons();
 }
 
 async function mountDevice(device, mountpoint) {
@@ -339,13 +384,13 @@ function renderFiles(isSearch = false) {
         if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
             const li = document.createElement('li');
             li.className = 'file-item';
-            li.innerHTML = `<span class="icon">⬆️</span> ..`;
+            li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> ..`;
             li.onclick = goUp;
             list.appendChild(li);
         } else if (state.currentFolder && state.currentPath === `syncweb://${state.currentFolder}/`) {
             const li = document.createElement('li');
             li.className = 'file-item';
-            li.innerHTML = `<span class="icon">⬆️</span> [Root]`;
+            li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> [Root]`;
             li.onclick = () => selectFolder(null);
             list.appendChild(li);
         }
@@ -356,7 +401,9 @@ function renderFiles(isSearch = false) {
         li.className = 'file-item';
         li.draggable = true;
         const displayName = isSearch ? f.path : f.name;
-        li.innerHTML = `<span class="icon">${f.is_dir ? '📁' : '📄'}</span> ${displayName} ${!f.local && !f.is_dir ? '☁️' : ''}`;
+        const icon = f.is_dir ? 'folder' : 'file';
+        const cloudIcon = !f.local && !f.is_dir ? ' <span class="icon" style="display:inline-block; margin-left: 0.5rem;"><i data-lucide="cloud"></i></span>' : '';
+        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> ${displayName}${cloudIcon}`;
         
         li.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
@@ -401,6 +448,7 @@ function renderFiles(isSearch = false) {
 
         list.appendChild(li);
     });
+    if (window.lucide) lucide.createIcons();
 }
 
 function goUp() {
@@ -454,14 +502,18 @@ async function triggerDownload(path) {
 
 async function toggleOffline() {
     const btn = document.getElementById('offline-btn');
-    const isOffline = btn.innerText === 'Go Online';
+    const span = btn?.querySelector('span');
+    const isOffline = span?.innerText === 'Go Online';
     try {
         const resp = await fetchAPI('/api/syncweb/toggle', {
             method: 'POST',
             body: JSON.stringify({ offline: !isOffline })
         });
         const data = await resp.json();
-        btn.innerText = data.offline ? 'Go Online' : 'Go Offline';
+        if (span) span.innerText = data.offline ? 'Go Online' : 'Go Offline';
+        const icon = btn.querySelector('i');
+        if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
+        if (window.lucide) lucide.createIcons();
         showToast(data.offline ? "Backend Stopped" : "Backend Started");
     } catch (e) {
         showToast("Toggle failed", true);
@@ -473,17 +525,30 @@ async function loadStatus() {
         const resp = await fetchAPI('/api/syncweb/status');
         const data = await resp.json();
         const btn = document.getElementById('offline-btn');
-        if (btn) btn.innerText = data.offline ? 'Go Online' : 'Go Offline';
+        if (btn) {
+            const span = btn.querySelector('span');
+            if (span) span.innerText = data.offline ? 'Go Online' : 'Go Offline';
+            const icon = btn.querySelector('i');
+            if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
+            if (window.lucide) lucide.createIcons();
+        }
     } catch (e) {}
 }
 
-function showToast(msg, isError = false) {
+function showToast(message, isError = false) {
     const t = document.getElementById('toast');
     if (!t) return;
-    t.innerText = msg;
+    t.textContent = message;
     t.style.background = isError ? '#ff4444' : 'var(--accent-color)';
+    t.style.color = isError ? '#fff' : 'var(--bg-color)';
     t.style.display = 'block';
-    setTimeout(() => t.style.display = 'none', 3000);
+
+    // Clear existing timeout if any
+    if (t.timeout) clearTimeout(t.timeout);
+
+    t.timeout = setTimeout(() => {
+        t.style.display = 'none';
+    }, 4000);
 }
 
 function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); }
@@ -514,7 +579,9 @@ if (typeof module !== 'undefined' && module.exports) {
         deleteFolder,
         loadMounts,
         mountDevice,
-        unmountPoint
+        unmountPoint,
+        previewLocalPath,
+        confirmAddFolder
     };
 } else {
     // Start app

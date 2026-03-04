@@ -11,22 +11,33 @@ import (
 )
 
 func GetMountpoints() ([]models.Mountpoint, error) {
-	out, err := exec.Command("lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").Output()
+	devices, err := GetBlockDevices()
 	if err != nil {
-		return nil, fmt.Errorf("lsblk failed: %w", err)
+		return nil, err
 	}
+	return FilterMountpoints(devices), nil
+}
 
-	var res struct {
-		Blockdevices []models.BlockDevice `json:"blockdevices"`
-	}
-	if err := json.Unmarshal(out, &res); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal lsblk output: %w", err)
-	}
-
+func FilterMountpoints(devices []models.BlockDevice) []models.Mountpoint {
 	var mounts []models.Mountpoint
 	var flatten func([]models.BlockDevice)
-	flatten = func(devices []models.BlockDevice) {
-		for _, d := range devices {
+	flatten = func(devs []models.BlockDevice) {
+		for _, d := range devs {
+			// Skip devices that include the root filesystem
+			isRootDevice := false
+			for _, mp := range d.Mountpoints {
+				if mp == "/" {
+					isRootDevice = true
+					break
+				}
+			}
+			if isRootDevice {
+				if len(d.Children) > 0 {
+					flatten(d.Children)
+				}
+				continue
+			}
+
 			if len(d.Mountpoints) > 0 {
 				hasRealMount := false
 				for _, mp := range d.Mountpoints {
@@ -52,8 +63,8 @@ func GetMountpoints() ([]models.Mountpoint, error) {
 		}
 	}
 
-	flatten(res.Blockdevices)
-	return mounts, nil
+	flatten(devices)
+	return mounts
 }
 
 func GetBlockDevices() ([]models.BlockDevice, error) {
@@ -61,16 +72,19 @@ func GetBlockDevices() ([]models.BlockDevice, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lsblk failed: %w", err)
 	}
+	return ParseLsblkOutput(out)
+}
 
+func ParseLsblkOutput(data []byte) ([]models.BlockDevice, error) {
 	var res struct {
 		Blockdevices []models.BlockDevice `json:"blockdevices"`
 	}
-	if err := json.Unmarshal(out, &res); err != nil {
+	if err := json.Unmarshal(data, &res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal lsblk output: %w", err)
 	}
-
 	return res.Blockdevices, nil
 }
+
 
 func Mount(device string, mountpoint string) error {
 	out, err := exec.Command("mount", device, mountpoint).CombinedOutput()
@@ -113,10 +127,6 @@ func Unmount(mountpoint string) error {
 		return nil
 	}
 
-	// If it's a removable device or has multiple mountpoints, we might want to unmount all
-	// But according to requirements: unmount all points when unmounting a removable device.
-	// For now let's identify all mountpoints for this device.
-	
 	for _, mp := range targetDevice.Mountpoints {
 		if mp == "/" {
 			return fmt.Errorf("cannot unmount root filesystem")
@@ -162,11 +172,16 @@ func IsUdisks2Mount(path string) bool {
 	return strings.HasPrefix(path, "/run/media/") || strings.HasPrefix(path, "/media/")
 }
 
-func SafePrepareForRead(deviceName string) error {
-	// 1. Get all block devices
-	devices, err := GetBlockDevices()
-	if err != nil {
-		return err
+func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevice) error {
+	var devices []models.BlockDevice
+	var err error
+	if len(optionalDevices) > 0 {
+		devices = optionalDevices[0]
+	} else {
+		devices, err = GetBlockDevices()
+		if err != nil {
+			return err
+		}
 	}
 
 	// 2. Find our target device
@@ -189,12 +204,19 @@ func SafePrepareForRead(deviceName string) error {
 		return fmt.Errorf("device %s not found", deviceName)
 	}
 
-	// 3. Skip if thread-safe (Btrfs)
+	// 3. Skip if root device (safety)
+	for _, mp := range target.Mountpoints {
+		if mp == "/" {
+			return nil
+		}
+	}
+
+	// 4. Skip if thread-safe (Btrfs)
 	if target.FSType == "btrfs" {
 		return nil
 	}
 
-	// 4. Identify preferred mountpoint (fstab > udisks2 > others)
+	// 5. Identify preferred mountpoint (fstab > udisks2 > others)
 	if len(target.Mountpoints) <= 1 {
 		return nil
 	}
@@ -220,7 +242,7 @@ func SafePrepareForRead(deviceName string) error {
 		preferred = target.Mountpoints[0]
 	}
 
-	// 5. Unmount others
+	// 6. Unmount others
 	for _, mp := range target.Mountpoints {
 		if mp == preferred || mp == "" || strings.HasPrefix(mp, "[") {
 			continue
@@ -236,4 +258,3 @@ func SafePrepareForRead(deviceName string) error {
 
 	return nil
 }
-

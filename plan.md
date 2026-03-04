@@ -2,16 +2,21 @@
 
 ## Completed
 - CLI Parity (Search, Devices, Folder Management)
-- Comprehensive Web UI Tests (18/18 passing)
 - Mountpoints Management UI (Listing, Mounting, Unmounting)
 - Safe Removable Device Access (Unmounting multiple points, prioritizing fstab/udisks2)
 - Automated Loop Device Tests for Mounts
+- Root Device Exclusion (Ensuring "/" is never unmounted or treated as duplicate)
+- Folder Preview UI
+- UI/UX Polishing (Lucide icons, modern styling, responsive sidebar, enhanced notifications)
 
 ## Next Steps
 
-1.  **UI/UX Enhancements:**
-    - Add a preview for Syncthing folders before adding them (listing contents of local path).
-    - Improved styling for file/folder icons and layout.
-2.  **Stability & Automation:**
-    - Auto-unmount duplicate mountpoints on initial scan (Backend).
-    - Ensure CI runs both Go and Vitest tests.
+1.  **Backend Robustness:**
+    - Auto-unmount duplicate mountpoints on initial scan.
+    - Implement `/api/syncweb/config` to view/edit raw syncthing settings.
+2.  **Advanced File Operations:**
+    - Implementation for copying files.
+    - Bulk file operations (delete, move).
+3.  **Authentication & Security:**
+    - Persistent session token (local storage).
+    - Optional password protection for the web UI.

@@ -18,7 +18,9 @@ import {
     deleteFolder,
     loadMounts,
     mountDevice,
-    unmountPoint
+    unmountPoint,
+    previewLocalPath,
+    confirmAddFolder
 } from './app.js';
 
 // Mock fetch
@@ -36,9 +38,14 @@ describe('Syncweb UI', () => {
             <ul id="mount-list"></ul>
             <ul id="file-list"></ul>
             <h2 id="current-path">/</h2>
-            <button id="offline-btn">Go Offline</button>
+            <button id="offline-btn"><i></i><span>Go Offline</span></button>
             <input id="search-input" value="">
             <div id="toast" style="display: none;"></div>
+            <div id="add-folder-ui" style="display: none;">
+                <input id="new-folder-id">
+                <input id="new-folder-path">
+                <div id="path-preview"></div>
+            </div>
         `;
 
         folderList = document.getElementById('folder-list');
@@ -162,7 +169,8 @@ describe('Syncweb UI', () => {
 
     describe('System Status', () => {
         it('toggleOffline calls API and updates button', async () => {
-            offlineBtn.innerText = 'Go Offline'; // Currently online
+            const span = offlineBtn.querySelector('span');
+            span.innerText = 'Go Offline'; // Currently online
             
             fetch.mockResolvedValueOnce({
                 ok: true,
@@ -174,7 +182,7 @@ describe('Syncweb UI', () => {
             expect(fetch).toHaveBeenCalledWith('/api/syncweb/toggle', expect.objectContaining({
                 body: JSON.stringify({ offline: true })
             }));
-            expect(offlineBtn.innerText).toBe('Go Online');
+            expect(span.innerText).toBe('Go Online');
         });
 
         it('loadStatus updates button state', async () => {
@@ -186,26 +194,53 @@ describe('Syncweb UI', () => {
             await loadStatus();
 
             expect(fetch).toHaveBeenCalledWith('/api/syncweb/status', expect.any(Object));
-            expect(offlineBtn.innerText).toBe('Go Online');
+            expect(offlineBtn.querySelector('span').innerText).toBe('Go Online');
         });
     });
 
     describe('Future Functionality (CLI Parity)', () => {
         describe('Folder Management', () => {
-            it('addFolder() sends POST request', async () => {
-                global.prompt = vi.fn()
-                    .mockReturnValueOnce('new-folder') // ID
-                    .mockReturnValueOnce('/tmp/new');  // Path
+            it('previewLocalPath() fetches local files and updates UI', async () => {
+                const pathInput = document.getElementById('new-folder-path');
+                const previewDiv = document.getElementById('path-preview');
+                pathInput.value = '/tmp/test';
+
+                const mockFiles = [
+                    { name: 'file1.txt', is_dir: false },
+                    { name: 'dir1', is_dir: true }
+                ];
+
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockFiles
+                });
+
+                await previewLocalPath();
+
+                expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/local/ls?path=%2Ftmp%2Ftest'), expect.any(Object));
+                expect(previewDiv.innerHTML).toContain('file1.txt');
+                expect(previewDiv.innerHTML).toContain('dir1');
+            });
+
+            it('confirmAddFolder() sends POST request and hides UI', async () => {
+                const idInput = document.getElementById('new-folder-id');
+                const pathInput = document.getElementById('new-folder-path');
+                const ui = document.getElementById('add-folder-ui');
+                
+                idInput.value = 'new-id';
+                pathInput.value = '/new/path';
+                ui.style.display = 'block';
 
                 fetch.mockResolvedValueOnce({ ok: true }); // Add folder
                 fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload folders
 
-                await addFolder();
+                await confirmAddFolder();
 
                 expect(fetch).toHaveBeenCalledWith('/api/syncweb/folders/add', expect.objectContaining({
                     method: 'POST',
-                    body: JSON.stringify({ id: 'new-folder', path: '/tmp/new' })
+                    body: JSON.stringify({ id: 'new-id', path: '/new/path' })
                 }));
+                expect(ui.style.display).toBe('none');
             });
 
             it('deleteFolder(id) sends POST request', async () => {

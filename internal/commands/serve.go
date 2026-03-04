@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/mounts", c.authMiddleware(c.handleMounts))
 	mux.HandleFunc("/api/mount", c.authMiddleware(c.handleMount))
 	mux.HandleFunc("/api/unmount", c.authMiddleware(c.handleUnmount))
+	mux.HandleFunc("/api/local/ls", c.authMiddleware(c.handleLocalLs))
 	mux.HandleFunc("/api/raw", c.authMiddleware(c.handleRaw))
 
 	// File Management Routes
@@ -291,4 +293,32 @@ func (c *ServeCmd) handleUnmount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "/"
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var results []LsEntry
+	for _, entry := range entries {
+		info, _ := entry.Info()
+		results = append(results, LsEntry{
+			Name:  entry.Name(),
+			Path:  filepath.Join(path, entry.Name()),
+			IsDir: entry.IsDir(),
+			Size:  info.Size(),
+			Local: true,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
 }

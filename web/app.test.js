@@ -8,7 +8,8 @@ import {
     moveFile,
     triggerDownload,
     toggleOffline,
-    loadStatus
+    loadStatus,
+    searchFiles
 } from './app.js';
 
 // Mock fetch
@@ -25,6 +26,7 @@ describe('Syncweb UI', () => {
             <ul id="file-list"></ul>
             <h2 id="current-path">/</h2>
             <button id="offline-btn">Go Offline</button>
+            <input id="search-input" value="">
             <div id="toast" style="display: none;"></div>
         `;
 
@@ -190,7 +192,29 @@ describe('Syncweb UI', () => {
         });
 
         describe('Search & Details', () => {
-            it.todo('searchFiles(query) calls find API');
+            it('searchFiles() calls find API and renders results', async () => {
+                const searchInput = document.getElementById('search-input');
+                searchInput.value = 'testfile';
+                
+                const mockResults = [
+                    { name: 'testfile.txt', is_dir: false, local: true, size: 100, path: 'syncweb://f1/testfile.txt' }
+                ];
+                
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockResults
+                });
+
+                await searchFiles();
+
+                expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/syncweb/find?q=testfile'), expect.any(Object));
+                expect(pathHeader.textContent).toContain('Search results for "testfile"');
+                
+                const items = fileList.getElementsByTagName('li');
+                expect(items.length).toBe(1);
+                expect(items[0].textContent).toContain('syncweb://f1/testfile.txt');
+            });
+
             it.todo('fileProperties(path) fetches detailed metadata');
         });
     });

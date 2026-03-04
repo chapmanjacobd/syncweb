@@ -1,10 +1,15 @@
-let state = {
+const state = {
     folders: [],
     currentFolder: null,
     currentPath: '/',
     files: [],
-    token: new URLSearchParams(window.location.search).get('token') || ''
+    token: ''
 };
+
+// Initialize token from URL if in browser
+if (typeof window !== 'undefined' && window.location) {
+    state.token = new URLSearchParams(window.location.search).get('token') || '';
+}
 
 async function fetchAPI(url, options = {}) {
     const headers = {
@@ -82,34 +87,53 @@ async function loadFiles() {
     }
 }
 
-function renderFiles() {
+async function searchFiles() {
+    const query = document.getElementById('search-input')?.value;
+    if (!query) {
+        loadFiles();
+        return;
+    }
+    try {
+        const resp = await fetchAPI(`/api/syncweb/find?q=${encodeURIComponent(query)}`);
+        state.files = await resp.json();
+        state.currentPath = `Search results for "${query}"`;
+        renderFiles(true);
+    } catch (e) {
+        showToast("Search failed", true);
+    }
+}
+
+function renderFiles(isSearch = false) {
     const list = document.getElementById('file-list');
     const pathHeader = document.getElementById('current-path');
     if (!list || !pathHeader) return;
 
-    pathHeader.innerText = state.currentPath;
+    pathHeader.textContent = state.currentPath;
     list.innerHTML = '';
 
-    // Parent dir
-    if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
-        const li = document.createElement('li');
-        li.className = 'file-item';
-        li.innerHTML = `<span class="icon">⬆️</span> ..`;
-        li.onclick = goUp;
-        list.appendChild(li);
-    } else if (state.currentFolder && state.currentPath === `syncweb://${state.currentFolder}/`) {
-        const li = document.createElement('li');
-        li.className = 'file-item';
-        li.innerHTML = `<span class="icon">⬆️</span> [Root]`;
-        li.onclick = () => selectFolder(null);
-        list.appendChild(li);
+    if (!isSearch) {
+        // Parent dir
+        if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.innerHTML = `<span class="icon">⬆️</span> ..`;
+            li.onclick = goUp;
+            list.appendChild(li);
+        } else if (state.currentFolder && state.currentPath === `syncweb://${state.currentFolder}/`) {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.innerHTML = `<span class="icon">⬆️</span> [Root]`;
+            li.onclick = () => selectFolder(null);
+            list.appendChild(li);
+        }
     }
 
     state.files.forEach(f => {
         const li = document.createElement('li');
         li.className = 'file-item';
         li.draggable = true;
-        li.innerHTML = `<span class="icon">${f.is_dir ? '📁' : '📄'}</span> ${f.name} ${!f.local && !f.is_dir ? '☁️' : ''}`;
+        const displayName = isSearch ? f.path : f.name;
+        li.innerHTML = `<span class="icon">${f.is_dir ? '📁' : '📄'}</span> ${displayName} ${!f.local && !f.is_dir ? '☁️' : ''}`;
         
         li.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
@@ -238,10 +262,16 @@ if (typeof module !== 'undefined' && module.exports) {
         toggleOffline,
         loadStatus,
         showToast,
-        refresh
+        refresh,
+        searchFiles
     };
 } else {
     // Start app
     loadFolders();
     loadStatus();
+
+    // Add search listener for "Enter" key
+    document.getElementById('search-input')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchFiles();
+    });
 }

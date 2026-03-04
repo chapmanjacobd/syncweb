@@ -107,7 +107,9 @@
     <main>
         <div class="header">
             <h2 id="current-path">Select a folder</h2>
-            <div>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="search-input" placeholder="Search files..." class="btn" style="background: var(--bg-color); cursor: text;">
+                <button class="btn" onclick="searchFiles()">Search</button>
                 <button class="btn" onclick="refresh()">Refresh</button>
             </div>
         </div>

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
+	"github.com/syncthing/syncthing/lib/protocol"
 )
 
 var (
@@ -322,7 +324,6 @@ func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSyncwebStatus returns the current status of Syncweb.
-// GET /api/syncweb/status
 func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, r *http.Request) {
 	swMu.Lock()
 	defer swMu.Unlock()
@@ -344,4 +345,59 @@ func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, r *http.Request) {
 		"status":  status,
 		"offline": offline,
 	})
+}
+
+// handleSyncwebFind searches for files across all Syncweb folders.
+// GET /api/syncweb/find?q=...
+func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Query required"})
+		return
+	}
+
+	re, err := regexp.Compile("(?i)" + query)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid regex: " + err.Error()})
+		return
+	}
+
+	var results []LsEntry
+	cfg := swInstance.Node.Cfg.RawCopy()
+	for _, f := range cfg.Folders {
+		seq, cancel := swInstance.Node.App.Internals.AllGlobalFiles(f.ID)
+		for meta := range seq {
+			if re.MatchString(meta.Name) || re.MatchString(filepath.Base(meta.Name)) {
+				fullSyncwebPath := fmt.Sprintf("syncweb://%s/%s", f.ID, meta.Name)
+				localPath, _, _ := swInstance.ResolveLocalPath(fullSyncwebPath)
+				isLocal := utils.FileExists(localPath)
+
+				results = append(results, LsEntry{
+					Name:  filepath.Base(meta.Name),
+					Path:  fullSyncwebPath,
+					IsDir: meta.Type == protocol.FileInfoTypeDirectory,
+					Local: isLocal,
+					Size:  meta.Size,
+					Type:  utils.DetectMimeType(meta.Name),
+				})
+			}
+		}
+		cancel()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
 }

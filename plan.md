@@ -21,7 +21,7 @@ These tests target features available in the CLI that should be added to the Web
 
 ## Next Steps
 
-1.  **Search Bar Implementation:**
+1.  **Search Bar Implementation (COMPLETED):**
     - Add a search input field to `web/index.html`.
     - Implement `searchFiles(query)` in `web/app.js`.
     - Implement the `searchFiles(query)` test in `web/app.test.js`.

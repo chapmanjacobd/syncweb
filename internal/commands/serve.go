@@ -43,6 +43,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/folders", c.authMiddleware(c.handleSyncwebFolders))
 	mux.HandleFunc("/api/syncweb/ls", c.authMiddleware(c.handleSyncwebLs))
 	mux.HandleFunc("/api/syncweb/find", c.authMiddleware(c.handleSyncwebFind))
+	mux.HandleFunc("/api/syncweb/stat", c.authMiddleware(c.handleSyncwebStat))
 	mux.HandleFunc("/api/syncweb/download", c.authMiddleware(c.handleSyncwebDownload))
 	mux.HandleFunc("/api/syncweb/toggle", c.authMiddleware(c.handleSyncwebToggle))
 	mux.HandleFunc("/api/syncweb/status", c.authMiddleware(c.handleSyncwebStatus))

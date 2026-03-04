@@ -12,7 +12,8 @@ import {
     searchFiles,
     loadDevices,
     addDevice,
-    deleteDevice
+    deleteDevice,
+    showFileProperties
 } from './app.js';
 
 // Mock fetch
@@ -258,7 +259,28 @@ describe('Syncweb UI', () => {
                 expect(items[0].textContent).toContain('syncweb://f1/testfile.txt');
             });
 
-            it.todo('fileProperties(path) fetches detailed metadata');
+            it('fileProperties(path) fetches detailed metadata', async () => {
+                const mockStat = {
+                    name: 'test.txt',
+                    path: 'syncweb://f1/test.txt',
+                    size: 1048576,
+                    modified: '2026-03-04T12:00:00Z',
+                    local: true
+                };
+
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockStat
+                });
+
+                global.alert = vi.fn();
+
+                await showFileProperties('syncweb://f1/test.txt');
+
+                expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/syncweb/stat?path=syncweb%3A%2F%2Ff1%2Ftest.txt'), expect.any(Object));
+                expect(global.alert).toHaveBeenCalledWith(expect.stringContaining('File: test.txt'));
+                expect(global.alert).toHaveBeenCalledWith(expect.stringContaining('1.00 MB'));
+            });
         });
     });
 });

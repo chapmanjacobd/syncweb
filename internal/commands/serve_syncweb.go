@@ -402,6 +402,67 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+// handleSyncwebStat returns detailed metadata for a file.
+// GET /api/syncweb/stat?path=syncweb://...
+func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Path required"})
+		return
+	}
+
+	localPath, folderID, err := swInstance.ResolveLocalPath(path)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	folderPath, _ := swInstance.GetFolderPath(folderID)
+	relPath, _ := filepath.Rel(folderPath, localPath)
+
+	info, ok, err := swInstance.GetGlobalFileInfo(folderID, relPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "File not found in cluster"})
+		return
+	}
+
+	isLocal := utils.FileExists(localPath)
+	res := map[string]any{
+		"name":     filepath.Base(info.Name),
+		"path":     path,
+		"size":     info.Size,
+		"modified": time.Unix(info.ModifiedS, 0),
+		"is_dir":   info.Type == protocol.FileInfoTypeDirectory,
+		"local":    isLocal,
+		"folder":   folderID,
+		"type":     utils.DetectMimeType(info.Name),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
 // handleSyncwebDevices returns a list of configured Syncthing devices.
 // GET /api/syncweb/devices
 func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) {

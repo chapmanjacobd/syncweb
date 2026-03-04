@@ -239,6 +239,11 @@ function renderFiles(isSearch = false) {
             }
         };
 
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            showFileProperties(f.path);
+        };
+
         // Drag and Drop
         li.ondragstart = (e) => {
             e.dataTransfer.setData('text/plain', f.path);
@@ -285,6 +290,20 @@ async function moveFile(src, dst) {
         }
     } catch (e) {
         showToast("Move error", true);
+    }
+}
+
+async function showFileProperties(path) {
+    try {
+        const resp = await fetchAPI(`/api/syncweb/stat?path=${encodeURIComponent(path)}`);
+        const data = await resp.json();
+        if (resp.ok) {
+            alert(`File: ${data.name}\nPath: ${data.path}\nSize: ${(data.size / 1024 / 1024).toFixed(2)} MB\nModified: ${new Date(data.modified).toLocaleString()}\nLocal: ${data.local ? 'Yes' : 'No'}`);
+        } else {
+            showToast(data.error || "Failed to fetch properties", true);
+        }
+    } catch (e) {
+        showToast("Error fetching properties", true);
     }
 }
 
@@ -354,7 +373,8 @@ if (typeof module !== 'undefined' && module.exports) {
         searchFiles,
         loadDevices,
         addDevice,
-        deleteDevice
+        deleteDevice,
+        showFileProperties
     };
 } else {
     // Start app

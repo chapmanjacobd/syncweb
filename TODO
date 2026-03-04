@@ -1,8 +1,1 @@
-add more tests
-
-search bar in web ui
-
-preview syncthing folders before adding as folders (maybe this could just bea UI orginization affordance like folder groups)
-
-mountpoints list like Android File Browser and auto-unmount duplicate mountpoints on initial scan
-
+mountpoints: auto-unmount duplicate mountpoints on initial scan. also, add eject buttons, and view unmounted and mount when clicked (keep unmounted in a separate list)

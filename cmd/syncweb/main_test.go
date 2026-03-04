@@ -1,5 +1,3 @@
-//go:build syncweb
-
 package main
 
 import (
@@ -7,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/kong"
-	"github.com/chapmanjacobd/discotheque/internal/commands"
+	"github.com/chapmanjacobd/syncweb/internal/commands"
 )
 
 func TestSyncwebCLI_Structure(t *testing.T) {

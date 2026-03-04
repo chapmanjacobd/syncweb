@@ -1,5 +1,3 @@
-//go:build syncweb
-
 package commands
 
 import (
@@ -11,11 +9,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/chapmanjacobd/discotheque/internal/models"
-	"github.com/chapmanjacobd/discotheque/internal/syncweb"
-	"github.com/chapmanjacobd/discotheque/internal/utils"
+	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 var (
@@ -39,27 +36,6 @@ func (c *ServeCmd) setupSyncweb() {
 	}
 }
 
-func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]LsEntry, counts map[string]int, path string) {
-	swMu.Lock()
-	defer swMu.Unlock()
-	if swInstance != nil && (path == "/" || path == "") && swInstance.IsRunning() {
-		for _, folder := range swInstance.GetFolders() {
-			id := folder.ID
-			entryPath := fmt.Sprintf("syncweb://%s/", id)
-			name := id
-			if localPath, ok := swInstance.GetFolderPath(id); ok {
-				name += " (" + filepath.Base(localPath) + ")"
-			}
-			resultsMap[entryPath] = LsEntry{
-				Name:  name,
-				Path:  entryPath,
-				IsDir: true,
-			}
-			counts[entryPath] = 1000 // High priority for roots
-		}
-	}
-}
-
 func (c *ServeCmd) resolveSyncwebPath(path string) (string, string, error) {
 	swMu.Lock()
 	defer swMu.Unlock()
@@ -67,26 +43,6 @@ func (c *ServeCmd) resolveSyncwebPath(path string) (string, string, error) {
 		return "", "", fmt.Errorf("syncweb not configured")
 	}
 	return swInstance.ResolveLocalPath(path)
-}
-
-func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, folderID, path, localPath string) {
-	swMu.Lock()
-	if swInstance == nil || !swInstance.IsRunning() {
-		swMu.Unlock()
-		http.Error(w, "Syncweb not configured or offline", http.StatusServiceUnavailable)
-		return
-	}
-	sw := swInstance
-	swMu.Unlock()
-
-	slog.Info("Serving remote Syncweb file via block pulling", "path", path)
-	rs, err := sw.NewReadSeeker(r.Context(), folderID, strings.TrimPrefix(path, "syncweb://"+folderID+"/"))
-	if err != nil {
-		slog.Error("Failed to create SyncwebReadSeeker", "path", path, "error", err)
-		http.Error(w, "Failed to stream remote file", http.StatusInternalServerError)
-		return
-	}
-	http.ServeContent(w, r, filepath.Base(localPath), time.Now(), rs)
 }
 
 // handleSyncwebFolders returns a list of configured Syncweb folders.

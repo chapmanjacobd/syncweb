@@ -1,0 +1,10 @@
+/web/coverage/
+/web/node_modules/
+/*.repair.lock
+/tmp
+/coverage*
+/*.db-shm
+/*.db-wal
+/*.db
+/syncthing
+/syncweb

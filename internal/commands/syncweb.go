@@ -1,5 +1,3 @@
-//go:build syncweb
-
 package commands
 
 import (
@@ -13,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/chapmanjacobd/discotheque/internal/models"
-	"github.com/chapmanjacobd/discotheque/internal/syncweb"
-	"github.com/chapmanjacobd/discotheque/internal/utils"
+	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/sevlyar/go-daemon"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"

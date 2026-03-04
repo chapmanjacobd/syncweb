@@ -1,5 +1,3 @@
-//go:build syncweb
-
 package main
 
 import (
@@ -7,13 +5,18 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
-	"github.com/chapmanjacobd/discotheque/internal/commands"
-	"github.com/chapmanjacobd/discotheque/internal/models"
-	"github.com/chapmanjacobd/discotheque/internal/utils"
+	"github.com/chapmanjacobd/syncweb/internal/commands"
+	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
+type CLI struct {
+	commands.SyncwebCmd `embed:""`
+	Serve               commands.ServeCmd `cmd:"" help:"Start the Syncweb Web UI server"`
+}
+
 func main() {
-	cli := &commands.SyncwebCmd{}
+	cli := &CLI{}
 
 	parser, err := kong.New(cli,
 		kong.Name("syncweb"),

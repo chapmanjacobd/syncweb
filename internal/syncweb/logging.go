@@ -26,7 +26,7 @@ func (h *syncthingRedirectHandler) Handle(ctx context.Context, r slog.Record) er
 		fs := runtime.CallersFrames([]uintptr{r.PC})
 		frame, _ := fs.Next()
 		if strings.Contains(frame.Function, "github.com/syncthing/syncthing") ||
-			strings.Contains(frame.Function, "github.com/chapmanjacobd/discotheque/internal/syncweb") {
+			strings.Contains(frame.Function, "github.com/chapmanjacobd/syncweb/internal/syncweb") {
 			isSyncthing = true
 		}
 	}

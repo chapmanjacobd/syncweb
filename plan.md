@@ -4,6 +4,8 @@
 - CLI Parity (Search, Devices, Folder Management)
 - Comprehensive Web UI Tests (18/18 passing)
 - Mountpoints Management UI (Listing, Mounting, Unmounting)
+- Safe Removable Device Access (Unmounting multiple points, prioritizing fstab/udisks2)
+- Automated Loop Device Tests for Mounts
 
 ## Next Steps
 

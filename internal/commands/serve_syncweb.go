@@ -36,6 +36,9 @@ func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
 			slog.Error("Failed to start Syncweb instance", "error", err)
 		} else {
 			slog.Info("Syncweb instance started", "myID", sw.Node.MyID())
+			if err := utils.AutoCleanupMounts(); err != nil {
+				slog.Warn("Failed to auto-cleanup mounts", "error", err)
+			}
 		}
 	}
 }

@@ -1,22 +1,17 @@
 # Syncweb Development Plan
 
-## Completed
-- CLI Parity (Search, Devices, Folder Management)
-- Mountpoints Management UI (Listing, Mounting, Unmounting)
-- Safe Removable Device Access (Unmounting multiple points, prioritizing fstab/udisks2)
-- Automated Loop Device Tests for Mounts
-- Root Device Exclusion (Ensuring "/" is never unmounted or treated as duplicate)
-- Folder Preview UI
-- UI/UX Polishing (Lucide icons, modern styling, responsive sidebar, enhanced notifications)
-
 ## Next Steps
 
-1.  **Backend Robustness:**
-    - Auto-unmount duplicate mountpoints on initial scan.
-    - Implement `/api/syncweb/config` to view/edit raw syncthing settings.
+1.  **Raw Configuration Editor:**
+    - Implement `/api/syncweb/config` to GET/POST raw Syncthing configuration (XML or JSON).
+    - Add a "Config" button in the sidebar to open a raw text editor.
 2.  **Advanced File Operations:**
-    - Implementation for copying files.
-    - Bulk file operations (delete, move).
+    - Implementation for copying files (`/api/file/copy`).
+    - Bulk file operations (delete, move) in the UI using checkboxes.
 3.  **Authentication & Security:**
-    - Persistent session token (local storage).
+    - Persistent session token (using local storage).
     - Optional password protection for the web UI.
+4.  **UI/UX Enhancements:**
+    - Drag-and-drop improvements (visual feedback for valid targets).
+    - Folder size calculation in the UI.
+    - Sorting options for file list (name, size, date).

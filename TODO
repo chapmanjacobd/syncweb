@@ -1,1 +1,0 @@
-mountpoints: auto-unmount duplicate mountpoints on initial scan. also, add eject buttons, and view unmounted and mount when clicked (keep unmounted in a separate list)

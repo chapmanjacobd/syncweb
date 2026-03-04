@@ -112,6 +112,46 @@ func TestSafePrepareForRead(t *testing.T) {
 	}
 }
 
+func TestAutoCleanupMounts(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "syncweb-auto-cleanup-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	imagePath := filepath.Join(tmpDir, "test.img")
+	exec.Command("truncate", "-s", "64M", imagePath).Run()
+	exec.Command("mkfs.vfat", imagePath).Run()
+
+	out, _ := exec.Command("sudo", "losetup", "-f", "--show", imagePath).Output()
+	loopDev := strings.TrimSpace(string(out))
+	defer exec.Command("sudo", "losetup", "-d", loopDev).Run()
+
+	mp1 := filepath.Join(tmpDir, "mnt1")
+	mp2 := filepath.Join(tmpDir, "mnt2")
+	os.MkdirAll(mp1, 0755)
+	os.MkdirAll(mp2, 0755)
+
+	exec.Command("sudo", "mount", loopDev, mp1).Run()
+	exec.Command("sudo", "mount", loopDev, mp2).Run()
+	defer exec.Command("sudo", "umount", "-l", loopDev).Run()
+
+	if err := AutoCleanupMounts(); err != nil {
+		t.Fatalf("AutoCleanupMounts failed: %v", err)
+	}
+
+	// Verify that exactly one of them is still mounted for our loop device
+	m1 := isMounted(mp1)
+	m2 := isMounted(mp2)
+
+	if m1 && m2 {
+		t.Errorf("Both %s and %s are still mounted, should have cleaned up one", mp1, mp2)
+	}
+	if !m1 && !m2 {
+		t.Errorf("Neither %s nor %s is mounted, should have kept one", mp1, mp2)
+	}
+}
+
 func TestSafePrepareForReadRoot(t *testing.T) {
 	mockDevices := []models.BlockDevice{
 		{

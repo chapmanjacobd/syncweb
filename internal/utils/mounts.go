@@ -147,6 +147,31 @@ func Unmount(mountpoint string) error {
 	return nil
 }
 
+func AutoCleanupMounts() error {
+	devices, err := GetBlockDevices()
+	if err != nil {
+		return err
+	}
+
+	var walk func([]models.BlockDevice)
+	walk = func(devs []models.BlockDevice) {
+		for _, d := range devs {
+			if len(d.Mountpoints) > 1 {
+				// Potential duplicates found, unmount them safely
+				if err := SafePrepareForRead(d.Name, devices); err != nil {
+					fmt.Printf("Warning: failed to cleanup mounts for %s: %v\n", d.Name, err)
+				}
+			}
+			if len(d.Children) > 0 {
+				walk(d.Children)
+			}
+		}
+	}
+
+	walk(devices)
+	return nil
+}
+
 func GetFstabMounts() (map[string]bool, error) {
 	data, err := os.ReadFile("/etc/fstab")
 	if err != nil {

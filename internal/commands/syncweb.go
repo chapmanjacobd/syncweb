@@ -20,8 +20,8 @@ import (
 )
 
 type SyncwebCmd struct {
-	models.CoreFlags
-	models.SyncwebFlags
+	models.CoreFlags    `embed:""`
+	models.SyncwebFlags `embed:""`
 
 	Create    SyncwebCreateCmd    `cmd:"" help:"Create a syncweb folder" aliases:"init,in,share"`
 	Join      SyncwebJoinCmd      `cmd:"" help:"Join syncweb folders/devices" aliases:"import,clone"`
@@ -35,7 +35,7 @@ type SyncwebCmd struct {
 	Sort      SyncwebSortCmd      `cmd:"" help:"Sort Syncthing files by multiple criteria"`
 	Download  SyncwebDownloadCmd  `cmd:"" help:"Mark file paths for download/sync" aliases:"dl,upload,unignore,sync"`
 	Automatic SyncwebAutomaticCmd `cmd:"" help:"Start syncweb-automatic daemon"`
-	Serve     SyncwebServeCmd     `cmd:"" help:"Run Syncweb in foreground"`
+	Serve     ServeCmd            `cmd:"" help:"Start the Syncweb Web UI server"`
 	Start     SyncwebStartCmd     `cmd:"" help:"Start Syncweb daemon" aliases:"restart"`
 	Stop      SyncwebStopCmd      `cmd:"" help:"Stop Syncweb daemon" aliases:"shutdown,quit"`
 	Version   SyncwebVersionCmd   `cmd:"" help:"Show Syncweb version"`
@@ -43,13 +43,13 @@ type SyncwebCmd struct {
 
 func (c *SyncwebCmd) AfterApply() error {
 	if c.SyncwebHome == "" {
-		c.SyncwebHome = filepath.Join(os.Getenv("HOME"), ".config", "syncweb")
+		c.SyncwebHome = utils.GetConfigDir()
 	}
 	return nil
 }
 
 func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
-	s, err := syncweb.NewSyncweb(c.SyncwebHome, "disco-syncweb", "")
+	s, err := syncweb.NewSyncweb(c.SyncwebHome, "syncweb", "")
 	if err != nil {
 		return err
 	}
@@ -699,23 +699,13 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-type SyncwebServeCmd struct{}
-
-func (c *SyncwebServeCmd) Run(g *SyncwebCmd) error {
-	models.SetupLogging(g.Verbose)
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		slog.Info("Syncweb serving in foreground", "myID", s.Node.MyID())
-		return s.Node.Serve()
-	})
-}
-
 type SyncwebStartCmd struct{}
 
 func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
 	if home == "" {
-		home = filepath.Join(os.Getenv("HOME"), ".config", "syncweb")
+		home = utils.GetConfigDir()
 	}
 
 	cntxt := &daemon.Context{
@@ -749,7 +739,7 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
 	if home == "" {
-		home = filepath.Join(os.Getenv("HOME"), ".config", "syncweb")
+		home = utils.GetConfigDir()
 	}
 
 	pidFile := filepath.Join(home, "syncweb.pid")

@@ -16,36 +16,6 @@ const (
 	DefaultOpenLimit         = 7
 )
 
-func GetMpvListenSocket() string {
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = os.TempDir()
-	}
-	return filepath.Join(runtimeDir, "mpv_socket")
-}
-
-func GetMpvWatchSocket() string {
-	home, _ := os.UserHomeDir()
-	if IsWindows {
-		return filepath.Join(home, "AppData", "Roaming", "mpv", "socket")
-	}
-	if IsMac {
-		return filepath.Join(home, "Library", "Application Support", "mpv", "socket")
-	}
-	return filepath.Join(home, ".config", "mpv", "socket")
-}
-
-func GetMpvWatchLaterDir() string {
-	home, _ := os.UserHomeDir()
-	if IsWindows {
-		return filepath.Join(home, "AppData", "Roaming", "mpv", "watch_later")
-	}
-	if IsMac {
-		return filepath.Join(home, "Library", "Application Support", "mpv", "watch_later")
-	}
-	return filepath.Join(home, ".config", "mpv", "watch_later")
-}
-
 var (
 	ApplicationStart = time.Now().Unix()
 	IsWindows        = runtime.GOOS == "windows"
@@ -143,7 +113,7 @@ func GetCattNowPlayingFile() string {
 func GetConfigDir() string {
 	home, _ := os.UserHomeDir()
 	if IsWindows {
-		return filepath.Join(home, "AppData", "Roaming", "disco")
+		return filepath.Join(home, "AppData", "Roaming", "syncweb")
 	}
-	return filepath.Join(home, ".config", "disco")
+	return filepath.Join(home, ".local", "state", "syncweb")
 }

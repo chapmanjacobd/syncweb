@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/alecthomas/kong"
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
@@ -23,21 +24,18 @@ type LsEntry struct {
 }
 
 type ServeCmd struct {
-	models.CoreFlags    `embed:""`
-	models.SyncwebFlags `embed:""`
-
-	Port      int    `short:"p" default:"8888" help:"Port to listen on"`
+	Port      int    `short:"p" default:"8889" help:"Port to listen on"`
 	PublicDir string `help:"Local directory for static assets"`
 	ReadOnly  bool   `help:"Disable file modifications"`
 
 	APIToken string `kong:"-"`
 }
 
-func (c *ServeCmd) Run(ctx *kong.Context) error {
-	models.SetupLogging(c.Verbose)
+func (c *ServeCmd) Run(g *SyncwebCmd) error {
+	models.SetupLogging(g.Verbose)
 	c.APIToken = utils.RandomString(32)
 
-	c.setupSyncweb()
+	c.setupSyncweb(g)
 
 	mux := http.NewServeMux()
 
@@ -47,6 +45,7 @@ func (c *ServeCmd) Run(ctx *kong.Context) error {
 	mux.HandleFunc("/api/syncweb/download", c.authMiddleware(c.handleSyncwebDownload))
 	mux.HandleFunc("/api/syncweb/toggle", c.authMiddleware(c.handleSyncwebToggle))
 	mux.HandleFunc("/api/syncweb/status", c.authMiddleware(c.handleSyncwebStatus))
+	mux.HandleFunc("/api/raw", c.authMiddleware(c.handleRaw))
 
 	// File Management Routes
 	mux.HandleFunc("/api/file/move", c.authMiddleware(c.handleFileMove))
@@ -84,6 +83,26 @@ func (c *ServeCmd) Run(ctx *kong.Context) error {
 
 func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Set basic security headers
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		remoteHost, _, _ := net.SplitHostPort(r.RemoteAddr)
+		isLocal := remoteHost == "127.0.0.1" || remoteHost == "::1"
+
+		// Host header validation (DNS rebinding protection)
+		// If we are on localhost, only allow localhost-related Host headers
+		if isLocal {
+			host, _, _ := net.SplitHostPort(r.Host)
+			if host == "" {
+				host = r.Host // No port in Host header
+			}
+			if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+				http.Error(w, "Host check failed (DNS rebinding protection)", http.StatusForbidden)
+				return
+			}
+		}
+
 		token := r.Header.Get("X-Syncweb-Token")
 		if token == "" {
 			token = r.URL.Query().Get("token")
@@ -95,10 +114,26 @@ func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		if token != c.APIToken {
+		if token != c.APIToken && !isLocal {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		// Basic CSRF protection for state-changing requests
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				origin = r.Header.Get("Referer")
+			}
+			if origin != "" && isLocal {
+				// The origin/referer should be local if it's a local browser making the request
+				if !strings.Contains(origin, "localhost") && !strings.Contains(origin, "127.0.0.1") && !strings.Contains(origin, "::1") {
+					http.Error(w, "CSRF block", http.StatusForbidden)
+					return
+				}
+			}
+		}
+
 		next(w, r)
 	}
 }
@@ -164,6 +199,31 @@ func (c *ServeCmd) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		http.Error(w, "Path required", http.StatusBadRequest)
+		return
+	}
+
+	localPath, folderID, err := c.resolveSyncwebPath(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if c.isPathBlacklisted(localPath) {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+
+	if utils.FileExists(localPath) {
+		http.ServeFile(w, r, localPath)
+	} else {
+		c.serveSyncwebContent(w, r, folderID, path, localPath)
+	}
 }
 
 func (c *ServeCmd) isPathBlacklisted(path string) bool {

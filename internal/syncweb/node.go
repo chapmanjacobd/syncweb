@@ -32,7 +32,7 @@ type Node struct {
 func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {
 	if homeDir == "" {
 		var err error
-		homeDir, err = os.MkdirTemp("", "disco-syncweb-")
+		homeDir, err = os.MkdirTemp("", "syncweb-")
 		if err != nil {
 			return nil, err
 		}

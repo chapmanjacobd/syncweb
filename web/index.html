@@ -119,7 +119,7 @@
         let state = {
             folders: [],
             currentFolder: null,
-            currentPath: '',
+            currentPath: '/',
             files: [],
             token: new URLSearchParams(window.location.search).get('token') || ''
         };
@@ -154,6 +154,13 @@
         function renderFolders() {
             const list = document.getElementById('folder-list');
             list.innerHTML = '';
+
+            const rootLi = document.createElement('li');
+            rootLi.className = 'folder-item' + (state.currentFolder === null ? ' active' : '');
+            rootLi.innerHTML = `<span class="icon">🏠</span> [Root]`;
+            rootLi.onclick = () => selectFolder(null);
+            list.appendChild(rootLi);
+
             state.folders.forEach(f => {
                 const li = document.createElement('li');
                 li.className = 'folder-item' + (state.currentFolder === f.id ? ' active' : '');
@@ -164,16 +171,26 @@
         }
 
         async function selectFolder(id) {
-            state.currentFolder = id;
-            state.currentPath = `syncweb://${id}/`;
+            if (id === null) {
+                state.currentFolder = null;
+                state.currentPath = "/";
+            } else {
+                state.currentFolder = id;
+                state.currentPath = `syncweb://${id}/`;
+            }
             renderFolders();
             loadFiles();
         }
 
         async function loadFiles() {
-            if (!state.currentFolder) return;
             try {
-                const url = `/api/syncweb/ls?folder=${encodeURIComponent(state.currentFolder)}&prefix=${encodeURIComponent(state.currentPath.split('/').slice(3).join('/'))}`;
+                let url;
+                if (!state.currentFolder) {
+                    url = '/api/syncweb/ls';
+                } else {
+                    const prefix = state.currentPath.split('/').slice(3).join('/');
+                    url = `/api/syncweb/ls?folder=${encodeURIComponent(state.currentFolder)}&prefix=${encodeURIComponent(prefix)}`;
+                }
                 const resp = await fetchAPI(url);
                 state.files = await resp.json();
                 renderFiles();
@@ -189,11 +206,17 @@
             list.innerHTML = '';
 
             // Parent dir
-            if (state.currentPath !== `syncweb://${state.currentFolder}/`) {
+            if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
                 const li = document.createElement('li');
                 li.className = 'file-item';
                 li.innerHTML = `<span class="icon">⬆️</span> ..`;
                 li.onclick = goUp;
+                list.appendChild(li);
+            } else if (state.currentFolder && state.currentPath === `syncweb://${state.currentFolder}/`) {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                li.innerHTML = `<span class="icon">⬆️</span> [Root]`;
+                li.onclick = () => selectFolder(null);
                 list.appendChild(li);
             }
 
@@ -201,9 +224,16 @@
                 const li = document.createElement('li');
                 li.className = 'file-item';
                 li.draggable = true;
-                li.innerHTML = `<span class="icon">${f.is_dir ? '📁' : '📄'}</span> ${f.name} ${!f.local ? '☁️' : ''}`;
+                li.innerHTML = `<span class="icon">${f.is_dir ? '📁' : '📄'}</span> ${f.name} ${!f.local && !f.is_dir ? '☁️' : ''}`;
                 
                 li.onclick = () => {
+                    if (!state.currentFolder && f.is_dir) {
+                        // Extract folder ID from path syncweb://id/
+                        const folderID = f.path.split('/')[2];
+                        selectFolder(folderID);
+                        return;
+                    }
+
                     if (f.is_dir) {
                         state.currentPath = f.path + (f.path.endsWith('/') ? '' : '/');
                         loadFiles();

@@ -10,13 +10,8 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-type CLI struct {
-	commands.SyncwebCmd `embed:""`
-	Serve               commands.ServeCmd `cmd:"" help:"Start the Syncweb Web UI server"`
-}
-
 func main() {
-	cli := &CLI{}
+	cli := &commands.SyncwebCmd{}
 
 	parser, err := kong.New(cli,
 		kong.Name("syncweb"),

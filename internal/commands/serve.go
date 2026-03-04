@@ -41,6 +41,8 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 
 	// API Routes
 	mux.HandleFunc("/api/syncweb/folders", c.authMiddleware(c.handleSyncwebFolders))
+	mux.HandleFunc("/api/syncweb/folders/add", c.authMiddleware(c.handleSyncwebFoldersAdd))
+	mux.HandleFunc("/api/syncweb/folders/delete", c.authMiddleware(c.handleSyncwebFoldersDelete))
 	mux.HandleFunc("/api/syncweb/ls", c.authMiddleware(c.handleSyncwebLs))
 	mux.HandleFunc("/api/syncweb/find", c.authMiddleware(c.handleSyncwebFind))
 	mux.HandleFunc("/api/syncweb/stat", c.authMiddleware(c.handleSyncwebStat))

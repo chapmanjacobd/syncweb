@@ -97,7 +97,10 @@
     <aside>
         <h2>Syncweb</h2>
         <div id="folder-container">
-            <h3>Folders</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Folders</h3>
+                <button class="btn" style="padding: 0.1rem 0.4rem;" onclick="addFolder()">+</button>
+            </div>
             <ul id="folder-list" class="folder-list"></ul>
         </div>
         <div id="device-container" style="margin-top: 1rem;">

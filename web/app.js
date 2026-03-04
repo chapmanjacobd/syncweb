@@ -87,7 +87,7 @@ function renderDevices() {
 }
 
 async function addDevice(suggestedId = '') {
-    const id = prompt("Enter Device ID:", suggestedId);
+    const id = suggestedId || prompt("Enter Device ID:", suggestedId);
     if (!id) return;
     const name = prompt("Enter Device Name (optional):", "");
     
@@ -142,9 +142,57 @@ function renderFolders() {
         li.className = 'folder-item' + (state.currentFolder === f.id ? ' active' : '');
         li.innerHTML = `<span class="icon">📂</span> ${f.id}`;
         li.onclick = () => selectFolder(f.id);
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (confirm(`Delete folder ${f.id}?`)) {
+                deleteFolder(f.id);
+            }
+        };
         list.appendChild(li);
     });
 }
+
+async function addFolder() {
+    const id = prompt("Enter Folder ID:");
+    if (!id) return;
+    const path = prompt("Enter Local Path:");
+    if (!path) return;
+
+    try {
+        const resp = await fetchAPI('/api/syncweb/folders/add', {
+            method: 'POST',
+            body: JSON.stringify({ id, path })
+        });
+        if (resp.ok) {
+            showToast("Folder added");
+            loadFolders();
+        } else {
+            const data = await resp.json();
+            showToast(data.error || "Failed to add folder", true);
+        }
+    } catch (e) {
+        showToast("Error adding folder", true);
+    }
+}
+
+async function deleteFolder(id) {
+    try {
+        const resp = await fetchAPI('/api/syncweb/folders/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+        if (resp.ok) {
+            showToast("Folder deleted");
+            if (state.currentFolder === id) selectFolder(null);
+            loadFolders();
+        } else {
+            showToast("Failed to delete folder", true);
+        }
+    } catch (e) {
+        showToast("Error deleting folder", true);
+    }
+}
+
 
 async function selectFolder(id) {
     if (id === null) {
@@ -374,7 +422,9 @@ if (typeof module !== 'undefined' && module.exports) {
         loadDevices,
         addDevice,
         deleteDevice,
-        showFileProperties
+        showFileProperties,
+        addFolder,
+        deleteFolder
     };
 } else {
     // Start app

@@ -15,6 +15,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
+	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
@@ -108,6 +109,77 @@ func (c *ServeCmd) handleSyncwebFolders(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(folders)
 }
+
+// handleSyncwebFoldersAdd adds a new sync folder.
+// POST /api/syncweb/folders/add
+// Body: {"id": "...", "path": "..."}
+func (c *ServeCmd) handleSyncwebFoldersAdd(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	var req struct {
+		ID   string `json:"id"`
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	// For now, we use SendReceive as default
+	if err := swInstance.AddFolder(req.ID, req.ID, req.Path, config.FolderTypeSendReceive); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintln(w, "Folder add request accepted")
+}
+
+// handleSyncwebFoldersDelete removes a sync folder.
+// POST /api/syncweb/folders/delete
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebFoldersDelete(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	if err := swInstance.DeleteFolder(req.ID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintln(w, "Folder deletion request accepted")
+}
+
 
 // handleSyncwebLs lists global files in a Syncweb folder.
 // GET /api/syncweb/ls?folder=...&prefix=...

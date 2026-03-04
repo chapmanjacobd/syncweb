@@ -13,7 +13,9 @@ import {
     loadDevices,
     addDevice,
     deleteDevice,
-    showFileProperties
+    showFileProperties,
+    addFolder,
+    deleteFolder
 } from './app.js';
 
 // Mock fetch
@@ -186,8 +188,33 @@ describe('Syncweb UI', () => {
 
     describe('Future Functionality (CLI Parity)', () => {
         describe('Folder Management', () => {
-            it.todo('createFolder(path) initializes new sync folder');
-            it.todo('deleteFolder(id) triggers delete API');
+            it('addFolder() sends POST request', async () => {
+                global.prompt = vi.fn()
+                    .mockReturnValueOnce('new-folder') // ID
+                    .mockReturnValueOnce('/tmp/new');  // Path
+
+                fetch.mockResolvedValueOnce({ ok: true }); // Add folder
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload folders
+
+                await addFolder();
+
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/folders/add', expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ id: 'new-folder', path: '/tmp/new' })
+                }));
+            });
+
+            it('deleteFolder(id) sends POST request', async () => {
+                fetch.mockResolvedValueOnce({ ok: true }); // Delete folder
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload folders
+
+                await deleteFolder('f1');
+
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/folders/delete', expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ id: 'f1' })
+                }));
+            });
         });
 
         describe('Device Management', () => {
@@ -232,7 +259,18 @@ describe('Syncweb UI', () => {
                 }));
             });
 
-            it.todo('acceptDevice(id) accepts pending device');
+            it('acceptDevice(id) calls addDevice with ID and only prompts for name', async () => {
+                global.prompt = vi.fn().mockReturnValue('new-name');
+                fetch.mockResolvedValueOnce({ ok: true }); // Add device
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload devices
+
+                await addDevice('pending-id');
+
+                expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('Name'), '');
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/devices/add', expect.objectContaining({
+                    body: JSON.stringify({ id: 'pending-id', name: 'new-name', introducer: false })
+                }));
+            });
         });
 
         describe('Search & Details', () => {

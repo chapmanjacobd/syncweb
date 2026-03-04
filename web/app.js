@@ -1,5 +1,7 @@
 const state = {
     folders: [],
+    devices: [],
+    pendingDevices: {},
     currentFolder: null,
     currentPath: '/',
     files: [],
@@ -37,6 +39,92 @@ async function loadFolders() {
         showToast("Failed to load folders", true);
     }
 }
+
+async function loadDevices() {
+    try {
+        const resp = await fetchAPI('/api/syncweb/devices');
+        state.devices = await resp.json();
+        
+        const pendingResp = await fetchAPI('/api/syncweb/pending');
+        state.pendingDevices = await pendingResp.json();
+        
+        renderDevices();
+    } catch (e) {
+        showToast("Failed to load devices", true);
+    }
+}
+
+function renderDevices() {
+    const list = document.getElementById('device-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    // Render pending devices first
+    Object.keys(state.pendingDevices).forEach(id => {
+        const li = document.createElement('li');
+        li.className = 'folder-item';
+        li.style.color = 'var(--accent-color)';
+        li.innerHTML = `<span class="icon">🔔</span> Pending: ${id.substring(0, 7)}...`;
+        li.title = `Click to accept device: ${id}`;
+        li.onclick = () => addDevice(id);
+        list.appendChild(li);
+    });
+
+    state.devices.forEach(d => {
+        const li = document.createElement('li');
+        li.className = 'folder-item';
+        const statusIcon = d.paused ? '⏸️' : '💻';
+        li.innerHTML = `<span class="icon">${statusIcon}</span> ${d.name || d.id.substring(0, 7) + '...'}`;
+        li.title = d.id;
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (confirm(`Delete device ${d.name || d.id}?`)) {
+                deleteDevice(d.id);
+            }
+        };
+        list.appendChild(li);
+    });
+}
+
+async function addDevice(suggestedId = '') {
+    const id = prompt("Enter Device ID:", suggestedId);
+    if (!id) return;
+    const name = prompt("Enter Device Name (optional):", "");
+    
+    try {
+        const resp = await fetchAPI('/api/syncweb/devices/add', {
+            method: 'POST',
+            body: JSON.stringify({ id, name, introducer: false })
+        });
+        if (resp.ok) {
+            showToast("Device added");
+            loadDevices();
+        } else {
+            const data = await resp.json();
+            showToast(data.error || "Failed to add device", true);
+        }
+    } catch (e) {
+        showToast("Error adding device", true);
+    }
+}
+
+async function deleteDevice(id) {
+    try {
+        const resp = await fetchAPI('/api/syncweb/devices/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+        if (resp.ok) {
+            showToast("Device deleted");
+            loadDevices();
+        } else {
+            showToast("Failed to delete device", true);
+        }
+    } catch (e) {
+        showToast("Error deleting device", true);
+    }
+}
+
 
 function renderFolders() {
     const list = document.getElementById('folder-list');
@@ -244,7 +332,7 @@ function showToast(msg, isError = false) {
     setTimeout(() => t.style.display = 'none', 3000);
 }
 
-function refresh() { loadFolders(); loadFiles(); loadStatus(); }
+function refresh() { loadFolders(); loadDevices(); loadFiles(); loadStatus(); }
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
@@ -263,11 +351,15 @@ if (typeof module !== 'undefined' && module.exports) {
         loadStatus,
         showToast,
         refresh,
-        searchFiles
+        searchFiles,
+        loadDevices,
+        addDevice,
+        deleteDevice
     };
 } else {
     // Start app
     loadFolders();
+    loadDevices();
     loadStatus();
 
     // Add search listener for "Enter" key

@@ -46,6 +46,10 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/download", c.authMiddleware(c.handleSyncwebDownload))
 	mux.HandleFunc("/api/syncweb/toggle", c.authMiddleware(c.handleSyncwebToggle))
 	mux.HandleFunc("/api/syncweb/status", c.authMiddleware(c.handleSyncwebStatus))
+	mux.HandleFunc("/api/syncweb/devices", c.authMiddleware(c.handleSyncwebDevices))
+	mux.HandleFunc("/api/syncweb/pending", c.authMiddleware(c.handleSyncwebPendingDevices))
+	mux.HandleFunc("/api/syncweb/devices/add", c.authMiddleware(c.handleSyncwebDevicesAdd))
+	mux.HandleFunc("/api/syncweb/devices/delete", c.authMiddleware(c.handleSyncwebDevicesDelete))
 	mux.HandleFunc("/api/raw", c.authMiddleware(c.handleRaw))
 
 	// File Management Routes

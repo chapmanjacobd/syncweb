@@ -9,7 +9,10 @@ import {
     triggerDownload,
     toggleOffline,
     loadStatus,
-    searchFiles
+    searchFiles,
+    loadDevices,
+    addDevice,
+    deleteDevice
 } from './app.js';
 
 // Mock fetch
@@ -23,6 +26,7 @@ describe('Syncweb UI', () => {
         // Reset DOM
         document.body.innerHTML = `
             <ul id="folder-list"></ul>
+            <ul id="device-list"></ul>
             <ul id="file-list"></ul>
             <h2 id="current-path">/</h2>
             <button id="offline-btn">Go Offline</button>
@@ -186,8 +190,47 @@ describe('Syncweb UI', () => {
         });
 
         describe('Device Management', () => {
-            it.todo('listDevices() fetches connected devices');
-            it.todo('addDevice(id) adds new device');
+            it('loadDevices() fetches and renders devices', async () => {
+                const mockDevices = [{ id: 'dev1', name: 'Laptop', paused: false }];
+                const mockPending = { 'dev2': '2026-03-04T00:00:00Z' };
+
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockDevices
+                });
+                fetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => mockPending
+                });
+
+                await loadDevices();
+
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/devices', expect.any(Object));
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/pending', expect.any(Object));
+                
+                const deviceList = document.getElementById('device-list');
+                const items = deviceList.getElementsByTagName('li');
+                expect(items.length).toBe(2);
+                expect(items[0].textContent).toContain('Pending: dev2');
+                expect(items[1].textContent).toContain('Laptop');
+            });
+
+            it('addDevice(id) sends POST request', async () => {
+                global.prompt = vi.fn()
+                    .mockReturnValueOnce('new-dev-id') // ID
+                    .mockReturnValueOnce('Desktop');   // Name
+
+                fetch.mockResolvedValueOnce({ ok: true }); // Add device
+                fetch.mockResolvedValue({ ok: true, json: async () => [] }); // Reload devices
+
+                await addDevice();
+
+                expect(fetch).toHaveBeenCalledWith('/api/syncweb/devices/add', expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ id: 'new-dev-id', name: 'Desktop', introducer: false })
+                }));
+            });
+
             it.todo('acceptDevice(id) accepts pending device');
         });
 

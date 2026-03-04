@@ -401,3 +401,107 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
+
+// handleSyncwebDevices returns a list of configured Syncthing devices.
+// GET /api/syncweb/devices
+func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	devices := swInstance.GetDevices()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
+}
+
+// handleSyncwebPendingDevices returns a list of rejected/pending device IDs.
+// GET /api/syncweb/pending
+func (c *ServeCmd) handleSyncwebPendingDevices(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	pending := swInstance.GetPendingDevices()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pending)
+}
+
+// handleSyncwebDevicesAdd adds a new device.
+// POST /api/syncweb/devices/add
+// Body: {"id": "...", "name": "...", "introducer": bool}
+func (c *ServeCmd) handleSyncwebDevicesAdd(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	var req struct {
+		ID         string `json:"id"`
+		Name       string `json:"name"`
+		Introducer bool   `json:"introducer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	if err := swInstance.AddDevice(req.ID, req.Name, req.Introducer); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintln(w, "Device add request accepted")
+}
+
+// handleSyncwebDevicesDelete removes a device.
+// POST /api/syncweb/devices/delete
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebDevicesDelete(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	if err := swInstance.DeleteDevice(req.ID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintln(w, "Device deletion request accepted")
+}

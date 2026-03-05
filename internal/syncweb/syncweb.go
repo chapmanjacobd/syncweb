@@ -353,6 +353,41 @@ func (s *Syncweb) AddFolderDevices(folderID string, deviceIDs []string) error {
 	return err
 }
 
+// RemoveFolderDevices removes devices from a folder
+func (s *Syncweb) RemoveFolderDevices(folderID string, deviceIDs []string) error {
+	ids := make([]protocol.DeviceID, 0, len(deviceIDs))
+	for _, did := range deviceIDs {
+		id, err := protocol.DeviceIDFromString(did)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+
+	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+		for i, fld := range cfg.Folders {
+			if fld.ID == folderID {
+				var newDevices []config.FolderDeviceConfiguration
+				for _, dev := range fld.Devices {
+					keep := true
+					for _, id := range ids {
+						if dev.DeviceID == id {
+							keep = false
+							break
+						}
+					}
+					if keep {
+						newDevices = append(newDevices, dev)
+					}
+				}
+				cfg.Folders[i].Devices = newDevices
+				return
+			}
+		}
+	})
+	return err
+}
+
 func (s *Syncweb) PauseFolder(id string) error {
 	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, f := range cfg.Folders {
@@ -666,4 +701,167 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 
 	r.offset += totalRead
 	return int(totalRead), nil
+}
+
+// GetIgnores returns the ignore patterns for a folder
+func (s *Syncweb) GetIgnores(folderID string) ([]string, error) {
+	lines, _, err := s.Node.App.Internals.Ignores(folderID)
+	return lines, err
+}
+
+// SetIgnores sets the ignore patterns for a folder
+func (s *Syncweb) SetIgnores(folderID string, lines []string) error {
+	return s.Node.App.Internals.SetIgnores(folderID, lines)
+}
+
+// AddIgnores adds unignore patterns to a folder's ignore list
+// This is used to mark files for download in receiveonly folders
+func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
+	existing, _, err := s.Node.App.Internals.Ignores(folderID)
+	if err != nil {
+		return err
+	}
+
+	// Keep existing patterns that are not Syncweb-managed
+	var preserved []string
+	for _, p := range existing {
+		if !strings.HasPrefix(p, "// Syncweb-managed") {
+			preserved = append(preserved, p)
+		}
+	}
+
+	// Build new unignore patterns
+	var newPatterns []string
+	for _, p := range unignores {
+		if strings.HasPrefix(p, "//") {
+			continue
+		}
+		if !strings.HasPrefix(p, "!/") {
+			p = "!/" + p
+		}
+		newPatterns = append(newPatterns, p)
+	}
+
+	// Combine: Syncweb header + unignores (sorted) + ignores (sorted) + wildcard
+	combined := make(map[string]bool)
+	for _, p := range preserved {
+		combined[p] = true
+	}
+	for _, p := range newPatterns {
+		combined[p] = true
+	}
+
+	var unignoreList, ignoreList []string
+	for p := range combined {
+		if strings.HasPrefix(p, "!") {
+			unignoreList = append(unignoreList, p)
+		} else if p != "*" {
+			ignoreList = append(ignoreList, p)
+		}
+	}
+
+	slices.Sort(unignoreList)
+	slices.Sort(ignoreList)
+
+	final := append([]string{"// Syncweb-managed"}, unignoreList...)
+	final = append(final, ignoreList...)
+	final = append(final, "*")
+
+	return s.Node.App.Internals.SetIgnores(folderID, final)
+}
+
+// GetFolderStats returns statistics for all folders
+func (s *Syncweb) GetFolderStats() map[string]map[string]any {
+	stats := make(map[string]map[string]any)
+	cfg := s.Node.Cfg.RawCopy()
+
+	for _, f := range cfg.Folders {
+		stats[f.ID] = map[string]any{
+			"id":     f.ID,
+			"label":  f.Label,
+			"path":   f.Path,
+			"type":   f.Type.String(),
+			"paused": f.Paused,
+		}
+	}
+
+	return stats
+}
+
+// GetDeviceStats returns statistics for all devices
+func (s *Syncweb) GetDeviceStats() map[string]map[string]any {
+	stats := make(map[string]map[string]any)
+	cfg := s.Node.Cfg.RawCopy()
+
+	for _, d := range cfg.Devices {
+		stats[d.DeviceID.String()] = map[string]any{
+			"id":         d.DeviceID.String(),
+			"name":       d.Name,
+			"paused":     d.Paused,
+			"introducer": d.Introducer,
+			"addresses":  d.Addresses,
+		}
+	}
+
+	return stats
+}
+
+// GetPendingFolders returns pending folder invitations from other devices
+func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
+	pending := make(map[string]map[string]any)
+	cfg := s.Node.Cfg.RawCopy()
+
+	for _, d := range cfg.Devices {
+		devPending, err := s.Node.App.Internals.PendingFolders(d.DeviceID)
+		if err != nil {
+			continue
+		}
+
+		for folderID := range devPending {
+			if _, exists := pending[folderID]; !exists {
+				pending[folderID] = map[string]any{
+					"offeredBy": make(map[string]map[string]any),
+				}
+			}
+			pending[folderID]["offeredBy"].(map[string]map[string]any)[d.DeviceID.String()] = map[string]any{}
+		}
+	}
+
+	return pending
+}
+
+// GetDiscoveredDevices returns devices from the discovery cache
+func (s *Syncweb) GetDiscoveredDevices() map[string]map[string]any {
+	discovered := make(map[string]map[string]any)
+	cfg := s.Node.Cfg.RawCopy()
+
+	for _, d := range cfg.Devices {
+		// For now, just return device info
+		// Discovery cache access would require additional API calls
+		discovered[d.DeviceID.String()] = map[string]any{
+			"id":        d.DeviceID.String(),
+			"name":      d.Name,
+			"addresses": d.Addresses,
+		}
+	}
+
+	return discovered
+}
+
+// GetPendingDevices returns devices waiting to be accepted
+func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
+	pending := make(map[string]map[string]any)
+	cfg := s.Node.Cfg.RawCopy()
+
+	// Check for rejected/pending devices
+	for _, d := range cfg.Devices {
+		if d.Paused && d.Name == "" {
+			pending[d.DeviceID.String()] = map[string]any{
+				"id":   d.DeviceID.String(),
+				"time": time.Now().Format(time.RFC3339),
+			}
+		}
+	}
+
+	return pending
 }

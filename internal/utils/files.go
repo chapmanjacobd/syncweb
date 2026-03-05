@@ -388,3 +388,8 @@ func GetExternalSubtitles(path string) []string {
 
 	return Unique(subs)
 }
+
+// EnsureDir creates a directory and all its parent directories if they don't exist
+func EnsureDir(path string) error {
+	return os.MkdirAll(path, 0o755)
+}

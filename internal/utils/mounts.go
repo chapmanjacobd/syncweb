@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
@@ -24,13 +25,7 @@ func FilterMountpoints(devices []models.BlockDevice) []models.Mountpoint {
 	flatten = func(devs []models.BlockDevice) {
 		for _, d := range devs {
 			// Skip devices that include the root filesystem
-			isRootDevice := false
-			for _, mp := range d.Mountpoints {
-				if mp == "/" {
-					isRootDevice = true
-					break
-				}
-			}
+			isRootDevice := slices.Contains(d.Mountpoints, "/")
 			if isRootDevice {
 				if len(d.Children) > 0 {
 					flatten(d.Children)
@@ -85,7 +80,6 @@ func ParseLsblkOutput(data []byte) ([]models.BlockDevice, error) {
 	return res.Blockdevices, nil
 }
 
-
 func Mount(device string, mountpoint string) error {
 	out, err := exec.Command("mount", device, mountpoint).CombinedOutput()
 	if err != nil {
@@ -105,11 +99,9 @@ func Unmount(mountpoint string) error {
 	var findDevice func([]models.BlockDevice)
 	findDevice = func(devs []models.BlockDevice) {
 		for _, d := range devs {
-			for _, mp := range d.Mountpoints {
-				if mp == mountpoint {
-					targetDevice = &d
-					return
-				}
+			if slices.Contains(d.Mountpoints, mountpoint) {
+				targetDevice = &d
+				return
 			}
 			if len(d.Children) > 0 {
 				findDevice(d.Children)
@@ -127,10 +119,8 @@ func Unmount(mountpoint string) error {
 		return nil
 	}
 
-	for _, mp := range targetDevice.Mountpoints {
-		if mp == "/" {
-			return fmt.Errorf("cannot unmount root filesystem")
-		}
+	if slices.Contains(targetDevice.Mountpoints, "/") {
+		return fmt.Errorf("cannot unmount root filesystem")
 	}
 
 	// Unmount ALL mountpoints for this device
@@ -177,10 +167,10 @@ func GetFstabMounts() (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	res := make(map[string]bool)
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(data), "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -230,10 +220,8 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 	}
 
 	// 3. Skip if root device (safety)
-	for _, mp := range target.Mountpoints {
-		if mp == "/" {
-			return nil
-		}
+	if slices.Contains(target.Mountpoints, "/") {
+		return nil
 	}
 
 	// 4. Skip if thread-safe (Btrfs)
@@ -247,7 +235,7 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 	}
 
 	fstab, _ := GetFstabMounts()
-	
+
 	var preferred string
 	for _, mp := range target.Mountpoints {
 		if fstab[mp] {

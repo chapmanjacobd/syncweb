@@ -7,12 +7,15 @@ const state = {
     currentPath: '/',
     files: [],
     token: '',
-    selectedItems: []
+    selectedItems: [],
+    events: [],
+    sortBy: 'name'
 };
 
-// Initialize token from URL if in browser
-if (typeof window !== 'undefined' && window.location) {
-    state.token = new URLSearchParams(window.location.search).get('token') || '';
+// Initialize token from localStorage or URL if in browser
+if (typeof window !== 'undefined' && window.localStorage && window.location) {
+    state.token = new URLSearchParams(window.location.search).get('token') || localStorage.getItem('syncweb_token') || '';
+    if (state.token) localStorage.setItem('syncweb_token', state.token);
 }
 
 async function fetchAPI(url, options = {}) {
@@ -26,10 +29,21 @@ async function fetchAPI(url, options = {}) {
         const newToken = prompt("Unauthorized. Enter API Token:");
         if (newToken) {
             state.token = newToken;
+            if (typeof window !== 'undefined' && window.localStorage) {
+                localStorage.setItem('syncweb_token', newToken);
+            }
             return fetchAPI(url, options);
         }
     }
     return resp;
+}
+
+function logout() {
+    state.token = '';
+    if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem('syncweb_token');
+    }
+    location.reload();
 }
 
 function toggleSidebar() {
@@ -384,6 +398,21 @@ function renderFiles(isSearch = false) {
     pathHeader.textContent = state.currentPath;
     list.innerHTML = '';
 
+    // Sort files
+    const sortedFiles = [...state.files].sort((a, b) => {
+        if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+        
+        switch (state.sortBy) {
+            case 'size':
+                return b.size - a.size;
+            case 'date':
+                return new Date(b.modified || 0) - new Date(a.modified || 0);
+            case 'name':
+            default:
+                return a.name.localeCompare(b.name);
+        }
+    });
+
     if (!isSearch) {
         // Parent dir
         if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
@@ -401,14 +430,16 @@ function renderFiles(isSearch = false) {
         }
     }
 
-    state.files.forEach(f => {
+    sortedFiles.forEach(f => {
         const li = document.createElement('li');
         li.className = 'file-item';
+        if (f.is_dir) li.classList.add('is-dir');
         if (state.selectedItems.includes(f.path)) li.classList.add('selected');
         li.draggable = true;
         const displayName = isSearch ? f.path : f.name;
         const icon = f.is_dir ? 'folder' : 'file';
         const cloudIcon = !f.local && !f.is_dir ? ' <span class="icon" style="display:inline-block; margin-left: 0.5rem;"><i data-lucide="cloud"></i></span>' : '';
+        const sizeInfo = f.is_dir ? '' : `<span class="secondary-info">${formatSize(f.size)}</span>`;
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -419,7 +450,7 @@ function renderFiles(isSearch = false) {
             toggleSelection(f.path);
         };
 
-        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> <span style="flex: 1">${displayName}${cloudIcon}</span>`;
+        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> <span style="flex: 1">${displayName}${cloudIcon}</span> ${sizeInfo}`;
         li.prepend(checkbox);
 
         li.onclick = () => {
@@ -446,7 +477,9 @@ function renderFiles(isSearch = false) {
         // Drag and Drop
         li.ondragstart = (e) => {
             e.dataTransfer.setData('text/plain', f.path);
+            list.classList.add('dragging-active');
         };
+        li.ondragend = () => list.classList.remove('dragging-active');
 
         if (f.is_dir) {
             li.ondragover = (e) => {
@@ -458,6 +491,7 @@ function renderFiles(isSearch = false) {
                 e.preventDefault();
                 li.classList.remove('drag-over');
                 const srcPath = e.dataTransfer.getData('text/plain');
+                if (srcPath === f.path) return;
                 const dstPath = f.path + '/' + srcPath.split('/').pop();
                 moveFile(srcPath, dstPath);
             };
@@ -693,7 +727,57 @@ async function bulkCopy() {
     loadFiles();
 }
 
-function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); }
+function updateSort() {
+    state.sortBy = document.getElementById('sort-select').value;
+    renderFiles(state.currentPath.startsWith('Search results'));
+}
+
+function formatSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function loadEvents() {
+    try {
+        const resp = await fetchAPI('/api/syncweb/events');
+        state.events = await resp.json();
+        renderEvents();
+    } catch (e) {}
+}
+
+function renderEvents() {
+    const list = document.getElementById('activity-list');
+    if (!list) return;
+    
+    // Sort events by time descending
+    const sortedEvents = [...state.events].sort((a, b) => new Date(b.time) - new Date(a.time));
+    
+    list.innerHTML = '';
+    sortedEvents.forEach(ev => {
+        const li = document.createElement('li');
+        li.className = 'folder-item';
+        li.style.padding = '0.4rem 0.5rem';
+        li.style.fontSize = '0.8rem';
+        
+        let icon = 'info';
+        if (ev.type === 'ItemFinished') icon = 'check-circle';
+        if (ev.type === 'ItemStarted') icon = 'refresh-cw';
+        if (ev.type.includes('Rejected')) icon = 'alert-triangle';
+        
+        const time = new Date(ev.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        li.innerHTML = `<span class="icon" style="width:14px; height:14px;"><i data-lucide="${icon}" style="width:12px; height:12px;"></i></span> 
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            <span style="color: var(--secondary-text)">[${time}]</span> ${ev.message}
+                        </div>`;
+        list.appendChild(li);
+    });
+    if (window.lucide) lucide.createIcons();
+}
+
+function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); loadEvents(); }
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
@@ -728,7 +812,8 @@ if (typeof module !== 'undefined' && module.exports) {
         clearSelection,
         bulkDelete,
         bulkMove,
-        bulkCopy
+        bulkCopy,
+        logout
     };
 } else {
     // Start app
@@ -736,6 +821,8 @@ if (typeof module !== 'undefined' && module.exports) {
     loadDevices();
     loadMounts();
     loadStatus();
+    loadEvents();
+    setInterval(loadEvents, 10000); // Refresh events every 10s
 
     // Add search listener for "Enter" key
     document.getElementById('search-input')?.addEventListener('keypress', (e) => {

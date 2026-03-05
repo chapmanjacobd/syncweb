@@ -72,7 +72,7 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 	http.ServeContent(w, r, filepath.Base(localPath), time.Now(), rs)
 }
 
-func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]LsEntry, counts map[string]int, path string) {
+func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]models.LsEntry, counts map[string]int, path string) {
 	swMu.Lock()
 	defer swMu.Unlock()
 	if swInstance != nil && (path == "/" || path == "") && swInstance.IsRunning() {
@@ -83,7 +83,7 @@ func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]LsEntry, counts map[str
 			if localPath, ok := swInstance.GetFolderPath(id); ok {
 				name += " (" + filepath.Base(localPath) + ")"
 			}
-			resultsMap[entryPath] = LsEntry{
+			resultsMap[entryPath] = models.LsEntry{
 				Name:  name,
 				Path:  entryPath,
 				IsDir: true,
@@ -91,6 +91,23 @@ func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]LsEntry, counts map[str
 			counts[entryPath] = 1000 // High priority for roots
 		}
 	}
+}
+
+// handleSyncwebEvents returns recent sync events.
+// GET /api/syncweb/events
+func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	events := swInstance.GetEvents()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(events)
 }
 
 // handleSyncwebFolders returns a list of configured Syncweb folders.
@@ -183,7 +200,6 @@ func (c *ServeCmd) handleSyncwebFoldersDelete(w http.ResponseWriter, r *http.Req
 	fmt.Fprintln(w, "Folder deletion request accepted")
 }
 
-
 // handleSyncwebLs lists global files in a Syncweb folder.
 // GET /api/syncweb/ls?folder=...&prefix=...
 func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +237,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		prefix += "/"
 	}
 
-	resultsMap := make(map[string]LsEntry)
+	resultsMap := make(map[string]models.LsEntry)
 	counts := make(map[string]int)
 
 	if folderID == "" || folderID == "/" {
@@ -249,12 +265,13 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 			localPath, _, _ := swInstance.ResolveLocalPath(fullSyncwebPath)
 			isLocal := utils.FileExists(localPath)
 
-			entry := LsEntry{
-				Name:  entryName,
-				Path:  fullSyncwebPath,
-				IsDir: isDir,
-				Local: isLocal,
-				Size:  meta.Size,
+			entry := models.LsEntry{
+				Name:     entryName,
+				Path:     fullSyncwebPath,
+				IsDir:    isDir,
+				Local:    isLocal,
+				Size:     meta.Size,
+				Modified: meta.ModTime().Format(time.RFC3339),
 			}
 			if !isDir {
 				entry.Type = utils.DetectMimeType(entryName)
@@ -263,7 +280,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results := make([]LsEntry, 0, len(resultsMap))
+	results := make([]models.LsEntry, 0, len(resultsMap))
 	for _, entry := range resultsMap {
 		results = append(results, entry)
 	}
@@ -450,7 +467,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var results []LsEntry
+	var results []models.LsEntry
 	cfg := swInstance.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
 		seq, cancel := swInstance.Node.App.Internals.AllGlobalFiles(f.ID)
@@ -460,13 +477,14 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				localPath, _, _ := swInstance.ResolveLocalPath(fullSyncwebPath)
 				isLocal := utils.FileExists(localPath)
 
-				results = append(results, LsEntry{
-					Name:  filepath.Base(meta.Name),
-					Path:  fullSyncwebPath,
-					IsDir: meta.Type == protocol.FileInfoTypeDirectory,
-					Local: isLocal,
-					Size:  meta.Size,
-					Type:  utils.DetectMimeType(meta.Name),
+				results = append(results, models.LsEntry{
+					Name:     filepath.Base(meta.Name),
+					Path:     fullSyncwebPath,
+					IsDir:    meta.Type == protocol.FileInfoTypeDirectory,
+					Local:    isLocal,
+					Size:     meta.Size,
+					Type:     utils.DetectMimeType(meta.Name),
+					Modified: meta.ModTime().Format(time.RFC3339),
 				})
 			}
 		}

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
 	stmodel "github.com/syncthing/syncthing/lib/model"
@@ -88,6 +89,8 @@ type Syncweb struct {
 	Node           *Node
 	Measurements   *Measurements
 	pendingDevices sync.Map // map[protocol.DeviceID]time.Time
+	events         []models.SyncEvent
+	eventsMu       sync.RWMutex
 }
 
 func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error) {
@@ -99,6 +102,7 @@ func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error
 	s := &Syncweb{
 		Node:         node,
 		Measurements: NewMeasurements(),
+		events:       make([]models.SyncEvent, 0),
 	}
 
 	go s.watchEvents()
@@ -106,8 +110,38 @@ func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error
 	return s, nil
 }
 
+func (s *Syncweb) addEvent(evType string, message string, data any) {
+	s.eventsMu.Lock()
+	defer s.eventsMu.Unlock()
+
+	event := models.SyncEvent{
+		Time:    time.Now().Format(time.RFC3339),
+		Type:    evType,
+		Message: message,
+		Data:    data,
+	}
+
+	s.events = append(s.events, event)
+	if len(s.events) > 100 {
+		s.events = s.events[1:]
+	}
+}
+
+func (s *Syncweb) GetEvents() []models.SyncEvent {
+	s.eventsMu.RLock()
+	defer s.eventsMu.RUnlock()
+
+	// Return a copy to avoid data races
+	res := make([]models.SyncEvent, len(s.events))
+	copy(res, s.events)
+	return res
+}
+
 func (s *Syncweb) watchEvents() {
-	sub := s.Node.Subscribe(events.DeviceRejected | events.PendingDevicesChanged | events.DeviceConnected)
+	mask := events.DeviceRejected | events.PendingDevicesChanged | events.DeviceConnected |
+		events.FolderSummary | events.ItemStarted | events.ItemFinished | events.LocalIndexUpdated
+
+	sub := s.Node.Subscribe(mask)
 	defer sub.Unsubscribe()
 
 	for {
@@ -126,12 +160,9 @@ func (s *Syncweb) watchEvents() {
 					if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
 						s.pendingDevices.Store(id, ev.Time)
 						slog.Info("Device rejected (pending)", "id", id)
+						s.addEvent("DeviceRejected", "New device request: "+deviceIDStr, ev.Data)
 					}
 				}
-			case events.PendingDevicesChanged:
-				// This event is emitted when the set of pending devices changes
-				// Ideally we would fetch the list here, but since we can't get it from Internals,
-				// we rely on DeviceRejected events for now or try to use Discovery
 			case events.DeviceConnected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {
@@ -143,7 +174,30 @@ func (s *Syncweb) watchEvents() {
 				if deviceIDStr != "" {
 					if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
 						s.pendingDevices.Delete(id)
+						s.addEvent("DeviceConnected", "Device connected: "+deviceIDStr, ev.Data)
 					}
+				}
+			case events.ItemStarted:
+				if m, ok := ev.Data.(map[string]any); ok {
+					item, _ := m["item"].(string)
+					_, _ = m["folder"].(string)
+					s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
+				}
+			case events.ItemFinished:
+				if m, ok := ev.Data.(map[string]any); ok {
+					item, _ := m["item"].(string)
+					_, _ = m["folder"].(string)
+					err, _ := m["error"].(string)
+					msg := "Finished: " + item
+					if err != "" {
+						msg += " (Error: " + err + ")"
+					}
+					s.addEvent("ItemFinished", msg, ev.Data)
+				}
+			case events.FolderSummary:
+				if m, ok := ev.Data.(map[string]any); ok {
+					folder, _ := m["folder"].(string)
+					s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
 				}
 			}
 		case <-s.Node.Ctx.Done():

@@ -15,15 +15,6 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-type LsEntry struct {
-	Name  string `json:"name"`
-	Path  string `json:"path"`
-	IsDir bool   `json:"is_dir"`
-	Type  string `json:"type,omitempty"`
-	Local bool   `json:"local"`
-	Size  int64  `json:"size"`
-}
-
 type ServeCmd struct {
 	Port      int    `short:"p" default:"8889" help:"Port to listen on"`
 	PublicDir string `help:"Local directory for static assets"`
@@ -50,6 +41,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/download", c.authMiddleware(c.handleSyncwebDownload))
 	mux.HandleFunc("/api/syncweb/toggle", c.authMiddleware(c.handleSyncwebToggle))
 	mux.HandleFunc("/api/syncweb/status", c.authMiddleware(c.handleSyncwebStatus))
+	mux.HandleFunc("/api/syncweb/events", c.authMiddleware(c.handleSyncwebEvents))
 	mux.HandleFunc("/api/syncweb/devices", c.authMiddleware(c.handleSyncwebDevices))
 	mux.HandleFunc("/api/syncweb/pending", c.authMiddleware(c.handleSyncwebPendingDevices))
 	mux.HandleFunc("/api/syncweb/devices/add", c.authMiddleware(c.handleSyncwebDevicesAdd))
@@ -69,15 +61,14 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	if c.PublicDir != "" {
 		mux.Handle("/", http.FileServer(http.Dir(c.PublicDir)))
 	} else {
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// Try to serve web/index.html if it exists relative to the binary
-			// This is a simple fallback for development
-			if _, err := os.Stat("web/index.html"); err == nil {
-				http.ServeFile(w, r, "web/index.html")
-				return
-			}
-			fmt.Fprintf(w, "Syncweb Server Running. (No PublicDir configured and web/index.html not found)")
-		})
+		// Try to serve from web/ directory if it exists relative to the binary
+		if info, err := os.Stat("web"); err == nil && info.IsDir() {
+			mux.Handle("/", http.FileServer(http.Dir("web")))
+		} else {
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, "Syncweb Server Running. (No PublicDir configured and web/ directory not found)")
+			})
+		}
 	}
 
 	addr := fmt.Sprintf(":%d", c.Port)
@@ -347,10 +338,10 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var results []LsEntry
+	var results []models.LsEntry
 	for _, entry := range entries {
 		info, _ := entry.Info()
-		results = append(results, LsEntry{
+		results = append(results, models.LsEntry{
 			Name:  entry.Name(),
 			Path:  filepath.Join(path, entry.Name()),
 			IsDir: entry.IsDir(),

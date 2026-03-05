@@ -31,6 +31,7 @@
             flex-direction: column;
             padding: 1.5rem;
             transition: width 0.3s ease;
+            overflow-y: auto;
         }
         main {
             flex: 1;
@@ -92,6 +93,12 @@
         .file-item.drag-over {
             border: 1px dashed var(--accent-color);
             background-color: var(--hover-color);
+        }
+        .file-list.dragging-active .file-item:not(.drag-over) {
+            opacity: 0.6;
+        }
+        .file-list.dragging-active .file-item.is-dir {
+            border: 1px dashed rgba(0, 212, 255, 0.3);
         }
         .file-item.selected {
             background-color: rgba(0, 212, 255, 0.1);
@@ -206,9 +213,16 @@
             <h3><i data-lucide="database" style="width: 16px;"></i> Mountpoints</h3>
             <ul id="mount-list" class="folder-list"></ul>
         </div>
-        <div style="margin-top: auto;">
-            <button class="btn" onclick="toggleOffline()" id="offline-btn" style="width: 100%;">
+        <div id="activity-container" style="margin-top: 1rem; flex: 1; min-height: 200px; display: flex; flex-direction: column; overflow: hidden;">
+            <h3><i data-lucide="activity" style="width: 16px;"></i> Activity</h3>
+            <ul id="activity-list" class="folder-list" style="overflow-y: auto; font-size: 0.8rem;"></ul>
+        </div>
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-top: 1rem;">
+            <button class="btn" onclick="toggleOffline()" id="offline-btn">
                 <i data-lucide="power"></i> <span>Go Offline</span>
+            </button>
+            <button class="btn" onclick="logout()" style="color: var(--secondary-text);">
+                <i data-lucide="log-out"></i> Logout
             </button>
         </div>
     </aside>
@@ -221,6 +235,11 @@
                 <h2 id="current-path" style="margin: 0; font-size: 1.2rem;">Select a folder</h2>
             </div>
             <div style="display: flex; gap: 0.5rem;">
+                <select id="sort-select" class="btn" style="background: var(--bg-color); cursor: pointer;" onchange="updateSort()">
+                    <option value="name">Sort by Name</option>
+                    <option value="size">Sort by Size</option>
+                    <option value="date">Sort by Date</option>
+                </select>
                 <input type="text" id="search-input" placeholder="Search files..." class="btn" style="background: var(--bg-color); cursor: text;">
                 <button class="btn" onclick="searchFiles()"><i data-lucide="search"></i></button>
                 <button class="btn" onclick="refresh()"><i data-lucide="rotate-cw"></i></button>

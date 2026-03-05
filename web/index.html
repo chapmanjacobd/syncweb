@@ -93,6 +93,10 @@
             border: 1px dashed var(--accent-color);
             background-color: var(--hover-color);
         }
+        .file-item.selected {
+            background-color: rgba(0, 212, 255, 0.1);
+            border-color: var(--accent-color);
+        }
         .icon { 
             width: 18px;
             height: 18px;
@@ -220,6 +224,15 @@
                 <input type="text" id="search-input" placeholder="Search files..." class="btn" style="background: var(--bg-color); cursor: text;">
                 <button class="btn" onclick="searchFiles()"><i data-lucide="search"></i></button>
                 <button class="btn" onclick="refresh()"><i data-lucide="rotate-cw"></i></button>
+            </div>
+        </div>
+        <div id="bulk-actions" style="display: none; align-items: center; gap: 1rem; margin-bottom: 1rem; padding: 0.5rem; background: var(--sidebar-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+            <span id="selected-count" style="font-size: 0.9rem; font-weight: 500; color: var(--accent-color);">0 selected</span>
+            <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+                <button class="btn" onclick="bulkMove()" title="Move selected items"><i data-lucide="external-link"></i> Move</button>
+                <button class="btn" onclick="bulkCopy()" title="Copy selected items"><i data-lucide="copy"></i> Copy</button>
+                <button class="btn" onclick="bulkDelete()" style="color: #ff4444;" title="Delete selected items"><i data-lucide="trash-2"></i> Delete</button>
+                <button class="btn" onclick="clearSelection()">Cancel</button>
             </div>
         </div>
         <ul id="file-list" class="file-list"></ul>

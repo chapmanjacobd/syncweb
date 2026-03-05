@@ -307,6 +307,61 @@ func CommonPathFull(paths []string) string {
 	return CommonPath(paths)
 }
 
+// CopyFile copies a single file from src to dst
+func CopyFile(src, dst string) error {
+	s, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	d, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	if _, err := io.Copy(d, s); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CopyDir recursively copies a directory tree
+func CopyDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, info.Mode()); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		sourcePath := filepath.Join(src, entry.Name())
+		destinationPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := CopyDir(sourcePath, destinationPath); err != nil {
+				return err
+			}
+		} else {
+			if err := CopyFile(sourcePath, destinationPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetExternalSubtitles finds external subtitle files associated with a media file
 func GetExternalSubtitles(path string) []string {
 	ext := filepath.Ext(path)

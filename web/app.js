@@ -6,7 +6,8 @@ const state = {
     currentFolder: null,
     currentPath: '/',
     files: [],
-    token: ''
+    token: '',
+    selectedItems: []
 };
 
 // Initialize token from URL if in browser
@@ -349,6 +350,8 @@ async function loadFiles() {
         }
         const resp = await fetchAPI(url);
         state.files = await resp.json();
+        state.selectedItems = []; // Clear selection on reload
+        updateBulkActions();
         renderFiles();
     } catch (e) {
         showToast("Failed to load files", true);
@@ -364,6 +367,8 @@ async function searchFiles() {
     try {
         const resp = await fetchAPI(`/api/syncweb/find?q=${encodeURIComponent(query)}`);
         state.files = await resp.json();
+        state.selectedItems = []; // Clear selection on reload
+        updateBulkActions();
         state.currentPath = `Search results for "${query}"`;
         renderFiles(true);
     } catch (e) {
@@ -399,12 +404,24 @@ function renderFiles(isSearch = false) {
     state.files.forEach(f => {
         const li = document.createElement('li');
         li.className = 'file-item';
+        if (state.selectedItems.includes(f.path)) li.classList.add('selected');
         li.draggable = true;
         const displayName = isSearch ? f.path : f.name;
         const icon = f.is_dir ? 'folder' : 'file';
         const cloudIcon = !f.local && !f.is_dir ? ' <span class="icon" style="display:inline-block; margin-left: 0.5rem;"><i data-lucide="cloud"></i></span>' : '';
-        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> ${displayName}${cloudIcon}`;
         
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = state.selectedItems.includes(f.path);
+        checkbox.style.marginRight = '0.5rem';
+        checkbox.onclick = (e) => {
+            e.stopPropagation();
+            toggleSelection(f.path);
+        };
+
+        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> <span style="flex: 1">${displayName}${cloudIcon}</span>`;
+        li.prepend(checkbox);
+
         li.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
                 // Extract folder ID from path syncweb://id/
@@ -551,6 +568,131 @@ function showToast(message, isError = false) {
     }, 4000);
 }
 
+function toggleSelection(path) {
+    const idx = state.selectedItems.indexOf(path);
+    if (idx === -1) {
+        state.selectedItems.push(path);
+    } else {
+        state.selectedItems.splice(idx, 1);
+    }
+    updateBulkActions();
+    renderFiles(state.currentPath.startsWith('Search results'));
+}
+
+function updateBulkActions() {
+    const bar = document.getElementById('bulk-actions');
+    const count = document.getElementById('selected-count');
+    if (!bar || !count) return;
+
+    if (state.selectedItems.length > 0) {
+        bar.style.display = 'flex';
+        count.textContent = `${state.selectedItems.length} selected`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearSelection() {
+    state.selectedItems = [];
+    updateBulkActions();
+    renderFiles(state.currentPath.startsWith('Search results'));
+}
+
+async function bulkDelete() {
+    if (state.selectedItems.length === 0) return;
+    if (!confirm(`Delete ${state.selectedItems.length} items?`)) return;
+
+    let success = 0;
+    for (const path of state.selectedItems) {
+        try {
+            const resp = await fetchAPI('/api/file/delete', {
+                method: 'POST',
+                body: JSON.stringify({ path })
+            });
+            if (resp.ok) success++;
+            else showToast(`Failed to delete ${path}`, true);
+        } catch (e) {
+            showToast(`Error deleting ${path}`, true);
+        }
+    }
+    showToast(`${success} items deleted`);
+    loadFiles();
+}
+
+async function bulkMove() {
+    if (state.selectedItems.length === 0) return;
+    const dstFolder = prompt("Enter destination folder ID (or empty for root):", state.currentFolder || "");
+    if (dstFolder === null) return;
+    
+    let dstPath;
+    if (!dstFolder) {
+        dstPath = "/";
+    } else {
+        dstPath = `syncweb://${dstFolder}/`;
+    }
+
+    const subPath = prompt("Enter subpath within destination (e.g. 'Photos/2023'):", "");
+    if (subPath === null) return;
+    if (subPath) {
+        dstPath += subPath.endsWith('/') ? subPath : subPath + '/';
+    }
+
+    let success = 0;
+    for (const src of state.selectedItems) {
+        const name = src.split('/').pop();
+        const dst = dstPath + name;
+        try {
+            const resp = await fetchAPI('/api/file/move', {
+                method: 'POST',
+                body: JSON.stringify({ src, dst })
+            });
+            if (resp.ok) success++;
+            else showToast(`Failed to move ${src}`, true);
+        } catch (e) {
+            showToast(`Error moving ${src}`, true);
+        }
+    }
+    showToast(`${success} items moved`);
+    loadFiles();
+}
+
+async function bulkCopy() {
+    if (state.selectedItems.length === 0) return;
+    const dstFolder = prompt("Enter destination folder ID (or empty for root):", state.currentFolder || "");
+    if (dstFolder === null) return;
+    
+    let dstPath;
+    if (!dstFolder) {
+        dstPath = "/";
+    } else {
+        dstPath = `syncweb://${dstFolder}/`;
+    }
+
+    const subPath = prompt("Enter subpath within destination (e.g. 'Photos/2023'):", "");
+    if (subPath === null) return;
+    if (subPath) {
+        dstPath += subPath.endsWith('/') ? subPath : subPath + '/';
+    }
+
+    let success = 0;
+    for (const src of state.selectedItems) {
+        const name = src.split('/').pop();
+        const dst = dstPath + name;
+        try {
+            const resp = await fetchAPI('/api/file/copy', {
+                method: 'POST',
+                body: JSON.stringify({ src, dst })
+            });
+            if (resp.ok) success++;
+            else showToast(`Failed to copy ${src}`, true);
+        } catch (e) {
+            showToast(`Error copying ${src}`, true);
+        }
+    }
+    showToast(`${success} items copied`);
+    loadFiles();
+}
+
 function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); }
 
 // Export for testing
@@ -581,7 +723,12 @@ if (typeof module !== 'undefined' && module.exports) {
         mountDevice,
         unmountPoint,
         previewLocalPath,
-        confirmAddFolder
+        confirmAddFolder,
+        toggleSelection,
+        clearSelection,
+        bulkDelete,
+        bulkMove,
+        bulkCopy
     };
 } else {
     // Start app

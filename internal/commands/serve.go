@@ -184,8 +184,48 @@ func (c *ServeCmd) handleFileMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *ServeCmd) handleFileCopy(w http.ResponseWriter, r *http.Request) {
-	// Implementation for copying files
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	if c.ReadOnly {
+		http.Error(w, "Read-only mode", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Src string `json:"src"`
+		Dst string `json:"dst"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	src, _, err := c.resolveSyncwebPath(req.Src)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dst, _, err := c.resolveSyncwebPath(req.Dst)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	info, err := os.Stat(src)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if info.IsDir() {
+		if err := utils.CopyDir(src, dst); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := utils.CopyFile(src, dst); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (c *ServeCmd) handleFileDelete(w http.ResponseWriter, r *http.Request) {

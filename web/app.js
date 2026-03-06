@@ -2,6 +2,7 @@ const state = {
     folders: [],
     devices: [],
     pendingDevices: {},
+    pendingFolders: {},
     mounts: [],
     currentFolder: null,
     currentPath: '/',
@@ -56,9 +57,55 @@ async function loadFolders() {
         const resp = await fetchAPI('/api/syncweb/folders');
         state.folders = await resp.json();
         renderFolders();
+        
+        // Load pending folders
+        const pendingResp = await fetchAPI('/api/syncweb/pending-folders');
+        state.pendingFolders = await pendingResp.json();
+        renderPendingFolders();
     } catch (e) {
         showToast("Failed to load folders", true);
     }
+}
+
+async function loadPendingFolders() {
+    try {
+        const resp = await fetchAPI('/api/syncweb/pending-folders');
+        state.pendingFolders = await resp.json();
+        renderPendingFolders();
+    } catch (e) {
+        showToast("Failed to load pending folders", true);
+    }
+}
+
+function renderPendingFolders() {
+    const container = document.getElementById('pending-folder-container');
+    const list = document.getElementById('pending-folder-list');
+    if (!list || !container) return;
+    
+    const folderIds = Object.keys(state.pendingFolders);
+    if (folderIds.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.style.display = 'block';
+    list.innerHTML = '';
+    
+    folderIds.forEach(folderId => {
+        const info = state.pendingFolders[folderId];
+        const offeredBy = info.offeredBy || {};
+        const deviceIds = Object.keys(offeredBy);
+        
+        const li = document.createElement('li');
+        li.className = 'folder-item';
+        li.style.color = 'var(--accent-color)';
+        li.innerHTML = `<span class="icon"><i data-lucide="inbox"></i></span> ${folderId} <span class="secondary-info">${deviceIds.length} peer(s)</span>`;
+        li.title = `Click to join folder: ${folderId}`;
+        li.onclick = () => joinFolder(folderId, deviceIds[0]);
+        list.appendChild(li);
+    });
+    
+    if (window.lucide) lucide.createIcons();
 }
 
 async function loadDevices() {
@@ -180,6 +227,27 @@ async function addFolder() {
     document.getElementById('path-preview').innerHTML = '';
     document.getElementById('new-folder-id').value = '';
     document.getElementById('new-folder-path').value = '';
+}
+
+async function joinFolder(folderId, deviceId = '') {
+    const defaultPath = prompt(`Enter local path for folder "${folderId}":`, `/home/user/Syncweb/${folderId}`);
+    if (!defaultPath) return;
+    
+    try {
+        const resp = await fetchAPI('/api/syncweb/folders/join', {
+            method: 'POST',
+            body: JSON.stringify({ folder_id: folderId, device_id: deviceId, path: defaultPath })
+        });
+        if (resp.ok) {
+            showToast(`Joined folder: ${folderId}`);
+            loadFolders();
+        } else {
+            const data = await resp.json();
+            showToast(data.error || "Failed to join folder", true);
+        }
+    } catch (e) {
+        showToast("Error joining folder", true);
+    }
 }
 
 async function previewLocalPath() {

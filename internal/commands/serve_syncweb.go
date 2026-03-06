@@ -626,6 +626,70 @@ func (c *ServeCmd) handleSyncwebDevicesAdd(w http.ResponseWriter, r *http.Reques
 	fmt.Fprintln(w, "Device add request accepted")
 }
 
+// handleSyncwebPendingFolders returns a list of pending folder invitations.
+// GET /api/syncweb/pending-folders
+func (c *ServeCmd) handleSyncwebPendingFolders(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	pending := swInstance.GetPendingFolders()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pending)
+}
+
+// handleSyncwebFoldersJoin joins a pending folder.
+// POST /api/syncweb/folders/join
+// Body: {"folder_id": "...", "device_id": "...", "path": "..."}
+func (c *ServeCmd) handleSyncwebFoldersJoin(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	var req struct {
+		FolderID string `json:"folder_id"`
+		DeviceID string `json:"device_id"`
+		Path     string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	// Add folder if it doesn't exist
+	if err := swInstance.AddFolder(req.FolderID, req.FolderID, req.Path, 0); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// Share with device if specified
+	if req.DeviceID != "" {
+		if err := swInstance.AddFolderDevice(req.FolderID, req.DeviceID); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintln(w, "Folder join request accepted")
+}
+
 // handleSyncwebDevicesDelete removes a device.
 // POST /api/syncweb/devices/delete
 // Body: {"id": "..."}

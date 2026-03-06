@@ -12,6 +12,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
+	"github.com/chapmanjacobd/syncweb/internal/version"
 	"github.com/sevlyar/go-daemon"
 	"github.com/syncthing/syncthing/lib/config"
 )
@@ -258,6 +259,6 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 type SyncwebVersionCmd struct{}
 
 func (c *SyncwebVersionCmd) Run(g *SyncwebCmd) error {
-	fmt.Println("Syncweb (Go port) v0.0.1")
+	fmt.Println(version.FullInfo())
 	return nil
 }

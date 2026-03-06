@@ -1,4 +1,4 @@
-# Syncweb (Go Port)
+# Syncweb
 
 ## An offline-first distributed web
 

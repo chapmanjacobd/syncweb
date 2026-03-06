@@ -12,7 +12,7 @@ import (
 
 // SyncwebJoinCmd joins syncweb folders/devices
 type SyncwebJoinCmd struct {
-	URLs   []string `arg:"" required:"" help:"Syncweb URLs (syncweb://folder-id#device-id)"`
+	URLs   []string `arg:"" required:"" name:"urls" help:"Syncweb URLs (syncweb://folder-id#device-id)"`
 	Prefix string   `help:"Path to parent folder" env:"SYNCWEB_HOME" default:"."`
 }
 

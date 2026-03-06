@@ -9,7 +9,7 @@ import (
 
 // SyncwebDropCmd removes devices from syncweb
 type SyncwebDropCmd struct {
-	DeviceIDs []string `arg:"" required:"" help:"Syncthing device IDs (space or comma-separated)"`
+	DeviceIDs []string `arg:"" required:"" name:"device-ids" help:"Syncthing device IDs (space or comma-separated)"`
 	FolderIDs []string `short:"f" help:"Remove devices from folders"`
 }
 

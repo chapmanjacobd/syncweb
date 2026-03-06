@@ -1,12 +1,28 @@
-.PHONY: build test clean fmt lint install all
+.PHONY: build test clean fmt lint install all version
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
 
+# Version info from git
+VERSION := $(shell git describe --tags --always 2>/dev/null || echo "dev")
+GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_DIRTY := $(shell test -z "$(shell git status --porcelain 2>/dev/null)" || echo "-dirty")
+BUILD_TIME := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+LDFLAGS := -X 'github.com/chapmanjacobd/syncweb/internal/version.Version=$(VERSION)' \
+	-X 'github.com/chapmanjacobd/syncweb/internal/version.GitHash=$(GIT_HASH)' \
+	-X 'github.com/chapmanjacobd/syncweb/internal/version.GitDirty=$(GIT_DIRTY)' \
+	-X 'github.com/chapmanjacobd/syncweb/internal/version.BuildTime=$(BUILD_TIME)'
+
 all: fmt lint test build
 
 build:
-	go build -tags "$(BUILD_TAGS)" -o $(BINARY_NAME) ./cmd/syncweb
+	go build -tags "$(BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/syncweb
+
+version:
+	@echo "Version: $(VERSION)"
+	@echo "Git Hash: $(GIT_HASH)"
+	@echo "Dirty: $(GIT_DIRTY)"
 
 dev:
 	(sleep 2 && xdg-open http://localhost:8889) &

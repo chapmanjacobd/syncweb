@@ -199,12 +199,13 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 		}
 
 		// Print table
-		header := "%-63s  %-8s  %-22s  %-10s  %s\n"
 		if c.Xfer {
-			header = "%-63s  %-8s  %-22s  %-10s  %-25s  %s\n"
+			fmt.Printf("%-63s  %-8s  %-22s  %-10s  %-25s  %s\n",
+				"Device ID", "Name", "Last Seen", "Duration", "Bandwidth Limit", "Transfer Rate")
+		} else {
+			fmt.Printf("%-63s  %-8s  %-22s  %-10s  %s\n",
+				"Device ID", "Name", "Last Seen", "Duration", "Bandwidth Limit")
 		}
-		fmt.Printf(header,
-			"Device ID", "Name", "Last Seen", "Duration", "Bandwidth Limit", "Transfer Rate")
 		fmt.Println(strings.Repeat("-", 150))
 
 		for _, d := range filtered {

@@ -865,3 +865,24 @@ func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
 
 	return pending
 }
+
+// CountSeeders returns the number of unique devices that have blocks for a file
+func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
+	info, ok, err := s.GetGlobalFileInfo(folderID, path)
+	if err != nil || !ok {
+		return 0, fmt.Errorf("file not found: %s", path)
+	}
+
+	seederSet := make(map[protocol.DeviceID]bool)
+	for _, block := range info.Blocks {
+		availables, err := s.Node.App.Internals.BlockAvailability(folderID, info, block)
+		if err != nil {
+			continue
+		}
+		for _, av := range availables {
+			seederSet[av.ID] = true
+		}
+	}
+
+	return len(seederSet), nil
+}

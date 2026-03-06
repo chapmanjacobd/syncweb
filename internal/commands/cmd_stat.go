@@ -190,7 +190,7 @@ func getFileType(info protocol.FileInfo) string {
 
 // formatVersion formats the version vector for display
 func formatVersion(version protocol.Vector) string {
-	if version.Counters == nil || len(version.Counters) == 0 {
+	if len(version.Counters) == 0 {
 		return "none"
 	}
 

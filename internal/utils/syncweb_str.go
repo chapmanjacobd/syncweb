@@ -28,9 +28,9 @@ func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 	// Split by # to separate device ID
 	var deviceID string
 	mainPart := trimmed
-	if idx := strings.Index(trimmed, "#"); idx != -1 {
-		mainPart = trimmed[:idx]
-		deviceID = trimmed[idx+1:]
+	if before, after, ok := strings.Cut(trimmed, "#"); ok {
+		mainPart = before
+		deviceID = after
 		if decode && deviceID != "" {
 			var err error
 			deviceID, err = url.PathUnescape(deviceID)
@@ -42,9 +42,9 @@ func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 
 	// Split by / to separate folder ID and subpath
 	var folderID, subpath string
-	if idx := strings.Index(mainPart, "/"); idx != -1 {
-		folderID = mainPart[:idx]
-		subpath = mainPart[idx+1:]
+	if before, after, ok := strings.Cut(mainPart, "/"); ok {
+		folderID = before
+		subpath = after
 	} else {
 		folderID = mainPart
 	}

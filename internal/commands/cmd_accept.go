@@ -20,8 +20,8 @@ func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 		// Parse device IDs (support comma-separated)
 		var deviceIDs []string
 		for _, id := range c.DeviceIDs {
-			parts := strings.Split(id, ",")
-			for _, p := range parts {
+			parts := strings.SplitSeq(id, ",")
+			for p := range parts {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					deviceIDs = append(deviceIDs, p)

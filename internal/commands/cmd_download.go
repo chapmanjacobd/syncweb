@@ -14,18 +14,18 @@ import (
 
 // SyncwebDownloadCmd marks file paths for download/sync
 type SyncwebDownloadCmd struct {
-	Paths  []string `arg:"" optional:"" help:"File or directory paths to download"`
-	Depth  int      `help:"Maximum depth for directory traversal"`
+	Paths []string `arg:"" optional:"" help:"File or directory paths to download"`
+	Depth int      `help:"Maximum depth for directory traversal"`
 }
 
 type folderSpaceInfo struct {
-	Free          int64
-	Total         int64
-	MinFree       int64
-	Usable        int64
-	MinFreeConfig minDiskFreeConfig
-	Mountpoint    string
-	DeviceID      uint64
+	Free            int64
+	Total           int64
+	MinFree         int64
+	Usable          int64
+	MinFreeConfig   minDiskFreeConfig
+	Mountpoint      string
+	DeviceID        uint64
 	PendingDownload int64
 }
 
@@ -183,10 +183,7 @@ func getFolderSpaceInfo(s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
 	pendingDownload := needSize.Bytes
 
 	// Usable space = free - min_free - pending_downloads
-	us := free - minFree - pendingDownload
-	if us < 0 {
-		us = 0
-	}
+	us := max(free-minFree-pendingDownload, 0)
 
 	// Try to get mountpoint
 	mountpoint := getMountpoint(folderPath)
@@ -300,10 +297,7 @@ func calculateMountpointUsage(
 		}
 
 		// Usable = free - max_buffer - pending
-		us := free - maxMinFree - totalPending
-		if us < 0 {
-			us = 0
-		}
+		us := max(free-maxMinFree-totalPending, 0)
 
 		result[mountpoint] = &mountpointUsageInfo{
 			TotalDownload: totalDownload,

@@ -36,6 +36,7 @@ type SyncwebCmd struct {
 	Start     SyncwebStartCmd     `cmd:"" help:"Start Syncweb daemon" aliases:"restart"`
 	Stop      SyncwebStopCmd      `cmd:"" help:"Stop Syncweb daemon" aliases:"shutdown,quit"`
 	Version   SyncwebVersionCmd   `cmd:"" help:"Show Syncweb version"`
+	Repl      SyncwebReplCmd      `cmd:"" help:"Interactive REPL for debugging" aliases:"debug"`
 }
 
 func (c *SyncwebCmd) AfterApply() error {
@@ -59,16 +60,16 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
 
 // SyncwebAutomaticCmd starts the syncweb-automatic daemon
 type SyncwebAutomaticCmd struct {
-	Devices         bool     `help:"Auto-accept devices"`
-	Folders         bool     `help:"Auto-join folders"`
-	Local           bool     `default:"true" help:"Only auto-accept local devices"`
-	FoldersInclude  []string `help:"Search for folders which match by label, ID, or path"`
-	FoldersExclude  []string `help:"Exclude folders which match by label, ID, or path"`
-	FolderTypes     []string `help:"Filter folders by type"`
-	DevicesInclude  []string `help:"Search for devices which match by name or ID"`
-	DevicesExclude  []string `help:"Exclude devices which match by name or ID"`
-	JoinNewFolders  bool     `help:"Join non-existing folders from other devices"`
-	Sort            string   `default:"-niche,-frecency" help:"Sort criteria for download prioritization"`
+	Devices        bool     `help:"Auto-accept devices"`
+	Folders        bool     `help:"Auto-join folders"`
+	Local          bool     `default:"true" help:"Only auto-accept local devices"`
+	FoldersInclude []string `help:"Search for folders which match by label, ID, or path"`
+	FoldersExclude []string `help:"Exclude folders which match by label, ID, or path"`
+	FolderTypes    []string `help:"Filter folders by type"`
+	DevicesInclude []string `help:"Search for devices which match by name or ID"`
+	DevicesExclude []string `help:"Exclude devices which match by name or ID"`
+	JoinNewFolders bool     `help:"Join non-existing folders from other devices"`
+	Sort           string   `default:"-niche,-frecency" help:"Sort criteria for download prioritization"`
 }
 
 func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {

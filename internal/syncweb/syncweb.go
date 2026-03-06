@@ -369,13 +369,7 @@ func (s *Syncweb) RemoveFolderDevices(folderID string, deviceIDs []string) error
 			if fld.ID == folderID {
 				var newDevices []config.FolderDeviceConfiguration
 				for _, dev := range fld.Devices {
-					keep := true
-					for _, id := range ids {
-						if dev.DeviceID == id {
-							keep = false
-							break
-						}
-					}
+					keep := !slices.Contains(ids, dev.DeviceID)
 					if keep {
 						newDevices = append(newDevices, dev)
 					}

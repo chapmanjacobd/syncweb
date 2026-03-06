@@ -13,16 +13,16 @@ import (
 
 // SyncwebSortCmd sorts Syncthing files by multiple criteria
 type SyncwebSortCmd struct {
-	Paths        []string `arg:"" optional:"" help:"File paths to sort"`
-	Sort         []string `help:"Sort criteria" default:"name"`
-	LimitSize    string   `short:"S" help:"Stop after printing N bytes"`
-	MinSeeders   int      `help:"Filter files with fewer than N seeders"`
-	MaxSeeders   int      `help:"Filter files with more than N seeders"`
-	Niche        int      `default:"3" help:"Ideal popularity for niche sort"`
-	FrecencyWeight int    `default:"3" help:"Weight for frecency calculation"`
-	Depth        []string `short:"d" help:"Depth constraints"`
-	MinDepth     int      `help:"Minimum depth"`
-	MaxDepth     int      `help:"Maximum depth"`
+	Paths          []string `arg:"" optional:"" help:"File paths to sort"`
+	Sort           []string `help:"Sort criteria" default:"name"`
+	LimitSize      string   `short:"S" help:"Stop after printing N bytes"`
+	MinSeeders     int      `help:"Filter files with fewer than N seeders"`
+	MaxSeeders     int      `help:"Filter files with more than N seeders"`
+	Niche          int      `default:"3" help:"Ideal popularity for niche sort"`
+	FrecencyWeight int      `default:"3" help:"Weight for frecency calculation"`
+	Depth          []string `short:"d" help:"Depth constraints"`
+	MinDepth       int      `help:"Minimum depth"`
+	MaxDepth       int      `help:"Maximum depth"`
 }
 
 type fileWithInfo struct {
@@ -166,7 +166,7 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 // Note: Since AccessTime is not available, we use only recency
 func calculateFrecency(f fileWithInfo, weight int) float64 {
 	now := time.Now().Unix()
-	
+
 	// Recency component: more recent = higher score
 	age := float64(now - f.Modified)
 	recencyScore := 1.0 / (1.0 + age/86400) // Decay over days
@@ -179,13 +179,13 @@ func calculateFrecency(f fileWithInfo, weight int) float64 {
 // FrecencyScore calculates the popularity score for a file
 func FrecencyScore(modified, accessTime int64, weight int) float64 {
 	now := time.Now().Unix()
-	
+
 	age := float64(now - modified)
 	recencyScore := 1.0 / (1.0 + age/86400)
-	
+
 	freqScore := float64(accessTime) / float64(now)
-	
-	return recencyScore * float64(weight) + freqScore
+
+	return recencyScore*float64(weight) + freqScore
 }
 
 // NicheScore calculates how close a file is to the ideal seeder count

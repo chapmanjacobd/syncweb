@@ -239,7 +239,7 @@ func (c *SyncwebLsCmd) printDirectory(items []*fileEntry, indent int, printHeade
 		}
 
 		// Print indentation
-		for i := 0; i < indent; i++ {
+		for range indent {
 			fmt.Print("  ")
 		}
 

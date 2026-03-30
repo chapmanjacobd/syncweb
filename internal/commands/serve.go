@@ -86,7 +86,8 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 		listenAddr = fmt.Sprintf("127.0.0.1:%s", listenAddr)
 	}
 
-	slog.Info("Syncweb server starting", "addr", listenAddr, "token", c.APIToken)
+	slog.Info("Syncweb server starting", "addr", listenAddr)
+	slog.Debug("API token", "token", c.APIToken)
 
 	server := &http.Server{
 		Addr:         listenAddr,
@@ -289,7 +290,35 @@ func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *ServeCmd) isPathBlacklisted(path string) bool {
-	// Add implementation for path blacklisting
+	// Normalize the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+
+	// Block directory traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return true
+	}
+
+	// Block absolute paths to sensitive system directories
+	sensitivePaths := []string{
+		"/etc",
+		"/proc",
+		"/sys",
+		"/dev",
+		"/root",
+		"/boot",
+	}
+
+	for _, sensitive := range sensitivePaths {
+		if cleanPath == sensitive || strings.HasPrefix(cleanPath, sensitive+"/") {
+			return true
+		}
+	}
+
+	// Block paths with null bytes or other dangerous characters
+	if strings.ContainsAny(cleanPath, "\x00") {
+		return true
+	}
+
 	return false
 }
 

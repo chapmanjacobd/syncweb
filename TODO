@@ -1,12 +1,3 @@
-    🔴 Critical Security Issues
-
-     1. API token logged at INFO level (internal/commands/serve.go:58) - exposes sensitive credentials in logs
-     2. Path blacklist not implemented (internal/commands/serve.go:248-251) - always returns false, provides no protection
-     3. Weak DNS rebinding protection - can be bypassed with controlled DNS
-     4. Log file permissions too open (0o640 instead of 0o600)
-
-    🟠 High Priority Bugs
-
      1. Ignored errors throughout - Multiple places ignore errors from PauseDevice(), ResumeDevice(), filepath.Abs()
      2. Race condition in event watching - Subscription may not be properly cleaned up if Stop() is called
      3. Integer overflow risk in size calculations on 32-bit systems

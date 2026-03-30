@@ -34,7 +34,7 @@ export class TestServer {
   private baseUrl: string;
 
   constructor(options: TestServerOptions = {}) {
-    this.port = options.port || this.findAvailablePort();
+    this.port = options.port ?? 0;  // 0 means find available port
     this.homeDir = options.homeDir || this.createTempHome();
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
@@ -43,9 +43,9 @@ export class TestServer {
   }
 
   /**
-   * Find an available port starting from 8889
+   * Find an available port starting from startPort
    */
-  private findAvailablePort(startPort: number = 8889): number {
+  private async findAvailablePort(startPort: number = 8889): Promise<number> {
     return new Promise<number>((resolve) => {
       const checkPort = (port: number) => {
         const server = http.createServer();
@@ -57,7 +57,7 @@ export class TestServer {
         });
       };
       checkPort(startPort);
-    }) as unknown as number;
+    });
   }
 
   /**
@@ -76,6 +76,12 @@ export class TestServer {
   async start(): Promise<void> {
     if (this.serverProcess) {
       throw new Error('Server already started');
+    }
+
+    // Find available port if not specified
+    if (this.port === 0) {
+      this.port = await this.findAvailablePort(8889);
+      this.baseUrl = `http://localhost:${this.port}`;
     }
 
     // Build the binary if it doesn't exist
@@ -105,21 +111,22 @@ export class TestServer {
     this.serverProcess = spawn(binaryPath, ['serve', '--port', this.port.toString(), '--public-dir', path.resolve(__dirname, '../../web/dist')], {
       env: serverEnv,
       cwd: projectRoot,
-      stdio: this.verbose ? 'inherit' : 'pipe',
+      stdio: 'pipe',  // Always capture stdio for debugging
     });
 
     this.serverProcess.on('error', (err: any) => {
       console.error('Server process error:', err);
     });
 
-    if (this.verbose) {
-      this.serverProcess.stdout?.on('data', (data: Buffer) => {
-        console.log(`[syncweb] ${data.toString()}`);
-      });
-      this.serverProcess.stderr?.on('data', (data: Buffer) => {
-        console.error(`[syncweb] ${data.toString()}`);
-      });
-    }
+    // Capture and log server output for debugging
+    this.serverProcess.stdout?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      console.log(`[syncweb stdout] ${output}`);
+    });
+    this.serverProcess.stderr?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      console.error(`[syncweb stderr] ${output}`);
+    });
 
     // Wait for server to be ready
     await this.waitForServer(60000);

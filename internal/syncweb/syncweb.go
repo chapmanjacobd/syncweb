@@ -318,7 +318,7 @@ func (s *Syncweb) AddFolder(id string, label string, path string, folderType con
 		return err
 	}
 
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		if _, _, ok := cfg.Folder(id); ok {
 			return // Already exists
 		}
@@ -329,7 +329,16 @@ func (s *Syncweb) AddFolder(id string, label string, path string, folderType con
 		fld.Type = folderType
 		cfg.SetFolder(fld)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	
+	// Save config to ensure changes are persisted
+	if err := s.Node.Cfg.Save(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // AddFolderDevice shares a folder with a device

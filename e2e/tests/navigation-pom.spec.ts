@@ -20,6 +20,9 @@ test.describe('Navigation', () => {
     // Verify files view is loaded
     await filesPage.expectVisible(filesPage.fileList);
 
+    // Wait for current path to be updated (might take a moment for JS to load)
+    await expect(filesPage.currentPath).not.toHaveText('Select a folder');
+    
     // Verify current path shows root
     const currentPath = await filesPage.getCurrentPath();
     expect(currentPath).toContain('/');

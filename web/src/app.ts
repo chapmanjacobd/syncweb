@@ -76,6 +76,9 @@ export async function loadFolders(): Promise<void> {
     } catch (e) {
         showToast("Failed to load folders", true);
     }
+    
+    // Load files for the current folder (root by default)
+    await loadFiles();
 }
 
 export async function loadPendingFolders(): Promise<void> {

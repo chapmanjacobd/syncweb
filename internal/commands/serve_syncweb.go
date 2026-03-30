@@ -80,8 +80,7 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 }
 
 func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]models.LsEntry, counts map[string]int, path string) {
-	c.swMu.Lock()
-	defer c.swMu.Unlock()
+	// Note: Caller must hold c.swMu.Lock()
 	if c.sw != nil && (path == "/" || path == "") && c.sw.IsRunning() {
 		for _, folder := range c.sw.GetFolders() {
 			id := folder.ID

@@ -27,10 +27,12 @@ export class FilesPage extends BasePage {
   }
 
   /**
-   * Wait for files to load
+   * Wait for files to load (or for the file list to be ready, even if empty)
    */
   async waitForFilesToLoad(timeout: number = 10000): Promise<void> {
-    await this.fileList.locator('.file-item').first().waitFor({ state: 'visible', timeout });
+    // Wait for the file list element to be attached to the DOM
+    await this.fileList.waitFor({ state: 'attached', timeout });
+    // Don't wait for files or visibility - empty state is valid
   }
 
   /**

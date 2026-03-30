@@ -10,6 +10,7 @@ import (
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
+	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
@@ -47,6 +48,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		var items []downloadItem
 		var totalSize int64
 
+		cfg := s.Node.Cfg.RawCopy()
 		for _, p := range c.Paths {
 			absPath, err := filepath.Abs(p)
 			if err != nil {
@@ -58,7 +60,6 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 			var folderID string
 			var relPath string
 
-			cfg := s.Node.Cfg.RawCopy()
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
@@ -97,7 +98,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		// Get space info for each folder
 		folderSpaceInfos := make(map[string]*folderSpaceInfo)
 		for folderID := range itemsByFolder {
-			spaceInfo := getFolderSpaceInfo(s, folderID)
+			spaceInfo := getFolderSpaceInfo(cfg, s, folderID)
 			if spaceInfo != nil {
 				folderSpaceInfos[folderID] = spaceInfo
 			}
@@ -147,8 +148,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 }
 
 // getFolderSpaceInfo gets disk space information for a folder
-func getFolderSpaceInfo(s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
-	cfg := s.Node.Cfg.RawCopy()
+func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
 	var folderPath string
 	var minFreeCfg minDiskFreeConfig
 

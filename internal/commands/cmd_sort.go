@@ -44,6 +44,7 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 
 		var files []fileWithInfo
 
+		cfg := s.Node.Cfg.RawCopy()
 		for _, p := range c.Paths {
 			absPath, err := filepath.Abs(p)
 			if err != nil {
@@ -55,7 +56,6 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 			var folderID string
 			var relPath string
 
-			cfg := s.Node.Cfg.RawCopy()
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID

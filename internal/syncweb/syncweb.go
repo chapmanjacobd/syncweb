@@ -98,6 +98,9 @@ type Syncweb struct {
 	pendingDevices sync.Map // map[protocol.DeviceID]time.Time
 	events         []models.SyncEvent
 	eventsMu       sync.RWMutex
+	eventsCache    []models.SyncEvent
+	eventsSeq      uint64
+	cacheSeq       uint64
 	eventSub       events.Subscription
 	eventSubMu     sync.Mutex
 }
@@ -134,15 +137,31 @@ func (s *Syncweb) addEvent(evType string, message string, data any) {
 	if len(s.events) > EventBufferLimit {
 		s.events = s.events[1:]
 	}
+	s.eventsSeq++
 }
 
 func (s *Syncweb) GetEvents() []models.SyncEvent {
 	s.eventsMu.RLock()
-	defer s.eventsMu.RUnlock()
+	if s.eventsCache != nil && s.cacheSeq == s.eventsSeq {
+		res := s.eventsCache
+		s.eventsMu.RUnlock()
+		return res
+	}
+	s.eventsMu.RUnlock()
+
+	s.eventsMu.Lock()
+	defer s.eventsMu.Unlock()
+
+	// Re-check after acquiring write lock
+	if s.eventsCache != nil && s.cacheSeq == s.eventsSeq {
+		return s.eventsCache
+	}
 
 	// Return a copy to avoid data races
 	res := make([]models.SyncEvent, len(s.events))
 	copy(res, s.events)
+	s.eventsCache = res
+	s.cacheSeq = s.eventsSeq
 	return res
 }
 

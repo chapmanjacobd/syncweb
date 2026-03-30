@@ -65,30 +65,35 @@ func MatchesAny(path string, patterns []string) bool {
 	return false
 }
 
+var cleanReplacer = strings.NewReplacer(
+	"\x7f", "",
+	"&", "",
+	"%", "",
+	"*", "",
+	"$", "",
+	"#", "",
+	"!", "",
+	"?", "",
+	"|", "",
+	"^", "",
+	"'", "",
+	"\"", "",
+	")", "",
+	":", "",
+	">", "",
+	"<", "",
+	"\\", " ",
+	"/", " ",
+	"(", " ",
+)
+
 func CleanString(s string) string {
 	s = RemoveTextInsideBrackets(s)
 	s = html.UnescapeString(s)
-	s = strings.ReplaceAll(s, "\x7f", "")
-	s = strings.ReplaceAll(s, "&", "")
-	s = strings.ReplaceAll(s, "%", "")
-	s = strings.ReplaceAll(s, "*", "")
-	s = strings.ReplaceAll(s, "$", "")
-	s = strings.ReplaceAll(s, "#", "")
-	s = strings.ReplaceAll(s, "!", "")
-	s = strings.ReplaceAll(s, "?", "")
-	s = strings.ReplaceAll(s, "|", "")
-	s = strings.ReplaceAll(s, "^", "")
-	s = strings.ReplaceAll(s, "'", "")
-	s = strings.ReplaceAll(s, "\"", "")
-	s = strings.ReplaceAll(s, ")", "")
-	s = strings.ReplaceAll(s, ":", "")
-	s = strings.ReplaceAll(s, ">", "")
-	s = strings.ReplaceAll(s, "<", "")
-	s = strings.ReplaceAll(s, "\\", " ")
-	s = strings.ReplaceAll(s, "/", " ")
+	s = cleanReplacer.Replace(s)
 
 	s = RemoveConsecutives(s, []string{"."})
-	s = strings.ReplaceAll(s, "(", " ")
+	// These replacements are more specific and order-dependent
 	s = strings.ReplaceAll(s, "-.", ".")
 	s = strings.ReplaceAll(s, " - ", " ")
 	s = strings.ReplaceAll(s, "- ", " ")
@@ -119,10 +124,11 @@ func RemoveTextInsideBrackets(s string) string {
 	return result.String()
 }
 
+var pathToSentenceRegex = regexp.MustCompile(`[/\\.\[\]\-\+(){}_&]`)
+
 func PathToSentence(path string) string {
 	s := filepath.Base(path)
-	re := regexp.MustCompile(`[/\\.\[\]\-\+(){}_&]`)
-	s = re.ReplaceAllString(s, " ")
+	s = pathToSentenceRegex.ReplaceAllString(s, " ")
 	return CleanString(s)
 }
 
@@ -333,11 +339,16 @@ func extractNumbers(s string) []chunk {
 	return chunks
 }
 
+var (
+	smartQuoteRegex       = regexp.MustCompile(`[“”‘’]`)
+	smartDoubleQuoteRegex = regexp.MustCompile(`[‛‟„]`)
+)
+
 func UnParagraph(s string) string {
 	s = RemoveConsecutiveWhitespace(s)
 	// Replace smart quotes
-	s = regexp.MustCompile(`[“”‘’]`).ReplaceAllString(s, "'")
-	s = regexp.MustCompile(`[‛‟„]`).ReplaceAllString(s, "\"")
+	s = smartQuoteRegex.ReplaceAllString(s, "'")
+	s = smartDoubleQuoteRegex.ReplaceAllString(s, "\"")
 	s = strings.ReplaceAll(s, "…", "...")
 	return StripEnclosingQuotes(s)
 }
@@ -578,13 +589,16 @@ func FtsQuote(query []string) []string {
 	return res
 }
 
+var xmlReplacer = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	"\"", "&quot;",
+	"'", "&apos;",
+)
+
 func EscapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
-	return s
+	return xmlReplacer.Replace(s)
 }
 
 // Pluralize returns the singular form if n is 1, otherwise the plural form

@@ -86,8 +86,8 @@ func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]models.LsEntry, counts 
 			id := folder.ID
 			entryPath := fmt.Sprintf("sync://%s/", id)
 			name := id
-			if localPath, ok := c.sw.GetFolderPath(id); ok {
-				name += " (" + filepath.Base(localPath) + ")"
+			if folder.Path != "" {
+				name += " (" + filepath.Base(folder.Path) + ")"
 			}
 			resultsMap[entryPath] = models.LsEntry{
 				Name:  name,
@@ -253,6 +253,11 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		for meta := range seq {
+			// Check context for cancellation
+			if r.Context().Err() != nil {
+				return
+			}
+
 			name := meta.Name
 			if !strings.HasPrefix(name, prefix) || name == prefix {
 				continue
@@ -477,7 +482,14 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	cfg := c.sw.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
 		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(f.ID)
+		defer cancel()
+
 		for meta := range seq {
+			// Check context for cancellation
+			if r.Context().Err() != nil {
+				return
+			}
+
 			if re.MatchString(meta.Name) || re.MatchString(filepath.Base(meta.Name)) {
 				fullSyncwebPath := fmt.Sprintf("sync://%s/%s", f.ID, meta.Name)
 				localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
@@ -494,7 +506,6 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		cancel()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

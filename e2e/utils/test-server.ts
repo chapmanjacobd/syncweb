@@ -16,6 +16,8 @@ export interface TestServerOptions {
   env?: Record<string, string>;
   /** Verbose logging */
   verbose?: boolean;
+  /** Public directory for web assets (default: embedded assets) */
+  publicDir?: string;
 }
 
 /**
@@ -30,6 +32,7 @@ export class TestServer {
   private env: Record<string, string>;
   private verbose: boolean;
   private baseUrl: string;
+  private publicDir?: string;
 
   constructor(options: TestServerOptions = {}) {
     this.port = options.port || this.findAvailablePort();
@@ -37,6 +40,7 @@ export class TestServer {
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
     this.verbose = options.verbose || false;
+    this.publicDir = options.publicDir;
     this.baseUrl = `http://localhost:${this.port}`;
   }
 
@@ -100,7 +104,7 @@ export class TestServer {
       ...this.env,
     };
 
-    this.serverProcess = spawn(binaryPath, ['serve', '--port', this.port.toString()], {
+    this.serverProcess = spawn(binaryPath, ['serve', '--port', this.port.toString(), '--public-dir', path.resolve(__dirname, '../../web/dist')], {
       env: serverEnv,
       cwd: projectRoot,
       stdio: this.verbose ? 'inherit' : 'pipe',

@@ -13,11 +13,12 @@ import (
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
+	"github.com/chapmanjacobd/syncweb/web"
 )
 
 type ServeCmd struct {
 	Port      int    `short:"p" default:"8889" help:"Port to listen on"`
-	PublicDir string `help:"Local directory for static assets"`
+	PublicDir string `help:"Override embedded web assets with local directory"`
 	ReadOnly  bool   `help:"Disable file modifications"`
 
 	APIToken string `kong:"-"`
@@ -71,14 +72,8 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	if c.PublicDir != "" {
 		mux.Handle("/", http.FileServer(http.Dir(c.PublicDir)))
 	} else {
-		// Try to serve from web/ directory if it exists relative to the binary
-		if info, err := os.Stat("web"); err == nil && info.IsDir() {
-			mux.Handle("/", http.FileServer(http.Dir("web")))
-		} else {
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "Syncweb Server Running. (No PublicDir configured and web/ directory not found)")
-			})
-		}
+		// Serve embedded web assets
+		mux.Handle("/", http.FileServer(http.FS(web.FS)))
 	}
 
 	addr := fmt.Sprintf(":%d", c.Port)

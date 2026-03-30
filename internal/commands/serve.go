@@ -48,6 +48,14 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/pending", c.authMiddleware(c.handleSyncwebPendingDevices))
 	mux.HandleFunc("/api/syncweb/devices/add", c.authMiddleware(c.handleSyncwebDevicesAdd))
 	mux.HandleFunc("/api/syncweb/devices/delete", c.authMiddleware(c.handleSyncwebDevicesDelete))
+
+	// New Syncthing Contract endpoints
+	mux.HandleFunc("/api/syncweb/completion", c.authMiddleware(c.handleSyncwebCompletion))
+	mux.HandleFunc("/api/syncweb/tree", c.authMiddleware(c.handleSyncwebTree))
+	mux.HandleFunc("/api/syncweb/local-changed", c.authMiddleware(c.handleSyncwebLocalChanged))
+	mux.HandleFunc("/api/syncweb/need", c.authMiddleware(c.handleSyncwebNeed))
+	mux.HandleFunc("/api/syncweb/remote-need", c.authMiddleware(c.handleSyncwebRemoteNeed))
+
 	mux.HandleFunc("/api/mounts", c.authMiddleware(c.handleMounts))
 	mux.HandleFunc("/api/mount", c.authMiddleware(c.handleMount))
 	mux.HandleFunc("/api/unmount", c.authMiddleware(c.handleUnmount))

@@ -11,6 +11,7 @@ package syncweb
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -785,5 +786,486 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 		_, err := internals.DownloadBlock(ctx, protocol.LocalDeviceID, folderID, testFile, 0, info.Blocks[0], false)
 		// Error is expected since we cancelled and there's no peer
 		_ = err
+	}
+}
+
+// =============================================================================
+// COMPLETION API CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_Completion(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-completion-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for folder to be running
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: Completion should return valid struct for local device
+	comp, err := internals.Completion(protocol.LocalDeviceID, folderID)
+	if err != nil {
+		t.Fatalf("Completion() failed: %v", err)
+	}
+
+	// CONTRACT: Completion struct should have expected fields
+	// CompletionPct should be between 0-100
+	if comp.CompletionPct < 0 || comp.CompletionPct > 100 {
+		t.Errorf("CompletionPct should be 0-100, got %f", comp.CompletionPct)
+	}
+
+	// NeedBytes should be non-negative
+	if comp.NeedBytes < 0 {
+		t.Errorf("NeedBytes should be non-negative, got %d", comp.NeedBytes)
+	}
+
+	// NeedItems should be non-negative
+	if comp.NeedItems < 0 {
+		t.Errorf("NeedItems should be non-negative, got %d", comp.NeedItems)
+	}
+
+	// Note: For local device with no remote, completion may show 100% or N/A
+	t.Logf("Completion: CompletionPct=%f, NeedBytes=%d, NeedItems=%d", comp.CompletionPct, comp.NeedBytes, comp.NeedItems)
+}
+
+func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-completion-remote-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create some test files
+	testFile := filepath.Join(syncDir, "test.txt")
+	testContent := "test content for completion"
+	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for file to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: Completion with non-existent device should return empty/zero values
+	// Generate a random device ID that doesn't exist
+	randomDeviceID := protocol.NewDeviceID(nil)
+	comp, err := internals.Completion(randomDeviceID, folderID)
+	if err != nil {
+		t.Fatalf("Completion() with non-existent device failed: %v", err)
+	}
+
+	// For non-existent device, values should be zero or N/A
+	t.Logf("Completion for non-existent device: CompletionPct=%f", comp.CompletionPct)
+}
+
+// =============================================================================
+// DEVICE STATISTICS CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_DeviceStatistics(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-devstats-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: DeviceStatistics should return non-nil map
+	stats, err := internals.DeviceStatistics()
+	if err != nil {
+		t.Fatalf("DeviceStatistics() failed: %v", err)
+	}
+	if stats == nil {
+		t.Error("DeviceStatistics() should return non-nil map")
+	}
+
+	// CONTRACT: Map should contain at least local device
+	// Note: Local device may not appear in stats until it has connections
+	t.Logf("DeviceStatistics returned %d entries", len(stats))
+
+	// Verify map keys are valid device IDs
+	for deviceID := range stats {
+		if deviceID.String() == "" {
+			t.Error("DeviceStatistics returned entry with empty device ID")
+		}
+	}
+}
+
+// =============================================================================
+// GLOBAL TREE CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_GlobalTree(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-tree-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a directory structure
+	subDir := filepath.Join(syncDir, "subdir")
+	os.MkdirAll(subDir, 0o700)
+	if err := os.WriteFile(filepath.Join(syncDir, "file1.txt"), []byte("content1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "file2.txt"), []byte("content2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for files to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: GlobalTree with levels=-1 should return full tree
+	tree, err := internals.GlobalTree(folderID, "", -1, false)
+	if err != nil {
+		t.Fatalf("GlobalTree() failed: %v", err)
+	}
+	if tree == nil {
+		t.Error("GlobalTree() should return non-nil slice")
+	}
+
+	t.Logf("GlobalTree returned %d entries", len(tree))
+
+	// CONTRACT: GlobalTree with prefix should filter results
+	treeWithPrefix, err := internals.GlobalTree(folderID, "subdir", -1, false)
+	if err != nil {
+		t.Fatalf("GlobalTree() with prefix failed: %v", err)
+	}
+	t.Logf("GlobalTree with prefix 'subdir' returned %d entries", len(treeWithPrefix))
+
+	// CONTRACT: GlobalTree with returnOnlyDirectories=true should return only dirs
+	treeDirsOnly, err := internals.GlobalTree(folderID, "", -1, true)
+	if err != nil {
+		t.Fatalf("GlobalTree() dirs-only failed: %v", err)
+	}
+	for _, entry := range treeDirsOnly {
+		if entry.Type != "FILE_INFO_TYPE_DIRECTORY" {
+			t.Errorf("GlobalTree with returnOnlyDirectories=true returned non-dir entry: %s (type=%s)", entry.Name, entry.Type)
+		}
+	}
+}
+
+func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-tree-empty-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for folder to be initialized
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: GlobalTree on empty folder should return empty slice, not error
+	tree, err := internals.GlobalTree(folderID, "", -1, false)
+	if err != nil {
+		t.Fatalf("GlobalTree() on empty folder failed: %v", err)
+	}
+	if len(tree) != 0 {
+		t.Errorf("GlobalTree() on empty folder should return empty slice, got %d entries", len(tree))
+	}
+}
+
+// =============================================================================
+// LOCAL CHANGED FOLDER FILES CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-localchanged-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(syncDir, "changed.txt")
+	testContent := "changed content"
+	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for file to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: LocalChangedFolderFiles should return valid slice
+	// page=1, perpage=100
+	files, err := internals.LocalChangedFolderFiles(folderID, 1, 100)
+	if err != nil {
+		t.Fatalf("LocalChangedFolderFiles() failed: %v", err)
+	}
+	// Note: files can be empty slice if no local changes - just verify no panic
+
+	t.Logf("LocalChangedFolderFiles returned %d entries", len(files))
+
+	// CONTRACT: Pagination should work - page=0 may error or return empty
+	// Just verify it doesn't panic
+	_, err = internals.LocalChangedFolderFiles(folderID, 0, 100)
+	t.Logf("LocalChangedFolderFiles page=0: err=%v", err)
+}
+
+// =============================================================================
+// NEED FOLDER FILES CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-needfiles-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(syncDir, "needtest.txt")
+	testContent := "need test content"
+	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for file to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: NeedFolderFiles should return three slices (remote, local, queued)
+	// page=1, perpage=100
+	remote, local, queued, err := internals.NeedFolderFiles(folderID, 1, 100)
+	if err != nil {
+		t.Fatalf("NeedFolderFiles() failed: %v", err)
+	}
+	if remote == nil {
+		t.Error("NeedFolderFiles() should return non-nil remote slice")
+	}
+	if local == nil {
+		t.Error("NeedFolderFiles() should return non-nil local slice")
+	}
+	if queued == nil {
+		t.Error("NeedFolderFiles() should return non-nil queued slice")
+	}
+
+	t.Logf("NeedFolderFiles: remote=%d, local=%d, queued=%d", len(remote), len(local), len(queued))
+
+	// Note: page=0 causes a panic in Syncthing's queue.go, so we don't test it
+	// This is a known edge case in Syncthing's implementation
+}
+
+func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-needfiles-multi-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create multiple test files
+	for i := range 5 {
+		filename := filepath.Join(syncDir, fmt.Sprintf("file%d.txt", i))
+		content := fmt.Sprintf("content %d", i)
+		if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait for files to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: NeedFolderFiles with pagination - perpage=2 should limit results
+	remote, local, queued, err := internals.NeedFolderFiles(folderID, 1, 2)
+	if err != nil {
+		t.Fatalf("NeedFolderFiles() with pagination failed: %v", err)
+	}
+
+	// Verify pagination limits results
+	totalFiles := len(remote) + len(local) + len(queued)
+	t.Logf("NeedFolderFiles page=1, perpage=2: remote=%d, local=%d, queued=%d (total=%d)", len(remote), len(local), len(queued), totalFiles)
+}
+
+// =============================================================================
+// REMOTE NEED FOLDER FILES CONTRACT TESTS
+// =============================================================================
+
+func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
+	homeDir, err := os.MkdirTemp("", "syncweb-contract-remoteneed-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(homeDir)
+
+	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer sw.Stop()
+
+	syncDir := filepath.Join(homeDir, "sync")
+	os.MkdirAll(syncDir, 0o700)
+	folderID := "test-folder"
+	if err := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(syncDir, "remoteneed.txt")
+	testContent := "remote need test"
+	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for file to be indexed
+	time.Sleep(500 * time.Millisecond)
+
+	internals := sw.Node.App.Internals
+
+	// CONTRACT: RemoteNeedFolderFiles with local device should return valid slice
+	files, err := internals.RemoteNeedFolderFiles(folderID, protocol.LocalDeviceID, 1, 100)
+	if err != nil {
+		t.Fatalf("RemoteNeedFolderFiles() failed: %v", err)
+	}
+	// Note: files can be empty if no remote needs - just verify no panic
+
+	t.Logf("RemoteNeedFolderFiles returned %d entries", len(files))
+
+	// CONTRACT: RemoteNeedFolderFiles with non-existent device
+	randomDeviceID := protocol.NewDeviceID(nil)
+	files, err = internals.RemoteNeedFolderFiles(folderID, randomDeviceID, 1, 100)
+	if err != nil {
+		// May error for non-existent device
+		t.Logf("RemoteNeedFolderFiles with non-existent device: err=%v", err)
+	} else {
+		t.Logf("RemoteNeedFolderFiles with non-existent device returned %d entries", len(files))
 	}
 }

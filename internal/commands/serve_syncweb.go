@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -722,4 +723,256 @@ func (c *ServeCmd) handleSyncwebDevicesDelete(w http.ResponseWriter, r *http.Req
 
 	w.WriteHeader(http.StatusAccepted)
 	fmt.Fprintln(w, "Device deletion request accepted")
+}
+
+// handleSyncwebCompletion returns folder completion percentage for a device.
+// GET /api/syncweb/completion?device_id=...&folder_id=...
+func (c *ServeCmd) handleSyncwebCompletion(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	deviceIDStr := r.URL.Query().Get("device_id")
+	folderID := r.URL.Query().Get("folder_id")
+
+	if deviceIDStr == "" || folderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Missing device_id or folder_id parameter"})
+		return
+	}
+
+	deviceID, err := protocol.DeviceIDFromString(deviceIDStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid device_id: " + err.Error()})
+		return
+	}
+
+	completion, err := swInstance.GetCompletion(deviceID, folderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(completion)
+}
+
+// handleSyncwebTree returns folder tree structure for browsing.
+// GET /api/syncweb/tree?folder_id=...&prefix=...&levels=-1&dirs_only=false
+func (c *ServeCmd) handleSyncwebTree(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	folderID := r.URL.Query().Get("folder_id")
+	prefix := r.URL.Query().Get("prefix")
+	levelsStr := r.URL.Query().Get("levels")
+	dirsOnlyStr := r.URL.Query().Get("dirs_only")
+
+	if folderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Missing folder_id parameter"})
+		return
+	}
+
+	levels := -1
+	if levelsStr != "" {
+		if parsed, err := strconv.Atoi(levelsStr); err == nil {
+			levels = parsed
+		}
+	}
+
+	dirsOnly := false
+	if dirsOnlyStr == "true" {
+		dirsOnly = true
+	}
+
+	tree, err := swInstance.GetGlobalTree(folderID, prefix, levels, dirsOnly)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"tree": tree})
+}
+
+// handleSyncwebLocalChanged returns locally changed files for a folder.
+// GET /api/syncweb/local-changed?folder_id=...&page=1&per_page=100
+func (c *ServeCmd) handleSyncwebLocalChanged(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	folderID := r.URL.Query().Get("folder_id")
+	pageStr := r.URL.Query().Get("page")
+	perPageStr := r.URL.Query().Get("per_page")
+
+	if folderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Missing folder_id parameter"})
+		return
+	}
+
+	page := 1
+	if pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	perPage := 100
+	if perPageStr != "" {
+		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
+			perPage = parsed
+		}
+	}
+
+	files, err := swInstance.GetLocalChangedFiles(folderID, page, perPage)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"files": files, "page": page, "per_page": perPage})
+}
+
+// handleSyncwebNeed returns paginated list of needed files for a folder.
+// GET /api/syncweb/need?folder_id=...&page=1&per_page=100
+func (c *ServeCmd) handleSyncwebNeed(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	folderID := r.URL.Query().Get("folder_id")
+	pageStr := r.URL.Query().Get("page")
+	perPageStr := r.URL.Query().Get("per_page")
+
+	if folderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Missing folder_id parameter"})
+		return
+	}
+
+	page := 1
+	if pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	perPage := 100
+	if perPageStr != "" {
+		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
+			perPage = parsed
+		}
+	}
+
+	remote, local, queued, err := swInstance.GetNeedFiles(folderID, page, perPage)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"remote":   remote,
+		"local":    local,
+		"queued":   queued,
+		"page":     page,
+		"per_page": perPage,
+	})
+}
+
+// handleSyncwebRemoteNeed returns files needed by a specific remote device.
+// GET /api/syncweb/remote-need?folder_id=...&device_id=...&page=1&per_page=100
+func (c *ServeCmd) handleSyncwebRemoteNeed(w http.ResponseWriter, r *http.Request) {
+	swMu.Lock()
+	defer swMu.Unlock()
+	if swInstance == nil || !swInstance.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Syncweb not configured or offline"})
+		return
+	}
+
+	folderID := r.URL.Query().Get("folder_id")
+	deviceIDStr := r.URL.Query().Get("device_id")
+	pageStr := r.URL.Query().Get("page")
+	perPageStr := r.URL.Query().Get("per_page")
+
+	if folderID == "" || deviceIDStr == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Missing folder_id or device_id parameter"})
+		return
+	}
+
+	deviceID, err := protocol.DeviceIDFromString(deviceIDStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid device_id: " + err.Error()})
+		return
+	}
+
+	page := 1
+	if pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	perPage := 100
+	if perPageStr != "" {
+		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
+			perPage = parsed
+		}
+	}
+
+	files, err := swInstance.GetRemoteNeedFiles(folderID, deviceID, page, perPage)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"files": files, "page": page, "per_page": perPage})
 }

@@ -880,3 +880,110 @@ func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
 
 	return len(seederSet), nil
 }
+
+// GetCompletion returns folder completion percentage for a device
+func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (map[string]any, error) {
+	comp, err := s.Node.App.Internals.Completion(deviceID, folderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"completion_pct": comp.CompletionPct,
+		"global_bytes":   comp.GlobalBytes,
+		"need_bytes":     comp.NeedBytes,
+		"global_items":   comp.GlobalItems,
+		"need_items":     comp.NeedItems,
+		"need_deletes":   comp.NeedDeletes,
+		"sequence":       comp.Sequence,
+	}, nil
+}
+
+// GetGlobalTree returns folder tree structure for browsing
+// levels: -1 for all levels, 0 for root only, etc.
+// returnOnlyDirectories: if true, only return directory entries
+func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]map[string]any, error) {
+	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]any, len(tree))
+	for i, entry := range tree {
+		result[i] = map[string]any{
+			"name":    entry.Name,
+			"modTime": entry.ModTime,
+			"size":    entry.Size,
+			"type":    entry.Type,
+		}
+	}
+	return result, nil
+}
+
+// GetLocalChangedFiles returns locally changed files for a folder (paginated)
+func (s *Syncweb) GetLocalChangedFiles(folderID string, page, perPage int) ([]map[string]any, error) {
+	files, err := s.Node.App.Internals.LocalChangedFolderFiles(folderID, page, perPage)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]any, len(files))
+	for i, f := range files {
+		result[i] = map[string]any{
+			"name":       f.Name,
+			"size":       f.Size,
+			"modified":   f.ModTime,
+			"type":       f.Type.String(),
+			"version":    f.Version.String(),
+			"permission": f.Permissions,
+		}
+	}
+	return result, nil
+}
+
+// GetNeedFiles returns paginated list of needed files for a folder
+// Returns three lists: remote (needed from remote), local (local changes), queued (queued for sync)
+func (s *Syncweb) GetNeedFiles(folderID string, page, perPage int) (remote, local, queued []map[string]any, err error) {
+	remoteFiles, localFiles, queuedFiles, err := s.Node.App.Internals.NeedFolderFiles(folderID, page, perPage)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	convertFiles := func(files []protocol.FileInfo) []map[string]any {
+		result := make([]map[string]any, len(files))
+		for i, f := range files {
+			result[i] = map[string]any{
+				"name":       f.Name,
+				"size":       f.Size,
+				"modified":   f.ModTime,
+				"type":       f.Type.String(),
+				"version":    f.Version.String(),
+				"permission": f.Permissions,
+			}
+		}
+		return result
+	}
+
+	return convertFiles(remoteFiles), convertFiles(localFiles), convertFiles(queuedFiles), nil
+}
+
+// GetRemoteNeedFiles returns files needed by a specific remote device
+func (s *Syncweb) GetRemoteNeedFiles(folderID string, deviceID protocol.DeviceID, page, perPage int) ([]map[string]any, error) {
+	files, err := s.Node.App.Internals.RemoteNeedFolderFiles(folderID, deviceID, page, perPage)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]any, len(files))
+	for i, f := range files {
+		result[i] = map[string]any{
+			"name":       f.Name,
+			"size":       f.Size,
+			"modified":   f.ModTime,
+			"type":       f.Type.String(),
+			"version":    f.Version.String(),
+			"permission": f.Permissions,
+		}
+	}
+	return result, nil
+}

@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli
+.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli webbuild webtest web-install
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
@@ -16,7 +16,13 @@ LDFLAGS := -X 'github.com/chapmanjacobd/syncweb/internal/version.Version=$(VERSI
 
 all: fmt lint test build
 
-build:
+web-install:
+	cd web && npm install
+
+webbuild:
+	cd web && npm run build
+
+build: webbuild
 	go build -tags "$(BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/syncweb
 
 version:
@@ -51,6 +57,7 @@ webcover:
 
 clean:
 	rm -f $(BINARY_NAME)
+	rm -rf web/dist/*
 
 install:
 	go install ./cmd/syncweb

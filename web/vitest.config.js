@@ -11,5 +11,6 @@ export default defineConfig({
     sequence: {
       concurrent: false,
     },
+    include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
   },
 });

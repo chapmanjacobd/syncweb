@@ -189,6 +189,221 @@
                 display: flex !important;
             }
         }
+        
+        /* Sync Monitor Styles */
+        .view-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        .view-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            background: var(--hover-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        .view-tab:hover {
+            background: var(--border-color);
+        }
+        .view-tab.active {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            border-color: var(--accent-color);
+            font-weight: 500;
+        }
+        .view-content {
+            display: none;
+        }
+        .view-content.active {
+            display: block;
+        }
+        
+        /* Completion Dashboard */
+        .completion-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .completion-card {
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .completion-card h4 {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .progress-bar {
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-color), #00a8cc);
+            transition: width 0.3s ease;
+        }
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--secondary-text);
+            margin-top: 0.5rem;
+        }
+        .completion-pct {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+        
+        /* Data Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--sidebar-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        .data-table th, .data-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .data-table th {
+            background: var(--hover-color);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--secondary-text);
+        }
+        .data-table tr:hover {
+            background: var(--border-color);
+        }
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .pagination button {
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--hover-color);
+            color: var(--text-color);
+            cursor: pointer;
+        }
+        .pagination button:hover:not(:disabled) {
+            background: var(--border-color);
+        }
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .pagination span {
+            font-size: 0.9rem;
+            color: var(--secondary-text);
+        }
+        
+        /* Tree View */
+        .tree-view {
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 0.4rem 0.5rem;
+            cursor: pointer;
+            border-radius: 4px;
+            gap: 0.5rem;
+        }
+        .tree-item:hover {
+            background: var(--hover-color);
+        }
+        .tree-children {
+            margin-left: 1.5rem;
+            border-left: 1px solid var(--border-color);
+            padding-left: 0.5rem;
+        }
+        .tree-item.expanded > .tree-children {
+            display: block;
+        }
+        .tree-item.collapsed > .tree-children {
+            display: none;
+        }
+        .tree-toggle {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--secondary-text);
+        }
+        
+        /* Filter Controls */
+        .filter-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .filter-controls select, .filter-controls input {
+            padding: 0.4rem 0.75rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+        
+        /* Status Badges */
+        .status-badge {
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-badge.syncing {
+            background: rgba(0, 212, 255, 0.2);
+            color: var(--accent-color);
+        }
+        .status-badge.queued {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+        .status-badge.error {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+        .status-badge.ok {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
     </style>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -258,7 +473,134 @@
                 <button class="btn" onclick="clearSelection()">Cancel</button>
             </div>
         </div>
-        <ul id="file-list" class="file-list"></ul>
+        
+        <!-- View Tabs -->
+        <div class="view-tabs">
+            <div class="view-tab active" onclick="switchView('files')"><i data-lucide="folder-open"></i> Files</div>
+            <div class="view-tab" onclick="switchView('completion')"><i data-lucide="circle-help"></i> Completion</div>
+            <div class="view-tab" onclick="switchView('tree')"><i data-lucide="git-branch"></i> Tree</div>
+            <div class="view-tab" onclick="switchView('local-changed')"><i data-lucide="file-edit"></i> Local Changed</div>
+            <div class="view-tab" onclick="switchView('need')"><i data-lucide="download-cloud"></i> Need</div>
+            <div class="view-tab" onclick="switchView('remote-need')"><i data-lucide="upload-cloud"></i> Remote Need</div>
+        </div>
+        
+        <!-- Files View (existing) -->
+        <div id="view-files" class="view-content active">
+            <ul id="file-list" class="file-list"></ul>
+        </div>
+        
+        <!-- Completion View -->
+        <div id="view-completion" class="view-content">
+            <div class="filter-controls">
+                <select id="completion-folder-select" onchange="loadCompletion()">
+                    <option value="">All Folders</option>
+                </select>
+                <select id="completion-device-select" onchange="loadCompletion()">
+                    <option value="">All Devices</option>
+                </select>
+                <button class="btn" onclick="loadCompletion()"><i data-lucide="rotate-cw"></i> Refresh</button>
+            </div>
+            <div id="completion-grid" class="completion-grid"></div>
+        </div>
+        
+        <!-- Tree View -->
+        <div id="view-tree" class="view-content">
+            <div class="filter-controls">
+                <select id="tree-folder-select" onchange="loadTreeView()">
+                    <option value="">Select a folder...</option>
+                </select>
+                <input type="text" id="tree-prefix" placeholder="Path prefix (optional)" onchange="loadTreeView()">
+                <select id="tree-levels" onchange="loadTreeView()">
+                    <option value="-1">All Levels</option>
+                    <option value="0">Root Only</option>
+                    <option value="1">1 Level</option>
+                    <option value="2">2 Levels</option>
+                    <option value="3">3 Levels</option>
+                </select>
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="tree-dirs-only" onchange="loadTreeView()"> Directories Only
+                </label>
+                <button class="btn" onclick="loadTreeView()"><i data-lucide="rotate-cw"></i> Refresh</button>
+            </div>
+            <div id="tree-view" class="tree-view"></div>
+        </div>
+        
+        <!-- Local Changed View -->
+        <div id="view-local-changed" class="view-content">
+            <div class="filter-controls">
+                <select id="local-changed-folder-select" onchange="loadLocalChanged()">
+                    <option value="">Select a folder...</option>
+                </select>
+                <button class="btn" onclick="loadLocalChanged()"><i data-lucide="rotate-cw"></i> Refresh</button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                        <th>Type</th>
+                        <th>Permissions</th>
+                    </tr>
+                </thead>
+                <tbody id="local-changed-tbody"></tbody>
+            </table>
+            <div id="local-changed-pagination" class="pagination"></div>
+        </div>
+        
+        <!-- Need View -->
+        <div id="view-need" class="view-content">
+            <div class="filter-controls">
+                <select id="need-folder-select" onchange="loadNeed()">
+                    <option value="">Select a folder...</option>
+                </select>
+                <div class="view-tabs" style="margin-bottom: 0; border: none; padding: 0;">
+                    <div class="view-tab active" onclick="switchNeedTab('remote')" id="need-tab-remote">Remote</div>
+                    <div class="view-tab" onclick="switchNeedTab('local')" id="need-tab-local">Local</div>
+                    <div class="view-tab" onclick="switchNeedTab('queued')" id="need-tab-queued">Queued</div>
+                </div>
+                <button class="btn" onclick="loadNeed()"><i data-lucide="rotate-cw"></i> Refresh</button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="need-tbody"></tbody>
+            </table>
+            <div id="need-pagination" class="pagination"></div>
+        </div>
+        
+        <!-- Remote Need View -->
+        <div id="view-remote-need" class="view-content">
+            <div class="filter-controls">
+                <select id="remote-need-folder-select" onchange="loadRemoteNeed()">
+                    <option value="">Select a folder...</option>
+                </select>
+                <select id="remote-need-device-select" onchange="loadRemoteNeed()">
+                    <option value="">Select a device...</option>
+                </select>
+                <button class="btn" onclick="loadRemoteNeed()"><i data-lucide="rotate-cw"></i> Refresh</button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                        <th>Type</th>
+                        <th>Permissions</th>
+                    </tr>
+                </thead>
+                <tbody id="remote-need-tbody"></tbody>
+            </table>
+            <div id="remote-need-pagination" class="pagination"></div>
+        </div>
     </main>
     <div id="toast"></div>
 

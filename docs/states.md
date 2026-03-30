@@ -1,4 +1,4 @@
-# Syncweb Decision Table
+# Syncweb Decision Tables
 
 This document describes all states, transitions, and outputs in the Syncweb system.
 

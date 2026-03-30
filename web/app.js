@@ -10,7 +10,15 @@ const state = {
     token: '',
     selectedItems: [],
     events: [],
-    sortBy: 'name'
+    sortBy: 'name',
+    // New state for sync monitoring views
+    currentView: 'files',
+    needTab: 'remote',
+    completionData: [],
+    treeData: [],
+    localChangedData: { files: [], page: 1, perPage: 100 },
+    needData: { remote: [], local: [], queued: [], page: 1, perPage: 100 },
+    remoteNeedData: { files: [], page: 1, perPage: 100 }
 };
 
 // Initialize token from localStorage or URL if in browser
@@ -847,6 +855,491 @@ function renderEvents() {
 
 function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); loadEvents(); }
 
+// ============== Sync Monitor View Functions ==============
+
+function switchView(viewName) {
+    state.currentView = viewName;
+    
+    // Update tab active state
+    document.querySelectorAll('.view-tab').forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.textContent.toLowerCase().includes(viewName.replace('-', ' '))) {
+            tab.classList.add('active');
+        }
+    });
+    
+    // Update content visibility
+    document.querySelectorAll('.view-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`view-${viewName}`)?.classList.add('active');
+    
+    // Load data for the selected view
+    switch (viewName) {
+        case 'completion':
+            populateFolderDeviceSelects();
+            loadCompletion();
+            break;
+        case 'tree':
+            populateFolderSelect('tree-folder-select');
+            break;
+        case 'local-changed':
+            populateFolderSelect('local-changed-folder-select');
+            break;
+        case 'need':
+            populateFolderSelect('need-folder-select');
+            loadNeed();
+            break;
+        case 'remote-need':
+            populateFolderSelect('remote-need-folder-select');
+            populateDeviceSelect('remote-need-device-select');
+            break;
+    }
+    
+    if (window.lucide) lucide.createIcons();
+}
+
+function switchNeedTab(tabName) {
+    state.needTab = tabName;
+    document.querySelectorAll('#view-need .view-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`need-tab-${tabName}`)?.classList.add('active');
+    renderNeedTable();
+}
+
+function populateFolderSelect(elementId) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Select a folder...</option>';
+    state.folders.forEach(f => {
+        const option = document.createElement('option');
+        option.value = f.id;
+        option.textContent = f.id;
+        select.appendChild(option);
+    });
+    if (currentValue && state.folders.some(f => f.id === currentValue)) {
+        select.value = currentValue;
+    }
+}
+
+function populateDeviceSelect(elementId) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Select a device...</option>';
+    state.devices.forEach(d => {
+        const option = document.createElement('option');
+        option.value = d.id;
+        option.textContent = d.name || d.id.substring(0, 7) + '...';
+        select.appendChild(option);
+    });
+    if (currentValue && state.devices.some(d => d.id === currentValue)) {
+        select.value = currentValue;
+    }
+}
+
+function populateFolderDeviceSelects() {
+    populateFolderSelect('completion-folder-select');
+    populateDeviceSelect('completion-device-select');
+}
+
+// Completion View
+async function loadCompletion() {
+    const folderId = document.getElementById('completion-folder-select')?.value || '';
+    const deviceId = document.getElementById('completion-device-select')?.value || '';
+    
+    const grid = document.getElementById('completion-grid');
+    if (!grid) return;
+    
+    grid.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading...</div>';
+    
+    try {
+        // Get all folders if none selected
+        const foldersToCheck = folderId ? [folderId] : state.folders.map(f => f.id);
+        const devicesToCheck = deviceId ? [deviceId] : state.devices.map(d => d.id);
+        
+        const completionCards = [];
+        
+        for (const folder of foldersToCheck) {
+            for (const device of devicesToCheck) {
+                try {
+                    const resp = await fetchAPI(`/api/syncweb/completion?folder_id=${encodeURIComponent(folder)}&device_id=${encodeURIComponent(device)}`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        completionCards.push({
+                            folderId: folder,
+                            deviceId: device,
+                            ...data
+                        });
+                    }
+                } catch (e) {
+                    // Skip if completion not available for this pair
+                }
+            }
+        }
+        
+        if (completionCards.length === 0) {
+            grid.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--secondary-text);">No completion data available</div>';
+            return;
+        }
+        
+        grid.innerHTML = '';
+        completionCards.forEach(card => {
+            const device = state.devices.find(d => d.id === card.deviceId);
+            const deviceName = device?.name || card.deviceId.substring(0, 7) + '...';
+            const pct = card.completion_pct || 0;
+            const needBytes = card.need_bytes || 0;
+            const globalBytes = card.global_bytes || 0;
+            const needItems = card.need_items || 0;
+            const globalItems = card.global_items || 0;
+            
+            const cardEl = document.createElement('div');
+            cardEl.className = 'completion-card';
+            cardEl.innerHTML = `
+                <h4><i data-lucide="folder" style="width: 16px;"></i> ${card.folderId}</h4>
+                <div style="font-size: 0.85rem; color: var(--secondary-text); margin-bottom: 0.5rem;">
+                    <i data-lucide="laptop" style="width: 12px; display: inline;"></i> ${deviceName}
+                </div>
+                <div class="completion-pct">${pct.toFixed(1)}%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${pct}%"></div>
+                </div>
+                <div class="progress-stats">
+                    <span>${formatSize(needBytes)} needed</span>
+                    <span>${needItems} items</span>
+                </div>
+                <div class="progress-stats">
+                    <span>${formatSize(globalBytes)} total</span>
+                    <span>${globalItems} items</span>
+                </div>
+            `;
+            grid.appendChild(cardEl);
+        });
+        
+        if (window.lucide) lucide.createIcons();
+    } catch (e) {
+        grid.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff4444;">Failed to load completion data</div>';
+    }
+}
+
+// Tree View
+async function loadTreeView() {
+    const folderId = document.getElementById('tree-folder-select')?.value;
+    const prefix = document.getElementById('tree-prefix')?.value || '';
+    const levels = document.getElementById('tree-levels')?.value || '-1';
+    const dirsOnly = document.getElementById('tree-dirs-only')?.checked || false;
+    
+    const treeView = document.getElementById('tree-view');
+    if (!treeView) return;
+    
+    if (!folderId) {
+        treeView.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--secondary-text);">Select a folder to view tree</div>';
+        return;
+    }
+    
+    treeView.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading...</div>';
+    
+    try {
+        const url = `/api/syncweb/tree?folder_id=${encodeURIComponent(folderId)}&prefix=${encodeURIComponent(prefix)}&levels=${levels}&dirs_only=${dirsOnly}`;
+        const resp = await fetchAPI(url);
+        if (!resp.ok) throw new Error('Failed to load tree');
+        
+        const data = await resp.json();
+        const tree = data.tree || [];
+        
+        if (tree.length === 0) {
+            treeView.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--secondary-text);">No entries found</div>';
+            return;
+        }
+        
+        treeView.innerHTML = '';
+        const rootNode = buildTreeNodes(tree, 0);
+        treeView.appendChild(rootNode);
+        
+        if (window.lucide) lucide.createIcons();
+    } catch (e) {
+        treeView.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff4444;">Failed to load tree view</div>';
+    }
+}
+
+function buildTreeNodes(entries, depth = 0) {
+    const container = document.createElement('div');
+    
+    entries.forEach(entry => {
+        const isDir = entry.type === 'DIRECTORY';
+        const itemEl = document.createElement('div');
+        itemEl.className = 'tree-item' + (isDir ? ' expanded' : '');
+        
+        const toggleEl = document.createElement('span');
+        toggleEl.className = 'tree-toggle';
+        toggleEl.innerHTML = isDir ? '<i data-lucide="chevron-down"></i>' : '<span style="width: 16px;"></span>';
+        
+        const iconEl = document.createElement('span');
+        iconEl.innerHTML = `<i data-lucide="${isDir ? 'folder' : 'file'}" style="width: 16px;"></i>`;
+        
+        const nameEl = document.createElement('span');
+        nameEl.style.flex = '1';
+        nameEl.textContent = entry.name;
+        
+        const sizeEl = document.createElement('span');
+        sizeEl.style.color = 'var(--secondary-text)';
+        sizeEl.style.fontSize = '0.85rem';
+        sizeEl.textContent = isDir ? '' : formatSize(entry.size);
+        
+        itemEl.appendChild(toggleEl);
+        itemEl.appendChild(iconEl);
+        itemEl.appendChild(nameEl);
+        itemEl.appendChild(sizeEl);
+        
+        if (isDir) {
+            const childrenEl = document.createElement('div');
+            childrenEl.className = 'tree-children';
+            // Placeholder for children - would need to load on expand
+            itemEl.appendChild(childrenEl);
+            
+            itemEl.onclick = (e) => {
+                e.stopPropagation();
+                itemEl.classList.toggle('expanded');
+                itemEl.classList.toggle('collapsed');
+                toggleEl.innerHTML = itemEl.classList.contains('expanded') 
+                    ? '<i data-lucide="chevron-down"></i>' 
+                    : '<i data-lucide="chevron-right"></i>';
+                if (window.lucide) lucide.createIcons();
+            };
+        }
+        
+        container.appendChild(itemEl);
+    });
+    
+    return container;
+}
+
+// Local Changed View
+async function loadLocalChanged(page = 1) {
+    const folderId = document.getElementById('local-changed-folder-select')?.value;
+    
+    if (!folderId) {
+        document.getElementById('local-changed-tbody').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">Select a folder</td></tr>';
+        document.getElementById('local-changed-pagination').innerHTML = '';
+        return;
+    }
+    
+    const tbody = document.getElementById('local-changed-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">Loading...</td></tr>';
+    
+    try {
+        const url = `/api/syncweb/local-changed?folder_id=${encodeURIComponent(folderId)}&page=${page}&per_page=100`;
+        const resp = await fetchAPI(url);
+        if (!resp.ok) throw new Error('Failed to load local changed files');
+        
+        const data = await resp.json();
+        state.localChangedData = {
+            files: data.files || [],
+            page: data.page || page,
+            perPage: data.per_page || 100
+        };
+        
+        renderLocalChangedTable();
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #ff4444;">Failed to load data</td></tr>';
+    }
+}
+
+function renderLocalChangedTable() {
+    const tbody = document.getElementById('local-changed-tbody');
+    const pagination = document.getElementById('local-changed-pagination');
+    
+    if (state.localChangedData.files.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">No locally changed files</td></tr>';
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    state.localChangedData.files.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td>${formatSize(f.size)}</td>
+            <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
+            <td>${f.type || 'FILE'}</td>
+            <td>${f.permission || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderPagination(pagination, state.localChangedData.page, state.localChangedData.perPage, loadLocalChanged);
+    if (window.lucide) lucide.createIcons();
+}
+
+// Need View
+async function loadNeed(page = 1) {
+    const folderId = document.getElementById('need-folder-select')?.value;
+    
+    if (!folderId) {
+        document.getElementById('need-tbody').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">Select a folder</td></tr>';
+        document.getElementById('need-pagination').innerHTML = '';
+        return;
+    }
+    
+    const tbody = document.getElementById('need-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">Loading...</td></tr>';
+    
+    try {
+        const url = `/api/syncweb/need?folder_id=${encodeURIComponent(folderId)}&page=${page}&per_page=100`;
+        const resp = await fetchAPI(url);
+        if (!resp.ok) throw new Error('Failed to load need files');
+        
+        const data = await resp.json();
+        state.needData = {
+            remote: data.remote || [],
+            local: data.local || [],
+            queued: data.queued || [],
+            page: data.page || page,
+            perPage: data.per_page || 100
+        };
+        
+        renderNeedTable();
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #ff4444;">Failed to load data</td></tr>';
+    }
+}
+
+function renderNeedTable() {
+    const tbody = document.getElementById('need-tbody');
+    const pagination = document.getElementById('need-pagination');
+    
+    let files = [];
+    let statusType = '';
+    
+    switch (state.needTab) {
+        case 'local':
+            files = state.needData.local;
+            statusType = 'local';
+            break;
+        case 'queued':
+            files = state.needData.queued;
+            statusType = 'queued';
+            break;
+        case 'remote':
+        default:
+            files = state.needData.remote;
+            statusType = 'syncing';
+            break;
+    }
+    
+    if (files.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">No files in this category</td></tr>';
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    files.forEach(f => {
+        const tr = document.createElement('tr');
+        const badgeClass = statusType === 'syncing' ? 'syncing' : statusType === 'queued' ? 'queued' : 'ok';
+        const badgeText = statusType === 'syncing' ? 'From Remote' : statusType === 'queued' ? 'Queued' : 'Local';
+        
+        tr.innerHTML = `
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td>${formatSize(f.size)}</td>
+            <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
+            <td>${f.type || 'FILE'}</td>
+            <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderPagination(pagination, state.needData.page, state.needData.perPage, loadNeed);
+    if (window.lucide) lucide.createIcons();
+}
+
+// Remote Need View
+async function loadRemoteNeed(page = 1) {
+    const folderId = document.getElementById('remote-need-folder-select')?.value;
+    const deviceId = document.getElementById('remote-need-device-select')?.value;
+    
+    if (!folderId || !deviceId) {
+        document.getElementById('remote-need-tbody').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">Select folder and device</td></tr>';
+        document.getElementById('remote-need-pagination').innerHTML = '';
+        return;
+    }
+    
+    const tbody = document.getElementById('remote-need-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">Loading...</td></tr>';
+    
+    try {
+        const url = `/api/syncweb/remote-need?folder_id=${encodeURIComponent(folderId)}&device_id=${encodeURIComponent(deviceId)}&page=${page}&per_page=100`;
+        const resp = await fetchAPI(url);
+        if (!resp.ok) throw new Error('Failed to load remote need files');
+        
+        const data = await resp.json();
+        state.remoteNeedData = {
+            files: data.files || [],
+            page: data.page || page,
+            perPage: data.per_page || 100
+        };
+        
+        renderRemoteNeedTable();
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #ff4444;">Failed to load data</td></tr>';
+    }
+}
+
+function renderRemoteNeedTable() {
+    const tbody = document.getElementById('remote-need-tbody');
+    const pagination = document.getElementById('remote-need-pagination');
+    
+    if (state.remoteNeedData.files.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--secondary-text);">No files needed by remote device</td></tr>';
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    state.remoteNeedData.files.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td>${formatSize(f.size)}</td>
+            <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
+            <td>${f.type || 'FILE'}</td>
+            <td>${f.permission || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderPagination(pagination, state.remoteNeedData.page, state.remoteNeedData.perPage, loadRemoteNeed);
+    if (window.lucide) lucide.createIcons();
+}
+
+function renderPagination(container, currentPage, perPage, loadFunction) {
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.onclick = () => loadFunction(currentPage - 1);
+    container.appendChild(prevBtn);
+    
+    const pageSpan = document.createElement('span');
+    pageSpan.textContent = `Page ${currentPage}`;
+    pageSpan.style.margin = '0 1rem';
+    container.appendChild(pageSpan);
+    
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.disabled = true; // Would need total count to enable properly
+    nextBtn.onclick = () => loadFunction(currentPage + 1);
+    container.appendChild(nextBtn);
+}
+
+function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); loadEvents(); }
+
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -881,7 +1374,17 @@ if (typeof module !== 'undefined' && module.exports) {
         bulkDelete,
         bulkMove,
         bulkCopy,
-        logout
+        logout,
+        // New sync monitor functions
+        switchView,
+        switchNeedTab,
+        loadCompletion,
+        loadTreeView,
+        loadLocalChanged,
+        loadNeed,
+        loadRemoteNeed,
+        populateFolderSelect,
+        populateDeviceSelect
     };
 } else {
     // Start app

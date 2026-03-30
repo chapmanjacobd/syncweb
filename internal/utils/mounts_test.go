@@ -213,11 +213,11 @@ func TestSafePrepareForReadRoot(t *testing.T) {
 // TestFilterMountpointsExcludesRoot tests that root filesystem is excluded from mountpoints.
 func TestFilterMountpointsExcludesRoot(t *testing.T) {
 	tests := []struct {
-		name          string
-		devices       []models.BlockDevice
-		wantCount     int
-		wantExcluded  []string // device names that should be excluded
-		wantIncluded  []string // device names that should be included
+		name         string
+		devices      []models.BlockDevice
+		wantCount    int
+		wantExcluded []string // device names that should be excluded
+		wantIncluded []string // device names that should be included
 	}{
 		{
 			name: "root device excluded",

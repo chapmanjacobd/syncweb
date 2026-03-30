@@ -71,11 +71,11 @@ func TestParseSyncwebPath(t *testing.T) {
 			wantDev:  "device",
 		},
 		{
-			name:    "URL with empty folder ID",
-			url:     "syncweb:///path#device",
-			wantID:  "",
+			name:     "URL with empty folder ID",
+			url:      "syncweb:///path#device",
+			wantID:   "",
 			wantPath: "path",
-			wantDev: "device",
+			wantDev:  "device",
 		},
 		{
 			name:    "URL with special characters in folder ID",

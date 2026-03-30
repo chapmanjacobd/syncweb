@@ -9,7 +9,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/rivo/uniseg v0.4.7
 	github.com/sevlyar/go-daemon v0.1.6
-	github.com/syncthing/syncthing v1.30.0-rc.1.0.20260202043224-b40f2acdad80
+	github.com/syncthing/syncthing v1.30.0-rc.1.0.20260211104138-dc2a77ab8e5b
 )
 
 require (

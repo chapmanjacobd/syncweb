@@ -50,8 +50,14 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 			var folderID string
 			var prefix string
 
-			if after, ok := strings.CutPrefix(p, "sync://"); ok {
-				// Parse sync:// URL
+			var after string
+			var ok bool
+			if after, ok = strings.CutPrefix(p, "sync://"); !ok {
+				after, ok = strings.CutPrefix(p, "syncweb://")
+			}
+
+			if ok {
+				// Parse sync:// or syncweb:// URL
 				parts := strings.SplitN(after, "/", 2)
 				folderID = parts[0]
 				if len(parts) > 1 {

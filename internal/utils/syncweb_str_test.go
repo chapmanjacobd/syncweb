@@ -83,6 +83,19 @@ func TestParseSyncwebPath(t *testing.T) {
 			wantID:  "my-folder_123",
 			wantDev: "device",
 		},
+		{
+			name:    "syncweb scheme basic",
+			url:     "syncweb://folder-id#device-id",
+			wantID:  "folder-id",
+			wantDev: "device-id",
+		},
+		{
+			name:     "syncweb scheme with subpath",
+			url:      "syncweb://folder-id/sub/path#device-id",
+			wantID:   "folder-id",
+			wantPath: "sub/path",
+			wantDev:  "device-id",
+		},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +161,11 @@ func TestExtractDeviceID(t *testing.T) {
 		{
 			name:  "device ID from syncweb URL",
 			input: "sync://folder#ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
+			want:  "ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
+		},
+		{
+			name:  "device ID from syncweb:// URL",
+			input: "syncweb://folder#ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
 			want:  "ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
 		},
 		{

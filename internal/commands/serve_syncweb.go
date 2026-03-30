@@ -64,7 +64,13 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 	c.swMu.Unlock()
 
 	slog.Info("Serving remote Syncweb file via block pulling", "path", path)
-	rs, err := sw.NewReadSeeker(r.Context(), folderID, strings.TrimPrefix(path, "sync://"+folderID+"/"))
+	var trimmedPath string
+	if strings.HasPrefix(path, "sync://") {
+		trimmedPath = strings.TrimPrefix(path, "sync://"+folderID+"/")
+	} else {
+		trimmedPath = strings.TrimPrefix(path, "syncweb://"+folderID+"/")
+	}
+	rs, err := sw.NewReadSeeker(r.Context(), folderID, trimmedPath)
 	if err != nil {
 		slog.Error("Failed to create SyncwebReadSeeker", "path", path, "error", err)
 		http.Error(w, "Failed to stream remote file", http.StatusInternalServerError)

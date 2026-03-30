@@ -531,8 +531,9 @@ export function renderFiles(isSearch: boolean = false): void {
 
         li.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
-                // Extract folder ID from path sync://id/
-                const folderID = f.path.split('/')[2];
+                // Extract folder ID from path sync://id/ or syncweb://id/
+                const parts = f.path.split('/');
+                const folderID = parts[0].startsWith('syncweb:') ? parts[2] : parts[2]; // Both are at index 2
                 selectFolder(folderID);
                 return;
             }

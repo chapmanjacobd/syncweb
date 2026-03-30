@@ -530,14 +530,18 @@ func (s *Syncweb) GetDevices() []DeviceInfo {
 	return devices
 }
 
-// ResolveLocalPath resolves a sync:// URL to a local filesystem path,
+// ResolveLocalPath resolves a sync:// or syncweb:// URL to a local filesystem path,
 // ensuring the path is within the folder's root directory.
 func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
-	if !strings.HasPrefix(syncPath, "sync://") {
+	var trimmed string
+	if strings.HasPrefix(syncPath, "sync://") {
+		trimmed = strings.TrimPrefix(syncPath, "sync://")
+	} else if strings.HasPrefix(syncPath, "syncweb://") {
+		trimmed = strings.TrimPrefix(syncPath, "syncweb://")
+	} else {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}
 
-	trimmed := strings.TrimPrefix(syncPath, "sync://")
 	parts := strings.SplitN(trimmed, "/", 2)
 	if len(parts) < 2 {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)

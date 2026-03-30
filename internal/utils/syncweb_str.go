@@ -16,14 +16,17 @@ type SyncwebRef struct {
 	DeviceID string
 }
 
-// ParseSyncwebPath parses a sync:// URL into its components
+// ParseSyncwebPath parses a sync:// or syncweb:// URL into its components
 // Format: sync://folder-id/subpath#device-id
 func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
-	if !strings.HasPrefix(rawURL, "sync://") {
+	var trimmed string
+	if strings.HasPrefix(rawURL, "sync://") {
+		trimmed = strings.TrimPrefix(rawURL, "sync://")
+	} else if strings.HasPrefix(rawURL, "syncweb://") {
+		trimmed = strings.TrimPrefix(rawURL, "syncweb://")
+	} else {
 		return nil, fmt.Errorf("invalid sync URL: %s", rawURL)
 	}
-
-	trimmed := strings.TrimPrefix(rawURL, "sync://")
 
 	// Split by # to separate device ID
 	var deviceID string
@@ -76,8 +79,8 @@ func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 func ExtractDeviceID(s string) (string, error) {
 	s = strings.TrimSpace(s)
 
-	// Remove any sync:// prefix
-	if strings.HasPrefix(s, "sync://") {
+	// Remove any sync:// or syncweb:// prefix
+	if strings.HasPrefix(s, "sync://") || strings.HasPrefix(s, "syncweb://") {
 		ref, err := ParseSyncwebPath(s, true)
 		if err != nil {
 			return "", err

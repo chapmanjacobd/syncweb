@@ -127,6 +127,26 @@ describe('Syncweb UI', () => {
             expect(mockFetch).toHaveBeenCalled(); // loadFiles called
         });
 
+        it('selectFolder handles syncweb:// URLs correctly', async () => {
+            const mockFiles = [
+                { name: 'folder1', is_dir: true, local: true, path: 'syncweb://f1/' }
+            ];
+            state.currentFolder = null;
+            state.currentPath = '/';
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockFiles
+            });
+
+            await loadFiles();
+            const items = fileList.getElementsByTagName('li');
+            (items[0] as HTMLElement).click();
+
+            expect(state.currentFolder).toBe('f1');
+            expect(state.currentPath).toBe('sync://f1/');
+        });
+
         it('goUp navigates to parent directory', async () => {
             state.currentPath = 'sync://f1/sub/nested/';
             state.currentFolder = 'f1';
@@ -404,7 +424,7 @@ describe('Syncweb UI', () => {
 
                 await showFileProperties('sync://f1/test.txt');
 
-                expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/api/syncweb/stat?path=syncweb%3A%2F%2Ff1%2Ftest.txt'), expect.any(Object));
+                expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/api/syncweb/stat?path=sync%3A%2F%2Ff1%2Ftest.txt'), expect.any(Object));
                 expect(global.alert).toHaveBeenCalledWith(expect.stringContaining('File: test.txt'));
                 expect(global.alert).toHaveBeenCalledWith(expect.stringContaining('1.00 MB'));
             });

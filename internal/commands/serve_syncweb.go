@@ -48,7 +48,7 @@ func (c *ServeCmd) resolveSyncwebPath(path string) (string, string, error) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil {
-		return "", "", fmt.Errorf("Syncweb not configured")
+		return "", "", fmt.Errorf("syncweb not configured")
 	}
 	return c.sw.ResolveLocalPath(path)
 }

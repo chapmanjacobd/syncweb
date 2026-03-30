@@ -60,15 +60,11 @@ e2e-install:
 	npm install --prefix e2e
 	npm run install --prefix e2e
 
-e2e-init: build
-	@echo "E2E test environment ready"
-	@echo "Run 'make e2e' to execute tests"
-
-e2e: e2e-init
+e2e: build
 	npm run test --prefix e2e
 
-e2e-cli: e2e-init
+e2e-cli: build
 	npm run test --prefix e2e -- --grep 'cli-'
 
-e2e-web: e2e-init
+e2e-web: build
 	npm run test --prefix e2e -- --grep-invert 'cli-'

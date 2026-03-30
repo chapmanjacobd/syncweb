@@ -1,28 +1,9 @@
-
     🟢 Performance Concerns
 
      1. Unnecessary allocations - GetEvents() copies entire slice on every call
      2. Repeated config copies - cfg.RawCopy() called frequently
      3. Inefficient string concatenation - Multiple ReplaceAll calls instead of strings.Builder
      4. Blocking file operations in HTTP handlers - No timeout or context cancellation
-
-    📋 Other Observations
-
-     - Test coverage gaps - No tests for HTTP handlers, Web UI, or CLI edge cases
-     - Platform-specific code - Many operations only work on Linux
-
-
-**Remaining:**
-- [ ] Expand test coverage for all commands
-- [ ] Add integration tests
-- [ ] Add end-to-end tests
-- [ ] Mock Syncthing API for testing
-
-#### 6.2 CLI Tests
-
-**Remaining:**
-- [ ] Test flag parsing edge cases
-- [ ] Test error cases comprehensively
 
 #### 7.1 Example Scripts
 **Status:** ❌ Not Implemented

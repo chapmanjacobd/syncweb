@@ -47,6 +47,9 @@ func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
 				return fmt.Errorf("failed to set ignores for %s: %w", folderID, err)
 			}
 
+			// Trigger scan to index files immediately
+			s.ScanFolderSubdirs(folderID, []string{""})
+
 			// Print syncweb URL
 			fmt.Printf("sync://%s#%s\n", folderID, s.Node.MyID())
 		}

@@ -33,7 +33,13 @@ type ServeCmd struct {
 
 func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
-	c.APIToken = utils.RandomString(32)
+	
+	// Use environment variable for API token if set (for testing)
+	if envToken := os.Getenv("SYNCWEB_API_TOKEN"); envToken != "" {
+		c.APIToken = envToken
+	} else {
+		c.APIToken = utils.RandomString(32)
+	}
 
 	c.setupSyncweb(g)
 

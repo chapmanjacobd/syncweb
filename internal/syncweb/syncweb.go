@@ -254,6 +254,16 @@ func (s *Syncweb) IsRunning() bool {
 	return s.Node.IsRunning()
 }
 
+// ScanFolders triggers a scan on all folders
+func (s *Syncweb) ScanFolders() map[string]error {
+	return s.Node.App.Internals.ScanFolders()
+}
+
+// ScanFolderSubdirs triggers a scan on specific subdirectories of a folder
+func (s *Syncweb) ScanFolderSubdirs(folderID string, paths []string) error {
+	return s.Node.App.Internals.ScanFolderSubdirs(folderID, paths)
+}
+
 // AddDevice adds a device to the Syncthing configuration
 func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error {
 	id, err := protocol.DeviceIDFromString(deviceID)

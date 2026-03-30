@@ -35,6 +35,7 @@ type SyncwebCmd struct {
 	Devices   SyncwebDevicesCmd   `cmd:"" help:"List Syncthing devices" aliases:"list-devices,lsd"`
 	Ls        SyncwebLsCmd        `cmd:"" help:"List files at the current directory level" aliases:"list"`
 	Find      SyncwebFindCmd      `cmd:"" help:"Search for files by filename, size, and modified date" aliases:"fd,search"`
+	Scan      SyncwebScanCmd      `cmd:"" help:"Trigger a scan on all folders"`
 	Stat      SyncwebStatCmd      `cmd:"" help:"Display detailed file status information from Syncthing"`
 	Sort      SyncwebSortCmd      `cmd:"" help:"Sort Syncthing files by multiple criteria"`
 	Download  SyncwebDownloadCmd  `cmd:"" help:"Mark file paths for download/sync" aliases:"dl,upload,unignore,sync"`

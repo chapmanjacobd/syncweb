@@ -11,6 +11,7 @@ export const test = base.extend<{
   cli: CliRunner;
   tempDir: string;
   testHome: string;
+  syncFolder: string;
   apiToken: string;
   createDummyFile: (name: string, content?: string) => string;
   createDummyDir: (name: string) => string;
@@ -37,6 +38,13 @@ export const test = base.extend<{
     }
   },
 
+  syncFolder: async ({ testHome }, use) => {
+    // syncFolder is a separate directory for the Syncweb folder (not the config directory)
+    const syncFolder = path.join(testHome, 'sync');
+    fs.mkdirSync(syncFolder, { recursive: true });
+    await use(syncFolder);
+  },
+
   tempDir: async ({ testHome }, use) => {
     // tempDir is a subdirectory for test-specific files
     const tempDir = path.join(testHome, 'temp');
@@ -56,30 +64,46 @@ export const test = base.extend<{
     cli.cleanup();
   },
 
-  createDummyFile: async ({ testHome, cli }, use) => {
+  createDummyFile: async ({ syncFolder, cli }, use) => {
     const createFile = (name: string, content: string = ''): string => {
-      const fullPath = path.join(testHome, name);
+      const fullPath = path.join(syncFolder, name);
       const dir = path.dirname(fullPath);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(fullPath, content);
-      
+
       // Trigger scan after file creation to ensure Syncthing indexes it
       cli.run(['scan'], { silent: true });
       
+      // Wait for scan to complete (scans are asynchronous)
+      try {
+        const { execSync } = require('child_process');
+        execSync('sleep 2');
+      } catch (e) {
+        // Ignore sleep errors
+      }
+
       return name;
     };
 
     await use(createFile);
   },
 
-  createDummyDir: async ({ testHome, cli }, use) => {
+  createDummyDir: async ({ syncFolder, cli }, use) => {
     const createDir = (name: string): string => {
-      const fullPath = path.join(testHome, name);
+      const fullPath = path.join(syncFolder, name);
       fs.mkdirSync(fullPath, { recursive: true });
-      
+
       // Trigger scan after directory creation
       cli.run(['scan'], { silent: true });
       
+      // Wait for scan to complete
+      try {
+        const { execSync } = require('child_process');
+        execSync('sleep 2');
+      } catch (e) {
+        // Ignore sleep errors
+      }
+
       return name;
     };
 

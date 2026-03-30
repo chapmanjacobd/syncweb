@@ -30,7 +30,6 @@ export class TestServer {
   private homeDir: string;
   private apiToken: string;
   private env: Record<string, string>;
-  private verbose: boolean;
   private baseUrl: string;
 
   constructor(options: TestServerOptions = {}) {
@@ -38,7 +37,6 @@ export class TestServer {
     this.homeDir = options.homeDir || this.createTempHome();
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
-    this.verbose = options.verbose || false;
     this.baseUrl = `http://localhost:${this.port}`;
   }
 

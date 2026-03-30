@@ -6,9 +6,9 @@ import * as path from 'path';
  * Tests for invalid arguments, missing folders, and other error conditions
  */
 test.describe('cli-errors', () => {
-  test('ls on non-syncweb folder shows error', async ({ cli, createDummyDir }) => {
+  test('ls on non-syncweb folder shows error', async ({ cli, createDummyDir, syncFolder }) => {
     createDummyDir('not-a-folder');
-    const folderPath = path.join(cli.getHome(), 'not-a-folder');
+    const folderPath = path.join(syncFolder, 'not-a-folder');
 
     const result = cli.run(['ls'], { silent: true, cwd: folderPath });
 
@@ -16,12 +16,12 @@ test.describe('cli-errors', () => {
     expect(result.stdout).toContain('is not inside of a Syncweb folder');
   });
 
-  test('create on existing syncweb folder handles it gracefully', async ({ cli }) => {
+  test('create on existing syncweb folder handles it gracefully', async ({ cli, syncFolder }) => {
     // First create
-    cli.run(['create', '.'], { silent: true, cwd: cli.getHome() });
-    
+    cli.run(['create', syncFolder], { silent: true });
+
     // Second create on same path
-    const result = cli.run(['create', '.'], { silent: true, cwd: cli.getHome() });
+    const result = cli.run(['create', syncFolder], { silent: true });
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('sync://'); // Should still output the URL
@@ -38,6 +38,6 @@ test.describe('cli-errors', () => {
     // join requires at least one URL
     const result = cli.run(['join'], { silent: true });
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('required');
+    expect(result.stderr).toContain('expected');
   });
 });

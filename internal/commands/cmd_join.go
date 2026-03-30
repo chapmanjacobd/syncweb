@@ -53,7 +53,11 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 					existingFolders[f.ID] = true
 				}
 
-				absPath, _ := filepath.Abs(path)
+				absPath, err := filepath.Abs(path)
+				if err != nil {
+					fmt.Printf("Error resolving path %s: %v\n", path, err)
+					continue
+				}
 				if _, exists := existingFolders[ref.FolderID]; !exists {
 					// Check if path is already a folder root
 					for _, f := range s.GetFolders() {

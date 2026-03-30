@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
@@ -54,10 +55,14 @@ func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 
 				// Pause and resume devices to unstuck connections
 				for _, devID := range deviceIDs {
-					_ = s.PauseDevice(devID)
+					if err := s.PauseDevice(devID); err != nil {
+						slog.Warn("Failed to pause device", "device", devID, "error", err)
+					}
 				}
 				for _, devID := range deviceIDs {
-					_ = s.ResumeDevice(devID)
+					if err := s.ResumeDevice(devID); err != nil {
+						slog.Warn("Failed to resume device", "device", devID, "error", err)
+					}
 				}
 			}
 		}

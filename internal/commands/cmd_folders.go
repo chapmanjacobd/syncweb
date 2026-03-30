@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -356,10 +357,14 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 						} else {
 							// Pause/resume to unstuck
 							for _, devID := range deviceIDs {
-								_ = s.PauseDevice(devID)
+								if err := s.PauseDevice(devID); err != nil {
+									slog.Warn("Failed to pause device", "device", devID, "error", err)
+								}
 							}
 							for _, devID := range deviceIDs {
-								_ = s.ResumeDevice(devID)
+								if err := s.ResumeDevice(devID); err != nil {
+									slog.Warn("Failed to resume device", "device", devID, "error", err)
+								}
 							}
 							fmt.Printf("Joined folder %s with %d devices\n", folderID, len(deviceIDs))
 						}

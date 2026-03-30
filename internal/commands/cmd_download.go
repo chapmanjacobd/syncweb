@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -47,7 +48,11 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		var totalSize int64
 
 		for _, p := range c.Paths {
-			absPath, _ := filepath.Abs(p)
+			absPath, err := filepath.Abs(p)
+			if err != nil {
+				fmt.Printf("Error: %s: %v\n", p, err)
+				continue
+			}
 
 			// Find folder
 			var folderID string
@@ -168,12 +173,12 @@ func getFolderSpaceInfo(s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
 		return nil
 	}
 
-	// Calculate free and total space
+	// Calculate free and total space with overflow protection
 	// stat.Bavail = free blocks available to non-super user
 	// stat.Blocks = total data blocks in filesystem
 	// stat.Bsize = block size
-	free := int64(stat.Bavail) * int64(stat.Bsize)
-	total := int64(stat.Blocks) * int64(stat.Bsize)
+	free := safeMulUint64(uint64(stat.Bavail), uint64(stat.Bsize))
+	total := safeMulUint64(uint64(stat.Blocks), uint64(stat.Bsize))
 
 	// Calculate minimum free space to preserve
 	minFree := calculateMinDiskFree(total, minFreeCfg)
@@ -426,4 +431,21 @@ func generateWarnings(
 	}
 
 	return warnings
+}
+
+// safeMulUint64 multiplies two uint64 values with overflow protection
+// Returns math.MaxInt64 if overflow would occur
+func safeMulUint64(a, b uint64) int64 {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	// Check for overflow: a * b > MaxInt64
+	if a > math.MaxInt64/b {
+		return math.MaxInt64
+	}
+	result := a * b
+	if result > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(result)
 }

@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
@@ -50,11 +49,6 @@ func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
 
 			// Print syncweb URL
 			fmt.Printf("sync://%s#%s\n", folderID, s.Node.MyID())
-		}
-		return nil
-	})
-}
-.Printf("sync://%s#%s\n", folderID, s.Node.MyID())
 		}
 		return nil
 	})

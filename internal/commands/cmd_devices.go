@@ -268,8 +268,8 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 				}
 			}
 			fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "device", "devices"))
-			}
-			if c.Resume {
+		}
+		if c.Resume {
 			count := 0
 			for _, d := range filtered {
 				if d.Paused {
@@ -279,8 +279,7 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 				}
 			}
 			fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "device", "devices"))
-			}
-
+		}
 
 		return nil
 	})

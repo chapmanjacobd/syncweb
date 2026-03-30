@@ -45,7 +45,11 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 		var files []fileWithInfo
 
 		for _, p := range c.Paths {
-			absPath, _ := filepath.Abs(p)
+			absPath, err := filepath.Abs(p)
+			if err != nil {
+				fmt.Printf("Error: %s: %v\n", p, err)
+				continue
+			}
 
 			// Find folder
 			var folderID string
@@ -131,7 +135,7 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 					}
 					less = nicheI < nicheJ
 				case "frecency":
-					// Frecency: combination of frequency and recency
+					// Frecency: combination of frequency (seeders) and recency
 					frecencyI := calculateFrecency(files[i], c.FrecencyWeight)
 					frecencyJ := calculateFrecency(files[j], c.FrecencyWeight)
 					less = frecencyI < frecencyJ
@@ -161,9 +165,8 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// calculateFrecency computes a score based on recency and access frequency
-// Higher score = more recently/frequently accessed
-// Note: Since AccessTime is not available, we use only recency
+// calculateFrecency computes a score based on recency and popularity (seed count)
+// Higher score = more recently modified and/or more popular (more seeders)
 func calculateFrecency(f fileWithInfo, weight int) float64 {
 	now := time.Now().Unix()
 
@@ -171,19 +174,27 @@ func calculateFrecency(f fileWithInfo, weight int) float64 {
 	age := float64(now - f.Modified)
 	recencyScore := 1.0 / (1.0 + age/86400) // Decay over days
 
-	// Without access time, we can only use recency
-	// Weight affects how much recency matters
-	return recencyScore * float64(weight)
+	// Frequency/popularity component: more seeders = higher score
+	// Normalize seed count to avoid overflow and give diminishing returns
+	freqScore := float64(f.Seeders) / (1.0 + float64(f.Seeders))
+
+	// Combine recency and frequency with weight balancing them
+	// Higher weight gives more importance to recency
+	return recencyScore*float64(weight) + freqScore
 }
 
-// FrecencyScore calculates the popularity score for a file
-func FrecencyScore(modified, accessTime int64, weight int) float64 {
+// FrecencyScore calculates the popularity score for a file using recency and seed count
+// modified: Unix timestamp of last modification
+// seeders: number of devices that have the file (popularity measure)
+// weight: importance of recency vs frequency (higher = more weight on recency)
+func FrecencyScore(modified int64, seeders int, weight int) float64 {
 	now := time.Now().Unix()
 
 	age := float64(now - modified)
 	recencyScore := 1.0 / (1.0 + age/86400)
 
-	freqScore := float64(accessTime) / float64(now)
+	// Frequency/popularity component: more seeders = higher score
+	freqScore := float64(seeders) / (1.0 + float64(seeders))
 
 	return recencyScore*float64(weight) + freqScore
 }

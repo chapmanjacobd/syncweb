@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -97,6 +98,8 @@ type Syncweb struct {
 	pendingDevices sync.Map // map[protocol.DeviceID]time.Time
 	events         []models.SyncEvent
 	eventsMu       sync.RWMutex
+	eventSub       events.Subscription
+	eventSubMu     sync.Mutex
 }
 
 func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error) {
@@ -148,7 +151,17 @@ func (s *Syncweb) watchEvents() {
 		events.FolderSummary | events.ItemStarted | events.ItemFinished | events.LocalIndexUpdated
 
 	sub := s.Node.Subscribe(mask)
-	defer sub.Unsubscribe()
+
+	s.eventSubMu.Lock()
+	s.eventSub = sub
+	s.eventSubMu.Unlock()
+
+	defer func() {
+		sub.Unsubscribe()
+		s.eventSubMu.Lock()
+		s.eventSub = nil
+		s.eventSubMu.Unlock()
+	}()
 
 	for {
 		select {
@@ -226,6 +239,14 @@ func (s *Syncweb) Start() error {
 }
 
 func (s *Syncweb) Stop() {
+	// Unsubscribe from events first to prevent race conditions
+	s.eventSubMu.Lock()
+	if s.eventSub != nil {
+		s.eventSub.Unsubscribe()
+		s.eventSub = nil
+	}
+	s.eventSubMu.Unlock()
+
 	s.Node.Stop()
 }
 
@@ -630,7 +651,8 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	}
 
 	wantedSize := int64(len(p))
-	if r.offset+wantedSize > r.info.Size {
+	// Check for overflow before addition
+	if r.offset > r.info.Size-wantedSize {
 		wantedSize = r.info.Size - r.offset
 	}
 
@@ -641,7 +663,12 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	// Calculate which blocks we need
 	blockSize := int64(r.info.BlockSize())
 	startBlock := r.offset / blockSize
-	endBlock := (r.offset + wantedSize - 1) / blockSize
+	// Check for overflow in endBlock calculation
+	endOffset := r.offset + wantedSize - 1
+	if endOffset < r.offset { // Overflow check
+		endOffset = r.info.Size - 1
+	}
+	endBlock := endOffset / blockSize
 
 	var totalRead int64
 	for i := startBlock; i <= endBlock; i++ {
@@ -700,6 +727,10 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	}
 
 	r.offset += totalRead
+	// Safe conversion to int for 32-bit systems
+	if totalRead > math.MaxInt {
+		return math.MaxInt, nil
+	}
 	return int(totalRead), nil
 }
 

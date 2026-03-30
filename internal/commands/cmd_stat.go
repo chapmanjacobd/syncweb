@@ -33,7 +33,11 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 		}
 
 		for _, p := range c.Paths {
-			absPath, _ := filepath.Abs(p)
+			absPath, err := filepath.Abs(p)
+			if err != nil {
+				fmt.Printf("Error: %s: %v\n", p, err)
+				continue
+			}
 
 			// Find folder and relative path
 			var folderID string

@@ -1,0 +1,32 @@
+{
+  "name": "syncweb-e2e",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "description": "End-to-end tests for Syncweb",
+  "scripts": {
+    "test": "tsc --noEmit && playwright test",
+    "test:e2e": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "install": "playwright install --with-deps"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chapmanjacobd/syncweb.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chapmanjacobd/syncweb/issues"
+  },
+  "homepage": "https://github.com/chapmanjacobd/syncweb#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  }
+}

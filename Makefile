@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt lint install all version
+.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
@@ -54,3 +54,18 @@ clean:
 
 install:
 	go install ./cmd/syncweb
+
+# E2E Tests
+e2e-install:
+	npm install --prefix e2e
+	npm run install --prefix e2e
+
+e2e-init: build
+	@echo "E2E test environment ready"
+	@echo "Run 'make e2e' to execute tests"
+
+e2e: e2e-init
+	npm run test --prefix e2e
+
+e2e-web: e2e-init
+	npm run test:ui --prefix e2e

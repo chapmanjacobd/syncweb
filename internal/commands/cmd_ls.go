@@ -27,7 +27,7 @@ type SyncwebLsCmd struct {
 func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		headerPrinted := !(c.Long && !c.NoHeader)
-		var allEntries []*fileEntry
+		allEntries := []*fileEntry{}
 
 		printHeader := func() {
 			if headerPrinted {

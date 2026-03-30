@@ -182,7 +182,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 		}
 
 		// Apply filters
-		var filtered []folderEntry
+		filtered := []folderEntry{}
 		for _, f := range folders {
 			// Missing filter
 			if c.Missing {

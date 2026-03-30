@@ -5,6 +5,11 @@ import { test, expect } from '../fixtures-cli';
  * Tests for file search functionality
  */
 test.describe('cli-find', () => {
+  test.beforeEach(async ({ cli }) => {
+    // Initialize a Syncweb folder in the test home
+    cli.run(['create', '.'], { silent: true, cwd: cli.getHome() });
+  });
+
   test('find searches by filename', async ({ cli, createDummyFile }) => {
     // Create test files
     createDummyFile('apple.txt', 'content');
@@ -18,10 +23,12 @@ test.describe('cli-find', () => {
     expect(result.stdout).not.toContain('banana.txt');
   });
 
-  test('find with json flag returns parseable output', async ({ runJson, createDummyFile }) => {
+  test('find with json flag returns parseable output', async ({ cli, createDummyFile }) => {
     createDummyFile('search-test.txt', 'test content');
 
-    const files = await runJson(['find', 'search-test']);
+    const result = cli.run(['find', 'search-test', '--json'], { silent: true });
+    expect(result.exitCode).toBe(0);
+    const files = JSON.parse(result.stdout);
 
     // Should return an array
     expect(Array.isArray(files)).toBe(true);

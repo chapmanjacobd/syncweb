@@ -47,7 +47,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			Modified time.Time `json:"modified"`
 			IsDir    bool      `json:"is_dir"`
 		}
-		var results []findResult
+		results := []findResult{}
 
 		// Build search pattern based on mode
 		var matchFunc func(string) bool

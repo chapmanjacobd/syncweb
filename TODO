@@ -1,3 +1,5 @@
+Bugs:
+
      1. Ignored errors throughout - Multiple places ignore errors from PauseDevice(), ResumeDevice(), filepath.Abs()
      2. Race condition in event watching - Subscription may not be properly cleaned up if Stop() is called
      3. Integer overflow risk in size calculations on 32-bit systems

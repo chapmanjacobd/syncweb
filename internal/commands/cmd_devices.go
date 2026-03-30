@@ -145,7 +145,7 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 		}
 
 		// Apply filters
-		var filtered []deviceEntry
+		filtered := []deviceEntry{}
 		for _, d := range devices {
 			// Include filter
 			if len(c.Include) > 0 {

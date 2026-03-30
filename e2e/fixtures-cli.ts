@@ -62,26 +62,28 @@ export const test = base.extend<{
       const dir = path.dirname(fullPath);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(fullPath, content);
+      
+      // Trigger scan after file creation to ensure Syncthing indexes it
+      cli.run(['scan'], { silent: true });
+      
       return name;
     };
 
     await use(createFile);
-
-    // Trigger scan after file creation to ensure Syncthing indexes it
-    cli.run(['scan'], { silent: true });
   },
 
   createDummyDir: async ({ testHome, cli }, use) => {
     const createDir = (name: string): string => {
       const fullPath = path.join(testHome, name);
       fs.mkdirSync(fullPath, { recursive: true });
+      
+      // Trigger scan after directory creation
+      cli.run(['scan'], { silent: true });
+      
       return name;
     };
 
     await use(createDir);
-
-    // Trigger scan after directory creation
-    cli.run(['scan'], { silent: true });
   },
 
   runJson: async ({ cli }, use) => {

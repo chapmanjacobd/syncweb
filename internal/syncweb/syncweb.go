@@ -271,7 +271,7 @@ func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error
 		return err
 	}
 
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, dev := range cfg.Devices {
 			if dev.DeviceID == id {
 				cfg.Devices[i].Name = name
@@ -286,7 +286,11 @@ func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error
 		device.Addresses = []string{"dynamic"}
 		cfg.SetDevice(device)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 // SetDeviceAddresses sets explicit addresses for a device
@@ -296,7 +300,7 @@ func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error 
 		return err
 	}
 
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, dev := range cfg.Devices {
 			if dev.DeviceID == id {
 				cfg.Devices[i].Addresses = addresses
@@ -304,7 +308,11 @@ func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error 
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 // AddFolder adds a folder to the Syncthing configuration
@@ -348,7 +356,7 @@ func (s *Syncweb) AddFolderDevice(folderID string, deviceID string) error {
 		return err
 	}
 
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, fld := range cfg.Folders {
 			if fld.ID == folderID {
 				for _, dev := range fld.Devices {
@@ -363,7 +371,11 @@ func (s *Syncweb) AddFolderDevice(folderID string, deviceID string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 // AddFolderDevices shares a folder with multiple devices
@@ -377,7 +389,7 @@ func (s *Syncweb) AddFolderDevices(folderID string, deviceIDs []string) error {
 		ids = append(ids, id)
 	}
 
-	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, fld := range cfg.Folders {
 			if fld.ID == folderID {
 				existing := make(map[protocol.DeviceID]bool)
@@ -396,7 +408,11 @@ func (s *Syncweb) AddFolderDevices(folderID string, deviceIDs []string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 // RemoveFolderDevices removes devices from a folder
@@ -410,7 +426,7 @@ func (s *Syncweb) RemoveFolderDevices(folderID string, deviceIDs []string) error
 		ids = append(ids, id)
 	}
 
-	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, fld := range cfg.Folders {
 			if fld.ID == folderID {
 				var newDevices []config.FolderDeviceConfiguration
@@ -425,11 +441,15 @@ func (s *Syncweb) RemoveFolderDevices(folderID string, deviceIDs []string) error
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) PauseFolder(id string) error {
-	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, f := range cfg.Folders {
 			if f.ID == id {
 				cfg.Folders[i].Paused = true
@@ -437,11 +457,15 @@ func (s *Syncweb) PauseFolder(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) ResumeFolder(id string) error {
-	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, f := range cfg.Folders {
 			if f.ID == id {
 				cfg.Folders[i].Paused = false
@@ -449,11 +473,15 @@ func (s *Syncweb) ResumeFolder(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) DeleteFolder(id string) error {
-	_, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, f := range cfg.Folders {
 			if f.ID == id {
 				cfg.Folders = append(cfg.Folders[:i], cfg.Folders[i+1:]...)
@@ -461,7 +489,11 @@ func (s *Syncweb) DeleteFolder(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) PauseDevice(id string) error {
@@ -469,7 +501,7 @@ func (s *Syncweb) PauseDevice(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, d := range cfg.Devices {
 			if d.DeviceID == devID {
 				cfg.Devices[i].Paused = true
@@ -477,7 +509,11 @@ func (s *Syncweb) PauseDevice(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) ResumeDevice(id string) error {
@@ -485,7 +521,7 @@ func (s *Syncweb) ResumeDevice(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, d := range cfg.Devices {
 			if d.DeviceID == devID {
 				cfg.Devices[i].Paused = false
@@ -493,7 +529,11 @@ func (s *Syncweb) ResumeDevice(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 func (s *Syncweb) DeleteDevice(id string) error {
@@ -501,7 +541,7 @@ func (s *Syncweb) DeleteDevice(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Node.Cfg.Modify(func(cfg *config.Configuration) {
+	waiter, err := s.Node.Cfg.Modify(func(cfg *config.Configuration) {
 		for i, d := range cfg.Devices {
 			if d.DeviceID == devID {
 				cfg.Devices = append(cfg.Devices[:i], cfg.Devices[i+1:]...)
@@ -509,7 +549,11 @@ func (s *Syncweb) DeleteDevice(id string) error {
 			}
 		}
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	waiter.Wait()
+	return s.Node.Cfg.Save()
 }
 
 // GetFolders returns a list of folder information

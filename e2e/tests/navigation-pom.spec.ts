@@ -45,9 +45,6 @@ test.describe('Navigation', () => {
   test('sidebar folders are clickable', async ({ filesPage, sidebarPage, server }) => {
     await filesPage.goto(server.getBaseUrl());
 
-    // Get initial folder count
-    const folderCount = await sidebarPage.getFolderCount();
-
     // Root folder should exist
     await expect(sidebarPage.getRootFolder()).toBeVisible();
 

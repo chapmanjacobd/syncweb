@@ -102,7 +102,7 @@ export class FilesPage extends BasePage {
    */
   async isDirectory(path: string): Promise<boolean> {
     const item = this.getFileItem(path);
-    return await item.hasClass(/is-dir/);
+    return await this.hasClass(item, 'is-dir');
   }
 
   /**
@@ -110,7 +110,7 @@ export class FilesPage extends BasePage {
    */
   async isSelected(path: string): Promise<boolean> {
     const item = this.getFileItem(path);
-    return await item.hasClass(/selected/);
+    return await this.hasClass(item, 'selected');
   }
 
   /**

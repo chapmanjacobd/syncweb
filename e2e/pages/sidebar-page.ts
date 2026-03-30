@@ -233,8 +233,8 @@ export class SidebarPage extends BasePage {
    */
   async isFolderActive(folderId: string | null): Promise<boolean> {
     if (folderId === null) {
-      return await this.getRootFolder().hasClass(/active/);
+      return await this.hasClass(this.getRootFolder(), 'active');
     }
-    return await this.getFolderItem(folderId).hasClass(/active/);
+    return await this.hasClass(this.getFolderItem(folderId), 'active');
   }
 }

@@ -56,7 +56,7 @@ export const test = base.extend<{
     cli.cleanup();
   },
 
-  createDummyFile: async ({ cli, testHome }, use) => {
+  createDummyFile: async ({ testHome }, use) => {
     const createFile = (name: string, content: string = ''): string => {
       const fullPath = path.join(testHome, name);
       const dir = path.dirname(fullPath);
@@ -68,7 +68,7 @@ export const test = base.extend<{
     await use(createFile);
   },
 
-  createDummyDir: async ({ cli, testHome }, use) => {
+  createDummyDir: async ({ testHome }, use) => {
     const createDir = (name: string): string => {
       const fullPath = path.join(testHome, name);
       fs.mkdirSync(fullPath, { recursive: true });

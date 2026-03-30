@@ -32,7 +32,6 @@ export class TestServer {
   private env: Record<string, string>;
   private verbose: boolean;
   private baseUrl: string;
-  private publicDir?: string;
 
   constructor(options: TestServerOptions = {}) {
     this.port = options.port || this.findAvailablePort();
@@ -40,7 +39,6 @@ export class TestServer {
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
     this.verbose = options.verbose || false;
-    this.publicDir = options.publicDir;
     this.baseUrl = `http://localhost:${this.port}`;
   }
 

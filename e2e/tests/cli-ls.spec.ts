@@ -38,7 +38,7 @@ test.describe('cli-ls', () => {
   });
 
   test('ls in empty directory works', async ({ cli, createDummyDir }) => {
-    const emptyDir = createDummyDir('empty');
+    createDummyDir('empty');
 
     const result = cli.run(['ls'], {
       silent: true,

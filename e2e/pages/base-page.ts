@@ -214,7 +214,7 @@ export class BasePage {
    */
   async getCurrentView(): Promise<string> {
     return await this.page.evaluate(() => {
-      const activeTab = document.querySelector('.view-tab.active');
+      const activeTab = (globalThis as any).document.querySelector('.view-tab.active');
       return activeTab?.textContent?.toLowerCase().replace(' ', '-') || 'files';
     });
   }
@@ -224,8 +224,16 @@ export class BasePage {
    */
   async waitForView(viewName: string, timeout: number = 5000): Promise<void> {
     await this.page.waitForFunction((view) => {
-      const activeTab = document.querySelector('.view-tab.active');
+      const activeTab = (globalThis as any).document.querySelector('.view-tab.active');
       return activeTab?.textContent?.toLowerCase().replace(' ', '-') === view;
     }, viewName, { timeout });
+  }
+
+  /**
+   * Check if element has a specific CSS class
+   */
+  async hasClass(locator: Locator, className: string): Promise<boolean> {
+    const classAttribute = await locator.getAttribute('class');
+    return classAttribute?.includes(className) || false;
   }
 }

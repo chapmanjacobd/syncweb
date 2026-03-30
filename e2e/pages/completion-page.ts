@@ -145,11 +145,11 @@ export class CompletionPage extends BasePage {
   /**
    * Wait for progress to reach percentage
    */
-  async waitForProgress(card: Locator, percentage: number, timeout: number = 30000): Promise<void> {
+  async waitForProgress(percentage: number, timeout: number = 30000): Promise<void> {
     await this.page.waitForFunction(async ({ pct }) => {
-      const fill = document.querySelector('.progress-fill');
+      const fill = (globalThis as any).document.querySelector('.progress-fill');
       if (!fill) return false;
-      const style = (fill as HTMLElement).style.width;
+      const style = (fill as any).style.width;
       const current = parseInt(style) || 0;
       return current >= pct;
     }, { pct: percentage }, { timeout });

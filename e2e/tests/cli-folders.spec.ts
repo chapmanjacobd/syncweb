@@ -5,7 +5,7 @@ import { test, expect } from '../fixtures-cli';
  * Tests for folder listing and management
  */
 test.describe('cli-folders', () => {
-  test('folders list returns folder information', async ({ cli, runJson }) => {
+  test('folders list returns folder information', async ({ cli }) => {
     // List folders (may be empty initially)
     const result = cli.run(['folders'], { silent: true });
 

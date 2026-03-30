@@ -15,7 +15,7 @@ export default async function globalSetup() {
   // This function can be used for one-time setup tasks
 
   // Store base URL in process.env for access in tests
-  const baseUrl = process.env.SYNCWEB_BASE_URL || 'http://localhost:8889';
+  process.env.SYNCWEB_BASE_URL = process.env.SYNCWEB_BASE_URL || 'http://localhost:8889';
 
   // Return teardown function (optional - servers are stopped in fixtures)
   return async () => {

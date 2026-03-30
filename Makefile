@@ -30,6 +30,9 @@ version:
 	@echo "Git Hash: $(GIT_HASH)"
 	@echo "Dirty: $(GIT_DIRTY)"
 
+run:
+	go run -tags "$(BUILD_TAGS)" -ldflags "$(LDFLAGS)" ./cmd/syncweb $(ARGS)
+
 dev:
 	(sleep 2 && xdg-open http://localhost:8889) &
 	air -d

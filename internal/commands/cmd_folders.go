@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -242,6 +243,15 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 		sort.Slice(filtered, func(i, j int) bool {
 			return filtered[i].ID < filtered[j].ID
 		})
+
+		if g.JSON {
+			data, err := json.MarshalIndent(filtered, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+			return nil
+		}
 
 		if c.Print {
 			for _, f := range filtered {

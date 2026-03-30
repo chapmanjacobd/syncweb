@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -39,6 +40,15 @@ type SyncwebFindCmd struct {
 
 func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+		type findResult struct {
+			Name     string    `json:"name"`
+			Path     string    `json:"path"`
+			Size     int64     `json:"size"`
+			Modified time.Time `json:"modified"`
+			IsDir    bool      `json:"is_dir"`
+		}
+		var results []findResult
+
 		// Build search pattern based on mode
 		var matchFunc func(string) bool
 
@@ -259,11 +269,31 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					} else {
 						path = fmt.Sprintf("syncweb://%s/%s", f.ID, meta.Name)
 					}
-					fmt.Println(path)
+
+					if g.JSON {
+						results = append(results, findResult{
+							Name:     filepath.Base(meta.Name),
+							Path:     path,
+							Size:     meta.Size,
+							Modified: meta.ModTime(),
+							IsDir:    isDir,
+						})
+					} else {
+						fmt.Println(path)
+					}
 				}
 			}
 			cancel()
 		}
+
+		if g.JSON {
+			data, err := json.MarshalIndent(results, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+		}
+
 		return nil
 	})
 }

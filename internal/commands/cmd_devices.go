@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -190,6 +191,15 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 			}
 			return filtered[i].ID < filtered[j].ID
 		})
+
+		if g.JSON {
+			data, err := json.MarshalIndent(filtered, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+			return nil
+		}
 
 		if c.Print {
 			for _, d := range filtered {

@@ -24,6 +24,6 @@ test.describe('cli-basic', () => {
     const result = cli.run(['unknown-command'], { silent: true });
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('unknown command');
+    expect(result.stderr).toContain('unexpected argument');
   });
 });

@@ -18,6 +18,7 @@ import (
 
 type ServeCmd struct {
 	Port      int    `short:"p" default:"8889" help:"Port to listen on"`
+	Listen    string `help:"Address to listen on (default: 127.0.0.1)"`
 	PublicDir string `help:"Override embedded web assets with local directory"`
 	ReadOnly  bool   `help:"Disable file modifications"`
 
@@ -76,11 +77,19 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 		mux.Handle("/", http.FileServer(http.FS(web.FS)))
 	}
 
-	addr := fmt.Sprintf(":%d", c.Port)
-	slog.Info("Syncweb server starting", "addr", addr, "token", c.APIToken)
+	// Default to localhost for security (DNS rebinding protection)
+	listenAddr := c.Listen
+	if listenAddr == "" {
+		listenAddr = fmt.Sprintf("127.0.0.1:%d", c.Port)
+	} else if !strings.Contains(listenAddr, ":") {
+		// If only port specified (e.g., "8889"), prepend localhost
+		listenAddr = fmt.Sprintf("127.0.0.1:%s", listenAddr)
+	}
+
+	slog.Info("Syncweb server starting", "addr", listenAddr, "token", c.APIToken)
 
 	server := &http.Server{
-		Addr:         addr,
+		Addr:         listenAddr,
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 0,
@@ -97,16 +106,16 @@ func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		remoteHost, _, _ := net.SplitHostPort(r.RemoteAddr)
-		isLocal := remoteHost == "127.0.0.1" || remoteHost == "::1"
+		isLocal := isLocalhost(remoteHost)
 
 		// Host header validation (DNS rebinding protection)
-		// If we are on localhost, only allow localhost-related Host headers
+		// If connection is from localhost, only allow localhost-related Host headers
 		if isLocal {
 			host, _, _ := net.SplitHostPort(r.Host)
 			if host == "" {
 				host = r.Host // No port in Host header
 			}
-			if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			if !isLocalhost(host) {
 				http.Error(w, "Host check failed (DNS rebinding protection)", http.StatusForbidden)
 				return
 			}
@@ -136,7 +145,11 @@ func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 			if origin != "" && isLocal {
 				// The origin/referer should be local if it's a local browser making the request
-				if !strings.Contains(origin, "localhost") && !strings.Contains(origin, "127.0.0.1") && !strings.Contains(origin, "::1") {
+				// Extract host from origin URL
+				originHost := strings.TrimPrefix(origin, "http://")
+				originHost = strings.TrimPrefix(originHost, "https://")
+				originHost, _, _ = strings.Cut(originHost, "/")
+				if !isLocalhost(originHost) {
 					http.Error(w, "CSRF block", http.StatusForbidden)
 					return
 				}
@@ -357,4 +370,28 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
+}
+
+// isLocalhost checks if a host is a localhost variant
+// This includes 127.0.0.0/8 range, ::1, and "localhost" hostname
+func isLocalhost(host string) bool {
+	// Strip port if present
+	hostOnly, _, err := net.SplitHostPort(host)
+	if err != nil {
+		hostOnly = host
+	}
+
+	// Check common localhost variations
+	if hostOnly == "localhost" || hostOnly == "127.0.0.1" || hostOnly == "::1" {
+		return true
+	}
+
+	// Check if it's an IP address in the loopback range
+	if ip := net.ParseIP(hostOnly); ip != nil {
+		if ip.IsLoopback() {
+			return true
+		}
+	}
+
+	return false
 }

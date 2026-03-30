@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -26,6 +27,7 @@ type SyncwebLsCmd struct {
 func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		headerPrinted := !(c.Long && !c.NoHeader)
+		var allEntries []*fileEntry
 
 		printHeader := func() {
 			if headerPrinted {
@@ -66,7 +68,9 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 			}
 
 			if folderID == "" {
-				fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
+				if !g.JSON {
+					fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
+				}
 				continue
 			}
 
@@ -78,23 +82,39 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 				if prefix != "" {
 					fileInfo, ok := c.getFile(s, folderID, prefix)
 					if ok {
-						if !headerPrinted {
-							printHeader()
+						if g.JSON {
+							allEntries = append(allEntries, &fileInfo)
+						} else {
+							if !headerPrinted {
+								printHeader()
+							}
+							c.printEntry(&fileInfo, printHeader)
 						}
-						c.printEntry(&fileInfo, printHeader)
 						continue
 					}
 				}
 				continue
 			}
 
-			if !headerPrinted {
-				printHeader()
+			if g.JSON {
+				allEntries = append(allEntries, files...)
+			} else {
+				if !headerPrinted {
+					printHeader()
+				}
+				// Print files
+				c.printDirectory(files, 0, printHeader)
 			}
-
-			// Print files
-			c.printDirectory(files, 0, printHeader)
 		}
+
+		if g.JSON {
+			data, err := json.MarshalIndent(allEntries, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+		}
+
 		return nil
 	})
 }

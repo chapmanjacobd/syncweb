@@ -9,6 +9,7 @@ import (
 type CoreFlags struct {
 	// Common options
 	Verbose   bool   `short:"v" help:"Enable verbose logging"`
+	JSON      bool   `short:"j" help:"Output results as JSON" group:"Display"`
 	Simulate  bool   `help:"Dry run; don't actually do anything"`
 	DryRun    bool   `kong:"-"` // Alias for Simulate
 	NoConfirm bool   `short:"y" help:"Don't ask for confirmation"`
@@ -104,7 +105,6 @@ type SortFlags struct {
 
 type DisplayFlags struct {
 	Columns   []string `short:"c" help:"Columns to display" group:"Display"`
-	JSON      bool     `short:"j" help:"Output results as JSON" group:"Display"`
 	Summarize bool     `help:"Print aggregate statistics" group:"Display"`
 	Frequency string   `short:"f" help:"Group statistics by time frequency (daily, weekly, monthly, yearly)" group:"Display"`
 	TUI       bool     `help:"Interactive TUI mode" group:"Display"`

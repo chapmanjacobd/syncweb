@@ -24,7 +24,11 @@ export class CompletionPage extends BasePage {
    * Wait for completion view to load
    */
   async waitForCompletionToLoad(timeout: number = 10000): Promise<void> {
-    await this.completionGrid.waitFor({ state: 'visible', timeout });
+    // Wait for the completion view content to be active
+    const completionView = this.page.locator('#view-completion');
+    await completionView.waitFor({ state: 'attached', timeout });
+    // Wait for the grid to be attached (content may be empty)
+    await this.completionGrid.waitFor({ state: 'attached', timeout });
   }
 
   /**

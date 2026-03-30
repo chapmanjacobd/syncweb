@@ -1352,6 +1352,29 @@ export function renderPagination(container: HTMLElement, currentPage: number, pe
 
 // Start app
 if (typeof window !== 'undefined' && window.document) {
+    // Expose functions globally for onclick handlers
+    (window as any).addFolder = addFolder;
+    (window as any).confirmAddFolder = confirmAddFolder;
+    (window as any).previewLocalPath = previewLocalPath;
+    (window as any).switchView = switchView;
+    (window as any).switchNeedTab = switchNeedTab;
+    (window as any).searchFiles = searchFiles;
+    (window as any).refresh = refresh;
+    (window as any).updateSort = updateSort;
+    (window as any).toggleSelection = toggleSelection;
+    (window as any).clearSelection = clearSelection;
+    (window as any).bulkDelete = bulkDelete;
+    (window as any).bulkMove = bulkMove;
+    (window as any).bulkCopy = bulkCopy;
+    (window as any).toggleOffline = toggleOffline;
+    (window as any).logout = logout;
+    (window as any).toggleSidebar = toggleSidebar;
+    (window as any).addDevice = addDevice;
+    (window as any).deleteDevice = deleteDevice;
+    (window as any).deleteFolder = deleteFolder;
+    (window as any).mountDevice = mountDevice;
+    (window as any).unmountPoint = unmountPoint;
+
     loadFolders();
     loadDevices();
     loadMounts();

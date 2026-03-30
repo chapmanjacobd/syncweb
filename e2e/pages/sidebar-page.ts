@@ -132,7 +132,11 @@ export class SidebarPage extends BasePage {
    */
   async clickAddFolder(): Promise<void> {
     await this.addFolderBtn.click();
-    await this.addFolderModal.waitFor({ state: 'visible' });
+    // Wait for modal to be visible (using display style check since it uses inline style)
+    await this.page.waitForFunction(() => {
+      const modal = (globalThis as any).document.getElementById('add-folder-ui');
+      return modal && modal.style.display !== 'none';
+    }, { timeout: 5000 });
   }
 
   /**

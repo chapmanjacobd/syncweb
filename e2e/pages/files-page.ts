@@ -252,7 +252,7 @@ export class FilesPage extends BasePage {
    * Get current sort value
    */
   async getCurrentSort(): Promise<string> {
-    return await this.sortSelect.getAttribute('value') || 'name';
+    return await this.sortSelect.evaluate(el => (el as any).value) || 'name';
   }
 
   /**

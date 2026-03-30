@@ -37,7 +37,8 @@ export class TestServer {
     this.homeDir = options.homeDir || this.createTempHome();
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
-    this.baseUrl = `http://localhost:${this.port}`;
+    // baseUrl will be set after server starts and port is assigned
+    this.baseUrl = '';
   }
 
   /**
@@ -76,11 +77,12 @@ export class TestServer {
       throw new Error('Server already started');
     }
 
-    // Find available port if not specified
+    // Find available port if not specified (port 0)
     if (this.port === 0) {
       this.port = await this.findAvailablePort(8889);
-      this.baseUrl = `http://localhost:${this.port}`;
     }
+    
+    this.baseUrl = `http://localhost:${this.port}`;
 
     // Build the binary if it doesn't exist
     const projectRoot = path.join(__dirname, '../..');

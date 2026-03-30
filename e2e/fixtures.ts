@@ -29,7 +29,10 @@ export const test = base.extend<{
 
     // Use global server for parallel test efficiency
     if (!globalServers.has(serverKey)) {
-      server = new TestServer(serverOptions);
+      // Use a unique port base per worker to avoid race conditions
+      const workerNum = workerId === 'default' ? 0 : parseInt(workerId) || 0;
+      const basePort = 8889 + (workerNum * 10);  // Each worker gets a range of 10 ports
+      server = new TestServer({ ...serverOptions, port: basePort });
       await server.start();
       globalServers.set(serverKey, server);
     } else {

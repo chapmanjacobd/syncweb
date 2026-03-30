@@ -19,6 +19,7 @@ type TestCluster struct {
 }
 
 func NewTestCluster(t *testing.T, count int) *TestCluster {
+	t.Helper()
 	tempDir, err := os.MkdirTemp("", "syncweb-cluster-")
 	if err != nil {
 		t.Fatal(err)
@@ -49,48 +50,52 @@ func (c *TestCluster) Close() {
 }
 
 func (c *TestCluster) ConnectAll(t *testing.T) {
+	t.Helper()
 	for i, nodeA := range c.Nodes {
 		for j, nodeB := range c.Nodes {
 			if i == j {
 				continue
 			}
 			if err := nodeA.AddDevice(nodeB.Node.MyID().String(), fmt.Sprintf("node-%d", j), false); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 			addr := fmt.Sprintf("tcp://127.0.0.1:%d", 22000+j)
 			if err := nodeA.SetDeviceAddresses(nodeB.Node.MyID().String(), []string{addr}); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}
 	}
 }
 
 func (c *TestCluster) ShareFolder(t *testing.T, folderID string) {
+	t.Helper()
 	for i, node := range c.Nodes {
 		path := filepath.Join(filepath.Dir(node.Node.Cfg.ConfigPath()), "data", folderID)
 		if err := node.AddFolder(folderID, folderID, path, config.FolderTypeSendReceive); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 		for j, other := range c.Nodes {
 			if i == j {
 				continue
 			}
 			if err := node.AddFolderDevice(folderID, other.Node.MyID().String()); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}
 	}
 }
 
 func (c *TestCluster) StartAll(t *testing.T) {
+	t.Helper()
 	for _, node := range c.Nodes {
 		if err := node.Start(); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
 }
 
 func (c *TestCluster) WaitConnected(t *testing.T) {
+	t.Helper()
 	timeout := time.After(60 * time.Second)
 	tick := time.Tick(1 * time.Second)
 
@@ -142,7 +147,7 @@ func TestSyncwebIntegration(t *testing.T) {
 	testFile := "hello.txt"
 	testContent := "hello from node 0"
 	if err := os.WriteFile(filepath.Join(folder0Path, testFile), []byte(testContent), 0o644); err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to write test file: %v", err)
 	}
 
 	// Wait for node 1 to see the file globally
@@ -171,17 +176,17 @@ Found:
 	// Test block pulling on node 1 (even if file is not local)
 	// We ensure it's not local by ignoring it on node 1 (selective sync)
 	if err := node1.Node.App.Internals.SetIgnores(folderID, []string{"*"}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to set ignores: %v", err)
 	}
 
 	rs, err := node1.NewReadSeeker(context.Background(), folderID, testFile)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to create ReadSeeker: %v", err)
 	}
 
 	buf, err := io.ReadAll(rs)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to read from ReadSeeker: %v", err)
 	}
 
 	if string(buf) != testContent {
@@ -202,12 +207,13 @@ func TestSyncwebChain(t *testing.T) {
 
 	// Connect 0-1 and 1-2
 	connect := func(a, b *Syncweb, portB int) {
+		t.Helper()
 		if err := a.AddDevice(b.Node.MyID().String(), "peer", false); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 		addr := fmt.Sprintf("tcp://127.0.0.1:%d", portB)
 		if err := a.SetDeviceAddresses(b.Node.MyID().String(), []string{addr}); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
 
@@ -222,6 +228,7 @@ func TestSyncwebChain(t *testing.T) {
 
 	// Wait for 0-1 and 1-2 connections
 	waitConn := func(node *Syncweb, peer protocol.DeviceID) {
+		t.Helper()
 		timeout := time.After(30 * time.Second)
 		for {
 			select {
@@ -244,7 +251,9 @@ func TestSyncwebChain(t *testing.T) {
 	folder0Path, _ := n0.GetFolderPath(folderID)
 	testFile := "chain.txt"
 	testContent := "chain content"
-	os.WriteFile(filepath.Join(folder0Path, testFile), []byte(testContent), 0o644)
+	if err := os.WriteFile(filepath.Join(folder0Path, testFile), []byte(testContent), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
 
 	// Wait for node 2 to see the file via node 1
 	timeout := time.After(30 * time.Second)
@@ -267,12 +276,12 @@ Found:
 	// Pull from node 2
 	rs, err := n2.NewReadSeeker(context.Background(), folderID, testFile)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to create ReadSeeker: %v", err)
 	}
 
 	buf, err := io.ReadAll(rs)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to read from ReadSeeker: %v", err)
 	}
 
 	if string(buf) != testContent {

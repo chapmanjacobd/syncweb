@@ -10,11 +10,11 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
+// TestSafeUnmountRemovable tests unmounting a device mounted at multiple mountpoints.
+// This test requires root privileges and loop device support.
 func TestSafeUnmountRemovable(t *testing.T) {
 	if os.Getenv("CI") != "" || os.Getuid() != 0 {
-		// This test requires root and loop device support
-		// If sudo -n true worked before, we might be able to run it with sudo
-		// but for now let's try to run it and see.
+		t.Skip("This test requires root and loop device support")
 	}
 
 	tmpDir, err := os.MkdirTemp("", "syncweb-mount-test")
@@ -72,7 +72,13 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	}
 }
 
+// TestSafePrepareForRead tests preparing a device for read by unmounting duplicate mountpoints.
+// This test requires root privileges and loop device support.
 func TestSafePrepareForRead(t *testing.T) {
+	if os.Getenv("CI") != "" || os.Getuid() != 0 {
+		t.Skip("This test requires root and loop device support")
+	}
+
 	tmpDir, err := os.MkdirTemp("", "syncweb-prepare-test")
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +118,13 @@ func TestSafePrepareForRead(t *testing.T) {
 	}
 }
 
+// TestAutoCleanupMounts tests automatic cleanup of duplicate mountpoints.
+// This test requires root privileges and loop device support.
 func TestAutoCleanupMounts(t *testing.T) {
+	if os.Getenv("CI") != "" || os.Getuid() != 0 {
+		t.Skip("This test requires root and loop device support")
+	}
+
 	tmpDir, err := os.MkdirTemp("", "syncweb-auto-cleanup-test")
 	if err != nil {
 		t.Fatal(err)
@@ -152,56 +164,275 @@ func TestAutoCleanupMounts(t *testing.T) {
 	}
 }
 
+// TestSafePrepareForReadRoot tests that root devices are skipped for safety.
 func TestSafePrepareForReadRoot(t *testing.T) {
+	tests := []struct {
+		name    string
+		device  models.BlockDevice
+		wantErr bool
+	}{
+		{
+			name: "root device with multiple mountpoints",
+			device: models.BlockDevice{
+				Name:        "rootdev",
+				Mountpoints: []string{"/home", "/"},
+				FSType:      "ext4",
+			},
+			wantErr: false, // Should skip silently
+		},
+		{
+			name: "root device single mountpoint",
+			device: models.BlockDevice{
+				Name:        "rootdev2",
+				Mountpoints: []string{"/"},
+				FSType:      "ext4",
+			},
+			wantErr: false, // Should skip silently
+		},
+		{
+			name: "non-root device with multiple mountpoints",
+			device: models.BlockDevice{
+				Name:        "datadev",
+				Mountpoints: []string{"/mnt/data1", "/mnt/data2"},
+				FSType:      "ext4",
+			},
+			wantErr: true, // Will fail because mountpoints don't exist in test environment
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := SafePrepareForRead(tt.device.Name, []models.BlockDevice{tt.device})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SafePrepareForRead(%q) error = %v, wantErr %v", tt.device.Name, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestFilterMountpointsExcludesRoot tests that root filesystem is excluded from mountpoints.
+func TestFilterMountpointsExcludesRoot(t *testing.T) {
+	tests := []struct {
+		name          string
+		devices       []models.BlockDevice
+		wantCount     int
+		wantExcluded  []string // device names that should be excluded
+		wantIncluded  []string // device names that should be included
+	}{
+		{
+			name: "root device excluded",
+			devices: []models.BlockDevice{
+				{
+					Name:        "sda1",
+					Mountpoints: []string{"/"},
+					Size:        "500G",
+				},
+				{
+					Name:        "sdb1",
+					Mountpoints: []string{"/mnt/data"},
+					Size:        "1T",
+				},
+			},
+			wantCount:    1,
+			wantExcluded: []string{"sda1"},
+			wantIncluded: []string{"sdb1"},
+		},
+		{
+			name: "root device with children - children included",
+			devices: []models.BlockDevice{
+				{
+					Name:        "sda",
+					Mountpoints: []string{"/"},
+					Size:        "500G",
+					Children: []models.BlockDevice{
+						{
+							Name:        "sda1",
+							Mountpoints: []string{"/boot"},
+							Size:        "1G",
+						},
+					},
+				},
+			},
+			wantCount:    1,
+			wantExcluded: []string{"sda"},
+			wantIncluded: []string{"sda1"},
+		},
+		{
+			name: "multiple non-root devices",
+			devices: []models.BlockDevice{
+				{
+					Name:        "sdb1",
+					Mountpoints: []string{"/mnt/data1"},
+					Size:        "1T",
+				},
+				{
+					Name:        "sdc1",
+					Mountpoints: []string{"/mnt/data2"},
+					Size:        "2T",
+				},
+			},
+			wantCount:    2,
+			wantExcluded: []string{},
+			wantIncluded: []string{"sdb1", "sdc1"},
+		},
+		{
+			name: "empty mountpoints excluded",
+			devices: []models.BlockDevice{
+				{
+					Name:        "sda1",
+					Mountpoints: []string{""},
+					Size:        "500G",
+				},
+				{
+					Name:        "sdb1",
+					Mountpoints: []string{"/mnt/data"},
+					Size:        "1T",
+				},
+			},
+			wantCount:    1,
+			wantExcluded: []string{"sda1"},
+			wantIncluded: []string{"sdb1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mounts := FilterMountpoints(tt.devices)
+
+			// Check count
+			if len(mounts) != tt.wantCount {
+				t.Errorf("FilterMountpoints() returned %d mounts, want %d", len(mounts), tt.wantCount)
+			}
+
+			// Check excluded devices
+			for _, excluded := range tt.wantExcluded {
+				for _, m := range mounts {
+					if m.Name == excluded {
+						t.Errorf("FilterMountpoints() should exclude %q but it was included", excluded)
+					}
+				}
+			}
+
+			// Check included devices
+			for _, included := range tt.wantIncluded {
+				found := false
+				for _, m := range mounts {
+					if m.Name == included {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("FilterMountpoints() should include %q but it was not found", included)
+				}
+			}
+		})
+	}
+}
+
+// TestParseLsblkOutput tests parsing of lsblk JSON output.
+func TestParseLsblkOutput(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		wantLen int
+	}{
+		{
+			name: "valid lsblk output",
+			input: `{
+				"blockdevices": [
+					{"name": "sda", "mountpoints": ["/"], "size": "500G", "type": "disk", "label": "", "fstype": "ext4"},
+					{"name": "sdb", "mountpoints": ["/mnt/data"], "size": "1T", "type": "disk", "label": "DATA", "fstype": "ext4"}
+				]
+			}`,
+			wantErr: false,
+			wantLen: 2,
+		},
+		{
+			name:    "empty blockdevices",
+			input:   `{"blockdevices": []}`,
+			wantErr: false,
+			wantLen: 0,
+		},
+		{
+			name:    "invalid JSON",
+			input:   `{"blockdevices": [`,
+			wantErr: true,
+			wantLen: 0,
+		},
+		{
+			name:    "missing blockdevices key",
+			input:   `{}`,
+			wantErr: false,
+			wantLen: 0,
+		},
+		{
+			name: "nested children",
+			input: `{
+				"blockdevices": [
+					{
+						"name": "sda",
+						"mountpoints": ["/"],
+						"size": "500G",
+						"type": "disk",
+						"label": "",
+						"fstype": "ext4",
+						"children": [
+							{"name": "sda1", "mountpoints": ["/boot"], "size": "1G", "type": "part", "label": "", "fstype": "ext4"}
+						]
+					}
+				]
+			}`,
+			wantErr: false,
+			wantLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			devices, err := ParseLsblkOutput([]byte(tt.input))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseLsblkOutput() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(devices) != tt.wantLen {
+				t.Errorf("ParseLsblkOutput() returned %d devices, want %d", len(devices), tt.wantLen)
+			}
+		})
+	}
+}
+
+// TestSafePrepareForReadBtrfs tests that Btrfs filesystems are skipped (thread-safe).
+func TestSafePrepareForReadBtrfs(t *testing.T) {
 	mockDevices := []models.BlockDevice{
 		{
-			Name:        "rootdev",
-			Mountpoints: []string{"/home", "/"},
+			Name:        "btrfsdev",
+			Mountpoints: []string{"/mnt/btrfs1", "/mnt/btrfs2"},
+			FSType:      "btrfs",
+		},
+	}
+
+	err := SafePrepareForRead("btrfsdev", mockDevices)
+	if err != nil {
+		t.Errorf("SafePrepareForRead() should skip Btrfs devices, got error: %v", err)
+	}
+}
+
+// TestSafePrepareForReadNotFound tests error handling when device is not found.
+func TestSafePrepareForReadNotFound(t *testing.T) {
+	mockDevices := []models.BlockDevice{
+		{
+			Name:        "existingdev",
+			Mountpoints: []string{"/mnt/data"},
 			FSType:      "ext4",
 		},
 	}
 
-	// Verify that SafePrepareForRead returns nil (skips) for a root device without calling umount
-	err := SafePrepareForRead("rootdev", mockDevices)
-	if err != nil {
-		t.Errorf("SafePrepareForRead failed for root device: %v", err)
+	err := SafePrepareForRead("nonexistent", mockDevices)
+	if err == nil {
+		t.Error("SafePrepareForRead() should return error for non-existent device")
 	}
-}
-
-func TestFilterMountpointsExcludesRoot(t *testing.T) {
-	mockDevices := []models.BlockDevice{
-		{
-			Name:        "sda1",
-			Mountpoints: []string{"/"},
-			Size:        "500G",
-		},
-		{
-			Name:        "sdb1",
-			Mountpoints: []string{"/mnt/data"},
-			Size:        "1T",
-		},
-	}
-
-	mounts := FilterMountpoints(mockDevices)
-
-	for _, m := range mounts {
-		for _, mp := range m.Mountpoints {
-			if mp == "/" {
-				t.Errorf("FilterMountpoints should exclude root device, but found %s on %s", mp, m.Name)
-			}
-		}
-	}
-	if len(mounts) != 1 {
-		t.Errorf("Expected 1 mount, got %d", len(mounts))
-	}
-}
-
-func TestSafePrepareForReadPreference(t *testing.T) {
-	// This test focuses on the logic of picking the "preferred" mountpoint
-	// without actually calling umount (since we use mock devices that don't match real system)
-	// Actually SafePrepareForRead WILL call umount if there are multiple mountpoints.
-	// To test this without side effects, we'd need to mock the exec.Command.
-	// For now, let's just verify the root and btrfs early returns which we've done.
 }
 
 func isMounted(path string) bool {

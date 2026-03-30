@@ -1,0 +1,78 @@
+    🔴 Critical Security Issues
+
+     1. API token logged at INFO level (internal/commands/serve.go:58) - exposes sensitive credentials in logs
+     2. Path blacklist not implemented (internal/commands/serve.go:248-251) - always returns false, provides no protection
+     3. Weak DNS rebinding protection - can be bypassed with controlled DNS
+     4. Log file permissions too open (0o640 instead of 0o600)
+
+    🟠 High Priority Bugs
+
+     1. Ignored errors throughout - Multiple places ignore errors from PauseDevice(), ResumeDevice(), filepath.Abs()
+     2. Race condition in event watching - Subscription may not be properly cleaned up if Stop() is called
+     3. Integer overflow risk in size calculations on 32-bit systems
+     4. Misleading `calculateFrecency` function - only uses recency, not frequency as the name implies
+
+    🟡 Code Quality Issues
+
+     1. Global state with mutex - Makes testing difficult, should use dependency injection
+     2. Duplicate `pluralize` function - Defined in both cmd_join.go and cmd_folders.go
+     3. Inconsistent URL scheme naming - Mix of sync:// and syncweb://
+     4. Magic numbers - Event buffer limit (100), ticker interval (30s), etc.
+     5. Inconsistent error message formatting
+
+    🟢 Performance Concerns
+
+     1. Unnecessary allocations - GetEvents() copies entire slice on every call
+     2. Repeated config copies - cfg.RawCopy() called frequently
+     3. Inefficient string concatenation - Multiple ReplaceAll calls instead of strings.Builder
+     4. Blocking file operations in HTTP handlers - No timeout or context cancellation
+
+    📋 Other Observations
+
+     - Test coverage gaps - No tests for HTTP handlers, Web UI, or CLI edge cases
+     - Platform-specific code - Many operations only work on Linux
+
+
+**Remaining:**
+- [ ] Expand test coverage for all commands
+- [ ] Add integration tests
+- [ ] Add end-to-end tests
+- [ ] Mock Syncthing API for testing
+
+#### 6.2 CLI Tests
+
+**Remaining:**
+- [ ] Test flag parsing edge cases
+- [ ] Test error cases comprehensively
+
+#### 7.1 Example Scripts
+**Status:** ❌ Not Implemented
+
+**Python Examples (to port):**
+- `install.sh`: Installation script for syncweb-automatic
+- `simple_wishlist.sh`: Simple wishlist generator
+- `syncweb-blocklist.sh`: Blocklist script
+- `syncweb-wishlist.sh`: Wishlist script
+- `syncweb-automatic.service`: Systemd service file
+
+**Remaining:**
+- [ ] Create example scripts for Go version
+- [ ] Update systemd service file
+- [ ] Create installation script
+
+#### 7.2 README Updates
+**Status:** ❌ Not Implemented
+
+**Remaining:**
+- [ ] Update README with Go-specific installation
+- [ ] Update usage examples
+- [ ] Document differences from Python version
+- [ ] Add migration guide
+
+#### 7.3 FAQ Updates
+**Status:** ❌ Not Implemented
+
+**Remaining:**
+- [ ] Update FAQ for Go version
+- [ ] Document known issues
+- [ ] Troubleshooting guide

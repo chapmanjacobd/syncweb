@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -167,8 +168,11 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 
 		// Check depth
 		if c.Depth > 0 && len(parts) > c.Depth {
+			slog.Debug("ls: skipping (depth)", "name", name, "parts", len(parts), "depth", c.Depth)
 			continue
 		}
+
+		slog.Debug("ls: processing", "name", name, "parts", len(parts), "depth", c.Depth)
 
 		// Build tree
 		var currentMap map[string]*fileEntry = tree
@@ -202,6 +206,16 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 				if currentPath == "" {
 					rootItems = append(rootItems, entry)
 				}
+				slog.Debug("ls: created entry", "path", entryPath, "isDir", isDir)
+			} else {
+				// Entry already exists, but might need to update IsDir
+				// If this part is not the last, it's a directory
+				if !isLast {
+					if !currentMap[part].IsDir {
+						slog.Debug("ls: updated to directory", "part", part)
+					}
+					currentMap[part].IsDir = true
+				}
 			}
 
 			currentMap = currentMap[part].Children
@@ -211,6 +225,11 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 				currentPath = currentPath + "/" + part
 			}
 		}
+	}
+
+	slog.Debug("ls: rootItems", "count", len(rootItems))
+	for _, item := range rootItems {
+		slog.Debug("ls: rootItem", "name", item.Name, "isDir", item.IsDir, "children", len(item.Children))
 	}
 
 	// Calculate folder sizes if needed

@@ -83,10 +83,13 @@ export class CliRunner {
       ...process.env,
       SYNCWEB_HOME: this.defaultHome,
       SYNCWEB_API_TOKEN: this.defaultToken,
+      SYNCWEB_DEBUG: '1',
       ...options.env,
     };
 
-    const command = `${this.binaryPath} ${args.join(' ')}`;
+    // Add --verbose flag for debug output
+    const allArgs = [...args, '--verbose'];
+    const command = `${this.binaryPath} ${allArgs.join(' ')}`;
 
     if (!options.silent) {
       console.log(`[CLI] $ ${command}`);

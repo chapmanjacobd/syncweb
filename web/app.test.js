@@ -106,10 +106,10 @@ describe('Syncweb UI', () => {
             
             const items = fileList.getElementsByTagName('li');
             // Root link + 2 files
-            expect(items.length).toBe(3); 
+            expect(items.length).toBe(3);
             expect(items[0].textContent).toContain('[Root]'); // Up link
-            expect(items[1].textContent).toContain('doc.txt');
-            expect(items[2].textContent).toContain('sub');
+            expect(items[1].textContent).toContain('sub');
+            expect(items[2].textContent).toContain('doc.txt');
         });
 
         it('selectFolder updates state and loads files', async () => {

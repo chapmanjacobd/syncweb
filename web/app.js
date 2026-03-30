@@ -1338,8 +1338,6 @@ function renderPagination(container, currentPage, perPage, loadFunction) {
     container.appendChild(nextBtn);
 }
 
-function refresh() { loadFolders(); loadDevices(); loadMounts(); loadFiles(); loadStatus(); loadEvents(); }
-
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {

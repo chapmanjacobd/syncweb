@@ -40,7 +40,22 @@ Reusable page-specific logic in `e2e/pages/`:
 | `FilesPage` | File grid/list interactions and operations |
 | `CompletionPage` | Sync completion monitoring view |
 
-### Test Fixtures
+### CLI Testing
+
+CLI E2E tests in `e2e/tests/cli-*.spec.ts` use `fixtures-cli.ts`:
+
+| Fixture | Description |
+|---------|-------------|
+| `cli` | CliRunner instance for command execution |
+| `tempDir` | Temporary directory for test files |
+| `testHome` | Isolated home directory per test |
+| `apiToken` | API token for authentication |
+| `createDummyFile` | Helper to create test files |
+| `createDummyDir` | Helper to create test directories |
+| `runJson` | Run command and parse JSON output |
+| `runAndVerify` | Run command and verify success |
+
+### Web UI Test Fixtures
 
 | Fixture | Description |
 |---------|-------------|
@@ -51,6 +66,8 @@ Reusable page-specific logic in `e2e/pages/`:
 | `completionPage` | CompletionPage instance |
 
 ## Writing Tests
+
+### Web UI Tests
 
 ```typescript
 import { test, expect } from '../fixtures';
@@ -67,6 +84,27 @@ test.describe('My Feature', () => {
     // Use files POM to verify content
     await expect(filesPage.fileList).toBeVisible();
     await expect(filesPage.getCurrentPath()).toContain('my-folder');
+  });
+});
+```
+
+### CLI Tests
+
+```typescript
+import { test, expect } from '../fixtures-cli';
+
+test.describe('cli-my-command', () => {
+  test('my command works', async ({ cli, createDummyFile, runJson }) => {
+    // Create test files
+    createDummyFile('test.txt', 'content');
+
+    // Run command and verify success
+    const result = cli.runAndVerify(['ls']);
+    expect(result.stdout).toContain('test.txt');
+
+    // Or use runJson for structured output
+    const files = await runJson(['ls']);
+    expect(Array.isArray(files)).toBe(true);
   });
 });
 ```
@@ -157,11 +195,18 @@ e2e/
 │   ├── files-page.ts        # Files view POM
 │   └── completion-page.ts   # Completion view POM
 ├── utils/
-│   └── test-server.ts       # Server management
+│   ├── test-server.ts       # Server management
+│   └── cli-runner.ts        # CLI command runner
 ├── tests/
 │   ├── navigation-pom.spec.ts   # Navigation tests (POM example)
-│   └── sidebar-pom.spec.ts      # Sidebar tests (POM example)
-├── fixtures.ts              # Test fixtures
+│   ├── sidebar-pom.spec.ts      # Sidebar tests (POM example)
+│   ├── cli-basic.spec.ts        # CLI basic commands
+│   ├── cli-folders.spec.ts      # CLI folders commands
+│   ├── cli-devices.spec.ts      # CLI devices commands
+│   ├── cli-ls.spec.ts           # CLI ls commands
+│   └── cli-find.spec.ts         # CLI find commands
+├── fixtures.ts              # Web UI test fixtures
+├── fixtures-cli.ts          # CLI test fixtures
 ├── global-setup.ts          # Global test setup
 ├── playwright.config.ts     # Playwright configuration
 ├── tsconfig.json            # TypeScript configuration

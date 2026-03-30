@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web
+.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
@@ -67,5 +67,8 @@ e2e-init: build
 e2e: e2e-init
 	npm run test --prefix e2e
 
+e2e-cli: e2e-init
+	npm run test --prefix e2e -- --grep 'cli-'
+
 e2e-web: e2e-init
-	npm run test:ui --prefix e2e
+	npm run test --prefix e2e -- --grep-invert 'cli-'

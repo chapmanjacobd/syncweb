@@ -423,7 +423,7 @@ export async function selectFolder(id: string | null): Promise<void> {
         state.currentPath = "/";
     } else {
         state.currentFolder = id;
-        state.currentPath = `syncweb://${id}/`;
+        state.currentPath = `sync://${id}/`;
     }
     renderFolders();
     loadFiles();
@@ -491,13 +491,13 @@ export function renderFiles(isSearch: boolean = false): void {
 
     if (!isSearch) {
         // Parent dir
-        if (state.currentFolder && state.currentPath !== `syncweb://${state.currentFolder}/`) {
+        if (state.currentFolder && state.currentPath !== `sync://${state.currentFolder}/`) {
             const li = document.createElement('li');
             li.className = 'file-item';
             li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> ..`;
             li.onclick = goUp;
             list.appendChild(li);
-        } else if (state.currentFolder && state.currentPath === `syncweb://${state.currentFolder}/`) {
+        } else if (state.currentFolder && state.currentPath === `sync://${state.currentFolder}/`) {
             const li = document.createElement('li');
             li.className = 'file-item';
             li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> [Root]`;
@@ -531,7 +531,7 @@ export function renderFiles(isSearch: boolean = false): void {
 
         li.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
-                // Extract folder ID from path syncweb://id/
+                // Extract folder ID from path sync://id/
                 const folderID = f.path.split('/')[2];
                 selectFolder(folderID);
                 return;
@@ -739,7 +739,7 @@ export async function bulkMove(): Promise<void> {
     if (!dstFolder) {
         dstPath = "/";
     } else {
-        dstPath = `syncweb://${dstFolder}/`;
+        dstPath = `sync://${dstFolder}/`;
     }
 
     const subPath = prompt("Enter subpath within destination (e.g. 'Photos/2023'):", "") || '';
@@ -776,7 +776,7 @@ export async function bulkCopy(): Promise<void> {
     if (!dstFolder) {
         dstPath = "/";
     } else {
-        dstPath = `syncweb://${dstFolder}/`;
+        dstPath = `sync://${dstFolder}/`;
     }
 
     const subPath = prompt("Enter subpath within destination (e.g. 'Photos/2023'):", "") || '';

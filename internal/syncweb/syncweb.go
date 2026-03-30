@@ -19,6 +19,12 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Constants for syncweb configuration
+const (
+	// EventBufferLimit is the maximum number of events to keep in memory
+	EventBufferLimit = 100
+)
+
 type Measurement struct {
 	TotalTime time.Duration
 	Count     int64
@@ -122,7 +128,7 @@ func (s *Syncweb) addEvent(evType string, message string, data any) {
 	}
 
 	s.events = append(s.events, event)
-	if len(s.events) > 100 {
+	if len(s.events) > EventBufferLimit {
 		s.events = s.events[1:]
 	}
 }
@@ -503,17 +509,17 @@ func (s *Syncweb) GetDevices() []DeviceInfo {
 	return devices
 }
 
-// ResolveLocalPath resolves a syncweb:// URL to a local filesystem path,
+// ResolveLocalPath resolves a sync:// URL to a local filesystem path,
 // ensuring the path is within the folder's root directory.
-func (s *Syncweb) ResolveLocalPath(syncwebPath string) (string, string, error) {
-	if !strings.HasPrefix(syncwebPath, "syncweb://") {
-		return "", "", fmt.Errorf("invalid syncweb path: %s", syncwebPath)
+func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
+	if !strings.HasPrefix(syncPath, "sync://") {
+		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}
 
-	trimmed := strings.TrimPrefix(syncwebPath, "syncweb://")
+	trimmed := strings.TrimPrefix(syncPath, "sync://")
 	parts := strings.SplitN(trimmed, "/", 2)
 	if len(parts) < 2 {
-		return "", "", fmt.Errorf("invalid syncweb path: %s", syncwebPath)
+		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}
 
 	folderID := parts[0]

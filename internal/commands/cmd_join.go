@@ -10,9 +10,9 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
-// SyncwebJoinCmd joins syncweb folders/devices
+// SyncwebJoinCmd joins sync folders/devices
 type SyncwebJoinCmd struct {
-	URLs   []string `arg:"" required:"" name:"urls" help:"Syncweb URLs (syncweb://folder-id#device-id)"`
+	URLs   []string `arg:"" required:"" name:"urls" help:"Sync URLs (sync://folder-id#device-id)"`
 	Prefix string   `help:"Path to parent folder" env:"SYNCWEB_HOME" default:"."`
 }
 
@@ -109,15 +109,8 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 			}
 		}
 
-		fmt.Printf("Added %d %s\n", deviceCount, pluralize(deviceCount, "device", "devices"))
-		fmt.Printf("Added %d %s\n", folderCount, pluralize(folderCount, "folder", "folders"))
+		fmt.Printf("Added %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
+		fmt.Printf("Added %d %s\n", folderCount, utils.Pluralize(folderCount, "folder", "folders"))
 		return nil
 	})
-}
-
-func pluralize(n int, singular, plural string) string {
-	if n == 1 {
-		return singular
-	}
-	return plural
 }

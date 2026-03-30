@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/chapmanjacobd/syncweb/web"
 )
@@ -23,6 +25,10 @@ type ServeCmd struct {
 	ReadOnly  bool   `help:"Disable file modifications"`
 
 	APIToken string `kong:"-"`
+
+	// Syncweb instance (dependency injection for testability)
+	sw   *syncweb.Syncweb
+	swMu sync.RWMutex
 }
 
 func (c *ServeCmd) Run(g *SyncwebCmd) error {

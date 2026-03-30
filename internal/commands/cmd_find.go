@@ -190,6 +190,9 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 				continue
 			}
 
+			// Wait for Syncthing to index local files
+			time.Sleep(1 * time.Second)
+
 			seq, cancel := s.Node.App.Internals.AllGlobalFiles(f.ID)
 			for meta := range seq {
 				isDir := meta.Type == protocol.FileInfoTypeDirectory
@@ -267,7 +270,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 						folderPath := f.Path
 						path = filepath.Join(folderPath, meta.Name)
 					} else {
-						path = fmt.Sprintf("syncweb://%s/%s", f.ID, meta.Name)
+						path = fmt.Sprintf("sync://%s/%s", f.ID, meta.Name)
 					}
 
 					if g.JSON {

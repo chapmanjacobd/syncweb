@@ -43,8 +43,8 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	// Mount it twice
 	mp1 := filepath.Join(tmpDir, "mnt1")
 	mp2 := filepath.Join(tmpDir, "mnt2")
-	os.MkdirAll(mp1, 0755)
-	os.MkdirAll(mp2, 0755)
+	os.MkdirAll(mp1, 0o755)
+	os.MkdirAll(mp2, 0o755)
 
 	if err := exec.Command("sudo", "mount", loopDev, mp1).Run(); err != nil {
 		t.Fatal(err)
@@ -95,8 +95,8 @@ func TestSafePrepareForRead(t *testing.T) {
 
 	mp1 := filepath.Join(tmpDir, "mnt1")
 	mp2 := filepath.Join(tmpDir, "mnt2")
-	os.MkdirAll(mp1, 0755)
-	os.MkdirAll(mp2, 0755)
+	os.MkdirAll(mp1, 0o755)
+	os.MkdirAll(mp2, 0o755)
 
 	exec.Command("sudo", "mount", loopDev, mp1).Run()
 	exec.Command("sudo", "mount", loopDev, mp2).Run()
@@ -141,8 +141,8 @@ func TestAutoCleanupMounts(t *testing.T) {
 
 	mp1 := filepath.Join(tmpDir, "mnt1")
 	mp2 := filepath.Join(tmpDir, "mnt2")
-	os.MkdirAll(mp1, 0755)
-	os.MkdirAll(mp2, 0755)
+	os.MkdirAll(mp1, 0o755)
+	os.MkdirAll(mp2, 0o755)
 
 	exec.Command("sudo", "mount", loopDev, mp1).Run()
 	exec.Command("sudo", "mount", loopDev, mp2).Run()

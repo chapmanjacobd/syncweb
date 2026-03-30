@@ -87,11 +87,11 @@ describe('Syncweb UI', () => {
 
         it('loadFiles renders files correctly', async () => {
             const mockFiles = [
-                { name: 'doc.txt', is_dir: false, local: true, size: 100, path: 'syncweb://f1/doc.txt' },
-                { name: 'sub', is_dir: true, local: true, path: 'syncweb://f1/sub' }
+                { name: 'doc.txt', is_dir: false, local: true, size: 100, path: 'sync://f1/doc.txt' },
+                { name: 'sub', is_dir: true, local: true, path: 'sync://f1/sub' }
             ];
             state.currentFolder = 'f1';
-            state.currentPath = 'syncweb://f1/';
+            state.currentPath = 'sync://f1/';
 
             mockFetch.mockResolvedValueOnce({
                 ok: true,
@@ -123,12 +123,12 @@ describe('Syncweb UI', () => {
             await selectFolder('new-folder');
 
             expect(state.currentFolder).toBe('new-folder');
-            expect(state.currentPath).toBe('syncweb://new-folder/');
+            expect(state.currentPath).toBe('sync://new-folder/');
             expect(mockFetch).toHaveBeenCalled(); // loadFiles called
         });
 
         it('goUp navigates to parent directory', async () => {
-            state.currentPath = 'syncweb://f1/sub/nested/';
+            state.currentPath = 'sync://f1/sub/nested/';
             state.currentFolder = 'f1';
 
             mockFetch.mockResolvedValue({
@@ -138,7 +138,7 @@ describe('Syncweb UI', () => {
 
             goUp();
 
-            expect(state.currentPath).toBe('syncweb://f1/sub/');
+            expect(state.currentPath).toBe('sync://f1/sub/');
             expect(mockFetch).toHaveBeenCalled();
         });
     });
@@ -368,7 +368,7 @@ describe('Syncweb UI', () => {
                 searchInput.value = 'testfile';
 
                 const mockResults = [
-                    { name: 'testfile.txt', is_dir: false, local: true, size: 100, path: 'syncweb://f1/testfile.txt' }
+                    { name: 'testfile.txt', is_dir: false, local: true, size: 100, path: 'sync://f1/testfile.txt' }
                 ];
 
                 mockFetch.mockResolvedValueOnce({
@@ -383,13 +383,13 @@ describe('Syncweb UI', () => {
 
                 const items = fileList.getElementsByTagName('li');
                 expect(items.length).toBe(1);
-                expect(items[0].textContent).toContain('syncweb://f1/testfile.txt');
+                expect(items[0].textContent).toContain('sync://f1/testfile.txt');
             });
 
             it('fileProperties(path) fetches detailed metadata', async () => {
                 const mockStat = {
                     name: 'test.txt',
-                    path: 'syncweb://f1/test.txt',
+                    path: 'sync://f1/test.txt',
                     size: 1048576,
                     modified: '2026-03-04T12:00:00Z',
                     local: true
@@ -402,7 +402,7 @@ describe('Syncweb UI', () => {
 
                 global.alert = vi.fn();
 
-                await showFileProperties('syncweb://f1/test.txt');
+                await showFileProperties('sync://f1/test.txt');
 
                 expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/api/syncweb/stat?path=syncweb%3A%2F%2Ff1%2Ftest.txt'), expect.any(Object));
                 expect(global.alert).toHaveBeenCalledWith(expect.stringContaining('File: test.txt'));

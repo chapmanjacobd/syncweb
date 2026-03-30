@@ -586,3 +586,11 @@ func EscapeXML(s string) string {
 	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s
 }
+
+// Pluralize returns the singular form if n is 1, otherwise the plural form
+func Pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}

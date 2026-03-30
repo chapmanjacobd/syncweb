@@ -40,13 +40,14 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 
 		for _, p := range c.Paths {
 			absPath, _ := filepath.Abs(p)
+			absPath = filepath.Clean(absPath)
 
 			// Find which folder this path belongs to
 			var folderID string
 			var prefix string
 
-			if after, ok := strings.CutPrefix(p, "syncweb://"); ok {
-				// Parse syncweb:// URL
+			if after, ok := strings.CutPrefix(p, "sync://"); ok {
+				// Parse sync:// URL
 				parts := strings.SplitN(after, "/", 2)
 				folderID = parts[0]
 				if len(parts) > 1 {
@@ -56,11 +57,14 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 				// Find folder by path
 				cfg := s.Node.Cfg.RawCopy()
 				for _, f := range cfg.Folders {
-					if strings.HasPrefix(absPath, f.Path) {
+					fPath := filepath.Clean(f.Path)
+					if absPath == fPath || strings.HasPrefix(absPath, fPath+string(filepath.Separator)) {
 						folderID = f.ID
-						rel, _ := filepath.Rel(f.Path, absPath)
+						rel, _ := filepath.Rel(fPath, absPath)
 						if rel != "." {
 							prefix = rel
+						} else {
+							prefix = ""
 						}
 						break
 					}
@@ -73,6 +77,9 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 				}
 				continue
 			}
+
+			// Wait for Syncthing to index local files
+			time.Sleep(1 * time.Second)
 
 			// Get files from Syncthing
 			files := c.getFiles(s, folderID, prefix)

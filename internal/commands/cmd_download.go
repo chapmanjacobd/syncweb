@@ -262,7 +262,6 @@ func calculateMountpointUsage(
 	folderSpaceInfos map[string]*folderSpaceInfo,
 	itemsByFolder map[string][]downloadItem,
 ) map[string]*mountpointUsageInfo {
-
 	result := make(map[string]*mountpointUsageInfo)
 
 	for mountpoint, folderIDs := range mountpointGroups {

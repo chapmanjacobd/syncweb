@@ -406,7 +406,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Paused %d %s\n", count, pluralize(count, "folder", "folders"))
+			fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 		}
 
 		if c.Resume {
@@ -418,7 +418,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Resumed %d %s\n", count, pluralize(count, "folder", "folders"))
+			fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 		}
 
 		if c.Delete {
@@ -434,7 +434,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Deleted %d %s\n", count, pluralize(count, "folder", "folders"))
+			fmt.Printf("Deleted %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 		}
 
 		if c.DeleteFiles {
@@ -448,7 +448,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Deleted files from %d %s\n", count, pluralize(count, "folder", "folders"))
+			fmt.Printf("Deleted files from %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 		}
 
 		return nil

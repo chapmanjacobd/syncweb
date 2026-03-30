@@ -30,6 +30,10 @@ func FullInfo() string {
 	if GitDirty != "" {
 		v += GitDirty
 	}
+	v += "\nVersion:  " + Version
+	if GitDirty != "" {
+		v += GitDirty
+	}
 	if GitHash != "unknown" && GitHash != "" {
 		v += "\ncommit:   " + GitHash
 	}

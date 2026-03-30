@@ -62,7 +62,7 @@ func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 			}
 		}
 
-		fmt.Printf("Added %d %s\n", deviceCount, pluralize(deviceCount, "device", "devices"))
+		fmt.Printf("Added %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
 		return nil
 	})
 }

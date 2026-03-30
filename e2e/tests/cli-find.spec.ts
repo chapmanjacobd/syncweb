@@ -7,7 +7,7 @@ import { test, expect } from '../fixtures-cli';
 test.describe('cli-find', () => {
   test.beforeEach(async ({ cli }) => {
     // Initialize a Syncweb folder in the test home
-    cli.run(['create', '.'], { silent: true, cwd: cli.getHome() });
+    cli.runAndVerify(['create', '.'], { silent: true, cwd: cli.getHome() });
   });
 
   test('find searches by filename', async ({ cli, createDummyFile }) => {
@@ -15,6 +15,9 @@ test.describe('cli-find', () => {
     createDummyFile('apple.txt', 'content');
     createDummyFile('banana.txt', 'content');
     createDummyFile('cherry.txt', 'content');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const result = cli.run(['find', 'apple'], { silent: true });
 
@@ -25,6 +28,9 @@ test.describe('cli-find', () => {
 
   test('find with json flag returns parseable output', async ({ cli, createDummyFile }) => {
     createDummyFile('search-test.txt', 'test content');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const result = cli.run(['find', 'search-test', '--json'], { silent: true });
     expect(result.exitCode).toBe(0);
@@ -38,6 +44,9 @@ test.describe('cli-find', () => {
   test('find with no results returns empty', async ({ cli, createDummyFile }) => {
     createDummyFile('unique-file.txt', 'content');
 
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const result = cli.run(['find', 'nonexistent'], { silent: true });
 
     expect(result.exitCode).toBe(0);
@@ -47,6 +56,9 @@ test.describe('cli-find', () => {
 
   test('find is case-insensitive', async ({ cli, createDummyFile }) => {
     createDummyFile('CaseSensitive.txt', 'content');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const result = cli.run(['find', 'casesensitive'], { silent: true });
 
@@ -58,6 +70,9 @@ test.describe('cli-find', () => {
     createDummyFile('file1.txt', 'content');
     createDummyFile('file2.mp3', 'content');
     createDummyFile('file3.txt', 'content');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const result = cli.run(['find', '--ext', 'txt'], { silent: true });
 

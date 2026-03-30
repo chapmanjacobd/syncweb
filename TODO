@@ -5,13 +5,6 @@ Bugs:
      3. Integer overflow risk in size calculations on 32-bit systems
      4. Misleading `calculateFrecency` function - only uses recency, not frequency as the name implies
 
-    🟡 Code Quality Issues
-
-     1. Global state with mutex - Makes testing difficult, should use dependency injection
-     2. Duplicate `pluralize` function - Defined in both cmd_join.go and cmd_folders.go
-     3. Inconsistent URL scheme naming - Mix of sync:// and syncweb://
-     4. Magic numbers - Event buffer limit (100), ticker interval (30s), etc.
-     5. Inconsistent error message formatting
 
     🟢 Performance Concerns
 

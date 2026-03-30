@@ -17,6 +17,12 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
+// Constants for automatic sync operations
+const (
+	// AutoSyncInterval is the default interval for automatic sync operations
+	AutoSyncInterval = 30 * time.Second
+)
+
 type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
@@ -81,7 +87,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 		"joinNewFolders", c.JoinNewFolders)
 
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(AutoSyncInterval)
 		defer ticker.Stop()
 
 		for {

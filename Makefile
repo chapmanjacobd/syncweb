@@ -39,6 +39,9 @@ dev:
 
 fmt:
 	gofmt -s -w -e .
+	-goimports -w -e .
+	-gofumpt -w .
+	-gci write .
 	go fix -tags "$(BUILD_TAGS)" ./...
 
 lint:

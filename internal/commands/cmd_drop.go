@@ -57,7 +57,7 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 			deviceCount++
 		}
 
-		fmt.Printf("Removed %d %s\n", deviceCount, pluralize(deviceCount, "device", "devices"))
+		fmt.Printf("Removed %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
 		return nil
 	})
 }

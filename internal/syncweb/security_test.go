@@ -75,11 +75,11 @@ func TestSecurity_PathValidation(t *testing.T) {
 		path    string
 		wantErr bool
 	}{
-		{"Normal path", "syncweb://test/file.txt", false},
-		{"Traversal ..", "syncweb://test/../secret.txt", true},
-		{"Traversal middle", "syncweb://test/dir/../../secret.txt", true},
-		{"Absolute path", "syncweb://test//etc/passwd", true},
-		{"Invalid folder", "syncweb://invalid/file.txt", true},
+		{"Normal path", "sync://test/file.txt", false},
+		{"Traversal ..", "sync://test/../secret.txt", true},
+		{"Traversal middle", "sync://test/dir/../../secret.txt", true},
+		{"Absolute path", "sync://test//etc/passwd", true},
+		{"Invalid folder", "sync://invalid/file.txt", true},
 	}
 
 	for _, tt := range tests {

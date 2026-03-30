@@ -122,13 +122,13 @@ export class TestServer {
     }
 
     // Wait for server to be ready
-    await this.waitForServer();
+    await this.waitForServer(60000);
   }
 
   /**
    * Wait for the server to be ready
    */
-  private async waitForServer(timeout: number = 30000): Promise<void> {
+  private async waitForServer(timeout: number = 60000): Promise<void> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {

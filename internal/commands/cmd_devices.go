@@ -254,7 +254,7 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 						fmt.Printf("Error accepting %s: %v\n", id, err)
 					}
 				}
-				fmt.Printf("Accepted %d %s\n", len(toAccept), pluralize(len(toAccept), "device", "devices"))
+				fmt.Printf("Accepted %d %s\n", len(toAccept), utils.Pluralize(len(toAccept), "device", "devices"))
 			}
 		}
 
@@ -267,10 +267,9 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Paused %d %s\n", count, pluralize(count, "device", "devices"))
-		}
-
-		if c.Resume {
+			fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "device", "devices"))
+			}
+			if c.Resume {
 			count := 0
 			for _, d := range filtered {
 				if d.Paused {
@@ -279,8 +278,9 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			fmt.Printf("Resumed %d %s\n", count, pluralize(count, "device", "devices"))
-		}
+			fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "device", "devices"))
+			}
+
 
 		return nil
 	})

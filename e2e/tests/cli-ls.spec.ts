@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures-cli';
+import * as path from 'path';
 
 /**
  * CLI ls (list files) command tests
@@ -7,7 +8,7 @@ import { test, expect } from '../fixtures-cli';
 test.describe('cli-ls', () => {
   test.beforeEach(async ({ cli }) => {
     // Initialize a Syncweb folder in the test home
-    cli.run(['create', '.'], { silent: true, cwd: cli.getHome() });
+    cli.runAndVerify(['create', '.'], { silent: true, cwd: cli.getHome() });
   });
 
   test('ls lists files in directory', async ({ cli, createDummyFile }) => {
@@ -15,6 +16,9 @@ test.describe('cli-ls', () => {
     createDummyFile('test1.txt', 'content1');
     createDummyFile('test2.txt', 'content2');
     createDummyFile('subdir/test3.txt', 'content3');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const result = cli.run(['ls'], { silent: true, cwd: cli.getHome() });
 
@@ -25,6 +29,9 @@ test.describe('cli-ls', () => {
 
   test('ls with json flag returns parseable output', async ({ cli, createDummyFile }) => {
     createDummyFile('json-test.txt', 'test content');
+
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Make sure we are in the correct directory
     const result = cli.run(['ls', '--json'], { silent: true, cwd: cli.getHome() });
@@ -39,6 +46,9 @@ test.describe('cli-ls', () => {
   test('ls shows directory indicator for folders', async ({ cli, createDummyDir }) => {
     createDummyDir('test-directory');
 
+    // Wait for Syncthing to index the files
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const result = cli.run(['ls'], { silent: true, cwd: cli.getHome() });
 
     expect(result.exitCode).toBe(0);
@@ -47,10 +57,11 @@ test.describe('cli-ls', () => {
 
   test('ls in empty directory works', async ({ cli, createDummyDir }) => {
     createDummyDir('empty');
+    const emptyPath = path.join(cli.getHome(), 'empty');
 
     const result = cli.run(['ls'], {
       silent: true,
-      cwd: cli.getHome(),
+      cwd: emptyPath,
     });
 
     // Should succeed even in empty directory

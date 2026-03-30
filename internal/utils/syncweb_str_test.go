@@ -17,20 +17,20 @@ func TestParseSyncwebPath(t *testing.T) {
 	}{
 		{
 			name:    "basic URL",
-			url:     "syncweb://folder-id#device-id",
+			url:     "sync://folder-id#device-id",
 			wantID:  "folder-id",
 			wantDev: "device-id",
 		},
 		{
 			name:     "URL with subpath",
-			url:      "syncweb://folder-id/sub/path#device-id",
+			url:      "sync://folder-id/sub/path#device-id",
 			wantID:   "folder-id",
 			wantPath: "sub/path",
 			wantDev:  "device-id",
 		},
 		{
 			name:    "URL without device",
-			url:     "syncweb://folder-id",
+			url:     "sync://folder-id",
 			wantID:  "folder-id",
 			wantDev: "",
 		},
@@ -51,13 +51,13 @@ func TestParseSyncwebPath(t *testing.T) {
 		},
 		{
 			name:    "only scheme",
-			url:     "syncweb://",
+			url:     "sync://",
 			wantID:  "",
 			wantDev: "",
 		},
 		{
 			name:     "URL with encoded characters",
-			url:      "syncweb://folder%20name/path%2Fencoded#device-id",
+			url:      "sync://folder%20name/path%2Fencoded#device-id",
 			decode:   true,
 			wantID:   "folder name",
 			wantPath: "path/encoded",
@@ -65,21 +65,21 @@ func TestParseSyncwebPath(t *testing.T) {
 		},
 		{
 			name:     "URL with deep subpath",
-			url:      "syncweb://folder/a/b/c/d/e/file.txt#device",
+			url:      "sync://folder/a/b/c/d/e/file.txt#device",
 			wantID:   "folder",
 			wantPath: "a/b/c/d/e/file.txt",
 			wantDev:  "device",
 		},
 		{
 			name:     "URL with empty folder ID",
-			url:      "syncweb:///path#device",
+			url:      "sync:///path#device",
 			wantID:   "",
 			wantPath: "path",
 			wantDev:  "device",
 		},
 		{
 			name:    "URL with special characters in folder ID",
-			url:     "syncweb://my-folder_123#device",
+			url:     "sync://my-folder_123#device",
 			wantID:  "my-folder_123",
 			wantDev: "device",
 		},
@@ -147,12 +147,12 @@ func TestExtractDeviceID(t *testing.T) {
 		},
 		{
 			name:  "device ID from syncweb URL",
-			input: "syncweb://folder#ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
+			input: "sync://folder#ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
 			want:  "ABC1234-DEF5678-GHI9012-JKL3456-MNO7890-PQR1234-STU5678-VWX9012",
 		},
 		{
 			name:    "syncweb URL without device ID",
-			input:   "syncweb://folder",
+			input:   "sync://folder",
 			wantErr: true,
 		},
 		{

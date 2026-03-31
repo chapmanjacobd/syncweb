@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 )
 
@@ -11,4 +12,12 @@ import (
 var FS_RAW embed.FS
 
 // FS is the web asset file system with "dist" prefix removed
-var FS, _ = fs.Sub(FS_RAW, "dist")
+var FS fs.FS
+
+func init() {
+	var err error
+	FS, err = fs.Sub(FS_RAW, "dist")
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize embedded filesystem: %v. Ensure the 'dist' directory exists before building.", err))
+	}
+}

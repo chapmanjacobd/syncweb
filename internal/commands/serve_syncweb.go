@@ -60,6 +60,9 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 		http.Error(w, "Syncweb not configured or offline", http.StatusServiceUnavailable)
 		return
 	}
+	// Store reference before releasing lock to avoid holding mutex during I/O
+	// This is safe because we're storing the pointer value, and Syncweb handles
+	// its own internal synchronization for operations
 	sw := c.sw
 	c.swMu.Unlock()
 
@@ -250,11 +253,11 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		c.addSyncwebRoots(resultsMap, counts, "/")
 	} else {
 		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(folderID)
-		defer cancel()
 
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
+				cancel()
 				return
 			}
 
@@ -289,6 +292,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 			}
 			resultsMap[fullSyncwebPath] = entry
 		}
+		cancel()
 	}
 
 	results := make([]models.LsEntry, 0, len(resultsMap))
@@ -482,11 +486,13 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	cfg := c.sw.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
 		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(f.ID)
-		defer cancel()
 
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
+				cancel()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Request cancelled"})
 				return
 			}
 
@@ -506,6 +512,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
+		cancel()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

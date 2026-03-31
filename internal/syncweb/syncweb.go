@@ -176,9 +176,11 @@ func (s *Syncweb) watchEvents() {
 	s.eventSubMu.Unlock()
 
 	defer func() {
-		sub.Unsubscribe()
 		s.eventSubMu.Lock()
-		s.eventSub = nil
+		if s.eventSub != nil {
+			s.eventSub.Unsubscribe()
+			s.eventSub = nil
+		}
 		s.eventSubMu.Unlock()
 	}()
 
@@ -189,7 +191,9 @@ func (s *Syncweb) watchEvents() {
 			case events.DeviceRejected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {
-					deviceIDStr, _ = m["device"].(string)
+					if idStr, ok := m["device"].(string); ok {
+						deviceIDStr = idStr
+					}
 				} else if m, ok := ev.Data.(map[string]string); ok {
 					deviceIDStr = m["device"]
 				}
@@ -204,7 +208,9 @@ func (s *Syncweb) watchEvents() {
 			case events.DeviceConnected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {
-					deviceIDStr, _ = m["id"].(string)
+					if idStr, ok := m["id"].(string); ok {
+						deviceIDStr = idStr
+					}
 				} else if m, ok := ev.Data.(map[string]string); ok {
 					deviceIDStr = m["id"]
 				}
@@ -217,14 +223,13 @@ func (s *Syncweb) watchEvents() {
 				}
 			case events.ItemStarted:
 				if m, ok := ev.Data.(map[string]any); ok {
-					item, _ := m["item"].(string)
-					_, _ = m["folder"].(string)
-					s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
+					if item, ok := m["item"].(string); ok {
+						s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
+					}
 				}
 			case events.ItemFinished:
 				if m, ok := ev.Data.(map[string]any); ok {
 					item, _ := m["item"].(string)
-					_, _ = m["folder"].(string)
 					err, _ := m["error"].(string)
 					msg := "Finished: " + item
 					if err != "" {
@@ -234,8 +239,9 @@ func (s *Syncweb) watchEvents() {
 				}
 			case events.FolderSummary:
 				if m, ok := ev.Data.(map[string]any); ok {
-					folder, _ := m["folder"].(string)
-					s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
+					if folder, ok := m["folder"].(string); ok {
+						s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
+					}
 				}
 			}
 		case <-s.Node.Ctx.Done():

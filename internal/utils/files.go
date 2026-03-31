@@ -49,6 +49,7 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 
 	hashes := make([][]byte, len(segments))
 	var wg sync.WaitGroup
+	errChan := make(chan error, len(segments))
 
 	if threads <= 0 {
 		threads = 1
@@ -67,6 +68,7 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 			n, err := file.ReadAt(buf, offset)
 			if err != nil && err != io.EOF {
 				slog.Error("Read error during hashing", "path", path, "offset", offset, "error", err)
+				errChan <- fmt.Errorf("read error at offset %d: %w", offset, err)
 				return
 			}
 			data := buf[:n]
@@ -77,6 +79,18 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 	}
 
 	wg.Wait()
+	close(errChan)
+
+	// Check for any hashing errors
+	var hashErr error
+	for err := range errChan {
+		if hashErr == nil {
+			hashErr = err
+		}
+	}
+	if hashErr != nil {
+		return "", hashErr
+	}
 
 	// Final hash of all segment hashes
 	finalHash := sha256.New()
@@ -156,7 +170,7 @@ func IsFileOpen(path string) bool {
 		if err != nil {
 			return true
 		}
-		f.Close()
+		defer f.Close()
 		return false
 	}
 

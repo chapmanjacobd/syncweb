@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"path/filepath"
 	"slices"
@@ -63,8 +64,12 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
-					rel, _ := filepath.Rel(f.Path, absPath)
-					relPath = rel
+					var err error
+					relPath, err = filepath.Rel(f.Path, absPath)
+					if err != nil {
+						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+						continue
+					}
 					break
 				}
 			}
@@ -184,8 +189,13 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	minFree := calculateMinDiskFree(total, minFreeCfg)
 
 	// Get pending download size from NeedSize
-	needSize, _ := s.Node.App.Internals.NeedSize(folderID, protocol.LocalDeviceID)
-	pendingDownload := needSize.Bytes
+	needSize, err := s.Node.App.Internals.NeedSize(folderID, protocol.LocalDeviceID)
+	if err != nil {
+		slog.Warn("Failed to get NeedSize", "folderID", folderID, "error", err)
+		pendingDownload = 0
+	} else {
+		pendingDownload = needSize.Bytes
+	}
 
 	// Usable space = free - min_free - pending_downloads
 	us := max(free-minFree-pendingDownload, 0)

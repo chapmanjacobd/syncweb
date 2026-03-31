@@ -23,7 +23,87 @@ import (
 const (
 	// FolderRootPriority is the priority value for folder roots in search results
 	FolderRootPriority = 1000
+	// MaxPathLength is the maximum allowed length for path inputs
+	MaxPathLength = 1024
+	// MaxQueryLength is the maximum allowed length for query string inputs
+	MaxQueryLength = 256
+	// MaxPerPage is the maximum number of items per page in pagination
+	MaxPerPage = 1000
 )
+
+// validateFolderID checks if a folder ID is valid (alphanumeric, dashes, underscores)
+func validateFolderID(folderID string) error {
+	if folderID == "" {
+		return fmt.Errorf("folder ID cannot be empty")
+	}
+	if len(folderID) > 128 {
+		return fmt.Errorf("folder ID too long (max 128 characters)")
+	}
+	// Folder IDs should be alphanumeric with dashes and underscores only
+	validFolderID := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	if !validFolderID.MatchString(folderID) {
+		return fmt.Errorf("folder ID contains invalid characters")
+	}
+	return nil
+}
+
+// validatePath checks if a path is safe and within allowed bounds
+func validatePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	if len(path) > MaxPathLength {
+		return fmt.Errorf("path too long (max %d characters)", MaxPathLength)
+	}
+	// Block directory traversal attempts
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path contains invalid sequence")
+	}
+	// Block null bytes
+	if strings.ContainsAny(path, "\x00") {
+		return fmt.Errorf("path contains null byte")
+	}
+	return nil
+}
+
+// validateQuery checks if a query string is safe and within allowed bounds
+func validateQuery(query string) error {
+	if len(query) > MaxQueryLength {
+		return fmt.Errorf("query too long (max %d characters)", MaxQueryLength)
+	}
+	// Block null bytes
+	if strings.ContainsAny(query, "\x00") {
+		return fmt.Errorf("query contains null byte")
+	}
+	return nil
+}
+
+// validatePaginationParams validates and sanitizes pagination parameters
+func validatePaginationParams(pageStr, perPageStr string) (page, perPage int, err error) {
+	page = 1
+	perPage = 100
+
+	if pageStr != "" {
+		if parsed, parseErr := strconv.Atoi(pageStr); parseErr == nil && parsed > 0 {
+			page = parsed
+		} else if pageStr != "" {
+			return 0, 0, fmt.Errorf("invalid page number")
+		}
+	}
+
+	if perPageStr != "" {
+		if parsed, parseErr := strconv.Atoi(perPageStr); parseErr == nil && parsed > 0 {
+			perPage = parsed
+			if perPage > MaxPerPage {
+				perPage = MaxPerPage
+			}
+		} else if perPageStr != "" {
+			return 0, 0, fmt.Errorf("invalid per_page value")
+		}
+	}
+
+	return page, perPage, nil
+}
 
 func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
 	c.swMu.Lock()
@@ -224,7 +304,15 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	folderID := r.URL.Query().Get("folder")
 	prefix := r.URL.Query().Get("prefix")
 
+	// Validate folder ID if provided
 	if folderID != "" && folderID != "/" {
+		if err := validateFolderID(folderID); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder ID: " + err.Error()})
+			return
+		}
+
 		// Security check: ensure the folder is one we actually have
 		configuredFolders := c.sw.GetFolders()
 		found := false
@@ -242,8 +330,17 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if prefix != "" && !strings.HasSuffix(prefix, "/") {
-		prefix += "/"
+	// Validate prefix if provided
+	if prefix != "" {
+		if err := validateQuery(prefix); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid prefix: " + err.Error()})
+			return
+		}
+		if !strings.HasSuffix(prefix, "/") {
+			prefix += "/"
+		}
 	}
 
 	resultsMap := make(map[string]models.LsEntry)
@@ -345,6 +442,14 @@ func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Path required"})
+		return
+	}
+
+	// Validate path
+	if err := validatePath(req.Path); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid path: " + err.Error()})
 		return
 	}
 
@@ -474,6 +579,14 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate query
+	if err := validateQuery(query); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid query: " + err.Error()})
+		return
+	}
+
 	re, err := regexp.Compile("(?i)" + query)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -536,6 +649,14 @@ func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Path required"})
+		return
+	}
+
+	// Validate path
+	if err := validatePath(path); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid path: " + err.Error()})
 		return
 	}
 
@@ -770,6 +891,14 @@ func (c *ServeCmd) handleSyncwebCompletion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Validate folder ID
+	if err := validateFolderID(folderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder_id: " + err.Error()})
+		return
+	}
+
 	deviceID, err := protocol.DeviceIDFromString(deviceIDStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -814,10 +943,32 @@ func (c *ServeCmd) handleSyncwebTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate folder ID
+	if err := validateFolderID(folderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder_id: " + err.Error()})
+		return
+	}
+
+	// Validate prefix if provided
+	if prefix != "" {
+		if err := validateQuery(prefix); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid prefix: " + err.Error()})
+			return
+		}
+	}
+
 	levels := -1
 	if levelsStr != "" {
 		if parsed, err := strconv.Atoi(levelsStr); err == nil {
 			levels = parsed
+			// Limit levels to prevent excessive recursion
+			if levels > 100 {
+				levels = 100
+			}
 		}
 	}
 
@@ -861,18 +1012,21 @@ func (c *ServeCmd) handleSyncwebLocalChanged(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	page := 1
-	if pageStr != "" {
-		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
-			page = parsed
-		}
+	// Validate folder ID
+	if err := validateFolderID(folderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder_id: " + err.Error()})
+		return
 	}
 
-	perPage := 100
-	if perPageStr != "" {
-		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
-			perPage = parsed
-		}
+	// Validate and parse pagination params
+	page, perPage, err := validatePaginationParams(pageStr, perPageStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	files, err := c.sw.GetLocalChangedFiles(folderID, page, perPage)
@@ -910,18 +1064,21 @@ func (c *ServeCmd) handleSyncwebNeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := 1
-	if pageStr != "" {
-		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
-			page = parsed
-		}
+	// Validate folder ID
+	if err := validateFolderID(folderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder_id: " + err.Error()})
+		return
 	}
 
-	perPage := 100
-	if perPageStr != "" {
-		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
-			perPage = parsed
-		}
+	// Validate and parse pagination params
+	page, perPage, err := validatePaginationParams(pageStr, perPageStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	remote, local, queued, err := c.sw.GetNeedFiles(folderID, page, perPage)
@@ -966,6 +1123,14 @@ func (c *ServeCmd) handleSyncwebRemoteNeed(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Validate folder ID
+	if err := validateFolderID(folderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: "Invalid folder_id: " + err.Error()})
+		return
+	}
+
 	deviceID, err := protocol.DeviceIDFromString(deviceIDStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -974,18 +1139,13 @@ func (c *ServeCmd) handleSyncwebRemoteNeed(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	page := 1
-	if pageStr != "" {
-		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
-			page = parsed
-		}
-	}
-
-	perPage := 100
-	if perPageStr != "" {
-		if parsed, err := strconv.Atoi(perPageStr); err == nil && parsed > 0 {
-			perPage = parsed
-		}
+	// Validate and parse pagination params
+	page, perPage, err := validatePaginationParams(pageStr, perPageStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	files, err := c.sw.GetRemoteNeedFiles(folderID, deviceID, page, perPage)

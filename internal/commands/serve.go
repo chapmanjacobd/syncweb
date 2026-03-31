@@ -33,7 +33,7 @@ type ServeCmd struct {
 
 func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
-	
+
 	// Use environment variable for API token if set (for testing)
 	if envToken := os.Getenv("SYNCWEB_API_TOKEN"); envToken != "" {
 		c.APIToken = envToken
@@ -283,6 +283,12 @@ func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate path
+	if err := validatePath(path); err != nil {
+		http.Error(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	localPath, folderID, err := c.resolveSyncwebPath(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -389,6 +395,12 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		path = "/"
+	}
+
+	// Validate path
+	if err := validatePath(path); err != nil {
+		http.Error(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	entries, err := os.ReadDir(path)

@@ -366,7 +366,7 @@ func (s *Syncweb) AddFolder(id string, label string, path string, folderType con
 		return err
 	}
 	waiter.Wait()
-	
+
 	// Save config to ensure changes are persisted
 	if err := s.Node.Cfg.Save(); err != nil {
 		return err
@@ -622,10 +622,10 @@ func (s *Syncweb) GetDevices() []DeviceInfo {
 // ensuring the path is within the folder's root directory.
 func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 	var trimmed string
-	if strings.HasPrefix(syncPath, "sync://") {
-		trimmed = strings.TrimPrefix(syncPath, "sync://")
-	} else if strings.HasPrefix(syncPath, "syncweb://") {
-		trimmed = strings.TrimPrefix(syncPath, "syncweb://")
+	if after, ok := strings.CutPrefix(syncPath, "sync://"); ok {
+		trimmed = after
+	} else if after, ok := strings.CutPrefix(syncPath, "syncweb://"); ok {
+		trimmed = after
 	} else {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}

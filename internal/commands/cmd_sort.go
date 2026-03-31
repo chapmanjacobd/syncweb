@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -59,8 +60,12 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
-					rel, _ := filepath.Rel(f.Path, absPath)
-					relPath = rel
+					var err error
+					relPath, err = filepath.Rel(f.Path, absPath)
+					if err != nil {
+						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+						continue
+					}
 					break
 				}
 			}
@@ -72,7 +77,11 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 			info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
 			if err == nil && ok {
 				// Count seeders for this file
-				seeders, _ := s.CountSeeders(folderID, relPath)
+				seeders, err := s.CountSeeders(folderID, relPath)
+				if err != nil {
+					slog.Warn("Failed to count seeders", "path", relPath, "error", err)
+					seeders = 0
+				}
 
 				files = append(files, fileWithInfo{
 					Path:       p,

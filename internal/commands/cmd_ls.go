@@ -71,7 +71,11 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 					fPath := filepath.Clean(f.Path)
 					if absPath == fPath || strings.HasPrefix(absPath, fPath+string(filepath.Separator)) {
 						folderID = f.ID
-						rel, _ := filepath.Rel(fPath, absPath)
+						rel, err := filepath.Rel(fPath, absPath)
+						if err != nil {
+							fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+							continue
+						}
 						if rel != "." {
 							prefix = rel
 						} else {

@@ -20,10 +20,10 @@ type SyncwebRef struct {
 // Format: sync://folder-id/subpath#device-id
 func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 	var trimmed string
-	if strings.HasPrefix(rawURL, "sync://") {
-		trimmed = strings.TrimPrefix(rawURL, "sync://")
-	} else if strings.HasPrefix(rawURL, "syncweb://") {
-		trimmed = strings.TrimPrefix(rawURL, "syncweb://")
+	if after, ok := strings.CutPrefix(rawURL, "sync://"); ok {
+		trimmed = after
+	} else if after, ok := strings.CutPrefix(rawURL, "syncweb://"); ok {
+		trimmed = after
 	} else {
 		return nil, fmt.Errorf("invalid sync URL: %s", rawURL)
 	}

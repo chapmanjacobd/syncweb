@@ -61,9 +61,21 @@ webtest:
 webcover:
 	npm run cover --prefix web
 
+ifeq ($(OS),Windows_NT)
+	EXE=.exe
+else
+	EXE=
+endif
+
+# Cross-platform build target
+release-build: webbuild
+	@mkdir -p dist
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -tags "$(BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o dist/$(BINARY_NAME)-$(GOOS)-$(GOARCH)$(EXE) ./cmd/syncweb
+
 clean:
 	rm -f $(BINARY_NAME)
 	rm -rf web/dist/*
+	rm -rf dist/*
 
 install:
 	go install -tags "$(BUILD_TAGS)" ./cmd/syncweb

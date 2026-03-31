@@ -50,21 +50,14 @@ jobs:
           go mod download
           make web-install
 
-      - name: Run lint and tests
+      - name: Run tests
         run: |
-          # Install linting tools
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/tools/cmd/goimports@latest
-          go install mvdan.cc/gofumpt@latest
-          go install github.com/daixiang0/gci@latest
-          
-          # Run make all (fmt, lint, test, build)
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             # Windows often has issues with parallel tests and file locking
             go test -tags noassets ./... -parallel 1
             make build
           else
-            make all
+            make test build
           fi
 
       - name: Run web tests

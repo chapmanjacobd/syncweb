@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli webbuild webtest web-install
+.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli webbuild webtest web-install go-deps
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
@@ -45,8 +45,7 @@ fmt:
 	go fix -tags "$(BUILD_TAGS)" ./...
 
 lint:
-	-staticcheck -tags "$(BUILD_TAGS)" ./...
-	go vet -tags "$(BUILD_TAGS)" ./...
+	golangci-lint run --build-tags "$(BUILD_TAGS)" ./...
 
 test:
 	go test -tags "$(BUILD_TAGS)" ./...
@@ -79,6 +78,9 @@ clean:
 
 install:
 	go install -tags "$(BUILD_TAGS)" ./cmd/syncweb
+
+go-deps:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # E2E Tests
 e2e-install:

@@ -20,43 +20,54 @@ func FormatDuration(seconds int) string {
 }
 
 func FormatDurationShort(seconds int) string {
-	if seconds == 0 {
-		return ""
+	if seconds <= 0 {
+		return "<1s"
 	}
 
-	if seconds < 60 {
-		return fmt.Sprintf("%d seconds", seconds)
+	const (
+		Minute = 60
+		Hour   = 3600
+		Day    = 86400
+		Year   = 31536000
+	)
+
+	if seconds < Minute {
+		return fmt.Sprintf("%ds", seconds)
 	}
 
-	minutes := float64(seconds) / 60.0
-	if minutes < 1.1 {
-		return "1 minute"
-	} else if minutes < 60 {
-		return fmt.Sprintf("%.1f minutes", minutes)
-	}
-
-	hours := minutes / 60.0
-	if hours < 1.1 {
-		return "1 hour"
-	} else if hours < 24 {
-		return fmt.Sprintf("%.1f hours", hours)
-	}
-
-	days := int(hours / 24)
-	years := days / 365
-	remainingDays := days % 365
-
-	if years > 0 {
-		if remainingDays > 0 {
-			return fmt.Sprintf("%d years and %d days", years, remainingDays)
+	if seconds < Hour {
+		m := seconds / Minute
+		s := seconds % Minute
+		if s == 0 {
+			return fmt.Sprintf("%dm", m)
 		}
-		return fmt.Sprintf("%d years", years)
+		return fmt.Sprintf("%dm%ds", m, s)
 	}
 
-	if days > 1 {
-		return fmt.Sprintf("%d days", days)
+	if seconds < Day {
+		h := seconds / Hour
+		m := (seconds % Hour) / Minute
+		if m == 0 {
+			return fmt.Sprintf("%dh", h)
+		}
+		return fmt.Sprintf("%dh%dm", h, m)
 	}
-	return "1 day"
+
+	if seconds < Year {
+		d := seconds / Day
+		h := (seconds % Day) / Hour
+		if h == 0 {
+			return fmt.Sprintf("%dd", d)
+		}
+		return fmt.Sprintf("%dd%dh", d, h)
+	}
+
+	y := seconds / Year
+	d := (seconds % Year) / Day
+	if d == 0 {
+		return fmt.Sprintf("%dy", y)
+	}
+	return fmt.Sprintf("%dy%dd", y, d)
 }
 
 func FormatSize(bytes int64) string {

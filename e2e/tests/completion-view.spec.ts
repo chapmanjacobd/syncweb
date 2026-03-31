@@ -186,9 +186,6 @@ test.describe('completion-view', () => {
     await filesPage.switchView('completion');
     await completionPage.waitForCompletionToLoad();
 
-    // Get initial card count
-    const initialCount = await completionPage.getCompletionCardCount();
-
     // Click refresh
     await completionPage.refresh();
 

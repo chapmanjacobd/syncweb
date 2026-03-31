@@ -90,8 +90,8 @@ test.describe('modal-interactions', () => {
     await expect(modal).toBeVisible();
 
     // Modal should have proper styling (implementation dependent)
-    const zIndex = await modal.evaluate(el => {
-      const style = (el as HTMLElement).style;
+    const zIndex = await modal.evaluate((el: HTMLElement) => {
+      const style = el.style;
       return parseInt(style.zIndex) || 0;
     });
 

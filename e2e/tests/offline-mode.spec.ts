@@ -109,8 +109,8 @@ test.describe('offline-mode', () => {
     await sidebarPage.offlineBtn.focus();
 
     // Button should have focus
-    const isFocused = await sidebarPage.offlineBtn.evaluate(el => {
-      return el === document.activeElement;
+    const isFocused = await sidebarPage.offlineBtn.evaluate((el) => {
+      return document.activeElement === el;
     });
     expect(isFocused).toBe(true);
 

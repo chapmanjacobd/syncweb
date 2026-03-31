@@ -4,7 +4,13 @@
 
 ### How do I install Syncweb?
 
-You can build from source:
+You can install using `go install`:
+
+```sh
+go install -tags noassets github.com/chapmanjacobd/syncweb/cmd/syncweb@latest
+```
+
+Or you can build from source:
 
 ```sh
 git clone https://github.com/chapmanjacobd/syncweb.git

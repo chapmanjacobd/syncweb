@@ -66,7 +66,7 @@ clean:
 	rm -rf web/dist/*
 
 install:
-	go install ./cmd/syncweb
+	go install -tags "$(BUILD_TAGS)" ./cmd/syncweb
 
 # E2E Tests
 e2e-install:

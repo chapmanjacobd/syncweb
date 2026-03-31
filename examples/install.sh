@@ -9,6 +9,17 @@ SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
 SERVICE_DST="$SYSTEMD_USER_DIR/syncweb-automatic.service"
 
+# Check if syncweb is in PATH or ~/go/bin
+if ! command -v syncweb &> /dev/null; then
+    if [ -x "$HOME/go/bin/syncweb" ]; then
+        echo "Found syncweb in $HOME/go/bin/syncweb"
+    else
+        echo "Error: syncweb binary not found in PATH or ~/go/bin."
+        echo "Please install it first: go install -tags noassets github.com/chapmanjacobd/syncweb/cmd/syncweb@latest"
+        exit 1
+    fi
+fi
+
 mkdir -p "$SYSTEMD_USER_DIR"
 
 echo "Downloading systemd user service..."

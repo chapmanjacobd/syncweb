@@ -31,7 +31,7 @@ type SyncwebFindCmd struct {
 	Depth          []string `short:"d" help:"Depth constraints (e.g., +2, -3, 2)"`
 	MinDepth       int      `help:"Minimum depth"`
 	MaxDepth       int      `help:"Maximum depth"`
-	Sizes          []string `short:"S" help:"Size constraints"`
+	Size           []string `short:"S" help:"Size constraints"`
 	ModifiedWithin string   `help:"Modified within duration (e.g., 1d, 2h, 30m)"`
 	ModifiedBefore string   `help:"Modified before duration or date (e.g., 1d, 2024-01-01)"`
 	Ext            []string `short:"e" help:"File extensions to include"`
@@ -107,8 +107,8 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 
 		// Parse size constraints
 		var sizeMin, sizeMax *int64
-		if len(c.Sizes) > 0 {
-			sizeRange, err := utils.ParseRange(strings.Join(c.Sizes, ","), utils.HumanToBytes)
+		if len(c.Size) > 0 {
+			sizeRange, err := utils.ParseRange(strings.Join(c.Size, ","), utils.HumanToBytes)
 			if err != nil {
 				return fmt.Errorf("invalid size constraint: %w", err)
 			}

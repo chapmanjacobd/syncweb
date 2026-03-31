@@ -113,6 +113,7 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 			}
 		}
 
+		fmt.Printf("Local Device ID: %s\n", s.Node.MyID())
 		fmt.Printf("Added %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
 		fmt.Printf("Added %d %s\n", folderCount, utils.Pluralize(folderCount, "folder", "folders"))
 		return nil

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+Environment=PATH=%h/go/bin:%h/.local/bin:/usr/local/bin:/usr/bin
 ExecStart=/usr/bin/env syncweb automatic --devices --folders
 
 # Restart behavior

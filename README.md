@@ -10,6 +10,12 @@ Syncweb is not a physical network, but rather a logical network resting on top o
 
 ## Install
 
+### Go install
+
+```sh
+go install -tags noassets github.com/chapmanjacobd/syncweb/cmd/syncweb@latest
+```
+
 ### From Source
 
 ```sh
@@ -26,6 +32,19 @@ Syncweb-automatic is an optional daemon that will auto-accept new local devices 
 
 ```sh
 curl -s https://raw.githubusercontent.com/chapmanjacobd/syncweb/refs/heads/main/examples/install.sh | bash
+```
+
+You can also run it manually with various filters:
+
+```sh
+# Auto-accept only devices matching a pattern
+syncweb automatic --devices --devices-include="server-*"
+
+# Auto-join only specific folders
+syncweb automatic --folders --folders-include="audio,video"
+
+# Auto-join ALL folders from local devices (be careful!)
+syncweb automatic --devices --folders --join-new-folders
 ```
 
 ## Usage

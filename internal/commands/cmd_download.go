@@ -189,6 +189,7 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	minFree := calculateMinDiskFree(total, minFreeCfg)
 
 	// Get pending download size from NeedSize
+	var pendingDownload int64
 	needSize, err := s.Node.App.Internals.NeedSize(folderID, protocol.LocalDeviceID)
 	if err != nil {
 		slog.Warn("Failed to get NeedSize", "folderID", folderID, "error", err)
@@ -361,10 +362,9 @@ func printDownloadSummary(
 		if spaceInfo != nil {
 			// Find mountpoint usage for this folder
 			var mpInfo *mountpointUsageInfo
-			for mp, info := range mountpointUsage {
+			for _, info := range mountpointUsage {
 				if slices.Contains(info.FolderIDs, folderID) {
 					mpInfo = info
-					_ = mp
 					break
 				}
 			}

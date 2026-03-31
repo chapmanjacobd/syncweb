@@ -93,10 +93,7 @@ func validatePaginationParams(pageStr, perPageStr string) (page, perPage int, er
 
 	if perPageStr != "" {
 		if parsed, parseErr := strconv.Atoi(perPageStr); parseErr == nil && parsed > 0 {
-			perPage = parsed
-			if perPage > MaxPerPage {
-				perPage = MaxPerPage
-			}
+			perPage = min(parsed, MaxPerPage)
 		} else if perPageStr != "" {
 			return 0, 0, fmt.Errorf("invalid per_page value")
 		}
@@ -964,11 +961,9 @@ func (c *ServeCmd) handleSyncwebTree(w http.ResponseWriter, r *http.Request) {
 	levels := -1
 	if levelsStr != "" {
 		if parsed, err := strconv.Atoi(levelsStr); err == nil {
-			levels = parsed
-			// Limit levels to prevent excessive recursion
-			if levels > 100 {
-				levels = 100
-			}
+			levels = min(
+				// Limit levels to prevent excessive recursion
+				parsed, 100)
 		}
 	}
 

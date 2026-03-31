@@ -15,6 +15,18 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 )
 
+// Constants for chunk size interpolation
+const (
+	// MinFileSize is the minimum file size for interpolation (25MB)
+	MinFileSize = 25 * 1024 * 1024 // 26214400
+	// MinChunkSize is the minimum chunk size (256KB)
+	MinChunkSize = 256 * 1024 // 262144
+	// MaxFileSize is the maximum file size for interpolation (50GB)
+	MaxFileSize = 50 * 1024 * 1024 * 1024 // 52428800000
+	// MaxChunkSize is the maximum chunk size (10MB)
+	MaxChunkSize = 10 * 1024 * 1024 // 10485760
+)
+
 // SampleHashFile calculates a hash based on small file segments
 func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (string, error) {
 	file, err := os.Open(path)
@@ -36,8 +48,8 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 	if chunkSize <= 0 {
 		// Linear interpolation for chunk size based on file size
 		dataPoints := [][2]float64{
-			{26214400, 262144},      // 25MB -> 256KB
-			{52428800000, 10485760}, // 50GB -> 10MB
+			{MinFileSize, MinChunkSize},
+			{MaxFileSize, MaxChunkSize},
 		}
 		chunkSize = int64(LinearInterpolation(float64(size), dataPoints))
 	}

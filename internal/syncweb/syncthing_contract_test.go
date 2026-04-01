@@ -393,8 +393,8 @@ func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 
 	// CONTRACT: Set ignores should work
 	newIgnores := []string{"*.tmp", "*.log"}
-	if err := internals.SetIgnores(folderID, newIgnores); err != nil {
-		t.Fatalf("SetIgnores() failed: %v", err)
+	if setIgnoresErr := internals.SetIgnores(folderID, newIgnores); setIgnoresErr != nil {
+		t.Fatalf("SetIgnores() failed: %v", setIgnoresErr)
 	}
 
 	// Wait for ignores to be applied
@@ -541,10 +541,10 @@ func TestSyncthingContract_TLSUtilCertificate(t *testing.T) {
 	}
 
 	// Verify cert files were created
-	if _, err := os.Stat(certPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(certPath); os.IsNotExist(statErr) {
 		t.Error("Certificate file should be created")
 	}
-	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(keyPath); os.IsNotExist(statErr) {
 		t.Error("Key file should be created")
 	}
 }
@@ -714,9 +714,17 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 		cancel() // Cancel immediately
 
 		// This should respect context cancellation
-		_, err := internals.DownloadBlock(ctx, protocol.LocalDeviceID, folderID, testFile, 0, info.Blocks[0], false)
+		_, downloadErr := internals.DownloadBlock(
+			ctx,
+			protocol.LocalDeviceID,
+			folderID,
+			testFile,
+			0,
+			info.Blocks[0],
+			false,
+		)
 		// Error is expected since we canceled and there's no peer
-		_ = err
+		_ = downloadErr
 	}
 }
 

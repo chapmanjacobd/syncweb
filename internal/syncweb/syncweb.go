@@ -192,10 +192,10 @@ func (s *Syncweb) watchEvents() {
 			case events.DeviceRejected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {
-					if idStr, ok := m["device"].(string); ok {
+					if idStr, ok2 := m["device"].(string); ok2 {
 						deviceIDStr = idStr
 					}
-				} else if m, ok := ev.Data.(map[string]string); ok {
+				} else if m, ok2 := ev.Data.(map[string]string); ok2 {
 					deviceIDStr = m["device"]
 				}
 
@@ -209,10 +209,10 @@ func (s *Syncweb) watchEvents() {
 			case events.DeviceConnected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {
-					if idStr, ok := m["id"].(string); ok {
+					if idStr, ok2 := m["id"].(string); ok2 {
 						deviceIDStr = idStr
 					}
-				} else if m, ok := ev.Data.(map[string]string); ok {
+				} else if m, ok2 := ev.Data.(map[string]string); ok2 {
 					deviceIDStr = m["id"]
 				}
 
@@ -224,23 +224,23 @@ func (s *Syncweb) watchEvents() {
 				}
 			case events.ItemStarted:
 				if m, ok := ev.Data.(map[string]any); ok {
-					if item, ok := m["item"].(string); ok {
+					if item, ok2 := m["item"].(string); ok2 {
 						s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
 					}
 				}
 			case events.ItemFinished:
 				if m, ok := ev.Data.(map[string]any); ok {
 					item, _ := m["item"].(string)
-					err, _ := m["error"].(string)
+					errMsg, _ := m["error"].(string)
 					msg := "Finished: " + item
-					if err != "" {
-						msg += " (Error: " + err + ")"
+					if errMsg != "" {
+						msg += " (Error: " + errMsg + ")"
 					}
 					s.addEvent("ItemFinished", msg, ev.Data)
 				}
 			case events.FolderSummary:
 				if m, ok := ev.Data.(map[string]any); ok {
-					if folder, ok := m["folder"].(string); ok {
+					if folder, ok2 := m["folder"].(string); ok2 {
 						s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
 					}
 				}
@@ -254,7 +254,15 @@ func (s *Syncweb) watchEvents() {
 func (s *Syncweb) GetPendingDevices() map[string]time.Time {
 	res := make(map[string]time.Time)
 	s.pendingDevices.Range(func(key, value any) bool {
-		res[key.(protocol.DeviceID).String()] = value.(time.Time)
+		deviceID, ok := key.(protocol.DeviceID)
+		if !ok {
+			return true
+		}
+		t, ok := value.(time.Time)
+		if !ok {
+			return true
+		}
+		res[deviceID.String()] = t
 		return true
 	})
 	return res
@@ -625,8 +633,8 @@ func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 	var trimmed string
 	if after, ok := strings.CutPrefix(syncPath, "sync://"); ok {
 		trimmed = after
-	} else if after, ok := strings.CutPrefix(syncPath, "syncweb://"); ok {
-		trimmed = after
+	} else if after2, ok := strings.CutPrefix(syncPath, "syncweb://"); ok {
+		trimmed = after2
 	} else {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}
@@ -691,7 +699,7 @@ func (s *Syncweb) GetGlobalFileInfo(folderID, path string) (protocol.FileInfo, b
 	return s.Node.App.Internals.GlobalFileInfo(folderID, path)
 }
 
-// SyncwebReadSeeker implements io.ReadSeeker by fetching blocks from Syncthing peers
+// SyncwebReadSeeker implements [io.ReadSeeker] by fetching blocks from Syncthing peers
 type SyncwebReadSeeker struct {
 	s        *Syncweb
 	folderID string
@@ -769,9 +777,9 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		block := r.info.Blocks[i]
 
 		// Determine which peers have this block
-		availables, err := r.s.Node.App.Internals.BlockAvailability(r.folderID, r.info, block)
-		if err != nil {
-			return int(totalRead), err
+		availables, availErr := r.s.Node.App.Internals.BlockAvailability(r.folderID, r.info, block)
+		if availErr != nil {
+			return int(totalRead), availErr
 		}
 		if len(availables) == 0 {
 			return int(totalRead), fmt.Errorf("no peers available for block %d", i)
@@ -956,7 +964,10 @@ func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 					"offeredBy": make(map[string]map[string]any),
 				}
 			}
-			pending[folderID]["offeredBy"].(map[string]map[string]any)[d.DeviceID.String()] = map[string]any{}
+			offeredBy, ok := pending[folderID]["offeredBy"].(map[string]map[string]any)
+			if ok {
+				offeredBy[d.DeviceID.String()] = map[string]any{}
+			}
 		}
 	}
 
@@ -981,7 +992,7 @@ func (s *Syncweb) GetDiscoveredDevices() map[string]map[string]any {
 	return discovered
 }
 
-// GetPendingDevices returns devices waiting to be accepted
+// GetPendingDevicesMap returns devices waiting to be accepted
 func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
 	pending := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -1008,8 +1019,8 @@ func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
 
 	seederSet := make(map[protocol.DeviceID]bool)
 	for _, block := range info.Blocks {
-		availables, err := s.Node.App.Internals.BlockAvailability(folderID, info, block)
-		if err != nil {
+		availables, availErr := s.Node.App.Internals.BlockAvailability(folderID, info, block)
+		if availErr != nil {
 			continue
 		}
 		for _, av := range availables {

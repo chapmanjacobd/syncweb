@@ -295,11 +295,11 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	// stat.Blocks = total data blocks in filesystem
 	// stat.Bsize = block size
 	free := safeMulUint64(
-		uint64(stat.Bavail),
+		stat.Bavail,
 		uint64(stat.Bsize),
 	)
 	total := safeMulUint64(
-		uint64(stat.Blocks),
+		stat.Blocks,
 		uint64(stat.Bsize),
 	)
 
@@ -448,12 +448,12 @@ func calculateMountpointUsage(
 
 // printDownloadSummary prints the download summary table
 //
-//nolint:unparam // mountpointGroups kept for future use
+
 func printDownloadSummary(
 	itemsByFolder map[string][]downloadItem,
 	folderSpaceInfos map[string]*folderSpaceInfo,
 	mountpointUsage map[string]*mountpointUsageInfo,
-	mountpointGroups map[string][]string,
+	_ map[string][]string, // mountpointGroups kept for future use
 ) {
 	fmt.Println("\nDownload Summary:")
 	fmt.Println(strings.Repeat("-", 135))
@@ -571,7 +571,7 @@ func generateWarnings(
 }
 
 // safeMulUint64 multiplies two uint64 values with overflow protection
-// Returns math.MaxInt64 if overflow would occur
+// Returns [math.MaxInt64] if overflow would occur
 func safeMulUint64(a, b uint64) int64 {
 	if a == 0 || b == 0 {
 		return 0

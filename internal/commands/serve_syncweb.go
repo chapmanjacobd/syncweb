@@ -183,7 +183,7 @@ func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]models.LsEntry, counts 
 
 // handleSyncwebEvents returns recent sync events
 // GET /api/syncweb/events
-func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil || !c.sw.IsRunning() {
@@ -197,7 +197,7 @@ func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, r *http.Request) {
 
 // handleSyncwebFolders returns a list of configured Syncweb folders
 // GET /api/syncweb/folders
-func (c *ServeCmd) handleSyncwebFolders(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebFolders(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil || !c.sw.IsRunning() {
@@ -482,7 +482,7 @@ func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSyncwebStatus returns the current status of Syncweb
-func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 
@@ -624,7 +624,7 @@ func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
 
 // handleSyncwebDevices returns a list of configured Syncthing devices
 // GET /api/syncweb/devices
-func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil || !c.sw.IsRunning() {
@@ -638,7 +638,7 @@ func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) 
 
 // handleSyncwebPendingDevices returns a list of rejected/pending device IDs
 // GET /api/syncweb/pending
-func (c *ServeCmd) handleSyncwebPendingDevices(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebPendingDevices(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil || !c.sw.IsRunning() {
@@ -681,7 +681,7 @@ func (c *ServeCmd) handleSyncwebDevicesAdd(w http.ResponseWriter, r *http.Reques
 
 // handleSyncwebPendingFolders returns a list of pending folder invitations
 // GET /api/syncweb/pending-folders
-func (c *ServeCmd) handleSyncwebPendingFolders(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleSyncwebPendingFolders(w http.ResponseWriter, _ *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil || !c.sw.IsRunning() {

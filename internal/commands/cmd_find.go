@@ -149,7 +149,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 		}
 
 		// Parse time constraints
-		var modifiedAfterTs, modifiedBeforeTs *int64
+		var modifiedAfterTS, modifiedBeforeTS *int64
 		now := time.Now().Unix()
 
 		if c.ModifiedWithin != "" {
@@ -159,7 +159,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 				return fmt.Errorf("invalid modified-within duration: %w", err)
 			}
 			ts := now - seconds
-			modifiedAfterTs = &ts
+			modifiedAfterTS = &ts
 		}
 
 		if c.ModifiedBefore != "" {
@@ -167,12 +167,12 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			seconds, err := utils.HumanToSeconds(c.ModifiedBefore)
 			if err == nil {
 				ts := now - seconds
-				modifiedBeforeTs = &ts
+				modifiedBeforeTS = &ts
 			} else {
 				// Try parsing as date
 				ts := utils.ParseDateOrRelative(c.ModifiedBefore)
 				if ts > 0 {
-					modifiedBeforeTs = &ts
+					modifiedBeforeTS = &ts
 				} else {
 					return fmt.Errorf("invalid modified-before: %s", c.ModifiedBefore)
 				}
@@ -191,7 +191,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 						return fmt.Errorf("invalid time-modified duration: %s", tm)
 					}
 					ts := now - seconds
-					modifiedAfterTs = &ts
+					modifiedAfterTS = &ts
 				} else if after, ok := strings.CutPrefix(tm, "+"); ok {
 					// Older than (e.g., +3 days)
 					duration := after
@@ -200,17 +200,17 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 						return fmt.Errorf("invalid time-modified duration: %s", tm)
 					}
 					ts := now - seconds
-					modifiedBeforeTs = &ts
+					modifiedBeforeTS = &ts
 				} else {
 					// Try parsing as date or duration
 					seconds, err := utils.HumanToSeconds(tm)
 					if err == nil {
 						ts := now - seconds
-						modifiedAfterTs = &ts
+						modifiedAfterTS = &ts
 					} else {
 						ts := utils.ParseDateOrRelative(tm)
 						if ts > 0 {
-							modifiedAfterTs = &ts
+							modifiedAfterTS = &ts
 						} else {
 							return fmt.Errorf("invalid time-modified: %s", tm)
 						}
@@ -307,12 +307,12 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 				}
 
 				// Time filter
-				if modifiedAfterTs != nil || modifiedBeforeTs != nil {
-					modifiedTs := meta.ModTime().Unix()
-					if modifiedAfterTs != nil && modifiedTs < *modifiedAfterTs {
+				if modifiedAfterTS != nil || modifiedBeforeTS != nil {
+					modifiedTS := meta.ModTime().Unix()
+					if modifiedAfterTS != nil && modifiedTS < *modifiedAfterTS {
 						continue
 					}
-					if modifiedBeforeTs != nil && modifiedTs > *modifiedBeforeTs {
+					if modifiedBeforeTS != nil && modifiedTS > *modifiedBeforeTS {
 						continue
 					}
 				}

@@ -79,17 +79,17 @@ func (r Range) Matches(val int64) bool {
 	return true
 }
 
-// ToNullInt64 converts int64 to sql.NullInt64
+// ToNullInt64 converts int64 to [sql.NullInt64]
 func ToNullInt64(i int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: i, Valid: i != 0}
 }
 
-// ToNullString converts string to sql.NullString
+// ToNullString converts string to [sql.NullString]
 func ToNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-// ToNullFloat64 converts float64 to sql.NullFloat64
+// ToNullFloat64 converts float64 to [sql.NullFloat64]
 func ToNullFloat64(f float64) sql.NullFloat64 {
 	return sql.NullFloat64{Float64: f, Valid: f != 0}
 }

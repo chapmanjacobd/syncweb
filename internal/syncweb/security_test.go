@@ -52,8 +52,8 @@ func TestSecurity_PathValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
-		t.Fatal(err)
+	if startErr := sw.Start(); startErr != nil {
+		t.Fatal(startErr)
 	}
 	defer stopAndCleanup(sw, homeDir)
 
@@ -76,9 +76,9 @@ func TestSecurity_PathValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := sw.ResolveLocalPath(tt.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ResolveLocalPath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+			_, _, resolveErr := sw.ResolveLocalPath(tt.path)
+			if (resolveErr != nil) != tt.wantErr {
+				t.Errorf("ResolveLocalPath(%q) error = %v, wantErr %v", tt.path, resolveErr, tt.wantErr)
 			}
 		})
 	}

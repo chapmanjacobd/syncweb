@@ -25,8 +25,7 @@ func ParseDate(dateStr string) int64 {
 	return 0
 }
 
-// IsTZAware checks if a time is not in the Local or UTC location (as a proxy for "aware")
-// In Go, time.Time is always aware of its Location
+// IsTZAware checks if a [time.Time] is not in the Local or UTC location (as a proxy for "aware")
 func IsTZAware(t time.Time) bool {
 	name, offset := t.Zone()
 	return name != "UTC" && name != "Local" || offset != 0
@@ -176,7 +175,6 @@ func TubeDate(v map[string]any) *int64 {
 	return nil
 }
 
-// UtcFromLocalTimestamp converts a local Unix timestamp to a UTC time.Time
 // ParseDateOrRelative parses a date string into a Unix timestamp
 // It supports absolute dates (YYYY-MM-DD) and relative strings (e.g., "3 days")
 func ParseDateOrRelative(dateStr string) int64 {

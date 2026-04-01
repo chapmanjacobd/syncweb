@@ -176,13 +176,8 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 							continue
 						}
 
-						// Check folder type filter
-						if len(
-							c.FolderTypes,
-						) > 0 {
-							// Would need to get folder type from pending info
-							// For now, skip type filtering
-						}
+						// Note: Folder type filtering is not applied to pending folders
+						// because the folder type is not available until the folder is joined.
 
 						// Check if folder already exists
 						exists := false

@@ -25,45 +25,45 @@ func FormatDurationShort(seconds int) string {
 	}
 
 	const (
-		Minute = 60
-		Hour   = 3600
-		Day    = 86400
-		Year   = 31536000
+		minute = 60
+		hour   = 3600
+		day    = 86400
+		year   = 31536000
 	)
 
-	if seconds < Minute {
+	if seconds < minute {
 		return fmt.Sprintf("%ds", seconds)
 	}
 
-	if seconds < Hour {
-		m := seconds / Minute
-		s := seconds % Minute
+	if seconds < hour {
+		m := seconds / minute
+		s := seconds % minute
 		if s == 0 {
 			return fmt.Sprintf("%dm", m)
 		}
 		return fmt.Sprintf("%dm%ds", m, s)
 	}
 
-	if seconds < Day {
-		h := seconds / Hour
-		m := (seconds % Hour) / Minute
+	if seconds < day {
+		h := seconds / hour
+		m := (seconds % hour) / minute
 		if m == 0 {
 			return fmt.Sprintf("%dh", h)
 		}
 		return fmt.Sprintf("%dh%dm", h, m)
 	}
 
-	if seconds < Year {
-		d := seconds / Day
-		h := (seconds % Day) / Hour
+	if seconds < year {
+		d := seconds / day
+		h := (seconds % day) / hour
 		if h == 0 {
 			return fmt.Sprintf("%dd", d)
 		}
 		return fmt.Sprintf("%dd%dh", d, h)
 	}
 
-	y := seconds / Year
-	d := (seconds % Year) / Day
+	y := seconds / year
+	d := (seconds % year) / day
 	if d == 0 {
 		return fmt.Sprintf("%dy", y)
 	}

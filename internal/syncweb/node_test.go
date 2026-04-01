@@ -35,8 +35,8 @@ func testNodeBasicLifecycle(t *testing.T) {
 		t.Error("node should not be running yet")
 	}
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 
 	if !node.IsRunning() {
@@ -60,8 +60,8 @@ func testNodeDoubleStart(t *testing.T) {
 		t.Fatalf("failed to create node: %v", err)
 	}
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 	defer func() {
 		node.Stop()
@@ -69,8 +69,8 @@ func testNodeDoubleStart(t *testing.T) {
 	}()
 
 	// Double start should be a no-op
-	if err := node.Start(); err != nil {
-		t.Errorf("double start failed: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Errorf("double start failed: %v", startErr)
 	}
 }
 
@@ -82,8 +82,8 @@ func testNodeDoubleStop(t *testing.T) {
 		t.Fatalf("failed to create node: %v", err)
 	}
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 
 	node.Stop()
@@ -104,8 +104,8 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to create node: %v", err)
 	}
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 	node.Stop()
 	_ = cleanupTestHomeDir(home)
@@ -140,8 +140,8 @@ func testNodeEmptyHome(t *testing.T) {
 	}
 	defer node.Stop()
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 
 	if !node.IsRunning() {
@@ -162,8 +162,8 @@ func TestNodeInvalidListenAddr(t *testing.T) {
 		_ = cleanupTestHomeDir(home)
 	}()
 
-	if err := node.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := node.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 }
 

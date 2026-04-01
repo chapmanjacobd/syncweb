@@ -86,17 +86,17 @@ func NewNode(homeDir, name, listenAddr string) (*Node, error) {
 
 		cfg = config.Wrap(cfgPath, newCfg, myID, evLogger)
 		go func() { _ = cfg.Serve(ctx) }()
-		if err := cfg.Save(); err != nil {
+		if saveErr := cfg.Save(); saveErr != nil {
 			cancel()
-			return nil, fmt.Errorf("failed to save config: %w", err)
+			return nil, fmt.Errorf("failed to save config: %w", saveErr)
 		}
 	} else {
 		slog.Info("Loading existing Syncthing config", "path", cfgPath)
-		var err error
-		cfg, _, err = config.Load(cfgPath, myID, evLogger)
-		if err != nil {
+		var loadErr error
+		cfg, _, loadErr = config.Load(cfgPath, myID, evLogger)
+		if loadErr != nil {
 			cancel()
-			return nil, fmt.Errorf("failed to load config: %w", err)
+			return nil, fmt.Errorf("failed to load config: %w", loadErr)
 		}
 		go func() { _ = cfg.Serve(ctx) }()
 	}

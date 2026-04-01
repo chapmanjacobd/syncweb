@@ -117,7 +117,7 @@ func StripMountSyntax(path string) string {
 // IsEmptyFolder checks if a folder contains no files (recursively)
 func IsEmptyFolder(path string) bool {
 	empty := true
-	err := filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

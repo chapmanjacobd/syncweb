@@ -139,7 +139,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 						var stat syscall.Statfs_t
 						if err := syscall.Statfs(f.Path, &stat); err == nil {
 							entry.FreeSpace = utils.FormatSize(
-								int64(stat.Bavail) * int64(stat.Bsize),
+								int64(stat.Bavail) * stat.Bsize,
 							)
 						}
 					}

@@ -121,7 +121,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 						}
 
 						// Check folder type filter
-						if len(c.FolderTypes) > 0 {
+						if len(c.FolderTypes) > 0 { //nolint:staticcheck // Empty branch: folder type filtering not yet implemented
 							// Would need to get folder type from pending info
 							// For now, skip type filtering
 						}

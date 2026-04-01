@@ -134,10 +134,6 @@ linters:
       - path: internal/
         linters:
           - nestif
-      # Exclude maintidx (too strict for CLI commands)
-      - path: internal/commands/
-        linters:
-          - maintidx
       # Exclude revive package-comments for internal packages
       - path: internal/
         text: "package-comments"
@@ -168,24 +164,11 @@ linters:
         text: "empty-block"
         linters:
           - revive
-      # Exclude unparam (too strict)
-      - path: internal/
-        linters:
-          - unparam
-      # Exclude nilerr (false positive for filepath.WalkDir)
-      - path: internal/utils/path_utils.go
-        linters:
-          - nilerr
       # Exclude gocritic ifElseChain (these are legitimate comparisons, not switch candidates)
       - path: internal/
         text: "ifElseChain"
         linters:
           - gocritic
-      # Exclude staticcheck SA9003 for empty branches (sometimes intentional)
-      - path: internal/
-        text: "SA9003"
-        linters:
-          - staticcheck
       # Exclude gochecknoglobals for web package
       - path: web/
         linters:
@@ -203,10 +186,6 @@ linters:
         text: "package-comments"
         linters:
           - revive
-      # Exclude nilerr for path_utils.go (false positive)
-      - path: internal/utils/path_utils.go
-        linters:
-          - nilerr
 
 linters-settings:
   gci:

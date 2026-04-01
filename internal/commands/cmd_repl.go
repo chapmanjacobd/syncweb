@@ -47,6 +47,7 @@ func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
+//nolint:maintidx // REPL command interpreter with many subcommands
 func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {

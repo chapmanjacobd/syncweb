@@ -329,6 +329,8 @@ func calculateMountpointUsage(
 }
 
 // printDownloadSummary prints the download summary table.
+//
+//nolint:unparam // mountpointGroups kept for future use
 func printDownloadSummary(
 	itemsByFolder map[string][]downloadItem,
 	folderSpaceInfos map[string]*folderSpaceInfo,

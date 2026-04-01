@@ -38,6 +38,7 @@ type SyncwebFindCmd struct {
 	Paths          []string `arg:""                                                         help:"Root directories to search" optional:""`
 }
 
+//nolint:maintidx // CLI command with many flags is inherently complex
 func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		type findResult struct {

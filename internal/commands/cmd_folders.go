@@ -36,6 +36,7 @@ type SyncwebFoldersCmd struct {
 	Print       bool     `help:"Print only folder IDs"`
 }
 
+//nolint:maintidx // CLI command with many flags is inherently complex
 func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		// If no filter specified, show all

@@ -212,15 +212,12 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 					rootItems = append(rootItems, entry)
 				}
 				slog.Debug("ls: created entry", "path", entryPath, "isDir", isDir)
-			} else {
+			} else if !isLast {
 				// Entry already exists, but might need to update IsDir
-				// If this part is not the last, it's a directory
-				if !isLast {
-					if !currentMap[part].IsDir {
-						slog.Debug("ls: updated to directory", "part", part)
-					}
-					currentMap[part].IsDir = true
+				if !currentMap[part].IsDir {
+					slog.Debug("ls: updated to directory", "part", part)
 				}
+				currentMap[part].IsDir = true
 			}
 
 			currentMap = currentMap[part].Children
@@ -324,6 +321,7 @@ func (c *SyncwebLsCmd) printDirectory(items []*fileEntry, indent int, printHeade
 	}
 }
 
+//nolint:unparam // printHeader kept for potential future use
 func (c *SyncwebLsCmd) printEntry(item *fileEntry, printHeader func()) {
 	if c.Long {
 		typeChar := "d"

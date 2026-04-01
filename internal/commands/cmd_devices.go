@@ -27,6 +27,7 @@ type SyncwebDevicesCmd struct {
 	Xfer       bool     `help:"Show transfer statistics"`
 }
 
+//nolint:maintidx // CLI command with many flags is inherently complex
 func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		// If no filter specified, show all

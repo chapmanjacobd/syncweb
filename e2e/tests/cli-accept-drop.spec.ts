@@ -10,12 +10,12 @@ test.describe('cli-accept-drop', () => {
     cli.runAndVerify(['create', syncFolder], { silent: true });
   });
 
-  test('accept command shows usage without arguments', async ({ cli, syncFolder }) => {
+  test('accept command shows error without arguments', async ({ cli, syncFolder }) => {
     const result = cli.run(['accept'], { silent: true, cwd: syncFolder });
 
-    // Should show usage or error
+    // Should error because device-ids is required
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toContain('usage');
+    expect(result.stderr).toContain('expected');
   });
 
   test('accept with invalid device ID fails', async ({ cli, syncFolder }) => {
@@ -24,14 +24,14 @@ test.describe('cli-accept-drop', () => {
       cwd: syncFolder,
     });
 
-    // Should fail with error about invalid device
+    // Should show error about invalid device and exit with non-zero
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toContain('error');
+    expect(result.stderr).toContain('no valid devices');
   });
 
-  test('accept with --folders flag', async ({ cli, syncFolder }) => {
-    // Accept with folders flag (may have no pending folders)
-    const result = cli.run(['accept', '--folders'], {
+  test('accept with --folder-ids flag', async ({ cli, syncFolder }) => {
+    // Accept with folder-ids flag (may have no pending folders)
+    const result = cli.run(['accept', '-f', 'test-folder', 'TEST-DEVICE-ID'], {
       silent: true,
       cwd: syncFolder,
     });
@@ -40,14 +40,14 @@ test.describe('cli-accept-drop', () => {
     expect([0, 1]).toContain(result.exitCode);
   });
 
-  test('accept with --devices flag', async ({ cli, syncFolder }) => {
-    // Accept with devices flag (may have no pending devices)
-    const result = cli.run(['accept', '--devices'], {
+  test('accept with device ID positional argument', async ({ cli, syncFolder }) => {
+    // Accept with device ID as positional argument
+    const result = cli.run(['accept', 'TEST-DEVICE-ID'], {
       silent: true,
       cwd: syncFolder,
     });
 
-    // Should succeed or show no pending devices
+    // Should handle gracefully (may fail if device doesn't exist)
     expect([0, 1]).toContain(result.exitCode);
   });
 
@@ -59,12 +59,12 @@ test.describe('cli-accept-drop', () => {
     expect(result.stdout).toContain('accept');
   });
 
-  test('drop command shows usage without arguments', async ({ cli, syncFolder }) => {
+  test('drop command shows error without arguments', async ({ cli, syncFolder }) => {
     const result = cli.run(['drop'], { silent: true, cwd: syncFolder });
 
-    // Should show usage or error
+    // Should error because device-ids is required
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toContain('usage');
+    expect(result.stderr).toContain('expected');
   });
 
   test('drop with non-existent device ID', async ({ cli, syncFolder }) => {
@@ -92,15 +92,17 @@ test.describe('cli-accept-drop', () => {
       cwd: syncFolder,
     });
 
-    // May fail but should produce valid JSON if --json is used
-    if (result.exitCode === 0) {
-      expect(() => JSON.parse(result.stdout)).not.toThrow();
-    }
+    // Should produce valid JSON even on error
+    expect(result.exitCode).not.toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output).toHaveProperty('device_count');
+    expect(output).toHaveProperty('devices');
+    expect(output).toHaveProperty('errors');
   });
 
-  test('accept with folder specification', async ({ cli, syncFolder }) => {
+  test('accept with folder-ids specification', async ({ cli, syncFolder }) => {
     // Accept specific folder (may have no pending folders)
-    const result = cli.run(['accept', '--folders', 'test-folder'], {
+    const result = cli.run(['accept', '-f', 'test-folder', 'TEST-DEVICE-ID'], {
       silent: true,
       cwd: syncFolder,
     });
@@ -109,9 +111,9 @@ test.describe('cli-accept-drop', () => {
     expect([0, 1]).toContain(result.exitCode);
   });
 
-  test('accept with device specification', async ({ cli, syncFolder }) => {
+  test('accept with device ID', async ({ cli, syncFolder }) => {
     // Accept specific device (may have no pending devices)
-    const result = cli.run(['accept', '--devices', 'TEST-DEVICE-ID'], {
+    const result = cli.run(['accept', 'TEST-DEVICE-ID'], {
       silent: true,
       cwd: syncFolder,
     });
@@ -120,9 +122,9 @@ test.describe('cli-accept-drop', () => {
     expect([0, 1]).toContain(result.exitCode);
   });
 
-  test('drop folder command', async ({ cli, syncFolder }) => {
-    // Drop a folder (may have no folders to drop)
-    const result = cli.run(['drop', 'folder', 'test-folder'], {
+  test('drop with folder-ids removes from folders', async ({ cli, syncFolder }) => {
+    // Drop a device from folders
+    const result = cli.run(['drop', '-f', 'test-folder', 'TEST-DEVICE'], {
       silent: true,
       cwd: syncFolder,
     });
@@ -132,45 +134,14 @@ test.describe('cli-accept-drop', () => {
   });
 
   test('drop device command', async ({ cli, syncFolder }) => {
-    // Drop a device (may have no devices to drop)
-    const result = cli.run(['drop', 'device', 'TEST-DEVICE'], {
+    // Drop a device
+    const result = cli.run(['drop', 'TEST-DEVICE'], {
       silent: true,
       cwd: syncFolder,
     });
 
     // Should handle gracefully
     expect([0, 1]).toContain(result.exitCode);
-  });
-
-  test('accept all pending (if any)', async ({ cli, syncFolder }) => {
-    // Try to accept all pending items
-    const result = cli.run(['accept', '--all'], {
-      silent: true,
-      cwd: syncFolder,
-    });
-
-    // May succeed or show unknown flag
-    expect([0, 1, 2]).toContain(result.exitCode);
-  });
-
-  test('accept with force flag (if implemented)', async ({ cli, syncFolder }) => {
-    const result = cli.run(['accept', '--force', 'TEST-DEVICE'], {
-      silent: true,
-      cwd: syncFolder,
-    });
-
-    // May succeed or show unknown flag
-    expect([0, 1, 2]).toContain(result.exitCode);
-  });
-
-  test('drop with force flag (if implemented)', async ({ cli, syncFolder }) => {
-    const result = cli.run(['drop', '--force', 'TEST-DEVICE'], {
-      silent: true,
-      cwd: syncFolder,
-    });
-
-    // May succeed or show unknown flag
-    expect([0, 1, 2]).toContain(result.exitCode);
   });
 
   test('accept command preserves config', async ({ cli, syncFolder }) => {
@@ -180,8 +151,8 @@ test.describe('cli-accept-drop', () => {
       cwd: syncFolder,
     });
 
-    // Try accept (should not break config)
-    cli.run(['accept'], { silent: true, cwd: syncFolder });
+    // Try accept with a device (should not break config)
+    cli.run(['accept', 'TEST-DEVICE'], { silent: true, cwd: syncFolder });
 
     // Get folders after accept
     const afterFolders = cli.run(['folders', '--json'], {
@@ -217,7 +188,7 @@ test.describe('cli-accept-drop', () => {
 
   test('accept then drop scenario', async ({ cli, syncFolder }) => {
     // Accept (may be no-op)
-    const acceptResult = cli.run(['accept'], { silent: true, cwd: syncFolder });
+    const acceptResult = cli.run(['accept', 'TEST-DEVICE'], { silent: true, cwd: syncFolder });
 
     // Drop (may be no-op)
     const dropResult = cli.run(['drop', 'TEST'], { silent: true, cwd: syncFolder });
@@ -227,18 +198,18 @@ test.describe('cli-accept-drop', () => {
     expect([0, 1]).toContain(dropResult.exitCode);
   });
 
-  test('accept with multiple flags', async ({ cli, syncFolder }) => {
-    const result = cli.run(['accept', '--folders', '--devices'], {
+  test('accept with folder-ids flag', async ({ cli, syncFolder }) => {
+    const result = cli.run(['accept', '-f', 'test-folder', 'TEST-DEVICE'], {
       silent: true,
       cwd: syncFolder,
     });
 
-    // Should handle multiple flags
+    // Should handle gracefully
     expect([0, 1]).toContain(result.exitCode);
   });
 
   test('accept output contains status', async ({ cli, syncFolder }) => {
-    const result = cli.run(['accept'], { silent: true, cwd: syncFolder });
+    const result = cli.run(['accept', 'TEST-DEVICE'], { silent: true, cwd: syncFolder });
 
     // Output should contain some status information
     expect(result.stdout.length).toBeGreaterThanOrEqual(0);

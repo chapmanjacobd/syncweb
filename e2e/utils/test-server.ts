@@ -31,12 +31,16 @@ export class TestServer {
   private apiToken: string;
   private env: Record<string, string>;
   private baseUrl: string;
+  private stdoutBuffer: string[] = [];
+  private stderrBuffer: string[] = [];
+  private verbose: boolean;
 
   constructor(options: TestServerOptions = {}) {
     this.port = options.port ?? 0;  // 0 means find available port
     this.homeDir = options.homeDir || this.createTempHome();
     this.apiToken = options.apiToken || 'e2e-test-token';
     this.env = options.env || {};
+    this.verbose = options.verbose ?? false;
     // baseUrl will be set after server starts and port is assigned
     this.baseUrl = '';
   }
@@ -118,14 +122,20 @@ export class TestServer {
       console.error('Server process error:', err);
     });
 
-    // Capture and log server output for debugging
+    // Capture server output in buffers - only printed on test failure
     this.serverProcess.stdout?.on('data', (data: Buffer) => {
       const output = data.toString();
-      console.log(`[syncweb stdout] ${output}`);
+      this.stdoutBuffer.push(output);
+      if (this.verbose) {
+        console.log(`[syncweb stdout] ${output}`);
+      }
     });
     this.serverProcess.stderr?.on('data', (data: Buffer) => {
       const output = data.toString();
-      console.error(`[syncweb stderr] ${output}`);
+      this.stderrBuffer.push(output);
+      if (this.verbose) {
+        console.error(`[syncweb stderr] ${output}`);
+      }
     });
 
     // Wait for server to be ready
@@ -247,5 +257,25 @@ export class TestServer {
    */
   getPort(): number {
     return this.port;
+  }
+
+  /**
+   * Print the captured server output (used when tests fail)
+   */
+  printOutput(): void {
+    const stdout = this.stdoutBuffer.join('');
+    const stderr = this.stderrBuffer.join('');
+
+    if (stdout) {
+      console.log('\n=== Syncweb Server Output (stdout) ===');
+      console.log(stdout);
+      console.log('=== End of stdout output ===\n');
+    }
+
+    if (stderr) {
+      console.error('\n=== Syncweb Server Output (stderr) ===');
+      console.error(stderr);
+      console.error('=== End of stderr output ===\n');
+    }
   }
 }

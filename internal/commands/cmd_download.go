@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -19,6 +20,22 @@ import (
 type SyncwebDownloadCmd struct {
 	Paths []string `arg:""                                       help:"File or directory paths to download" optional:""`
 	Depth int      `help:"Maximum depth for directory traversal"`
+}
+
+type DownloadItemInfo struct {
+	Path     string `json:"path"`
+	FolderID string `json:"folder_id"`
+	Size     int64  `json:"size"`
+}
+
+type DownloadResult struct {
+	TotalFiles  int                `json:"total_files"`
+	TotalSize   int64              `json:"total_size"`
+	Items       []DownloadItemInfo `json:"items"`
+	Queued      []string           `json:"queued,omitempty"`
+	Errors      []string           `json:"errors,omitempty"`
+	Warnings    []string           `json:"warnings,omitempty"`
+	SpaceStatus map[string]string  `json:"space_status,omitempty"`
 }
 
 type folderSpaceInfo struct {
@@ -48,12 +65,23 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		// Build download plan
 		var items []downloadItem
 		var totalSize int64
+		result := DownloadResult{
+			Items:       []DownloadItemInfo{},
+			Queued:      []string{},
+			Errors:      []string{},
+			Warnings:    []string{},
+			SpaceStatus: make(map[string]string),
+		}
 
 		cfg := s.Node.Cfg.RawCopy()
 		for _, p := range c.Paths {
 			absPath, err := filepath.Abs(p)
 			if err != nil {
-				fmt.Printf("Error: %s: %v\n", p, err)
+				errMsg := fmt.Sprintf("Error: %s: %v", p, err)
+				result.Errors = append(result.Errors, errMsg)
+				if !g.JSON {
+					fmt.Println(errMsg)
+				}
 				continue
 			}
 
@@ -67,7 +95,11 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 					var err error
 					relPath, err = filepath.Rel(f.Path, absPath)
 					if err != nil {
-						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+						errMsg := fmt.Sprintf("Error: Failed to compute relative path for %s: %v", p, err)
+						result.Errors = append(result.Errors, errMsg)
+						if !g.JSON {
+							fmt.Println(errMsg)
+						}
 						continue
 					}
 					break
@@ -75,22 +107,43 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 			}
 
 			if folderID == "" {
-				fmt.Printf("Warning: %s is not inside a Syncweb folder\n", p)
+				warnMsg := fmt.Sprintf("Warning: %s is not inside a Syncweb folder", p)
+				result.Warnings = append(result.Warnings, warnMsg)
+				if !g.JSON {
+					fmt.Println(warnMsg)
+				}
 				continue
 			}
 
 			info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
 			if err != nil || !ok {
-				fmt.Printf("Warning: %s not found in cluster\n", p)
+				warnMsg := fmt.Sprintf("Warning: %s not found in cluster", p)
+				result.Warnings = append(result.Warnings, warnMsg)
+				if !g.JSON {
+					fmt.Println(warnMsg)
+				}
 				continue
 			}
 
 			items = append(items, downloadItem{folderID, relPath, info.Size})
+			result.Items = append(result.Items, DownloadItemInfo{
+				Path:     relPath,
+				FolderID: folderID,
+				Size:     info.Size,
+			})
 			totalSize += info.Size
 		}
 
+		result.TotalFiles = len(items)
+		result.TotalSize = totalSize
+
 		if len(items) == 0 {
-			fmt.Println("No files found to download")
+			if g.JSON {
+				jsonData, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(jsonData))
+			} else {
+				fmt.Println("No files found to download")
+			}
 			return nil
 		}
 
@@ -115,17 +168,39 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		// Calculate mountpoint-level pending downloads and usable space
 		mountpointUsage := calculateMountpointUsage(mountpointGroups, folderSpaceInfos, itemsByFolder)
 
-		// Print summary
-		printDownloadSummary(itemsByFolder, folderSpaceInfos, mountpointUsage, mountpointGroups)
-
-		// Check for space warnings
-		warnings := generateWarnings(mountpointUsage, folderSpaceInfos)
-		if len(warnings) > 0 {
-			fmt.Println("\nWARNING: Insufficient space!")
-			for _, w := range warnings {
-				fmt.Printf("  %s\n", w)
+		// Print summary (or store in result for JSON)
+		if g.JSON {
+			// Store space status for JSON output
+			for folderID, spaceInfo := range folderSpaceInfos {
+				if spaceInfo != nil {
+					var mpInfo *mountpointUsageInfo
+					for _, info := range mountpointUsage {
+						if slices.Contains(info.FolderIDs, folderID) {
+							mpInfo = info
+							break
+						}
+					}
+					if mpInfo != nil {
+						if mpInfo.TotalDownload > mpInfo.Usable {
+							result.SpaceStatus[folderID] = "LOW"
+						} else {
+							result.SpaceStatus[folderID] = "OK"
+						}
+					}
+				}
 			}
-			fmt.Println()
+		} else {
+			printDownloadSummary(itemsByFolder, folderSpaceInfos, mountpointUsage, mountpointGroups)
+
+			// Check for space warnings
+			warnings := generateWarnings(mountpointUsage, folderSpaceInfos)
+			if len(warnings) > 0 {
+				fmt.Println("\nWARNING: Insufficient space!")
+				for _, w := range warnings {
+					fmt.Printf("  %s\n", w)
+				}
+				fmt.Println()
+			}
 		}
 
 		// Confirm
@@ -142,10 +217,22 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		// Trigger downloads
 		for _, item := range items {
 			if err := s.Unignore(item.folderID, item.relPath); err != nil {
-				fmt.Printf("Error: Failed to trigger download for %s: %v\n", item.relPath, err)
+				errMsg := fmt.Sprintf("Error: Failed to trigger download for %s: %v", item.relPath, err)
+				result.Errors = append(result.Errors, errMsg)
+				if !g.JSON {
+					fmt.Printf("Error: Failed to trigger download for %s: %v\n", item.relPath, err)
+				}
 			} else {
-				fmt.Printf("Queued: %s\n", item.relPath)
+				result.Queued = append(result.Queued, item.relPath)
+				if !g.JSON {
+					fmt.Printf("Queued: %s\n", item.relPath)
+				}
 			}
+		}
+
+		if g.JSON {
+			jsonData, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(jsonData))
 		}
 
 		return nil

@@ -8,13 +8,13 @@ import (
 // CoreFlags are essential flags shared across most binaries/commands
 type CoreFlags struct {
 	// Common options
-	Verbose   bool   `help:"Enable verbose logging"              short:"v"`
-	JSON      bool   `group:"Display"                            help:"Output results as JSON" short:"j"`
-	Simulate  bool   `help:"Dry run; don't actually do anything"`
+	Verbose   bool   `help:"Enable verbose logging"       short:"v"`
+	JSON      bool   `group:"Display"                     help:"Output results as JSON"              short:"j"`
+	Simulate  bool   `aliases:"dry-run"                   help:"Dry run; don't actually do anything"`
 	DryRun    bool   `kong:"-"` // Alias for Simulate
-	NoConfirm bool   `help:"Don't ask for confirmation"          short:"y"`
+	NoConfirm bool   `aliases:"yes"                       help:"Don't ask for confirmation"          short:"y"`
 	Yes       bool   `kong:"-"` // Alias for NoConfirm
-	Timeout   string `help:"Quit after N minutes/seconds"        short:"T"`
+	Timeout   string `help:"Quit after N minutes/seconds" short:"T"`
 }
 
 // SyncwebFlags are flags related to Syncweb configuration

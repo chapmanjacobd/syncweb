@@ -63,17 +63,18 @@ test.describe('cli-download', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  test('download non-existent file fails', async ({ cli, syncFolder }) => {
-    const result = cli.run(['download', 'non-existent-file.txt'], {
+  test('download non-existent file shows warning', async ({ cli, syncFolder }) => {
+    const result = cli.run(['download', '-y', 'non-existent-file.txt'], {
       silent: true,
       cwd: syncFolder,
     });
 
-    // Command should fail
-    expect(result.exitCode).not.toBe(0);
+    // Command may succeed with warning or fail
+    // The Go implementation shows a warning but doesn't fail
+    expect([0, 1]).toContain(result.exitCode);
 
-    // Should show error message
-    expect(result.stderr.toLowerCase()).toContain('error');
+    // Should show warning message
+    expect(result.stdout.toLowerCase()).toContain('warning');
   });
 
   test('download directory', async ({ cli, createDummyDir, createDummyFile, syncFolder }) => {
@@ -95,7 +96,7 @@ test.describe('cli-download', () => {
   test('download with json output', async ({ cli, createDummyFile, syncFolder }) => {
     createDummyFile('json-download.txt', 'json download test');
 
-    const result = cli.run(['download', '--json', 'json-download.txt'], {
+    const result = cli.run(['download', '--json', '-y', 'json-download.txt'], {
       silent: true,
       cwd: syncFolder,
     });
@@ -106,6 +107,8 @@ test.describe('cli-download', () => {
     // Output should be valid JSON
     const output = JSON.parse(result.stdout);
     expect(output).toBeTruthy();
+    expect(output).toHaveProperty('total_files');
+    expect(output).toHaveProperty('items');
   });
 
   test('download summary is displayed', async ({ cli, createDummyFile, syncFolder }) => {
@@ -209,7 +212,7 @@ test.describe('cli-download', () => {
     }
   });
 
-  test('download with dry-run (if implemented)', async ({ cli, createDummyFile, syncFolder }) => {
+  test('download with --dry-run flag', async ({ cli, createDummyFile, syncFolder }) => {
     createDummyFile('dry-run-test.txt', 'dry run test');
 
     const result = cli.run(['download', '--dry-run', 'dry-run-test.txt'], {

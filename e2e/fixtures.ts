@@ -20,7 +20,7 @@ export const test = base.extend<{
     await use({});
   },
 
-  server: async ({ page, serverOptions }, use) => {
+  server: async ({ page, serverOptions }, use, testInfo) => {
     const workerId = process.env.TEST_WORKER_INDEX || 'default';
     const project = process.env.PLAYWRIGHT_PROJECT || 'desktop';
     const serverKey = `${project}-${workerId}`;
@@ -75,6 +75,11 @@ export const test = base.extend<{
     }
 
     await use(server);
+
+    // Print server output if test failed
+    if (testInfo.errors.length > 0) {
+      server.printOutput();
+    }
 
     // Server lifecycle is managed globally for efficiency
     // Individual tests should not stop the server

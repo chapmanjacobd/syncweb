@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,6 +14,12 @@ import (
 type SyncwebDropCmd struct {
 	DeviceIDs []string `arg:""                             help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
 	FolderIDs []string `help:"Remove devices from folders" short:"f"`
+}
+
+type DropResult struct {
+	DeviceCount int      `json:"device_count"`
+	Devices     []string `json:"devices"`
+	Errors      []string `json:"errors,omitempty"`
 }
 
 func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
@@ -29,13 +36,20 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 			}
 		}
 
-		deviceCount := 0
+		result := DropResult{
+			Devices: []string{},
+			Errors:  []string{},
+		}
 
 		// If folder IDs specified, remove devices from folders
 		if len(c.FolderIDs) > 0 {
 			for _, fldID := range c.FolderIDs {
 				if err := s.RemoveFolderDevices(fldID, deviceIDs); err != nil {
-					fmt.Printf("Failed to remove devices from folder %s: %v\n", fldID, err)
+					errMsg := fmt.Sprintf("Failed to remove devices from folder %s: %v", fldID, err)
+					result.Errors = append(result.Errors, errMsg)
+					if !g.JSON {
+						fmt.Println(errMsg)
+					}
 					continue
 				}
 
@@ -51,19 +65,42 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
+
+			if g.JSON {
+				jsonData, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(jsonData))
+			} else {
+				fmt.Printf("Removed from %d folder(s)\n", len(c.FolderIDs))
+			}
 			return nil
 		}
 
 		// Remove devices entirely
 		for _, devID := range deviceIDs {
 			if err := s.DeleteDevice(devID); err != nil {
-				fmt.Printf("Failed to remove device %s: %v\n", devID, err)
+				errMsg := fmt.Sprintf("Failed to remove device %s: %v", devID, err)
+				result.Errors = append(result.Errors, errMsg)
+				if !g.JSON {
+					fmt.Println(errMsg)
+				}
 				continue
 			}
-			deviceCount++
+			result.Devices = append(result.Devices, devID)
+			result.DeviceCount++
 		}
 
-		fmt.Printf("Removed %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
+		if g.JSON {
+			jsonData, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(jsonData))
+		} else {
+			fmt.Printf("Removed %d %s\n", result.DeviceCount, utils.Pluralize(result.DeviceCount, "device", "devices"))
+		}
+
+		// Exit with error if all device IDs were invalid
+		if len(deviceIDs) > 0 && result.DeviceCount == 0 {
+			return fmt.Errorf("no valid devices were removed")
+		}
+
 		return nil
 	})
 }

@@ -49,7 +49,7 @@ func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {
 
 	// Set up event logger
 	evLogger := events.NewLogger()
-	go evLogger.Serve(ctx)
+	go func() { _ = evLogger.Serve(ctx) }()
 
 	// Construct paths manually to avoid global locations state
 	certPath := filepath.Join(homeDir, "cert.pem")
@@ -85,7 +85,7 @@ func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {
 		}
 
 		cfg = config.Wrap(cfgPath, newCfg, myID, evLogger)
-		go cfg.Serve(ctx)
+		go func() { _ = cfg.Serve(ctx) }()
 		if err := cfg.Save(); err != nil {
 			cancel()
 			return nil, fmt.Errorf("failed to save config: %w", err)
@@ -98,7 +98,7 @@ func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {
 			cancel()
 			return nil, fmt.Errorf("failed to load config: %w", err)
 		}
-		go cfg.Serve(ctx)
+		go func() { _ = cfg.Serve(ctx) }()
 	}
 
 	// Open database
@@ -116,7 +116,7 @@ func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {
 
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, appOpts)
 	if err != nil {
-		sdb.Close()
+		_ = sdb.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create Syncthing app: %w", err)
 	}
@@ -166,7 +166,7 @@ func (n *Node) Stop() {
 	n.App.Wait()
 	n.running = false
 	if n.db != nil {
-		n.db.Close()
+		_ = n.db.Close()
 	}
 }
 

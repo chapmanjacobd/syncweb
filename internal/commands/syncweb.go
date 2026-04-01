@@ -225,7 +225,7 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 		slog.Info("Syncweb daemon started", "pid", d.Pid)
 		return nil
 	}
-	defer cntxt.Release()
+	defer func() { _ = cntxt.Release() }()
 
 	slog.Info("Syncweb daemon process starting")
 	return nil

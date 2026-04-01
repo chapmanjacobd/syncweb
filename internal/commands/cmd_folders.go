@@ -46,28 +46,28 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 		}
 
 		type folderEntry struct {
-			ID             string
-			Label          string
-			Path           string
-			LocalFiles     int
-			LocalBytes     int64
-			NeededFiles    int
-			NeededBytes    int64
-			GlobalFiles    int
-			GlobalBytes    int64
-			FreeSpace      string
-			SyncStatus     string
-			SyncPct        float64
-			Peers          int
-			PendingPeers   int
-			Errors         string
-			Type           string
-			Paused         bool
-			Devices        []string
-			PendingDevices []string
-			Discovered     bool
-			State          string
-			Completed      int64
+			ID             string   `json:"id"`
+			Label          string   `json:"label"`
+			Path           string   `json:"path"`
+			LocalFiles     int      `json:"local_files"`
+			LocalBytes     int64    `json:"local_bytes"`
+			NeededFiles    int      `json:"needed_files"`
+			NeededBytes    int64    `json:"needed_bytes"`
+			GlobalFiles    int      `json:"global_files"`
+			GlobalBytes    int64    `json:"global_bytes"`
+			FreeSpace      string   `json:"free_space"`
+			SyncStatus     string   `json:"sync_status"`
+			SyncPct        float64  `json:"sync_pct"`
+			Peers          int      `json:"peers"`
+			PendingPeers   int      `json:"pending_peers"`
+			Errors         string   `json:"errors"`
+			Type           string   `json:"type"`
+			Paused         bool     `json:"paused"`
+			Devices        []string `json:"devices"`
+			PendingDevices []string `json:"pending_devices"`
+			Discovered     bool     `json:"discovered"`
+			State          string   `json:"state"`
+			Completed      int64    `json:"completed"`
 		}
 
 		var folders []folderEntry

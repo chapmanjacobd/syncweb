@@ -132,7 +132,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		if !g.NoConfirm && !g.Yes {
 			var response string
 			fmt.Printf("\nMark %d files (%s) for download? [y/N]: ", len(items), utils.FormatSize(totalSize))
-			fmt.Scanln(&response)
+			_, _ = fmt.Scanln(&response)
 			if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
 				fmt.Println("Download cancelled")
 				return nil

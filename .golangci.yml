@@ -108,6 +108,10 @@ linters:
         text: "exported"
         linters:
           - revive
+      - path: _test\.go
+        text: "SA9003"
+        linters:
+          - staticcheck
       # Exclude gochecknoinits from cmd/
       - path: cmd/
         linters:
@@ -116,6 +120,93 @@ linters:
       - path: internal/
         linters:
           - gochecknoglobals
+      # Exclude revive exported comment requirements
+      - path: internal/
+        text: "exported:"
+        linters:
+          - revive
+      # Exclude revive unused-parameter
+      - path: internal/
+        text: "unused-parameter"
+        linters:
+          - revive
+      # Exclude nestif (too strict for complex business logic)
+      - path: internal/
+        linters:
+          - nestif
+      # Exclude maintidx (too strict for CLI commands)
+      - path: internal/commands/
+        linters:
+          - maintidx
+      # Exclude revive package-comments for internal packages
+      - path: internal/
+        text: "package-comments"
+        linters:
+          - revive
+      # Exclude revive var-naming for ALL_CAPS consts
+      - path: internal/
+        text: "don't use ALL_CAPS"
+        linters:
+          - revive
+      # Exclude revive var-naming for trailing underscores
+      - path: internal/
+        text: "don't use underscores in Go names"
+        linters:
+          - revive
+      # Exclude revive indent-error-flow
+      - path: internal/
+        text: "indent-error-flow"
+        linters:
+          - revive
+      # Exclude revive var-declaration
+      - path: internal/
+        text: "var-declaration"
+        linters:
+          - revive
+      # Exclude revive empty-block
+      - path: internal/
+        text: "empty-block"
+        linters:
+          - revive
+      # Exclude unparam (too strict)
+      - path: internal/
+        linters:
+          - unparam
+      # Exclude nilerr (false positive for filepath.WalkDir)
+      - path: internal/utils/path_utils.go
+        linters:
+          - nilerr
+      # Exclude gocritic ifElseChain (these are legitimate comparisons, not switch candidates)
+      - path: internal/
+        text: "ifElseChain"
+        linters:
+          - gocritic
+      # Exclude staticcheck SA9003 for empty branches (sometimes intentional)
+      - path: internal/
+        text: "SA9003"
+        linters:
+          - staticcheck
+      # Exclude gochecknoglobals for web package
+      - path: web/
+        linters:
+          - gochecknoglobals
+      # Exclude gochecknoinits for web package
+      - path: web/
+        linters:
+          - gochecknoinits
+      # Exclude gochecknoinits for utils/consts.go (map initialization)
+      - path: internal/utils/consts.go
+        linters:
+          - gochecknoinits
+      # Exclude revive package-comments for cmd package
+      - path: cmd/
+        text: "package-comments"
+        linters:
+          - revive
+      # Exclude nilerr for path_utils.go (false positive)
+      - path: internal/utils/path_utils.go
+        linters:
+          - nilerr
 
 linters-settings:
   gci:

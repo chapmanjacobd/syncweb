@@ -153,7 +153,7 @@ func TestPercentageDifference(t *testing.T) {
 	}
 }
 
-func TestSqlHumanTime(t *testing.T) {
+func TestSQLHumanTime(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -165,8 +165,8 @@ func TestSqlHumanTime(t *testing.T) {
 		{"10.5hr", "10.5 hr"},
 	}
 	for _, tt := range tests {
-		if got := SqlHumanTime(tt.input); got != tt.want {
-			t.Errorf("SqlHumanTime(%q) = %q, want %q", tt.input, got, tt.want)
+		if got := SQLHumanTime(tt.input); got != tt.want {
+			t.Errorf("SQLHumanTime(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
@@ -265,9 +265,9 @@ func TestParsePercentileRange(t *testing.T) {
 		{"p10", 0, 0, false},
 	}
 	for _, tt := range tests {
-		min, max, ok := ParsePercentileRange(tt.input)
-		if ok != tt.wantOk || min != tt.wantMin || max != tt.wantMax {
-			t.Errorf("ParsePercentileRange(%q) = %v, %v, %v, want %v, %v, %v", tt.input, min, max, ok, tt.wantMin, tt.wantMax, tt.wantOk)
+		minVal, maxVal, ok := ParsePercentileRange(tt.input)
+		if ok != tt.wantOk || minVal != tt.wantMin || maxVal != tt.wantMax {
+			t.Errorf("ParsePercentileRange(%q) = %v, %v, %v, want %v, %v, %v", tt.input, minVal, maxVal, ok, tt.wantMin, tt.wantMax, tt.wantOk)
 		}
 	}
 }

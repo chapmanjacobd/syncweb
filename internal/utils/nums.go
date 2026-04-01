@@ -18,11 +18,11 @@ func RandomFloat() float64 {
 	return rand.Float64()
 }
 
-func RandomInt(min, max int) int {
-	if min >= max {
-		return min
+func RandomInt(minVal, maxVal int) int {
+	if minVal >= maxVal {
+		return minVal
 	}
-	return rand.Intn(max-min) + min
+	return rand.Intn(maxVal-minVal) + minVal
 }
 
 func LinearInterpolation(x float64, dataPoints [][2]float64) float64 {
@@ -254,15 +254,15 @@ func ParseRange(s string, humanToX func(string) (int64, error)) (Range, error) {
 	if strings.Contains(s, "-") && !strings.HasPrefix(s, "-") {
 		parts := strings.Split(s, "-")
 		if len(parts) == 2 {
-			min, err := humanToX(parts[0])
+			minVal, err := humanToX(parts[0])
 			if err != nil {
 				return Range{}, err
 			}
-			max, err := humanToX(parts[1])
+			maxVal, err := humanToX(parts[1])
 			if err != nil {
 				return Range{}, err
 			}
-			return Range{Min: &min, Max: &max}, nil
+			return Range{Min: &minVal, Max: &maxVal}, nil
 		}
 	}
 
@@ -277,40 +277,40 @@ func ParseRange(s string, humanToX func(string) (int64, error)) (Range, error) {
 			return Range{}, err
 		}
 		tolerance := int64(float64(base) * (percent / 100.0))
-		min := base - tolerance
-		max := base + tolerance
-		return Range{Min: &min, Max: &max}, nil
+		minVal := base - tolerance
+		maxVal := base + tolerance
+		return Range{Min: &minVal, Max: &maxVal}, nil
 	}
 
 	if strings.HasPrefix(s, ">") {
-		min, err := humanToX(s[1:])
+		minVal, err := humanToX(s[1:])
 		if err != nil {
 			return Range{}, err
 		}
-		min++ // strictly greater
-		return Range{Min: &min}, nil
+		minVal++ // strictly greater
+		return Range{Min: &minVal}, nil
 	}
 	if strings.HasPrefix(s, "<") {
-		max, err := humanToX(s[1:])
+		maxVal, err := humanToX(s[1:])
 		if err != nil {
 			return Range{}, err
 		}
-		max-- // strictly less
-		return Range{Max: &max}, nil
+		maxVal-- // strictly less
+		return Range{Max: &maxVal}, nil
 	}
 	if strings.HasPrefix(s, "+") {
-		min, err := humanToX(s[1:])
+		minVal, err := humanToX(s[1:])
 		if err != nil {
 			return Range{}, err
 		}
-		return Range{Min: &min}, nil
+		return Range{Min: &minVal}, nil
 	}
 	if strings.HasPrefix(s, "-") {
-		max, err := humanToX(s[1:])
+		maxVal, err := humanToX(s[1:])
 		if err != nil {
 			return Range{}, err
 		}
-		return Range{Max: &max}, nil
+		return Range{Max: &maxVal}, nil
 	}
 
 	val, err := humanToX(s)
@@ -408,7 +408,7 @@ func PercentageDifference(v1, v2 float64) float64 {
 	return math.Abs((v1-v2)/((v1+v2)/2)) * 100
 }
 
-func ParsePercentileRange(s string) (min, max float64, ok bool) {
+func ParsePercentileRange(s string) (minVal, maxVal float64, ok bool) {
 	if !strings.HasPrefix(s, "p") {
 		return 0, 0, false
 	}
@@ -418,15 +418,15 @@ func ParsePercentileRange(s string) (min, max float64, ok bool) {
 		return 0, 0, false
 	}
 	var err error
-	min, err = strconv.ParseFloat(parts[0], 64)
+	minVal, err = strconv.ParseFloat(parts[0], 64)
 	if err != nil {
 		return 0, 0, false
 	}
-	max, err = strconv.ParseFloat(parts[1], 64)
+	maxVal, err = strconv.ParseFloat(parts[1], 64)
 	if err != nil {
 		return 0, 0, false
 	}
-	return min, max, true
+	return minVal, maxVal, true
 }
 
 func CalculateSegments(total float64, chunk float64, gap float64) []float64 {
@@ -504,7 +504,7 @@ func SafeFloat(s string) *float64 {
 	return &f
 }
 
-func SqlHumanTime(s string) string {
+func SQLHumanTime(s string) string {
 	if _, err := strconv.Atoi(s); err == nil {
 		return s + " minutes"
 	}

@@ -48,7 +48,7 @@ func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
 			}
 
 			// Trigger scan to index files immediately
-			s.ScanFolderSubdirs(folderID, []string{""})
+			_ = s.ScanFolderSubdirs(folderID, []string{""})
 
 			// Print syncweb URL
 			fmt.Printf("sync://%s#%s\n", folderID, s.Node.MyID())

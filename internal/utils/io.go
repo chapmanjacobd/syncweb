@@ -42,7 +42,7 @@ func IsSQLite(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	header := make([]byte, 16)
 	if _, err := f.Read(header); err != nil {
@@ -76,7 +76,7 @@ func ExpandStdin(paths []string) []string {
 }
 
 func Confirm(message string) bool {
-	fmt.Fprintf(Stdout, "%s [y/N]: ", message)
+	_, _ = fmt.Fprintf(Stdout, "%s [y/N]: ", message)
 	scanner := bufio.NewScanner(Stdin)
 	if scanner.Scan() {
 		response := strings.ToLower(strings.TrimSpace(scanner.Text()))
@@ -86,7 +86,7 @@ func Confirm(message string) bool {
 }
 
 func Prompt(message string) string {
-	fmt.Fprintf(Stdout, "%s: ", message)
+	_, _ = fmt.Fprintf(Stdout, "%s: ", message)
 	scanner := bufio.NewScanner(Stdin)
 	if scanner.Scan() {
 		return strings.TrimSpace(scanner.Text())

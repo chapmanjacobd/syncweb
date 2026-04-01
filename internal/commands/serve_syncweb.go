@@ -324,7 +324,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
-				cancel()
+				_ = cancel()
 				return
 			}
 
@@ -359,7 +359,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 			}
 			resultsMap[fullSyncwebPath] = entry
 		}
-		cancel()
+		_ = cancel()
 	}
 
 	results := make([]models.LsEntry, 0, len(resultsMap))
@@ -539,7 +539,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
-				cancel()
+				_ = cancel()
 				return
 			}
 
@@ -559,7 +559,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		cancel()
+		_ = cancel()
 	}
 
 	writeOK(w, results)

@@ -37,18 +37,18 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 		}
 
 		type deviceEntry struct {
-			ID         string
-			Name       string
-			Status     string
-			LastSeen   int64
-			Duration   int
-			Bandwidth  string
-			UL         float64
-			DL         float64
-			Connected  bool
-			Pending    bool
-			Discovered bool
-			Paused     bool
+			ID         string  `json:"id"`
+			Name       string  `json:"name"`
+			Status     string  `json:"status"`
+			LastSeen   int64   `json:"last_seen"`
+			Duration   int     `json:"duration"`
+			Bandwidth  string  `json:"bandwidth"`
+			UL         float64 `json:"ul"`
+			DL         float64 `json:"dl"`
+			Connected  bool    `json:"connected"`
+			Pending    bool    `json:"pending"`
+			Discovered bool    `json:"discovered"`
+			Paused     bool    `json:"paused"`
 		}
 
 		var devices []deviceEntry

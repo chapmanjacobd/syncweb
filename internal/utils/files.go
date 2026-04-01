@@ -34,7 +34,7 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
@@ -122,7 +122,7 @@ func FullHashFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
@@ -183,7 +183,7 @@ func IsFileOpen(path string) bool {
 		if err != nil {
 			return true
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		return false
 	}
 
@@ -340,13 +340,13 @@ func CopyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	d, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	if _, err := io.Copy(d, s); err != nil {
 		return err

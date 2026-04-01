@@ -27,7 +27,7 @@ func TestRandomString(t *testing.T) {
 	// Test hexadecimal characters
 	result = RandomString(20)
 	for _, c := range result {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("RandomString returned non-hexadecimal character: %c", c)
 		}
 	}

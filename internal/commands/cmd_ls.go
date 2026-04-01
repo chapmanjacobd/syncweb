@@ -144,7 +144,7 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 
 func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*fileEntry {
 	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
-	defer cancel()
+	defer func() { _ = cancel() }()
 
 	// Build a tree structure
 	tree := make(map[string]*fileEntry)
@@ -358,10 +358,10 @@ func (c *SyncwebLsCmd) printEntry(item *fileEntry, printHeader func()) {
 }
 
 type fileEntry struct {
-	Name     string
-	Path     string
-	IsDir    bool
-	Size     int64
-	ModTime  time.Time
-	Children map[string]*fileEntry
+	Name     string            `json:"name"`
+	Path     string            `json:"path"`
+	IsDir    bool              `json:"is_dir"`
+	Size     int64             `json:"size"`
+	ModTime  time.Time         `json:"mod_time"`
+	Children map[string]*fileEntry `json:"children,omitempty"`
 }

@@ -278,7 +278,7 @@ func TestRemovePrefixes(t *testing.T) {
 	}{
 		{"single prefix", "hello world", []string{"hello "}, "world"},
 		{"multiple prefixes", "the hello world", []string{"the ", "hello "}, "world"},
-		{"repeated prefix", "hello hello world", []string{"hello"}, "hello world"}, //nolint:dupword // intentional test case for repeated words
+		{"repeated prefix", "hello hello world", []string{"hello"}, " hello world"}, //nolint:dupword // intentional test case for repeated words
 		{"no prefix", "hello world", []string{"goodbye "}, "hello world"},
 		{"multiple prefix types", "the a hello", []string{"the ", "a "}, "hello"},
 	}

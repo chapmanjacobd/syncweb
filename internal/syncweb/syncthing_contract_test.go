@@ -38,7 +38,7 @@ func TestSyncthingContract_ConfigDefaults(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	cfg := sw.Node.Cfg.RawCopy()
 
@@ -100,7 +100,7 @@ func TestSyncthingContract_ConfigRawCopyIsolation(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	// CONTRACT: RawCopy() should return a deep copy, not the same reference
 	cfg1 := sw.Node.Cfg.RawCopy()
@@ -128,7 +128,7 @@ func TestSyncthingContract_ProtocolDeviceID(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	// CONTRACT: DeviceID from certificate should be non-empty
 	id := sw.Node.MyID()
@@ -235,7 +235,7 @@ func TestSyncthingContract_EventsLogger(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	// CONTRACT: Event logger should not be nil
 	if sw.Node.EvLogger == nil {
@@ -266,7 +266,7 @@ func TestSyncthingContract_EventsSubscription(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	sub := sw.Node.EvLogger.Subscribe(0) // 0 = all events
 
@@ -315,7 +315,7 @@ func TestSyncthingContract_AppInternals(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	// CONTRACT: App.Internals should not be nil
 	internals := sw.Node.App.Internals
@@ -369,7 +369,7 @@ func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -421,7 +421,7 @@ func TestSyncthingContract_AppInternalsFolderState(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -458,7 +458,7 @@ func TestSyncthingContract_AppInternalsAllGlobalFiles(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -493,7 +493,7 @@ func TestSyncthingContract_AppInternalsPendingFolders(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	internals := sw.Node.App.Internals
 
@@ -573,7 +573,7 @@ func TestSyncthingContract_InternalsGlobalFileInfo(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -603,7 +603,7 @@ func TestSyncthingContract_InternalsIsConnectedTo(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	internals := sw.Node.App.Internals
 
@@ -627,7 +627,7 @@ func TestSyncthingContract_BlockAvailability(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -643,10 +643,13 @@ func TestSyncthingContract_BlockAvailability(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: Get file info first
 	info, ok, err := internals.GlobalFileInfo(folderID, testFile)
@@ -675,7 +678,7 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -691,10 +694,13 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: Get file info first
 	info, ok, err := internals.GlobalFileInfo(folderID, testFile)
@@ -727,7 +733,7 @@ func TestSyncthingContract_Completion(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -776,7 +782,7 @@ func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -792,10 +798,13 @@ func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: Completion with non-existent device should return empty/zero values
 	// Generate a random device ID that doesn't exist
@@ -822,7 +831,7 @@ func TestSyncthingContract_DeviceStatistics(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	internals := sw.Node.App.Internals
 
@@ -860,7 +869,7 @@ func TestSyncthingContract_GlobalTree(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -923,7 +932,7 @@ func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -960,7 +969,7 @@ func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -976,10 +985,13 @@ func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: LocalChangedFolderFiles should return valid slice
 	// page=1, perpage=100
@@ -1010,7 +1022,7 @@ func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -1026,10 +1038,13 @@ func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: NeedFolderFiles should return three slices (remote, local, queued)
 	// page=1, perpage=100
@@ -1062,7 +1077,7 @@ func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -1109,7 +1124,7 @@ func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
@@ -1125,10 +1140,13 @@ func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	internals := sw.Node.App.Internals
+
+	// Trigger folder scan to ensure file is indexed
+	_ = internals.ScanFolderSubdirs(folderID, []string{""})
+
 	// Wait for file to be indexed
 	time.Sleep(500 * time.Millisecond)
-
-	internals := sw.Node.App.Internals
 
 	// CONTRACT: RemoteNeedFolderFiles with local device should return valid slice
 	files, err := internals.RemoteNeedFolderFiles(folderID, protocol.LocalDeviceID, 1, 100)

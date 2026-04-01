@@ -43,6 +43,11 @@ func (c *TestCluster) Close() {
 	for _, node := range c.Nodes {
 		node.Stop()
 	}
+	// Clean up Syncthing files to avoid "directory not empty" errors
+	for i := range c.Nodes {
+		home := filepath.Join(c.TempDir, fmt.Sprintf("node-%d", i))
+		_ = cleanupTestHomeDir(home)
+	}
 }
 
 func (c *TestCluster) ConnectAll(t *testing.T) {

@@ -186,12 +186,18 @@ func RemoveConsecutives(s string, chars []string) string {
 }
 
 func RemovePrefixes(s string, prefixes []string) string {
+	used := make(map[int]bool)
 	for {
 		changed := false
-		for _, prefix := range prefixes {
+		for i, prefix := range prefixes {
+			if used[i] {
+				continue
+			}
 			if after, ok := strings.CutPrefix(s, prefix); ok {
 				s = after
+				used[i] = true
 				changed = true
+				break
 			}
 		}
 		if !changed {
@@ -202,12 +208,18 @@ func RemovePrefixes(s string, prefixes []string) string {
 }
 
 func RemoveSuffixes(s string, suffixes []string) string {
+	used := make(map[int]bool)
 	for {
 		changed := false
-		for _, suffix := range suffixes {
+		for i, suffix := range suffixes {
+			if used[i] {
+				continue
+			}
 			if before, ok := strings.CutSuffix(s, suffix); ok {
 				s = before
+				used[i] = true
 				changed = true
+				break
 			}
 		}
 		if !changed {

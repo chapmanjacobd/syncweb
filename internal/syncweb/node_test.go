@@ -46,6 +46,7 @@ func testNodeBasicLifecycle(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	node.Stop()
+	_ = cleanupTestHomeDir(home)
 	if node.IsRunning() {
 		t.Error("node should not be running after stop")
 	}
@@ -62,7 +63,10 @@ func testNodeDoubleStart(t *testing.T) {
 	if err := node.Start(); err != nil {
 		t.Fatalf("failed to start node: %v", err)
 	}
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		_ = cleanupTestHomeDir(home)
+	}()
 
 	// Double start should be a no-op
 	if err := node.Start(); err != nil {
@@ -83,6 +87,7 @@ func testNodeDoubleStop(t *testing.T) {
 	}
 
 	node.Stop()
+	_ = cleanupTestHomeDir(home)
 	if node.IsRunning() {
 		t.Error("node should not be running after stop")
 	}
@@ -103,6 +108,7 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to start node: %v", err)
 	}
 	node.Stop()
+	_ = cleanupTestHomeDir(home)
 
 	// Re-create node from same home
 	node2, err := NewNode(home, "restart-node", "tcp://127.0.0.1:0")
@@ -114,6 +120,7 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to restart node: %v", err)
 	}
 	node2.Stop()
+	_ = cleanupTestHomeDir(home)
 }
 
 func testNodeInvalidHome(t *testing.T) {
@@ -126,6 +133,7 @@ func testNodeInvalidHome(t *testing.T) {
 
 func testNodeEmptyHome(t *testing.T) {
 	// Empty home should create a temp directory
+	// Note: We don't clean up the temp dir here since we don't track it
 	node, err := NewNode("", "test", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node with empty home: %v", err)
@@ -149,7 +157,10 @@ func TestNodeInvalidListenAddr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		_ = cleanupTestHomeDir(home)
+	}()
 
 	if err := node.Start(); err != nil {
 		t.Fatalf("failed to start node: %v", err)
@@ -163,7 +174,10 @@ func TestNodeMyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		_ = cleanupTestHomeDir(home)
+	}()
 
 	id := node.MyID()
 	if id.String() == "" {
@@ -184,7 +198,10 @@ func TestNodeSubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		_ = cleanupTestHomeDir(home)
+	}()
 
 	sub := node.Subscribe(0) // Subscribe to all events
 	if sub == nil {

@@ -356,10 +356,10 @@ func (c *SyncwebLsCmd) printEntry(item *fileEntry, printHeader func()) {
 }
 
 type fileEntry struct {
-	Name     string            `json:"name"`
-	Path     string            `json:"path"`
-	IsDir    bool              `json:"is_dir"`
-	Size     int64             `json:"size"`
-	ModTime  time.Time         `json:"mod_time"`
+	Name     string                `json:"name"`
+	Path     string                `json:"path"`
+	IsDir    bool                  `json:"is_dir"`
+	Size     int64                 `json:"size"`
+	ModTime  time.Time             `json:"mod_time"`
 	Children map[string]*fileEntry `json:"children,omitempty"`
 }

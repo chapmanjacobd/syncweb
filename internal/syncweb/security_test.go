@@ -18,7 +18,7 @@ func TestSecurity_SyncthingConfig(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	cfg := sw.Node.Cfg.RawCopy()
 
@@ -55,7 +55,7 @@ func TestSecurity_PathValidation(t *testing.T) {
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer sw.Stop()
+	defer stopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)

@@ -115,9 +115,9 @@ func Unmount(mountpoint string) error {
 
 	if targetDevice == nil {
 		// Fallback to simple unmount if device not found in lsblk
-		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mountpoint).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("unmount failed: %s: %w", string(out), err)
+		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mountpoint).CombinedOutput()
+		if umountErr != nil {
+			return fmt.Errorf("unmount failed: %s: %w", string(out), umountErr)
 		}
 		return nil
 	}
@@ -131,9 +131,9 @@ func Unmount(mountpoint string) error {
 		if mp == "" || strings.HasPrefix(mp, "[") {
 			continue
 		}
-		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("failed to unmount %s: %s: %w", mp, string(out), err)
+		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
+		if umountErr != nil {
+			return fmt.Errorf("failed to unmount %s: %s: %w", mp, string(out), umountErr)
 		}
 	}
 
@@ -151,8 +151,8 @@ func AutoCleanupMounts() error {
 		for _, d := range devs {
 			if len(d.Mountpoints) > 1 {
 				// Potential duplicates found, unmount them safely
-				if err := SafePrepareForRead(d.Name, devices); err != nil {
-					fmt.Printf("Warning: failed to cleanup mounts for %s: %v\n", d.Name, err)
+				if cleanupErr := SafePrepareForRead(d.Name, devices); cleanupErr != nil {
+					fmt.Printf("Warning: failed to cleanup mounts for %s: %v\n", d.Name, cleanupErr)
 				}
 			}
 			if len(d.Children) > 0 {
@@ -266,9 +266,9 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 		if mp == "/" {
 			continue // Safety
 		}
-		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("failed to unmount extra mountpoint %s: %s: %w", mp, string(out), err)
+		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
+		if umountErr != nil {
+			return fmt.Errorf("failed to unmount extra mountpoint %s: %s: %w", mp, string(out), umountErr)
 		}
 	}
 

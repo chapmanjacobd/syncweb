@@ -33,10 +33,10 @@ Examples:
 
 // SyncwebStatCmd displays detailed file status information
 type SyncwebStatCmd struct {
-	Paths       []string `help:"Files or directories to stat"    required:"" arg:""`
-	Terse       bool     `help:"Print information in terse form"                    short:"t"`
-	Format      string   `help:"Use custom format"                                  short:"c"`
-	Dereference bool     `help:"Follow symbolic links"                              short:"L"`
+	Paths       []string `help:"Files or directories to stat"    required:"true" arg:""`
+	Terse       bool     `help:"Print information in terse form"                        short:"t"`
+	Format      string   `help:"Use custom format"                                      short:"c"`
+	Dereference bool     `help:"Follow symbolic links"                                  short:"L"`
 }
 
 // Help displays examples for the stat command
@@ -72,10 +72,10 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
-					var err error
-					relPath, err = filepath.Rel(f.Path, absPath)
-					if err != nil {
-						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+					var relErr error
+					relPath, relErr = filepath.Rel(f.Path, absPath)
+					if relErr != nil {
+						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, relErr)
 						continue
 					}
 					break

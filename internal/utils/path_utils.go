@@ -122,8 +122,8 @@ func IsEmptyFolder(path string) bool {
 			return err
 		}
 		if !d.IsDir() {
-			info, err := d.Info()
-			if err == nil && info.Size() > 0 {
+			info, infoErr := d.Info()
+			if infoErr == nil && info.Size() > 0 {
 				empty = false
 				return filepath.SkipDir // Found a non-empty file, can stop
 			}
@@ -145,8 +145,8 @@ func FolderSize(path string) int64 {
 			return nil
 		}
 		if !d.IsDir() {
-			info, err := d.Info()
-			if err == nil {
+			info, infoErr := d.Info()
+			if infoErr == nil {
 				size += info.Size()
 			}
 		}
@@ -156,7 +156,7 @@ func FolderSize(path string) int64 {
 }
 
 // PathTupleFromURL returns (parentDir, filename) from a URL
-func PathTupleFromURL(rawURL string) (string, string) {
+func PathTupleFromURL(rawURL string) (parentDir, filename string) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", filepath.Base(rawURL)
@@ -169,10 +169,10 @@ func PathTupleFromURL(rawURL string) (string, string) {
 		return host, ""
 	}
 
-	filename := filepath.Base(path)
-	parent := SafeJoin(host, filepath.Dir(path))
+	filename = filepath.Base(path)
+	parentDir = SafeJoin(host, filepath.Dir(path))
 
-	return StripMountSyntax(parent), filename
+	return StripMountSyntax(parentDir), filename
 }
 
 type CleanPathOptions struct {

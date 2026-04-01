@@ -323,10 +323,7 @@ func (g *GlobalFlags) AfterApply() error {
 	if err := g.MediaFilterFlags.AfterApply(); err != nil {
 		return err
 	}
-	if err := g.MergeFlags.AfterApply(); err != nil {
-		return err
-	}
-	return nil
+	return g.MergeFlags.AfterApply()
 }
 
 var LogLevel = &slog.LevelVar{}

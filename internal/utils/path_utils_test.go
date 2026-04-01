@@ -11,9 +11,9 @@ import (
 
 func TestRandomString(t *testing.T) {
 	// Test length
-	result := utils.RandomString(10)
-	if len(result) != 10 {
-		t.Errorf("RandomString(10) returned string of length %d, expected 10", len(result))
+	firstResult := utils.RandomString(10)
+	if len(firstResult) != 10 {
+		t.Errorf("RandomString(10) returned string of length %d, expected 10", len(firstResult))
 	}
 
 	// Test uniqueness
@@ -27,8 +27,8 @@ func TestRandomString(t *testing.T) {
 	}
 
 	// Test hexadecimal characters
-	result = utils.RandomString(20)
-	for _, c := range result {
+	hexResult := utils.RandomString(20)
+	for _, c := range hexResult {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("RandomString returned non-hexadecimal character: %c", c)
 		}

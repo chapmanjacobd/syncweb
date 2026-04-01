@@ -236,9 +236,7 @@ linters:
       # Settings per analyzer.
       settings:
         shadow:
-          # Whether to be strict about shadowing; can be noisy.
-          # Default: false
-          strict: true
+          strict: false
 
     mnd:
       # List of function patterns to exclude from analysis.
@@ -391,7 +389,7 @@ linters:
     tagalign:
       align: true
       sort: true
-      strict: false
+      strict: true
       order:
         - help
         - required

@@ -276,10 +276,10 @@ func TestRename(t *testing.T) {
 	}
 
 	// Verify file was renamed
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
+	if _, statErr := os.Stat(src); !os.IsNotExist(statErr) {
 		t.Error("Source file should not exist after rename")
 	}
-	if _, err := os.Stat(dst); os.IsNotExist(err) {
+	if _, statErr := os.Stat(dst); os.IsNotExist(statErr) {
 		t.Error("Destination file should exist after rename")
 	}
 }
@@ -301,10 +301,10 @@ func TestRename_Simulate(t *testing.T) {
 	}
 
 	// Verify file was NOT renamed in simulate mode
-	if _, err := os.Stat(src); os.IsNotExist(err) {
+	if _, statErr := os.Stat(src); os.IsNotExist(statErr) {
 		t.Error("Source file should still exist in simulate mode")
 	}
-	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+	if _, statErr := os.Stat(dst); !os.IsNotExist(statErr) {
 		t.Error("Destination file should not exist in simulate mode")
 	}
 }
@@ -325,7 +325,7 @@ func TestUnlink(t *testing.T) {
 	}
 
 	// Verify file was deleted
-	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
+	if _, statErr := os.Stat(testFile); !os.IsNotExist(statErr) {
 		t.Error("File should not exist after unlink")
 	}
 }
@@ -346,7 +346,7 @@ func TestUnlink_Simulate(t *testing.T) {
 	}
 
 	// Verify file was NOT deleted in simulate mode
-	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(testFile); os.IsNotExist(statErr) {
 		t.Error("File should still exist in simulate mode")
 	}
 }
@@ -374,7 +374,7 @@ func TestRmtree(t *testing.T) {
 	}
 
 	// Verify directory was deleted
-	if _, err := os.Stat(testDir); !os.IsNotExist(err) {
+	if _, statErr := os.Stat(testDir); !os.IsNotExist(statErr) {
 		t.Error("Directory should not exist after rmtree")
 	}
 }
@@ -395,7 +395,7 @@ func TestRmtree_Simulate(t *testing.T) {
 	}
 
 	// Verify directory was NOT deleted in simulate mode
-	if _, err := os.Stat(testDir); os.IsNotExist(err) {
+	if _, statErr := os.Stat(testDir); os.IsNotExist(statErr) {
 		t.Error("Directory should still exist in simulate mode")
 	}
 }
@@ -553,7 +553,7 @@ func TestCopyDir(t *testing.T) {
 	}
 
 	// Verify directory structure was copied
-	if _, err := os.Stat(filepath.Join(dst, "subdir")); os.IsNotExist(err) {
+	if _, statErr := os.Stat(filepath.Join(dst, "subdir")); os.IsNotExist(statErr) {
 		t.Error("Subdirectory should exist in destination")
 	}
 

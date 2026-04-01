@@ -45,8 +45,8 @@ func SuperParser(dateStr string) *time.Time {
 		"20060102",
 	}
 	for _, l := range layouts {
-		if t, err := time.Parse(l, dateStr); err == nil {
-			return &t
+		if parsedTime, parseErr := time.Parse(l, dateStr); parseErr == nil {
+			return &parsedTime
 		}
 	}
 

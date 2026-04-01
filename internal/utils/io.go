@@ -45,7 +45,7 @@ func IsSQLite(path string) bool {
 	defer func() { _ = f.Close() }()
 
 	header := make([]byte, 16)
-	if _, err := f.Read(header); err != nil {
+	if _, readErr := f.Read(header); readErr != nil {
 		return false
 	}
 	return string(header) == "SQLite format 3\x00"

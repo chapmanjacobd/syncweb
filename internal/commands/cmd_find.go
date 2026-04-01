@@ -171,11 +171,10 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			} else {
 				// Try parsing as date
 				ts := utils.ParseDateOrRelative(c.ModifiedBefore)
-				if ts > 0 {
-					modifiedBeforeTS = &ts
-				} else {
+				if ts <= 0 {
 					return fmt.Errorf("invalid modified-before: %s", c.ModifiedBefore)
 				}
+				modifiedBeforeTS = &ts
 			}
 		}
 
@@ -209,11 +208,10 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 						modifiedAfterTS = &ts
 					} else {
 						ts := utils.ParseDateOrRelative(tm)
-						if ts > 0 {
-							modifiedAfterTS = &ts
-						} else {
+						if ts <= 0 {
 							return fmt.Errorf("invalid time-modified: %s", tm)
 						}
+						modifiedAfterTS = &ts
 					}
 				}
 			}

@@ -22,8 +22,8 @@ func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 	var trimmed string
 	if after, ok := strings.CutPrefix(rawURL, "sync://"); ok {
 		trimmed = after
-	} else if after, ok := strings.CutPrefix(rawURL, "syncweb://"); ok {
-		trimmed = after
+	} else if after2, ok2 := strings.CutPrefix(rawURL, "syncweb://"); ok2 {
+		trimmed = after2
 	} else {
 		return nil, fmt.Errorf("invalid sync URL: %s", rawURL)
 	}
@@ -136,7 +136,7 @@ func DeviceIDLong2Name(long string, devicesMap map[string]map[string]any) string
 
 	if devicesMap != nil {
 		if dev, ok := devicesMap[long]; ok {
-			if name, ok := dev["name"].(string); ok && name != "" {
+			if name, nameOk := dev["name"].(string); nameOk && name != "" {
 				nameLower := strings.ToLower(name)
 				if nameLower != "syncweb" && nameLower != "syncthing" {
 					return fmt.Sprintf("%s (%s)", name, short)

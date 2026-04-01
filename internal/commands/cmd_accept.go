@@ -32,8 +32,8 @@ Examples:
 
 // SyncwebAcceptCmd accepts devices and optionally adds them to folders
 type SyncwebAcceptCmd struct {
-	DeviceIDs  []string `help:"Syncthing device IDs (space or comma-separated)" required:"" name:"device-ids" arg:""`
-	FolderIDs  []string `help:"Add devices to folders"                                                               short:"f"`
+	DeviceIDs  []string `help:"Syncthing device IDs (space or comma-separated)" required:"true" name:"device-ids" arg:""`
+	FolderIDs  []string `help:"Add devices to folders"                                                                   short:"f"`
 	Introducer bool     `help:"Configure devices as introducers"`
 }
 

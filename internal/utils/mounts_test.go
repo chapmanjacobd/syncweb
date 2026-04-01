@@ -47,16 +47,16 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	}
 	defer exec.Command("sudo", "umount", mp1).Run()
 
-	if err := exec.Command("sudo", "mount", loopDev, mp2).Run(); err != nil {
-		t.Fatal(err)
+	if mountErr := exec.Command("sudo", "mount", loopDev, mp2).Run(); mountErr != nil {
+		t.Fatal(mountErr)
 	}
 	defer exec.Command("sudo", "umount", mp2).Run()
 
 	t.Logf("Mounted %s to %s and %s", loopDev, mp1, mp2)
 
 	// Call our Unmount function on mp1
-	if err := utils.Unmount(mp1); err != nil {
-		t.Fatalf("Unmount failed: %v", err)
+	if unmountErr := utils.Unmount(mp1); unmountErr != nil {
+		t.Fatalf("Unmount failed: %v", unmountErr)
 	}
 
 	// Verify both mp1 and mp2 are unmounted

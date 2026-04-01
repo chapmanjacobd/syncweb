@@ -54,13 +54,14 @@ func TestSyncwebCLI_Subcommands(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		ctx, err := parser.Parse(tt.args)
+		var parseCtx *kong.Context
+		parseCtx, err = parser.Parse(tt.args)
 		if err != nil {
 			t.Errorf("Failed to parse args %v: %v", tt.args, err)
 			continue
 		}
-		if !strings.HasPrefix(ctx.Command(), tt.cmd) {
-			t.Errorf("Expected command %s for args %v, got %s", tt.cmd, tt.args, ctx.Command())
+		if !strings.HasPrefix(parseCtx.Command(), tt.cmd) {
+			t.Errorf("Expected command %s for args %v, got %s", tt.cmd, tt.args, parseCtx.Command())
 		}
 	}
 }

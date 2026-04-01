@@ -123,7 +123,7 @@ func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
 	}
 }
 
-func (c *ServeCmd) resolveSyncwebPath(path string) (string, string, error) {
+func (c *ServeCmd) resolveSyncwebPath(path string) (folderID, localPath string, err error) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	if c.sw == nil {

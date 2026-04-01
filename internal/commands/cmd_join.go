@@ -29,8 +29,8 @@ Examples:
 
 // SyncwebJoinCmd joins sync folders/devices
 type SyncwebJoinCmd struct {
-	URLs   []string `help:"Sync URLs (sync://folder-id#device-id)" required:"" name:"urls" arg:""`
-	Prefix string   `help:"Path to parent folder"                                                 default:"." env:"SYNCWEB_HOME"`
+	URLs   []string `help:"Sync URLs (sync://folder-id#device-id)" required:"true" name:"urls" arg:""`
+	Prefix string   `help:"Path to parent folder"                                                     default:"." env:"SYNCWEB_HOME"`
 }
 
 // Help displays examples for the join command

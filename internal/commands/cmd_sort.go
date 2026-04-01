@@ -84,10 +84,10 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
-					var err error
-					relPath, err = filepath.Rel(f.Path, absPath)
-					if err != nil {
-						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
+					var relErr error
+					relPath, relErr = filepath.Rel(f.Path, absPath)
+					if relErr != nil {
+						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, relErr)
 						continue
 					}
 					break

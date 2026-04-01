@@ -149,7 +149,7 @@ func TestPercentageDifference(t *testing.T) {
 	}
 	for _, tt := range tests {
 		got := utils.PercentageDifference(tt.v1, tt.v2)
-		if reflect.DeepEqual(got, tt.want) == false && (got-tt.want) > 0.000001 {
+		if !reflect.DeepEqual(got, tt.want) && (got-tt.want) > 0.000001 {
 			t.Errorf("PercentageDifference(%v, %v) = %v, want %v", tt.v1, tt.v2, got, tt.want)
 		}
 	}

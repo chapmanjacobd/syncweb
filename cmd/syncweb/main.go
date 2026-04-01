@@ -40,7 +40,7 @@ func main() {
 
 	err = ctx.Run()
 	if err != nil {
-		slog.Error("Syncweb command failed", "error", err)
+		logger.Error("Syncweb command failed", "error", err)
 		os.Exit(1)
 	}
 }

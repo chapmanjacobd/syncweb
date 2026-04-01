@@ -356,7 +356,7 @@ func (s *Syncweb) AddFolder(id, label, path string, folderType config.FolderType
 		return err
 	}
 
-	if err := os.MkdirAll(absPath, 0o700); err != nil {
+	if err = os.MkdirAll(absPath, 0o700); err != nil {
 		return err
 	}
 
@@ -377,10 +377,7 @@ func (s *Syncweb) AddFolder(id, label, path string, folderType config.FolderType
 	waiter.Wait()
 
 	// Save config to ensure changes are persisted
-	if err := s.Node.Cfg.Save(); err != nil {
-		return err
-	}
-	return nil
+	return s.Node.Cfg.Save()
 }
 
 // AddFolderDevice shares a folder with a device
@@ -629,11 +626,11 @@ func (s *Syncweb) GetDevices() []DeviceInfo {
 
 // ResolveLocalPath resolves a sync:// or syncweb:// URL to a local filesystem path,
 // ensuring the path is within the folder's root directory
-func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
+func (s *Syncweb) ResolveLocalPath(syncPath string) (folderID, localPath string, err error) {
 	var trimmed string
 	if after, ok := strings.CutPrefix(syncPath, "sync://"); ok {
 		trimmed = after
-	} else if after2, ok := strings.CutPrefix(syncPath, "syncweb://"); ok {
+	} else if after2, ok2 := strings.CutPrefix(syncPath, "syncweb://"); ok2 {
 		trimmed = after2
 	} else {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
@@ -644,7 +641,7 @@ func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
 	}
 
-	folderID := parts[0]
+	folderID = parts[0]
 	relativePath := filepath.Clean(parts[1])
 
 	if strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
@@ -654,13 +651,13 @@ func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 	cfg := s.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
 		if f.ID == folderID {
-			fullPath := filepath.Join(f.Path, relativePath)
+			localPath = filepath.Join(f.Path, relativePath)
 			// Final safety check: ensure the joined path is still within f.Path
-			rel, err := filepath.Rel(f.Path, fullPath)
-			if err != nil || strings.HasPrefix(rel, "..") {
+			rel, relErr := filepath.Rel(f.Path, localPath)
+			if relErr != nil || strings.HasPrefix(rel, "..") {
 				return "", "", fmt.Errorf("traversal detected: %s", relativePath)
 			}
-			return fullPath, folderID, nil
+			return localPath, folderID, nil
 		}
 	}
 

@@ -10,7 +10,10 @@ func TestParseDate(t *testing.T) {
 		input string
 		want  int64
 	}{
-		{"2024-01-01", 1704067200}, // Depends on local timezone if not specified, but time.Parse uses UTC if no offset. Wait, time.Parse uses UTC for "2006-01-02" if no timezone
+		{
+			"2024-01-01",
+			1704067200,
+		}, // Depends on local timezone if not specified, but time.Parse uses UTC if no offset. Wait, time.Parse uses UTC for "2006-01-02" if no timezone
 		{"2024-01-01 12:00", 1704110400},
 		{"invalid", 0},
 	}

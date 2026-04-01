@@ -61,7 +61,6 @@ linters:
     - decorder
     - dogsled
     - dupl
-    - dupword
     - durationcheck
     - errchkjson
     - errname
@@ -398,7 +397,7 @@ linters:
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
 
     tagalign:
-      align: false
+      align: true
       sort: true
       strict: false
       order:

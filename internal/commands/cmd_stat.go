@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
 // Stat command examples
@@ -32,10 +33,10 @@ Examples:
 
 // SyncwebStatCmd displays detailed file status information
 type SyncwebStatCmd struct {
-	Paths       []string `help:"Files or directories to stat" required:"" arg:""`
-	Terse       bool     `help:"Print information in terse form" short:"t"`
-	Format      string   `help:"Use custom format"               short:"c"`
-	Dereference bool     `help:"Follow symbolic links"           short:"L"`
+	Paths       []string `help:"Files or directories to stat"    required:"" arg:""`
+	Terse       bool     `help:"Print information in terse form"                    short:"t"`
+	Format      string   `help:"Use custom format"                                  short:"c"`
+	Dereference bool     `help:"Follow symbolic links"                              short:"L"`
 }
 
 // Help displays examples for the stat command

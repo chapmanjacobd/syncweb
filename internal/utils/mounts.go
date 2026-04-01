@@ -65,7 +65,8 @@ func FilterMountpoints(devices []models.BlockDevice) []models.Mountpoint {
 }
 
 func GetBlockDevices() ([]models.BlockDevice, error) {
-	out, err := exec.CommandContext(context.Background(), "lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").Output()
+	out, err := exec.CommandContext(context.Background(), "lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").
+		Output()
 	if err != nil {
 		return nil, fmt.Errorf("lsblk failed: %w", err)
 	}
@@ -82,7 +83,7 @@ func ParseLsblkOutput(data []byte) ([]models.BlockDevice, error) {
 	return res.Blockdevices, nil
 }
 
-func Mount(device string, mountpoint string) error {
+func Mount(device, mountpoint string) error {
 	out, err := exec.CommandContext(context.Background(), "mount", device, mountpoint).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mount failed: %s: %w", string(out), err)

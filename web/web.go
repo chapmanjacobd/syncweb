@@ -19,6 +19,11 @@ func init() {
 	var err error
 	FS, err = fs.Sub(fsRaw, "dist")
 	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize embedded filesystem: %v. Ensure the 'dist' directory exists before building.", err))
+		panic(
+			fmt.Sprintf(
+				"Failed to initialize embedded filesystem: %v. Ensure the 'dist' directory exists before building.",
+				err,
+			),
+		)
 	}
 }

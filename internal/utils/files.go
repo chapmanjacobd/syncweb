@@ -12,8 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/gabriel-vasile/mimetype"
+
+	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
 // Constants for chunk size interpolation

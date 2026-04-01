@@ -13,11 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
 	stmodel "github.com/syncthing/syncthing/lib/model"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
 // Constants for syncweb configuration
@@ -105,7 +106,7 @@ type Syncweb struct {
 	eventSubMu     sync.Mutex
 }
 
-func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error) {
+func NewSyncweb(homeDir, name, listenAddr string) (*Syncweb, error) {
 	node, err := NewNode(homeDir, name, listenAddr)
 	if err != nil {
 		return nil, err
@@ -122,7 +123,7 @@ func NewSyncweb(homeDir string, name string, listenAddr string) (*Syncweb, error
 	return s, nil
 }
 
-func (s *Syncweb) addEvent(evType string, message string, data any) {
+func (s *Syncweb) addEvent(evType, message string, data any) {
 	s.eventsMu.Lock()
 	defer s.eventsMu.Unlock()
 
@@ -290,7 +291,7 @@ func (s *Syncweb) ScanFolderSubdirs(folderID string, paths []string) error {
 }
 
 // AddDevice adds a device to the Syncthing configuration
-func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error {
+func (s *Syncweb) AddDevice(deviceID, name string, introducer bool) error {
 	id, err := protocol.DeviceIDFromString(deviceID)
 	if err != nil {
 		return err
@@ -341,7 +342,7 @@ func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error 
 }
 
 // AddFolder adds a folder to the Syncthing configuration
-func (s *Syncweb) AddFolder(id string, label string, path string, folderType config.FolderType) error {
+func (s *Syncweb) AddFolder(id, label, path string, folderType config.FolderType) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return err
@@ -375,7 +376,7 @@ func (s *Syncweb) AddFolder(id string, label string, path string, folderType con
 }
 
 // AddFolderDevice shares a folder with a device
-func (s *Syncweb) AddFolderDevice(folderID string, deviceID string) error {
+func (s *Syncweb) AddFolderDevice(folderID, deviceID string) error {
 	devID, err := protocol.DeviceIDFromString(deviceID)
 	if err != nil {
 		return err
@@ -793,7 +794,15 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		var downloadErr error
 		for _, peer := range availables {
 			startTime := time.Now()
-			data, downloadErr = r.s.Node.App.Internals.DownloadBlock(r.ctx, peer.ID, r.folderID, r.info.Name, int(i), block, peer.FromTemporary)
+			data, downloadErr = r.s.Node.App.Internals.DownloadBlock(
+				r.ctx,
+				peer.ID,
+				r.folderID,
+				r.info.Name,
+				int(i),
+				block,
+				peer.FromTemporary,
+			)
 			r.s.Measurements.Record(peer.ID, time.Since(startTime), downloadErr)
 			if downloadErr == nil {
 				break
@@ -1032,7 +1041,11 @@ func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (ma
 // GetGlobalTree returns folder tree structure for browsing
 // levels: -1 for all levels, 0 for root only, etc
 // returnOnlyDirectories: if true, only return directory entries
-func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]map[string]any, error) {
+func (s *Syncweb) GetGlobalTree(
+	folderID, prefix string,
+	levels int,
+	returnOnlyDirectories bool,
+) ([]map[string]any, error) {
 	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
 	if err != nil {
 		return nil, err
@@ -1098,7 +1111,11 @@ func (s *Syncweb) GetNeedFiles(folderID string, page, perPage int) (remote, loca
 }
 
 // GetRemoteNeedFiles returns files needed by a specific remote device
-func (s *Syncweb) GetRemoteNeedFiles(folderID string, deviceID protocol.DeviceID, page, perPage int) ([]map[string]any, error) {
+func (s *Syncweb) GetRemoteNeedFiles(
+	folderID string,
+	deviceID protocol.DeviceID,
+	page, perPage int,
+) ([]map[string]any, error) {
 	files, err := s.Node.App.Internals.RemoteNeedFolderFiles(folderID, deviceID, page, perPage)
 	if err != nil {
 		return nil, err

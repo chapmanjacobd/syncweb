@@ -33,14 +33,14 @@ Examples:
 
 // SyncwebSortCmd sorts Syncthing files by multiple criteria
 type SyncwebSortCmd struct {
-	Paths          []string `help:"File paths to sort (or read from stdin)" arg:"" optional:""`
-	Sort           []string `help:"Sort by: name, size, seeds, niche, frecency, modified" default:"name"`
-	LimitSize      string   `help:"Stop after printing N bytes"            short:"S"`
+	Paths          []string `help:"File paths to sort (or read from stdin)"               arg:"" optional:""`
+	Sort           []string `help:"Sort by: name, size, seeds, niche, frecency, modified"                    default:"name"`
+	LimitSize      string   `help:"Stop after printing N bytes"                                                             short:"S"`
 	MinSeeders     int      `help:"Filter files with fewer than N seeders"`
 	MaxSeeders     int      `help:"Filter files with more than N seeders"`
-	Niche          int      `help:"Ideal peer count for niche sorting" default:"3"`
-	FrecencyWeight int      `help:"Recency weight for frecency (lower=more recency)" default:"3"`
-	Depth          []string `help:"Depth constraints"                      short:"d"`
+	Niche          int      `help:"Ideal peer count for niche sorting"                                       default:"3"`
+	FrecencyWeight int      `help:"Recency weight for frecency (lower=more recency)"                         default:"3"`
+	Depth          []string `help:"Depth constraints"                                                                       short:"d"`
 	MinDepth       int      `help:"Minimum depth"`
 	MaxDepth       int      `help:"Maximum depth"`
 }
@@ -220,7 +220,7 @@ func calculateFrecency(f fileWithInfo, weight int) float64 {
 // modified: Unix timestamp of last modification
 // seeders: number of devices that have the file (popularity measure)
 // weight: importance of recency vs frequency (higher = more weight on recency)
-func FrecencyScore(modified int64, seeders int, weight int) float64 {
+func FrecencyScore(modified int64, seeders, weight int) float64 {
 	now := time.Now().Unix()
 
 	age := float64(now - modified)

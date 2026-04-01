@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/syncthing/syncthing/lib/config"
+
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
-	"github.com/syncthing/syncthing/lib/config"
 )
 
 // Join command examples
@@ -29,7 +30,7 @@ Examples:
 // SyncwebJoinCmd joins sync folders/devices
 type SyncwebJoinCmd struct {
 	URLs   []string `help:"Sync URLs (sync://folder-id#device-id)" required:"" name:"urls" arg:""`
-	Prefix string   `help:"Path to parent folder" default:"." env:"SYNCWEB_HOME"`
+	Prefix string   `help:"Path to parent folder"                                                 default:"." env:"SYNCWEB_HOME"`
 }
 
 // Help displays examples for the join command

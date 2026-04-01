@@ -10,10 +10,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/chapmanjacobd/syncweb/internal/syncweb"
-	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 // Download command examples
@@ -37,7 +38,7 @@ Examples:
 
 // SyncwebDownloadCmd marks file paths for download/sync
 type SyncwebDownloadCmd struct {
-	Paths []string `help:"File or directory paths to download" arg:"" optional:""`
+	Paths []string `help:"File or directory paths to download"   arg:"" optional:""`
 	Depth int      `help:"Maximum depth for directory traversal"`
 }
 
@@ -293,8 +294,14 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	// stat.Bavail = free blocks available to non-super user
 	// stat.Blocks = total data blocks in filesystem
 	// stat.Bsize = block size
-	free := safeMulUint64(uint64(stat.Bavail), uint64(stat.Bsize))  //nolint:unconvert // explicit conversion for clarity
-	total := safeMulUint64(uint64(stat.Blocks), uint64(stat.Bsize)) //nolint:unconvert // explicit conversion for clarity
+	free := safeMulUint64(
+		uint64(stat.Bavail),
+		uint64(stat.Bsize),
+	)
+	total := safeMulUint64(
+		uint64(stat.Blocks),
+		uint64(stat.Bsize),
+	)
 
 	// Calculate minimum free space to preserve
 	minFree := calculateMinDiskFree(total, minFreeCfg)
@@ -389,7 +396,6 @@ func calculateMountpointUsage(
 	folderSpaceInfos map[string]*folderSpaceInfo,
 	itemsByFolder map[string][]downloadItem,
 ) map[string]*mountpointUsageInfo {
-
 	result := make(map[string]*mountpointUsageInfo)
 
 	for mountpoint, folderIDs := range mountpointGroups {
@@ -449,7 +455,6 @@ func printDownloadSummary(
 	mountpointUsage map[string]*mountpointUsageInfo,
 	mountpointGroups map[string][]string,
 ) {
-
 	fmt.Println("\nDownload Summary:")
 	fmt.Println(strings.Repeat("-", 135))
 	fmt.Printf("%-40s %8s %12s %12s %12s %15s %8s\n",
@@ -531,7 +536,6 @@ func generateWarnings(
 	mountpointUsage map[string]*mountpointUsageInfo,
 	folderSpaceInfos map[string]*folderSpaceInfo,
 ) []string {
-
 	var warnings []string
 
 	for mp, info := range mountpointUsage {
@@ -541,9 +545,16 @@ func generateWarnings(
 				if len(info.FolderIDs) > 3 {
 					folderList += fmt.Sprintf(", ... (%d total)", len(info.FolderIDs))
 				}
-				warnings = append(warnings,
-					fmt.Sprintf("Shared mountpoint (%s): Combined download size (%s) exceeds usable space (%s) across folders: %s",
-						mp, utils.FormatSize(info.TotalDownload), utils.FormatSize(info.Usable), folderList))
+				warnings = append(
+					warnings,
+					fmt.Sprintf(
+						"Shared mountpoint (%s): Combined download size (%s) exceeds usable space (%s) across folders: %s",
+						mp,
+						utils.FormatSize(info.TotalDownload),
+						utils.FormatSize(info.Usable),
+						folderList,
+					),
+				)
 			} else {
 				folderID := info.FolderIDs[0]
 				spaceInfo := folderSpaceInfos[folderID]

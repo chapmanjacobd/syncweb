@@ -30,7 +30,7 @@ Examples:
 // SyncwebDropCmd removes devices from syncweb
 type SyncwebDropCmd struct {
 	DeviceIDs []string `help:"Syncthing device IDs (space or comma-separated)" required:"" name:"device-ids" arg:""`
-	FolderIDs []string `help:"Remove devices from folders" short:"f"`
+	FolderIDs []string `help:"Remove devices from folders"                                                          short:"f"`
 }
 
 // Help displays examples for the drop command

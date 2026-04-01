@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
+
 	"github.com/chapmanjacobd/syncweb/internal/commands"
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/utils"

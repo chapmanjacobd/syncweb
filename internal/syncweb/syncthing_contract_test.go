@@ -770,7 +770,12 @@ func TestSyncthingContract_Completion(t *testing.T) {
 	}
 
 	// Note: For local device with no remote, completion may show 100% or N/A
-	t.Logf("Completion: CompletionPct=%f, NeedBytes=%d, NeedItems=%d", comp.CompletionPct, comp.NeedBytes, comp.NeedItems)
+	t.Logf(
+		"Completion: CompletionPct=%f, NeedBytes=%d, NeedItems=%d",
+		comp.CompletionPct,
+		comp.NeedBytes,
+		comp.NeedItems,
+	)
 }
 
 func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
@@ -918,7 +923,11 @@ func TestSyncthingContract_GlobalTree(t *testing.T) {
 	}
 	for _, entry := range treeDirsOnly {
 		if entry.Type != "FILE_INFO_TYPE_DIRECTORY" {
-			t.Errorf("GlobalTree with returnOnlyDirectories=true returned non-dir entry: %s (type=%s)", entry.Name, entry.Type)
+			t.Errorf(
+				"GlobalTree with returnOnlyDirectories=true returned non-dir entry: %s (type=%s)",
+				entry.Name,
+				entry.Type,
+			)
 		}
 	}
 }
@@ -1108,7 +1117,13 @@ func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
 
 	// Verify pagination limits results
 	totalFiles := len(remote) + len(local) + len(queued)
-	t.Logf("NeedFolderFiles page=1, perpage=2: remote=%d, local=%d, queued=%d (total=%d)", len(remote), len(local), len(queued), totalFiles)
+	t.Logf(
+		"NeedFolderFiles page=1, perpage=2: remote=%d, local=%d, queued=%d (total=%d)",
+		len(remote),
+		len(local),
+		len(queued),
+		totalFiles,
+	)
 }
 
 // =============================================================================

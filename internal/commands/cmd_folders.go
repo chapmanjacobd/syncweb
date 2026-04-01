@@ -11,10 +11,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/chapmanjacobd/syncweb/internal/syncweb"
-	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 // Folders command examples
@@ -137,7 +138,9 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					if info, err := os.Stat(f.Path); err == nil && info.IsDir() {
 						var stat syscall.Statfs_t
 						if err := syscall.Statfs(f.Path, &stat); err == nil {
-							entry.FreeSpace = utils.FormatSize(int64(stat.Bavail) * int64(stat.Bsize)) //nolint:unconvert // explicit conversion for clarity
+							entry.FreeSpace = utils.FormatSize(
+								int64(stat.Bavail) * int64(stat.Bsize),
+							)
 						}
 					}
 				}
@@ -298,8 +301,20 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 		}
 
 		// Print table
-		fmt.Printf("%-15s  %-8s  %-28s  %-18s  %-18s  %-20s  %-8s  %-15s  %-6s  %-10s  %s\n",
-			"Folder ID", "Label", "Path", "Local", "Needed", "Global", "Free", "Sync Status", "Peers", "State", "Errors")
+		fmt.Printf(
+			"%-15s  %-8s  %-28s  %-18s  %-18s  %-20s  %-8s  %-15s  %-6s  %-10s  %s\n",
+			"Folder ID",
+			"Label",
+			"Path",
+			"Local",
+			"Needed",
+			"Global",
+			"Free",
+			"Sync Status",
+			"Peers",
+			"State",
+			"Errors",
+		)
 		fmt.Println(strings.Repeat("-", 170))
 
 		for _, f := range filtered {

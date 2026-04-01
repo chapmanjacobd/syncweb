@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syncthing/syncthing/lib/protocol"
+
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
-	"github.com/syncthing/syncthing/lib/protocol"
 )
 
 // Ls command examples
@@ -39,12 +40,12 @@ Examples:
 
 // SyncwebLsCmd lists files at the current directory level
 type SyncwebLsCmd struct {
-	Paths         []string `help:"Path relative to the root" default:"." arg:"" optional:""`
-	Long          bool     `help:"Use long listing format"               short:"l"`
-	HumanReadable bool     `help:"Print sizes in human readable format" default:"true"`
-	FolderSize    bool     `help:"Include accurate subfolder size" default:"true"`
-	ShowAll       bool     `help:"Do not ignore entries starting with ." short:"a"`
-	Depth         int      `help:"Descend N directory levels deep" default:"0" short:"D"`
+	Paths         []string `help:"Path relative to the root"             default:"."    arg:"" optional:""`
+	Long          bool     `help:"Use long listing format"                                                 short:"l"`
+	HumanReadable bool     `help:"Print sizes in human readable format"  default:"true"`
+	FolderSize    bool     `help:"Include accurate subfolder size"       default:"true"`
+	ShowAll       bool     `help:"Do not ignore entries starting with ."                                   short:"a"`
+	Depth         int      `help:"Descend N directory levels deep"       default:"0"                       short:"D"`
 	NoHeader      bool     `help:"Suppress header in long format"`
 }
 

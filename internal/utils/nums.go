@@ -429,7 +429,7 @@ func ParsePercentileRange(s string) (minVal, maxVal float64, ok bool) {
 	return minVal, maxVal, true
 }
 
-func CalculateSegments(total float64, chunk float64, gap float64) []float64 {
+func CalculateSegments(total, chunk, gap float64) []float64 {
 	if total <= 0 || chunk <= 0 {
 		return nil
 	}
@@ -454,7 +454,7 @@ func CalculateSegments(total float64, chunk float64, gap float64) []float64 {
 	return append(segments, endSegmentStart)
 }
 
-func CalculateSegmentsInt(total int64, chunk int64, gap float64) []int64 {
+func CalculateSegmentsInt(total, chunk int64, gap float64) []int64 {
 	if total <= 0 || chunk <= 0 {
 		return nil
 	}

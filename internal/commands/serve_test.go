@@ -107,16 +107,64 @@ func TestCSRFProtection(t *testing.T) {
 		{"GET no origin", http.MethodGet, "127.0.0.1:12345", "localhost:8889", "", "", http.StatusOK},
 
 		// POST with valid localhost origin
-		{"POST localhost origin", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "http://localhost:8889", "", http.StatusOK},
-		{"POST 127.0.0.1 origin", http.MethodPost, "127.0.0.1:12345", "127.0.0.1:8889", "http://127.0.0.1:8889", "", http.StatusOK},
+		{
+			"POST localhost origin",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"localhost:8889",
+			"http://localhost:8889",
+			"",
+			http.StatusOK,
+		},
+		{
+			"POST 127.0.0.1 origin",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"127.0.0.1:8889",
+			"http://127.0.0.1:8889",
+			"",
+			http.StatusOK,
+		},
 
 		// POST with external origin - should be blocked
-		{"POST external origin", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "http://evil.com", "", http.StatusForbidden},
-		{"POST private network origin", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "http://192.168.1.1", "", http.StatusForbidden},
+		{
+			"POST external origin",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"localhost:8889",
+			"http://evil.com",
+			"",
+			http.StatusForbidden,
+		},
+		{
+			"POST private network origin",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"localhost:8889",
+			"http://192.168.1.1",
+			"",
+			http.StatusForbidden,
+		},
 
 		// POST with valid localhost referer (when origin is empty)
-		{"POST localhost referer", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "", "http://localhost:8889/page", http.StatusOK},
-		{"POST external referer", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "", "http://evil.com/page", http.StatusForbidden},
+		{
+			"POST localhost referer",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"localhost:8889",
+			"",
+			"http://localhost:8889/page",
+			http.StatusOK,
+		},
+		{
+			"POST external referer",
+			http.MethodPost,
+			"127.0.0.1:12345",
+			"localhost:8889",
+			"",
+			"http://evil.com/page",
+			http.StatusForbidden,
+		},
 
 		// POST without origin/referer should be allowed (e.g., API clients)
 		{"POST no origin from local", http.MethodPost, "127.0.0.1:12345", "localhost:8889", "", "", http.StatusOK},
@@ -164,7 +212,13 @@ func TestAuthMiddleware_TokenValidation(t *testing.T) {
 		expectedStatus int
 	}{
 		{"Valid token", "127.0.0.1:12345", "localhost:8889", "test-token-12345", http.StatusOK},
-		{"Invalid token from remote", "192.168.1.100:12345", "example.com:8889", "wrong-token", http.StatusUnauthorized},
+		{
+			"Invalid token from remote",
+			"192.168.1.100:12345",
+			"example.com:8889",
+			"wrong-token",
+			http.StatusUnauthorized,
+		},
 		{"No token from remote", "192.168.1.100:12345", "example.com:8889", "", http.StatusUnauthorized},
 		{"Local request without token", "127.0.0.1:12345", "localhost:8889", "", http.StatusOK},
 	}

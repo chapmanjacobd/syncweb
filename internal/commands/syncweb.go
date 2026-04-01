@@ -10,12 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sevlyar/go-daemon"
+	"github.com/syncthing/syncthing/lib/config"
+
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/chapmanjacobd/syncweb/internal/version"
-	"github.com/sevlyar/go-daemon"
-	"github.com/syncthing/syncthing/lib/config"
 )
 
 // Constants for automatic sync operations
@@ -78,24 +79,24 @@ type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
 
-	Create    SyncwebCreateCmd    `help:"Create a syncweb folder" cmd:"" aliases:"init,in,share"`
-	Join      SyncwebJoinCmd      `help:"Join syncweb folders/devices" cmd:"" aliases:"import,clone"`
-	Accept    SyncwebAcceptCmd    `help:"Add a device to syncweb" cmd:"" aliases:"add"`
-	Drop      SyncwebDropCmd      `help:"Remove a device from syncweb" cmd:"" aliases:"remove,reject"`
-	Folders   SyncwebFoldersCmd   `help:"List Syncthing folders" cmd:"" aliases:"list-folders,lsf"`
-	Devices   SyncwebDevicesCmd   `help:"List Syncthing devices" cmd:"" aliases:"list-devices,lsd"`
-	Ls        SyncwebLsCmd        `help:"List files at the current directory level" cmd:"" aliases:"list"`
-	Find      SyncwebFindCmd      `help:"Search for files by filename, size, and modified date" cmd:"" aliases:"fd,search"`
-	Scan      SyncwebScanCmd      `help:"Trigger a scan on all folders" cmd:""`
+	Create    SyncwebCreateCmd    `help:"Create a syncweb folder"                                 cmd:"" aliases:"init,in,share"`
+	Join      SyncwebJoinCmd      `help:"Join syncweb folders/devices"                            cmd:"" aliases:"import,clone"`
+	Accept    SyncwebAcceptCmd    `help:"Add a device to syncweb"                                 cmd:"" aliases:"add"`
+	Drop      SyncwebDropCmd      `help:"Remove a device from syncweb"                            cmd:"" aliases:"remove,reject"`
+	Folders   SyncwebFoldersCmd   `help:"List Syncthing folders"                                  cmd:"" aliases:"list-folders,lsf"`
+	Devices   SyncwebDevicesCmd   `help:"List Syncthing devices"                                  cmd:"" aliases:"list-devices,lsd"`
+	Ls        SyncwebLsCmd        `help:"List files at the current directory level"               cmd:"" aliases:"list"`
+	Find      SyncwebFindCmd      `help:"Search for files by filename, size, and modified date"   cmd:"" aliases:"fd,search"`
+	Scan      SyncwebScanCmd      `help:"Trigger a scan on all folders"                           cmd:""`
 	Stat      SyncwebStatCmd      `help:"Display detailed file status information from Syncthing" cmd:""`
-	Sort      SyncwebSortCmd      `help:"Sort Syncthing files by multiple criteria" cmd:""`
-	Download  SyncwebDownloadCmd  `help:"Mark file paths for download/sync" cmd:"" aliases:"dl,upload,unignore,sync"`
-	Automatic SyncwebAutomaticCmd `help:"Start syncweb-automatic daemon" cmd:""`
-	Serve     ServeCmd            `help:"Start the Syncweb Web UI server" cmd:""`
-	Start     SyncwebStartCmd     `help:"Start Syncweb daemon" cmd:"" aliases:"restart"`
-	Stop      SyncwebStopCmd      `help:"Stop Syncweb daemon" cmd:"" aliases:"shutdown,quit"`
-	Version   SyncwebVersionCmd   `help:"Show Syncweb version" cmd:""`
-	Repl      SyncwebReplCmd      `help:"Interactive REPL for debugging" cmd:"" aliases:"debug"`
+	Sort      SyncwebSortCmd      `help:"Sort Syncthing files by multiple criteria"               cmd:""`
+	Download  SyncwebDownloadCmd  `help:"Mark file paths for download/sync"                       cmd:"" aliases:"dl,upload,unignore,sync"`
+	Automatic SyncwebAutomaticCmd `help:"Start syncweb-automatic daemon"                          cmd:""`
+	Serve     ServeCmd            `help:"Start the Syncweb Web UI server"                         cmd:""`
+	Start     SyncwebStartCmd     `help:"Start Syncweb daemon"                                    cmd:"" aliases:"restart"`
+	Stop      SyncwebStopCmd      `help:"Stop Syncweb daemon"                                     cmd:"" aliases:"shutdown,quit"`
+	Version   SyncwebVersionCmd   `help:"Show Syncweb version"                                    cmd:""`
+	Repl      SyncwebReplCmd      `help:"Interactive REPL for debugging"                          cmd:"" aliases:"debug"`
 }
 
 func (c *SyncwebCmd) AfterApply() error {
@@ -121,14 +122,14 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
 type SyncwebAutomaticCmd struct {
 	Devices        bool     `help:"Auto-accept devices"`
 	Folders        bool     `help:"Auto-join folders"`
-	Local          bool     `help:"Only auto-accept local devices" default:"true"`
+	Local          bool     `help:"Only auto-accept local devices"                       default:"true"`
 	FoldersInclude []string `help:"Search for folders which match by label, ID, or path"`
 	FoldersExclude []string `help:"Exclude folders which match by label, ID, or path"`
 	FolderTypes    []string `help:"Filter folders by type"`
 	DevicesInclude []string `help:"Search for devices which match by name or ID"`
 	DevicesExclude []string `help:"Exclude devices which match by name or ID"`
 	JoinNewFolders bool     `help:"Join non-existing folders from other devices"`
-	Sort           string   `help:"Sort criteria for download prioritization" default:"-niche,-frecency"`
+	Sort           string   `help:"Sort criteria for download prioritization"            default:"-niche,-frecency"`
 }
 
 // Help displays examples for the automatic command
@@ -176,7 +177,9 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 						}
 
 						// Check folder type filter
-						if len(c.FolderTypes) > 0 { //nolint:staticcheck // Empty branch: folder type filtering not yet implemented
+						if len(
+							c.FolderTypes,
+						) > 0 {
 							// Would need to get folder type from pending info
 							// For now, skip type filtering
 						}
@@ -213,7 +216,15 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 						}
 
 						if err := s.AddFolderDevice(folderID, dev.DeviceID.String()); err != nil {
-							slog.Error("Failed to share folder with device", "folder", folderID, "device", dev.DeviceID, "error", err)
+							slog.Error(
+								"Failed to share folder with device",
+								"folder",
+								folderID,
+								"device",
+								dev.DeviceID,
+								"error",
+								err,
+							)
 						}
 					}
 				}

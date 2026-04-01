@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chapmanjacobd/syncweb/internal/syncweb"
-	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 // Find command examples (displayed in help)
@@ -40,27 +41,27 @@ Examples:
 
 // SyncwebFindCmd searches for files by filename, size, and modified date
 type SyncwebFindCmd struct {
-	Pattern        string   `help:"Search patterns (default: all files)" default:".*" arg:"" optional:""`
-	Type           string   `help:"Filter by type: f=file, d=directory"                   short:"t"`
-	FullPath       bool     `help:"Search full abs. path (default: filename only)"        short:"p"`
-	IgnoreCase     bool     `help:"Case insensitive search"                               short:"i"`
-	CaseSensitive  bool     `help:"Case sensitive search"                                 short:"s"`
-	FixedStrings   bool     `help:"Treat all patterns as literals"                        short:"F"`
-	Glob           bool     `help:"Glob-based search"                                     short:"g"`
-	Exact          bool     `help:"Exact match search"                                    short:"x"`
-	Hidden         bool     `help:"Search hidden files and directories"                   short:"H"`
-	FollowLinks    bool     `help:"Follow symbolic links"                                 short:"L"`
-	AbsolutePath   bool     `help:"Print absolute paths"                                  short:"a"`
+	Pattern        string   `help:"Search patterns (default: all files)"                  default:".*" arg:"" optional:""`
+	Type           string   `help:"Filter by type: f=file, d=directory"                                                   short:"t"`
+	FullPath       bool     `help:"Search full abs. path (default: filename only)"                                        short:"p"`
+	IgnoreCase     bool     `help:"Case insensitive search"                                                               short:"i"`
+	CaseSensitive  bool     `help:"Case sensitive search"                                                                 short:"s"`
+	FixedStrings   bool     `help:"Treat all patterns as literals"                                                        short:"F"`
+	Glob           bool     `help:"Glob-based search"                                                                     short:"g"`
+	Exact          bool     `help:"Exact match search"                                                                    short:"x"`
+	Hidden         bool     `help:"Search hidden files and directories"                                                   short:"H"`
+	FollowLinks    bool     `help:"Follow symbolic links"                                                                 short:"L"`
+	AbsolutePath   bool     `help:"Print absolute paths"                                                                  short:"a"`
 	Downloadable   bool     `help:"Exclude sendonly folders"`
-	Depth          []string `help:"Constrain files by file depth"                         short:"d"`
+	Depth          []string `help:"Constrain files by file depth"                                                         short:"d"`
 	MinDepth       int      `help:"Alternative depth notation (default: 0)"`
 	MaxDepth       int      `help:"Alternative depth notation"`
-	Size           []string `help:"Constrain files by file size"                          short:"S"`
+	Size           []string `help:"Constrain files by file size"                                                          short:"S"`
 	ModifiedWithin string   `help:"Constrain files by time_modified (newer than)"`
 	ModifiedBefore string   `help:"Constrain files by time_modified (older than)"`
 	TimeModified   []string `help:"Constrain media by time_modified (alternative syntax)"`
-	Ext            []string `help:"Include only specific file extensions"                 short:"e"`
-	Paths          []string `help:"Root directories to search" arg:"" optional:""`
+	Ext            []string `help:"Include only specific file extensions"                                                 short:"e"`
+	Paths          []string `help:"Root directories to search"                                         arg:"" optional:""`
 }
 
 // Help displays examples for the find command

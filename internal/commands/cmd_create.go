@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/syncthing/syncthing/lib/config"
+
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
-	"github.com/syncthing/syncthing/lib/config"
 )
 
 // Create command examples

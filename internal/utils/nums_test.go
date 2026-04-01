@@ -195,7 +195,14 @@ func TestParseRange(t *testing.T) {
 		{"+10", HumanToBytes, new(int64(10)), nil, nil, false},
 		{"-20", HumanToBytes, nil, new(int64(20)), nil, false},
 		{"100%10", HumanToBytes, new(int64(90)), new(int64(110)), nil, false},
-		{"10,20", HumanToBytes, nil, nil, new(int64(20)), false}, // Split by ',' last one wins in ParseRange implementation
+		{
+			"10,20",
+			HumanToBytes,
+			nil,
+			nil,
+			new(int64(20)),
+			false,
+		}, // Split by ',' last one wins in ParseRange implementation
 		{"1KB-2KB", HumanToBytes, new(int64(1024)), new(int64(2048)), nil, false},
 		{"100", HumanToBytes, nil, nil, new(int64(100)), false},
 		{"", HumanToBytes, nil, nil, nil, false},
@@ -207,7 +214,14 @@ func TestParseRange(t *testing.T) {
 			continue
 		}
 		if !ptrEqual(got.Min, tt.wantMin) || !ptrEqual(got.Max, tt.wantMax) || !ptrEqual(got.Value, tt.wantValue) {
-			t.Errorf("ParseRange(%q) = %+v, want Min:%v Max:%v Value:%v", tt.input, got, tt.wantMin, tt.wantMax, tt.wantValue)
+			t.Errorf(
+				"ParseRange(%q) = %+v, want Min:%v Max:%v Value:%v",
+				tt.input,
+				got,
+				tt.wantMin,
+				tt.wantMax,
+				tt.wantValue,
+			)
 		}
 	}
 }
@@ -267,7 +281,16 @@ func TestParsePercentileRange(t *testing.T) {
 	for _, tt := range tests {
 		minVal, maxVal, ok := ParsePercentileRange(tt.input)
 		if ok != tt.wantOk || minVal != tt.wantMin || maxVal != tt.wantMax {
-			t.Errorf("ParsePercentileRange(%q) = %v, %v, %v, want %v, %v, %v", tt.input, minVal, maxVal, ok, tt.wantMin, tt.wantMax, tt.wantOk)
+			t.Errorf(
+				"ParsePercentileRange(%q) = %v, %v, %v, want %v, %v, %v",
+				tt.input,
+				minVal,
+				maxVal,
+				ok,
+				tt.wantMin,
+				tt.wantMax,
+				tt.wantOk,
+			)
 		}
 	}
 }

@@ -191,18 +191,45 @@ func IsUdisks2Mount(path string) bool {
 }
 
 func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevice) error {
-	var devices []models.BlockDevice
-	var err error
-	if len(optionalDevices) > 0 {
-		devices = optionalDevices[0]
-	} else {
-		devices, err = GetBlockDevices()
-		if err != nil {
-			return err
-		}
+	devices, err := getDevicesForSearch(optionalDevices)
+	if err != nil {
+		return err
 	}
 
-	// 2. Find our target device
+	// Find our target device
+	target := findDevice(deviceName, devices)
+	if target == nil {
+		return fmt.Errorf("device %s not found", deviceName)
+	}
+
+	// Skip if root device (safety)
+	if slices.Contains(target.Mountpoints, "/") {
+		return nil
+	}
+
+	// Skip if thread-safe (Btrfs)
+	if target.FSType == "btrfs" {
+		return nil
+	}
+
+	// Identify preferred mountpoint
+	preferred := findPreferredMountpoint(target.Mountpoints)
+	if preferred == "" {
+		return nil
+	}
+
+	// Unmount others
+	return unmountExtraMountpoints(target.Mountpoints, preferred)
+}
+
+func getDevicesForSearch(optionalDevices [][]models.BlockDevice) ([]models.BlockDevice, error) {
+	if len(optionalDevices) > 0 {
+		return optionalDevices[0], nil
+	}
+	return GetBlockDevices()
+}
+
+func findDevice(deviceName string, devs []models.BlockDevice) *models.BlockDevice {
 	var target *models.BlockDevice
 	var find func([]models.BlockDevice)
 	find = func(devs []models.BlockDevice) {
@@ -216,50 +243,37 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 			}
 		}
 	}
-	find(devices)
+	find(devs)
+	return target
+}
 
-	if target == nil {
-		return fmt.Errorf("device %s not found", deviceName)
-	}
-
-	// 3. Skip if root device (safety)
-	if slices.Contains(target.Mountpoints, "/") {
-		return nil
-	}
-
-	// 4. Skip if thread-safe (Btrfs)
-	if target.FSType == "btrfs" {
-		return nil
-	}
-
-	// 5. Identify preferred mountpoint (fstab > udisks2 > others)
-	if len(target.Mountpoints) <= 1 {
-		return nil
+func findPreferredMountpoint(mountpoints []string) string {
+	if len(mountpoints) <= 1 {
+		return ""
 	}
 
 	fstab, _ := GetFstabMounts()
 
-	var preferred string
-	for _, mp := range target.Mountpoints {
+	// Priority 1: fstab
+	for _, mp := range mountpoints {
 		if fstab[mp] {
-			preferred = mp
-			break
+			return mp
 		}
-	}
-	if preferred == "" {
-		for _, mp := range target.Mountpoints {
-			if IsUdisks2Mount(mp) {
-				preferred = mp
-				break
-			}
-		}
-	}
-	if preferred == "" {
-		preferred = target.Mountpoints[0]
 	}
 
-	// 6. Unmount others
-	for _, mp := range target.Mountpoints {
+	// Priority 2: udisks2
+	for _, mp := range mountpoints {
+		if IsUdisks2Mount(mp) {
+			return mp
+		}
+	}
+
+	// Priority 3: first available
+	return mountpoints[0]
+}
+
+func unmountExtraMountpoints(mountpoints []string, preferred string) error {
+	for _, mp := range mountpoints {
 		if mp == preferred || mp == "" || strings.HasPrefix(mp, "[") {
 			continue
 		}
@@ -271,6 +285,5 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 			return fmt.Errorf("failed to unmount extra mountpoint %s: %s: %w", mp, string(out), umountErr)
 		}
 	}
-
 	return nil
 }

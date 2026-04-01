@@ -230,94 +230,128 @@ func ParseRange(s string, humanToX func(string) (int64, error)) (Range, error) {
 		return Range{}, nil
 	}
 
+	// Handle comma-separated ranges
 	if strings.Contains(s, ",") {
-		parts := strings.Split(s, ",")
-		var merged Range
-		for _, p := range parts {
-			r, err := ParseRange(p, humanToX)
-			if err != nil {
-				return Range{}, err
-			}
-			if r.Min != nil {
-				merged.Min = r.Min
-			}
-			if r.Max != nil {
-				merged.Max = r.Max
-			}
-			if r.Value != nil {
-				merged.Value = r.Value
-			}
-		}
-		return merged, nil
+		return parseCommaRange(s, humanToX)
 	}
 
+	// Handle hyphen range (but not negative numbers)
 	if strings.Contains(s, "-") && !strings.HasPrefix(s, "-") {
-		parts := strings.Split(s, "-")
-		if len(parts) == 2 {
-			minVal, err := humanToX(parts[0])
-			if err != nil {
-				return Range{}, err
-			}
-			maxVal, err := humanToX(parts[1])
-			if err != nil {
-				return Range{}, err
-			}
-			return Range{Min: &minVal, Max: &maxVal}, nil
-		}
+		return parseHyphenRange(s, humanToX)
 	}
 
+	// Handle percentage range
 	if strings.Contains(s, "%") {
-		parts := strings.Split(s, "%")
-		base, err := humanToX(parts[0])
-		if err != nil {
-			return Range{}, err
-		}
-		percent, err := strconv.ParseFloat(parts[1], 64)
-		if err != nil {
-			return Range{}, err
-		}
-		tolerance := int64(float64(base) * (percent / 100.0))
-		minVal := base - tolerance
-		maxVal := base + tolerance
-		return Range{Min: &minVal, Max: &maxVal}, nil
+		return parsePercentRange(s, humanToX)
 	}
 
+	// Handle comparison operators
 	if strings.HasPrefix(s, ">") {
-		minVal, err := humanToX(s[1:])
-		if err != nil {
-			return Range{}, err
-		}
-		minVal++ // strictly greater
-		return Range{Min: &minVal}, nil
+		return parseGreaterThanRange(s, humanToX)
 	}
 	if strings.HasPrefix(s, "<") {
-		maxVal, err := humanToX(s[1:])
-		if err != nil {
-			return Range{}, err
-		}
-		maxVal-- // strictly less
-		return Range{Max: &maxVal}, nil
+		return parseLessThanRange(s, humanToX)
 	}
 	if strings.HasPrefix(s, "+") {
-		minVal, err := humanToX(s[1:])
-		if err != nil {
-			return Range{}, err
-		}
-		return Range{Min: &minVal}, nil
+		return parsePlusRange(s, humanToX)
 	}
 	if strings.HasPrefix(s, "-") {
-		maxVal, err := humanToX(s[1:])
-		if err != nil {
-			return Range{}, err
-		}
-		return Range{Max: &maxVal}, nil
+		return parseNegativePrefixRange(s, humanToX)
 	}
 
+	// Default: exact value
 	val, err := humanToX(s)
 	if err != nil {
 		return Range{}, err
 	}
 	return Range{Value: &val}, nil
+}
+
+func parseCommaRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	parts := strings.Split(s, ",")
+	var merged Range
+	for _, p := range parts {
+		r, err := ParseRange(p, humanToX)
+		if err != nil {
+			return Range{}, err
+		}
+		if r.Min != nil {
+			merged.Min = r.Min
+		}
+		if r.Max != nil {
+			merged.Max = r.Max
+		}
+		if r.Value != nil {
+			merged.Value = r.Value
+		}
+	}
+	return merged, nil
+}
+
+func parseHyphenRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	parts := strings.Split(s, "-")
+	if len(parts) == 2 {
+		minVal, err := humanToX(parts[0])
+		if err != nil {
+			return Range{}, err
+		}
+		maxVal, err := humanToX(parts[1])
+		if err != nil {
+			return Range{}, err
+		}
+		return Range{Min: &minVal, Max: &maxVal}, nil
+	}
+	return Range{}, nil
+}
+
+func parsePercentRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	parts := strings.Split(s, "%")
+	base, err := humanToX(parts[0])
+	if err != nil {
+		return Range{}, err
+	}
+	percent, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil {
+		return Range{}, err
+	}
+	tolerance := int64(float64(base) * (percent / 100.0))
+	minVal := base - tolerance
+	maxVal := base + tolerance
+	return Range{Min: &minVal, Max: &maxVal}, nil
+}
+
+func parseGreaterThanRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	minVal, err := humanToX(s[1:])
+	if err != nil {
+		return Range{}, err
+	}
+	minVal++ // strictly greater
+	return Range{Min: &minVal}, nil
+}
+
+func parseLessThanRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	maxVal, err := humanToX(s[1:])
+	if err != nil {
+		return Range{}, err
+	}
+	maxVal-- // strictly less
+	return Range{Max: &maxVal}, nil
+}
+
+func parsePlusRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	minVal, err := humanToX(s[1:])
+	if err != nil {
+		return Range{}, err
+	}
+	return Range{Min: &minVal}, nil
+}
+
+func parseNegativePrefixRange(s string, humanToX func(string) (int64, error)) (Range, error) {
+	maxVal, err := humanToX(s[1:])
+	if err != nil {
+		return Range{}, err
+	}
+	return Range{Max: &maxVal}, nil
 }
 
 func CalculatePercentiles(values []int64) []int64 {

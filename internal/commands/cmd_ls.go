@@ -171,6 +171,7 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 }
 
 func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*fileEntry {
+	logger := slog.Default().With("folderID", folderID, "prefix", prefix)
 	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
 	defer func() { _ = cancel() }()
 
@@ -201,11 +202,11 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 
 		// Check depth
 		if c.Depth > 0 && len(parts) > c.Depth {
-			slog.Debug("ls: skipping (depth)", "name", name, "parts", len(parts), "depth", c.Depth)
+			logger.Debug("ls: skipping (depth)", "name", name, "parts", len(parts), "depth", c.Depth)
 			continue
 		}
 
-		slog.Debug("ls: processing", "name", name, "parts", len(parts), "depth", c.Depth)
+		logger.Debug("ls: processing", "name", name, "parts", len(parts), "depth", c.Depth)
 
 		// Build tree
 		currentMap := tree
@@ -239,11 +240,11 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 				if currentPath == "" {
 					rootItems = append(rootItems, entry)
 				}
-				slog.Debug("ls: created entry", "path", entryPath, "isDir", isDir)
+				logger.Debug("ls: created entry", "path", entryPath, "isDir", isDir)
 			} else if !isLast {
 				// Entry already exists, but might need to update IsDir
 				if !currentMap[part].IsDir {
-					slog.Debug("ls: updated to directory", "part", part)
+					logger.Debug("ls: updated to directory", "part", part)
 				}
 				currentMap[part].IsDir = true
 			}
@@ -257,9 +258,9 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 		}
 	}
 
-	slog.Debug("ls: rootItems", "count", len(rootItems))
+	logger.Debug("ls: rootItems", "count", len(rootItems))
 	for _, item := range rootItems {
-		slog.Debug("ls: rootItem", "name", item.Name, "isDir", item.IsDir, "children", len(item.Children))
+		logger.Debug("ls: rootItem", "name", item.Name, "isDir", item.IsDir, "children", len(item.Children))
 	}
 
 	// Calculate folder sizes if needed

@@ -31,6 +31,7 @@ const (
 
 // SampleHashFile calculates a hash based on small file segments
 func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (string, error) {
+	logger := slog.Default().With("path", path)
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -81,7 +82,7 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 			buf := make([]byte, chunkSize)
 			n, readErr := file.ReadAt(buf, offset)
 			if readErr != nil && readErr != io.EOF {
-				slog.Error("Read error during hashing", "path", path, "offset", offset, "error", readErr)
+				logger.Error("Read error during hashing", "offset", offset, "error", readErr)
 				errChan <- fmt.Errorf("read error at offset %d: %w", offset, readErr)
 				return
 			}
@@ -179,58 +180,66 @@ func GetFileStats(path string) (FileStats, error) {
 // IsFileOpen checks if a file is currently open by any process
 func IsFileOpen(path string) bool {
 	if runtime.GOOS == "windows" {
-		// On Windows, try to open the file with exclusive access
-		f, err := os.OpenFile(path, os.O_RDWR, 0)
-		if err != nil {
-			return true
-		}
-		defer func() { _ = f.Close() }()
+		return isFileOpenWindows(path)
+	}
+	if runtime.GOOS == "linux" {
+		return isFileOpenLinux(path)
+	}
+	return false
+}
+
+func isFileOpenWindows(path string) bool {
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = f.Close() }()
+	return false
+}
+
+func isFileOpenLinux(path string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+
+	files, err := os.ReadDir("/proc")
+	if err != nil {
 		return false
 	}
 
-	if runtime.GOOS == "linux" {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			absPath = path
+	for _, f := range files {
+		if !f.IsDir() {
+			continue
+		}
+		if !isNumeric(f.Name()) {
+			continue
 		}
 
-		files, err := os.ReadDir("/proc")
-		if err != nil {
-			return false
+		fdDir := filepath.Join("/proc", f.Name(), "fd")
+		fds, readDirErr := os.ReadDir(fdDir)
+		if readDirErr != nil {
+			continue
 		}
 
-		for _, f := range files {
-			if !f.IsDir() {
-				continue
-			}
-			// Check if name is a number (PID)
-			isPid := true
-			for _, r := range f.Name() {
-				if r < '0' || r > '9' {
-					isPid = false
-					break
-				}
-			}
-			if !isPid {
-				continue
-			}
-
-			fdDir := filepath.Join("/proc", f.Name(), "fd")
-			fds, readDirErr := os.ReadDir(fdDir)
-			if readDirErr != nil {
-				continue
-			}
-
-			for _, fd := range fds {
-				link, linkErr := os.Readlink(filepath.Join(fdDir, fd.Name()))
-				if linkErr == nil && link == absPath {
-					return true
-				}
+		for _, fd := range fds {
+			link, linkErr := os.Readlink(filepath.Join(fdDir, fd.Name()))
+			if linkErr == nil && link == absPath {
+				return true
 			}
 		}
 	}
 
 	return false
+}
+
+func isNumeric(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // DetectMimeType returns the mimetype of a file
@@ -252,31 +261,34 @@ func DetectMimeType(path string) string {
 
 // Rename renames a file, respecting simulation mode
 func Rename(flags models.GlobalFlags, src, dst string) error {
+	logger := slog.Default().With("src", src, "dst", dst)
 	if flags.Simulate {
 		fmt.Printf("rename %s %s\n", src, dst)
 		return nil
 	}
-	slog.Debug("rename", "src", src, "dst", dst)
+	logger.Debug("rename")
 	return os.Rename(src, dst)
 }
 
 // Unlink deletes a file, respecting simulation mode
 func Unlink(flags models.GlobalFlags, path string) error {
+	logger := slog.Default().With("path", path)
 	if flags.Simulate {
 		fmt.Printf("unlink %s\n", path)
 		return nil
 	}
-	slog.Debug("unlink", "path", path)
+	logger.Debug("unlink")
 	return os.Remove(path)
 }
 
 // Rmtree deletes a directory tree, respecting simulation mode
 func Rmtree(flags models.GlobalFlags, path string) error {
+	logger := slog.Default().With("path", path)
 	if flags.Simulate {
 		fmt.Printf("rmtree %s\n", path)
 		return nil
 	}
-	slog.Debug("rmtree", "path", path)
+	logger.Debug("rmtree")
 	return os.RemoveAll(path)
 }
 

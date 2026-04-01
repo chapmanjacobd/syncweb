@@ -135,7 +135,7 @@ func DictFilterBool(d map[string]any) map[string]any {
 	}
 	res := make(map[string]any)
 	for k, v := range d {
-		if v != nil && v != "" && v != 0 && v != false {
+		if v != nil && v != "" && v != 0 && !isFalse(v) {
 			res[k] = v
 		}
 	}
@@ -143,4 +143,9 @@ func DictFilterBool(d map[string]any) map[string]any {
 		return nil
 	}
 	return res
+}
+
+func isFalse(v any) bool {
+	b, ok := v.(bool)
+	return ok && !b
 }

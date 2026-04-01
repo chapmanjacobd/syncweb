@@ -308,9 +308,10 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 
 	// Get pending download size from NeedSize
 	var pendingDownload int64
+	logger := slog.Default().With("folderID", folderID)
 	needSize, err := s.Node.App.Internals.NeedSize(folderID, protocol.LocalDeviceID)
 	if err != nil {
-		slog.Warn("Failed to get NeedSize", "folderID", folderID, "error", err)
+		logger.Warn("Failed to get NeedSize", "error", err)
 		pendingDownload = 0
 	} else {
 		pendingDownload = needSize.Bytes

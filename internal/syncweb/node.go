@@ -67,9 +67,10 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	myID := protocol.NewDeviceID(cert.Certificate[0])
 
 	// Load or create config
+	logger := slog.Default().With("component", "node")
 	var cfg config.Wrapper
 	if _, statErr := os.Stat(cfgPath); os.IsNotExist(statErr) {
-		slog.Info("Creating new Syncthing config", "path", cfgPath)
+		logger.Info("Creating new Syncthing config", "path", cfgPath)
 		newCfg := config.New(myID)
 		// Customize defaults similar to syncweb-py
 		newCfg.Options.StartBrowser = false
@@ -91,7 +92,7 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 			return nil, fmt.Errorf("failed to save config: %w", saveErr)
 		}
 	} else {
-		slog.Info("Loading existing Syncthing config", "path", cfgPath)
+		logger.Info("Loading existing Syncthing config", "path", cfgPath)
 		var loadErr error
 		cfg, _, loadErr = config.Load(cfgPath, myID, evLogger)
 		if loadErr != nil {

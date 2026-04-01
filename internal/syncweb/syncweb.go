@@ -167,6 +167,7 @@ func (s *Syncweb) GetEvents() []models.SyncEvent {
 }
 
 func (s *Syncweb) watchEvents() {
+	logger := slog.Default().With("component", "syncweb")
 	mask := events.DeviceRejected | events.PendingDevicesChanged | events.DeviceConnected |
 		events.FolderSummary | events.ItemStarted | events.ItemFinished | events.LocalIndexUpdated
 
@@ -188,65 +189,90 @@ func (s *Syncweb) watchEvents() {
 	for {
 		select {
 		case ev := <-sub.C():
-			switch ev.Type { //nolint:exhaustive // only handle specific events
-			case events.DeviceRejected:
-				var deviceIDStr string
-				if m, ok := ev.Data.(map[string]any); ok {
-					if idStr, ok2 := m["device"].(string); ok2 {
-						deviceIDStr = idStr
-					}
-				} else if m, ok2 := ev.Data.(map[string]string); ok2 {
-					deviceIDStr = m["device"]
-				}
-
-				if deviceIDStr != "" {
-					if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
-						s.pendingDevices.Store(id, ev.Time)
-						slog.Info("Device rejected (pending)", "id", id)
-						s.addEvent("DeviceRejected", "New device request: "+deviceIDStr, ev.Data)
-					}
-				}
-			case events.DeviceConnected:
-				var deviceIDStr string
-				if m, ok := ev.Data.(map[string]any); ok {
-					if idStr, ok2 := m["id"].(string); ok2 {
-						deviceIDStr = idStr
-					}
-				} else if m, ok2 := ev.Data.(map[string]string); ok2 {
-					deviceIDStr = m["id"]
-				}
-
-				if deviceIDStr != "" {
-					if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
-						s.pendingDevices.Delete(id)
-						s.addEvent("DeviceConnected", "Device connected: "+deviceIDStr, ev.Data)
-					}
-				}
-			case events.ItemStarted:
-				if m, ok := ev.Data.(map[string]any); ok {
-					if item, ok2 := m["item"].(string); ok2 {
-						s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
-					}
-				}
-			case events.ItemFinished:
-				if m, ok := ev.Data.(map[string]any); ok {
-					item, _ := m["item"].(string)
-					errMsg, _ := m["error"].(string)
-					msg := "Finished: " + item
-					if errMsg != "" {
-						msg += " (Error: " + errMsg + ")"
-					}
-					s.addEvent("ItemFinished", msg, ev.Data)
-				}
-			case events.FolderSummary:
-				if m, ok := ev.Data.(map[string]any); ok {
-					if folder, ok2 := m["folder"].(string); ok2 {
-						s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
-					}
-				}
-			}
+			s.handleEvent(ev, logger)
 		case <-s.Node.Ctx.Done():
 			return
+		}
+	}
+}
+
+func (s *Syncweb) handleEvent(ev events.Event, logger *slog.Logger) {
+	switch ev.Type { //nolint:exhaustive // only handle specific events
+	case events.DeviceRejected:
+		s.handleDeviceRejected(ev, logger)
+	case events.DeviceConnected:
+		s.handleDeviceConnected(ev, logger)
+	case events.ItemStarted:
+		s.handleItemStarted(ev)
+	case events.ItemFinished:
+		s.handleItemFinished(ev)
+	case events.FolderSummary:
+		s.handleFolderSummary(ev)
+	}
+}
+
+func (s *Syncweb) handleDeviceRejected(ev events.Event, logger *slog.Logger) {
+	var deviceIDStr string
+	if m, ok := ev.Data.(map[string]any); ok {
+		if idStr, ok2 := m["device"].(string); ok2 {
+			deviceIDStr = idStr
+		}
+	} else if m, ok2 := ev.Data.(map[string]string); ok2 {
+		deviceIDStr = m["device"]
+	}
+
+	if deviceIDStr != "" {
+		if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
+			s.pendingDevices.Store(id, ev.Time)
+			logger.Info("Device rejected (pending)", "id", id)
+			s.addEvent("DeviceRejected", "New device request: "+deviceIDStr, ev.Data)
+		}
+	}
+}
+
+func (s *Syncweb) handleDeviceConnected(ev events.Event, logger *slog.Logger) {
+	var deviceIDStr string
+	if m, ok := ev.Data.(map[string]any); ok {
+		if idStr, ok2 := m["id"].(string); ok2 {
+			deviceIDStr = idStr
+		}
+	} else if m, ok2 := ev.Data.(map[string]string); ok2 {
+		deviceIDStr = m["id"]
+	}
+
+	if deviceIDStr != "" {
+		if id, err := protocol.DeviceIDFromString(deviceIDStr); err == nil {
+			s.pendingDevices.Delete(id)
+			logger.Debug("Device connected", "id", id)
+			s.addEvent("DeviceConnected", "Device connected: "+deviceIDStr, ev.Data)
+		}
+	}
+}
+
+func (s *Syncweb) handleItemStarted(ev events.Event) {
+	if m, ok := ev.Data.(map[string]any); ok {
+		if item, ok2 := m["item"].(string); ok2 {
+			s.addEvent("ItemStarted", "Syncing: "+item, ev.Data)
+		}
+	}
+}
+
+func (s *Syncweb) handleItemFinished(ev events.Event) {
+	if m, ok := ev.Data.(map[string]any); ok {
+		item, _ := m["item"].(string)
+		errMsg, _ := m["error"].(string)
+		msg := "Finished: " + item
+		if errMsg != "" {
+			msg += " (Error: " + errMsg + ")"
+		}
+		s.addEvent("ItemFinished", msg, ev.Data)
+	}
+}
+
+func (s *Syncweb) handleFolderSummary(ev events.Event) {
+	if m, ok := ev.Data.(map[string]any); ok {
+		if folder, ok2 := m["folder"].(string); ok2 {
+			s.addEvent("FolderSummary", "Folder summary for "+folder, ev.Data)
 		}
 	}
 }
@@ -769,6 +795,7 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	}
 	endBlock := endOffset / blockSize
 
+	logger := slog.Default().With("folderID", r.folderID, "file", r.info.Name)
 	var totalRead int64
 	for i := startBlock; i <= endBlock; i++ {
 		block := r.info.Blocks[i]
@@ -812,7 +839,7 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 			if downloadErr == nil {
 				break
 			}
-			slog.Warn("Failed to download block from peer, trying next", "peer", peer.ID, "error", downloadErr)
+			logger.Warn("Failed to download block from peer, trying next", "peer", peer.ID, "error", downloadErr)
 		}
 
 		if downloadErr != nil {

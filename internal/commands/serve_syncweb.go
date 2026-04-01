@@ -105,19 +105,20 @@ func validatePaginationParams(pageStr, perPageStr string) (page, perPage int, er
 }
 
 func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
+	logger := slog.Default().With("component", "syncweb")
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 	sw, err := syncweb.NewSyncweb(g.SyncwebHome, "syncweb", "")
 	if err != nil {
-		slog.Warn("Failed to initialize Syncweb instance", "error", err)
+		logger.Warn("Failed to initialize Syncweb instance", "error", err)
 	} else {
 		c.sw = sw
 		if err := sw.Start(); err != nil {
-			slog.Error("Failed to start Syncweb instance", "error", err)
+			logger.Error("Failed to start Syncweb instance", "error", err)
 		} else {
-			slog.Info("Syncweb instance started", "myID", sw.Node.MyID())
+			logger.Info("Syncweb instance started", "myID", sw.Node.MyID())
 			if err := utils.AutoCleanupMounts(); err != nil {
-				slog.Warn("Failed to auto-cleanup mounts", "error", err)
+				logger.Warn("Failed to auto-cleanup mounts", "error", err)
 			}
 		}
 	}
@@ -133,6 +134,7 @@ func (c *ServeCmd) resolveSyncwebPath(path string) (folderID, localPath string, 
 }
 
 func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, folderID, path, localPath string) {
+	logger := slog.Default().With("path", path, "folderID", folderID)
 	c.swMu.Lock()
 	if c.sw == nil || !c.sw.IsRunning() {
 		c.swMu.Unlock()
@@ -145,7 +147,7 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 	sw := c.sw
 	c.swMu.Unlock()
 
-	slog.Info("Serving remote Syncweb file via block pulling", "path", path)
+	logger.Info("Serving remote Syncweb file via block pulling")
 	var trimmedPath string
 	if strings.HasPrefix(path, "sync://") {
 		trimmedPath = strings.TrimPrefix(path, "sync://"+folderID+"/")
@@ -154,7 +156,7 @@ func (c *ServeCmd) serveSyncwebContent(w http.ResponseWriter, r *http.Request, f
 	}
 	rs, err := sw.NewReadSeeker(r.Context(), folderID, trimmedPath)
 	if err != nil {
-		slog.Error("Failed to create SyncwebReadSeeker", "path", path, "error", err)
+		logger.Error("Failed to create SyncwebReadSeeker", "error", err)
 		http.Error(w, "Failed to stream remote file", http.StatusInternalServerError)
 		return
 	}
@@ -282,25 +284,9 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	prefix := r.URL.Query().Get("prefix")
 
 	// Validate folder ID if provided
-	if folderID != "" && folderID != "/" {
-		if err := validateFolderID(folderID); err != nil {
-			writeBadRequest(w, "Invalid folder ID: "+err.Error())
-			return
-		}
-
-		// Security check: ensure the folder is one we actually have
-		configuredFolders := c.sw.GetFolders()
-		found := false
-		for _, f := range configuredFolders {
-			if f.ID == folderID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeError(w, http.StatusNotFound, "Folder not found or not configured")
-			return
-		}
+	if err := c.validateFolderIDParam(folderID); err != nil {
+		writeBadRequest(w, "Invalid folder ID: "+err.Error())
+		return
 	}
 
 	// Validate prefix if provided
@@ -320,47 +306,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" || folderID == "/" {
 		c.addSyncwebRoots(resultsMap, counts, "/")
 	} else {
-		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(folderID)
-
-		for meta := range seq {
-			// Check context for cancellation
-			if r.Context().Err() != nil {
-				_ = cancel()
-				return
-			}
-
-			name := meta.Name
-			if !strings.HasPrefix(name, prefix) || name == prefix {
-				continue
-			}
-
-			rel := strings.TrimPrefix(name, prefix)
-			parts := strings.Split(rel, "/")
-			entryName := parts[0]
-			isDir := len(parts) > 1
-
-			fullSyncwebPath := fmt.Sprintf("sync://%s/%s", folderID, filepath.Join(prefix, entryName))
-			if _, ok := resultsMap[fullSyncwebPath]; ok {
-				continue
-			}
-
-			localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
-			isLocal := utils.FileExists(localPath)
-
-			entry := models.LsEntry{
-				Name:     entryName,
-				Path:     fullSyncwebPath,
-				IsDir:    isDir,
-				Local:    isLocal,
-				Size:     meta.Size,
-				Modified: meta.ModTime().Format(time.RFC3339),
-			}
-			if !isDir {
-				entry.Type = utils.DetectMimeType(entryName)
-			}
-			resultsMap[fullSyncwebPath] = entry
-		}
-		_ = cancel()
+		c.collectFolderEntries(r, folderID, prefix, resultsMap)
 	}
 
 	results := make([]models.LsEntry, 0, len(resultsMap))
@@ -376,6 +322,69 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeOK(w, results)
+}
+
+func (c *ServeCmd) validateFolderIDParam(folderID string) error {
+	if folderID == "" || folderID == "/" {
+		return nil
+	}
+	if err := validateFolderID(folderID); err != nil {
+		return err
+	}
+	// Security check: ensure the folder is one we actually have
+	configuredFolders := c.sw.GetFolders()
+	for _, f := range configuredFolders {
+		if f.ID == folderID {
+			return nil
+		}
+	}
+	return errors.New("folder not found or not configured")
+}
+
+func (c *ServeCmd) collectFolderEntries(
+	r *http.Request,
+	folderID, prefix string,
+	resultsMap map[string]models.LsEntry,
+) {
+	seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(folderID)
+	defer func() { _ = cancel() }()
+
+	for meta := range seq {
+		if r.Context().Err() != nil {
+			return
+		}
+
+		name := meta.Name
+		if !strings.HasPrefix(name, prefix) || name == prefix {
+			continue
+		}
+
+		rel := strings.TrimPrefix(name, prefix)
+		parts := strings.Split(rel, "/")
+		entryName := parts[0]
+		isDir := len(parts) > 1
+
+		fullSyncwebPath := fmt.Sprintf("sync://%s/%s", folderID, filepath.Join(prefix, entryName))
+		if _, ok := resultsMap[fullSyncwebPath]; ok {
+			continue
+		}
+
+		localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
+		isLocal := utils.FileExists(localPath)
+
+		entry := models.LsEntry{
+			Name:     entryName,
+			Path:     fullSyncwebPath,
+			IsDir:    isDir,
+			Local:    isLocal,
+			Size:     meta.Size,
+			Modified: meta.ModTime().Format(time.RFC3339),
+		}
+		if !isDir {
+			entry.Type = utils.DetectMimeType(entryName)
+		}
+		resultsMap[fullSyncwebPath] = entry
+	}
 }
 
 // handleSyncwebDownload triggers a download for a Syncweb file
@@ -433,8 +442,9 @@ func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request)
 	}
 	relativePath, _ := filepath.Rel(folderPath, localPath)
 
+	logger := slog.Default().With("path", req.Path, "folderID", folderID)
 	if err := c.sw.Unignore(folderID, relativePath); err != nil {
-		slog.Error("Syncweb download trigger failed", "path", req.Path, "error", err)
+		logger.Error("Syncweb download trigger failed", "error", err)
 		writeInternalServerError(w, fmt.Sprintf("Download trigger failed: %v", err))
 		return
 	}
@@ -446,6 +456,7 @@ func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request)
 // POST /api/syncweb/toggle
 // Body: {"offline": bool}
 func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
+	logger := slog.Default().With("component", "syncweb")
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
 
@@ -464,14 +475,14 @@ func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 
 	if req.Offline {
 		if c.sw.IsRunning() {
-			slog.Info("Stopping Syncweb backend (Offline Mode)")
+			logger.Info("Stopping Syncweb backend (Offline Mode)")
 			c.sw.Stop()
 		}
 	} else {
 		if !c.sw.IsRunning() {
-			slog.Info("Starting Syncweb backend (Online Mode)")
+			logger.Info("Starting Syncweb backend (Online Mode)")
 			if err := c.sw.Start(); err != nil {
-				slog.Error("Failed to restart Syncweb", "error", err)
+				logger.Error("Failed to restart Syncweb", "error", err)
 				writeInternalServerError(w, "Failed to restart Syncweb: "+err.Error())
 				return
 			}

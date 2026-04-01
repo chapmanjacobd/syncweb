@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -122,8 +123,9 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 		listenAddr = "127.0.0.1:" + listenAddr
 	}
 
-	slog.Info("Syncweb server starting", "addr", listenAddr)
-	slog.Debug("API token", "token", c.APIToken)
+	logger := slog.Default().With("addr", listenAddr)
+	logger.Info("Syncweb server starting")
+	logger.Debug("API token", "token", c.APIToken)
 
 	server := &http.Server{
 		Addr:         listenAddr,
@@ -146,55 +148,75 @@ func (c *ServeCmd) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		isLocal := IsLocalhost(remoteHost)
 
 		// Host header validation (DNS rebinding protection)
-		// If connection is from localhost, only allow localhost-related Host headers
-		if isLocal {
-			host, _, _ := net.SplitHostPort(r.Host)
-			if host == "" {
-				host = r.Host // No port in Host header
-			}
-			if !IsLocalhost(host) {
-				http.Error(w, "Host check failed (DNS rebinding protection)", http.StatusForbidden)
-				return
-			}
+		if err := validateHostHeader(r, isLocal); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
 		}
 
-		token := r.Header.Get("X-Syncweb-Token")
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
-		if token == "" {
-			cookie, err := r.Cookie("syncweb_token")
-			if err == nil {
-				token = cookie.Value
-			}
-		}
-
-		if token != c.APIToken && !isLocal {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		// Token validation
+		if err := validateToken(r, c.APIToken, isLocal); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 
 		// Basic CSRF protection for state-changing requests
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				origin = r.Header.Get("Referer")
-			}
-			if origin != "" && isLocal {
-				// The origin/referer should be local if it's a local browser making the request
-				// Extract host from origin URL
-				originHost := strings.TrimPrefix(origin, "http://")
-				originHost = strings.TrimPrefix(originHost, "https://")
-				originHost, _, _ = strings.Cut(originHost, "/")
-				if !IsLocalhost(originHost) {
-					http.Error(w, "CSRF block", http.StatusForbidden)
-					return
-				}
-			}
+		if err := validateCSRF(r, isLocal); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
 		}
 
 		next(w, r)
 	}
+}
+
+func validateHostHeader(r *http.Request, isLocal bool) error {
+	if !isLocal {
+		return nil
+	}
+	host, _, _ := net.SplitHostPort(r.Host)
+	if host == "" {
+		host = r.Host
+	}
+	if !IsLocalhost(host) {
+		return errors.New("host check failed (DNS rebinding protection)")
+	}
+	return nil
+}
+
+func validateToken(r *http.Request, apiToken string, isLocal bool) error {
+	token := r.Header.Get("X-Syncweb-Token")
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	if token == "" {
+		cookie, err := r.Cookie("syncweb_token")
+		if err == nil {
+			token = cookie.Value
+		}
+	}
+	if token != apiToken && !isLocal {
+		return errors.New("unauthorized")
+	}
+	return nil
+}
+
+func validateCSRF(r *http.Request, isLocal bool) error {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return nil
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = r.Header.Get("Referer")
+	}
+	if origin != "" && isLocal {
+		originHost := strings.TrimPrefix(origin, "http://")
+		originHost = strings.TrimPrefix(originHost, "https://")
+		originHost, _, _ = strings.Cut(originHost, "/")
+		if !IsLocalhost(originHost) {
+			return errors.New("CSRF block")
+		}
+	}
+	return nil
 }
 
 func (c *ServeCmd) handleFileMove(w http.ResponseWriter, r *http.Request) {

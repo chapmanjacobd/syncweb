@@ -138,7 +138,8 @@ func (c *SyncwebAutomaticCmd) Help() string {
 }
 
 func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
-	slog.Info("Starting syncweb-automatic",
+	logger := slog.Default().With("component", "automatic")
+	logger.Info("Starting syncweb-automatic",
 		"devices", c.Devices,
 		"folders", c.Folders,
 		"localOnly", c.Local,
@@ -158,9 +159,9 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 						continue
 					}
 
-					slog.Info("Auto-accepting device", "id", id)
+					logger.Info("Auto-accepting device", "id", id)
 					if err := s.AddDevice(id, "", false); err != nil {
-						slog.Error("Failed to auto-accept device", "id", id, "error", err)
+						logger.Error("Failed to auto-accept device", "id", id, "error", err)
 					}
 				}
 			}
@@ -192,26 +193,26 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 							continue
 						}
 
-						slog.Info("Auto-joining folder", "id", folderID, "from", dev.DeviceID)
+						logger.Info("Auto-joining folder", "id", folderID, "from", dev.DeviceID)
 						path := filepath.Join(g.SyncwebHome, folderID)
 
 						if !exists {
 							if err := s.AddFolder(folderID, folderID, path, config.FolderTypeReceiveOnly); err != nil {
-								slog.Error("Failed to create folder", "id", folderID, "error", err)
+								logger.Error("Failed to create folder", "id", folderID, "error", err)
 								continue
 							}
 							if err := s.SetIgnores(folderID, []string{}); err != nil {
-								slog.Error("Failed to set ignores", "id", folderID, "error", err)
+								logger.Error("Failed to set ignores", "id", folderID, "error", err)
 								continue
 							}
 							if err := s.ResumeFolder(folderID); err != nil {
-								slog.Error("Failed to resume folder", "id", folderID, "error", err)
+								logger.Error("Failed to resume folder", "id", folderID, "error", err)
 								continue
 							}
 						}
 
 						if err := s.AddFolderDevice(folderID, dev.DeviceID.String()); err != nil {
-							slog.Error(
+							logger.Error(
 								"Failed to share folder with device",
 								"folder",
 								folderID,
@@ -267,6 +268,7 @@ func (c *SyncwebStartCmd) Help() string {
 }
 
 func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
+	logger := slog.Default().With("component", "daemon")
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
 	if home == "" {
@@ -288,12 +290,12 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 		return fmt.Errorf("unable to run: %w", err)
 	}
 	if d != nil {
-		slog.Info("Syncweb daemon started", "pid", d.Pid)
+		logger.Info("Syncweb daemon started", "pid", d.Pid)
 		return nil
 	}
 	defer func() { _ = cntxt.Release() }()
 
-	slog.Info("Syncweb daemon process starting")
+	logger.Info("Syncweb daemon process starting")
 	return nil
 }
 
@@ -306,6 +308,7 @@ func (c *SyncwebStopCmd) Help() string {
 }
 
 func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
+	logger := slog.Default().With("component", "daemon")
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
 	if home == "" {
@@ -330,7 +333,7 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 		return fmt.Errorf("unable to send signal to daemon: %w", err)
 	}
 
-	slog.Info("Syncweb daemon stop signal sent")
+	logger.Info("Syncweb daemon stop signal sent")
 	return nil
 }
 

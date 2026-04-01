@@ -115,7 +115,7 @@ func ListDictFilterBool(data []map[string]any) []map[string]any {
 		}
 		keep := false
 		for _, v := range d {
-			if v != nil && v != "" && v != 0 && v != false {
+			if v != nil && v != "" && v != 0 && !isFalseValue(v) {
 				keep = true
 				break
 			}
@@ -125,6 +125,11 @@ func ListDictFilterBool(data []map[string]any) []map[string]any {
 		}
 	}
 	return res
+}
+
+func isFalseValue(v any) bool {
+	b, ok := v.(bool)
+	return ok && !b
 }
 
 func Chunks[T any](slice []T, chunkSize int) [][]T {

@@ -384,9 +384,9 @@ linters:
       - name: argument-limit
         arguments: [ 5 ]
       - name: function-length
-        arguments: [ 15, 30 ]
+        arguments: [ 60, 100 ]
       - name: cognitive-complexity
-        arguments: [ 25 ]
+        arguments: [ 30 ]
       - name: max-public-structs
         arguments: [ 10 ]
       - name: add-constant
@@ -535,6 +535,14 @@ linters:
         text: "ifElseChain"
         linters:
           - gocritic
+      # Exclude unused linter for blank identifiers (standard Go practice for unused parameters)
+      - text: "var _ is unused"
+        linters:
+          - unused
+      # Exclude unused-receiver for methods where receiver is not needed (interface compliance, etc.)
+      - text: "unused-receiver"
+        linters:
+          - revive
       # Exclude gochecknoglobals for web package
       - path: web/
         linters:

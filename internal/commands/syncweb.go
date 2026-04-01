@@ -342,7 +342,7 @@ func (c *SyncwebVersionCmd) Help() string {
 	return versionExamples
 }
 
-func (c *SyncwebVersionCmd) Run(g *SyncwebCmd) error {
+func (c *SyncwebVersionCmd) Run(_ *SyncwebCmd) error {
 	fmt.Println(version.FullInfo())
 	return nil
 }

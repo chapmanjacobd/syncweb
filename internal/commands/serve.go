@@ -364,7 +364,7 @@ func (c *ServeCmd) isPathBlacklisted(path string) bool {
 	return false
 }
 
-func (c *ServeCmd) handleMounts(w http.ResponseWriter, r *http.Request) {
+func (c *ServeCmd) handleMounts(w http.ResponseWriter, _ *http.Request) {
 	devices, err := utils.GetBlockDevices()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

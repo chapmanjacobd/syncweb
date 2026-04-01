@@ -1,5 +1,4 @@
 //go:build !e2e
-// +build !e2e
 
 package syncweb
 
@@ -25,6 +24,7 @@ func cleanupTestHomeDir(homeDir string) error {
 			strings.HasPrefix(name, ".syncthing") ||
 			strings.HasSuffix(name, ".xml") ||
 			strings.HasSuffix(name, ".pem") {
+
 			path := filepath.Join(homeDir, name)
 			_ = os.RemoveAll(path) // Best-effort cleanup
 		}

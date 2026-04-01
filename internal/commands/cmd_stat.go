@@ -32,7 +32,7 @@ Examples:
 
 // SyncwebStatCmd displays detailed file status information
 type SyncwebStatCmd struct {
-	Paths       []string `arg:""                                 help:"Files or directories to stat" required:""`
+	Paths       []string `help:"Files or directories to stat" required:"" arg:""`
 	Terse       bool     `help:"Print information in terse form" short:"t"`
 	Format      string   `help:"Use custom format"               short:"c"`
 	Dereference bool     `help:"Follow symbolic links"           short:"L"`

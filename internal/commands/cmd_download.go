@@ -37,7 +37,7 @@ Examples:
 
 // SyncwebDownloadCmd marks file paths for download/sync
 type SyncwebDownloadCmd struct {
-	Paths []string `arg:""                                       help:"File or directory paths to download" optional:""`
+	Paths []string `help:"File or directory paths to download" arg:"" optional:""`
 	Depth int      `help:"Maximum depth for directory traversal"`
 }
 
@@ -232,8 +232,8 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 			var response string
 			fmt.Printf("\nMark %d files (%s) for download? [y/N]: ", len(items), utils.FormatSize(totalSize))
 			_, _ = fmt.Scanln(&response)
-			if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
-				fmt.Println("Download cancelled")
+			if !strings.EqualFold(response, "y") && !strings.EqualFold(response, "yes") {
+				fmt.Println("Download canceled")
 				return nil
 			}
 		}
@@ -389,6 +389,7 @@ func calculateMountpointUsage(
 	folderSpaceInfos map[string]*folderSpaceInfo,
 	itemsByFolder map[string][]downloadItem,
 ) map[string]*mountpointUsageInfo {
+
 	result := make(map[string]*mountpointUsageInfo)
 
 	for mountpoint, folderIDs := range mountpointGroups {
@@ -448,6 +449,7 @@ func printDownloadSummary(
 	mountpointUsage map[string]*mountpointUsageInfo,
 	mountpointGroups map[string][]string,
 ) {
+
 	fmt.Println("\nDownload Summary:")
 	fmt.Println(strings.Repeat("-", 135))
 	fmt.Printf("%-40s %8s %12s %12s %12s %15s %8s\n",
@@ -529,6 +531,7 @@ func generateWarnings(
 	mountpointUsage map[string]*mountpointUsageInfo,
 	folderSpaceInfos map[string]*folderSpaceInfo,
 ) []string {
+
 	var warnings []string
 
 	for mp, info := range mountpointUsage {

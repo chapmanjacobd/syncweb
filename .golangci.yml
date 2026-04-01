@@ -186,64 +186,64 @@ linters:
         linters:
           - revive
 
-linters-settings:
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/chapmanjacobd/syncweb)
-    custom-order: true
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/chapmanjacobd/syncweb)
+      custom-order: true
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - whyNoLint
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - whyNoLint
 
-  gofumpt:
-    extra-rules: true
+    gofumpt:
+      extra-rules: true
 
-  goimports:
-    local-prefixes: github.com/chapmanjacobd/syncweb
+    goimports:
+      local-prefixes: github.com/chapmanjacobd/syncweb
 
-  maintidx:
-    under: 30
+    maintidx:
+      under: 30
 
-  misspell:
-    locale: US
-    ignore-words: []
+    misspell:
+      locale: US
+      ignore-words: []
 
-  nakedret:
-    max-func-lines: 5
+    nakedret:
+      max-func-lines: 5
 
-  nestif:
-    min-complexity: 6
+    nestif:
+      min-complexity: 6
 
-  nilnil:
-    checked-types:
-      - ptr
-      - func
-      - iface
-      - map
-      - chan
+    nilnil:
+      checked-types:
+        - ptr
+        - func
+        - iface
+        - map
+        - chan
 
-  nolintlint:
-    allow-unused: false
-    require-explanation: true
-    require-specific: true
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
 
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: true
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: true
 
-  revive:
-    confidence: 0.8
-    rules:
+    revive:
+      confidence: 0.8
+      rules:
       - name: blank-imports
       - name: context-as-argument
       - name: context-keys-type
@@ -291,36 +291,44 @@ linters-settings:
             allowInts: "0,1,2"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
 
-  tagalign:
-    align: true
-    sort: true
-    order:
-      - required
-      - help
-      - default
-      - cmd
-      - alias
-      - short
-      - aliases
-      - name
-      - env
-      - group
-      - kong
+    tagalign:
+      align: false
+      sort: true
+      strict: false
+      order:
+        - help
+        - required
+        - default
+        - cmd
+        - alias
+        - short
+        - aliases
+        - name
+        - env
+        - group
+        - kong
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - binding
+        - validate
 
-  testifylint:
-    enable-all: true
+    testifylint:
+      enable-all: true
 
-  unused:
-    field-writes-are-uses: false
-    post-statements-are-reads: false
-    exported-fields-are-used: false
-    parameters-are-used: false
-    local-variables-are-used: false
-    generated-is-used: false
+    unused:
+      field-writes-are-uses: false
+      post-statements-are-reads: false
+      exported-fields-are-used: false
+      parameters-are-used: false
+      local-variables-are-used: false
+      generated-is-used: false
 
-  whitespace:
-    multi-if: true
-    multi-func: true
+    whitespace:
+      multi-if: true
+      multi-func: true
 
 issues:
   max-issues-per-linter: 0

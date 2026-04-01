@@ -33,13 +33,13 @@ Examples:
 
 // SyncwebSortCmd sorts Syncthing files by multiple criteria
 type SyncwebSortCmd struct {
-	Paths          []string `arg:""                                        help:"File paths to sort (or read from stdin)" optional:""`
-	Sort           []string `default:"name"                                help:"Sort by: name, size, seeds, niche, frecency, modified"`
+	Paths          []string `help:"File paths to sort (or read from stdin)" arg:"" optional:""`
+	Sort           []string `help:"Sort by: name, size, seeds, niche, frecency, modified" default:"name"`
 	LimitSize      string   `help:"Stop after printing N bytes"            short:"S"`
 	MinSeeders     int      `help:"Filter files with fewer than N seeders"`
 	MaxSeeders     int      `help:"Filter files with more than N seeders"`
-	Niche          int      `default:"3"                                   help:"Ideal peer count for niche sorting"`
-	FrecencyWeight int      `default:"3"                                   help:"Recency weight for frecency (lower=more recency)"`
+	Niche          int      `help:"Ideal peer count for niche sorting" default:"3"`
+	FrecencyWeight int      `help:"Recency weight for frecency (lower=more recency)" default:"3"`
 	Depth          []string `help:"Depth constraints"                      short:"d"`
 	MinDepth       int      `help:"Minimum depth"`
 	MaxDepth       int      `help:"Maximum depth"`

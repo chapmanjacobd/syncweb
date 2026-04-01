@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -28,7 +29,7 @@ Examples:
 
 // SyncwebDropCmd removes devices from syncweb
 type SyncwebDropCmd struct {
-	DeviceIDs []string `arg:""                             help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
+	DeviceIDs []string `help:"Syncthing device IDs (space or comma-separated)" required:"" name:"device-ids" arg:""`
 	FolderIDs []string `help:"Remove devices from folders" short:"f"`
 }
 
@@ -119,7 +120,7 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 
 		// Exit with error if all device IDs were invalid
 		if len(deviceIDs) > 0 && result.DeviceCount == 0 {
-			return fmt.Errorf("no valid devices were removed")
+			return errors.New("no valid devices were removed")
 		}
 
 		return nil

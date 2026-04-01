@@ -97,7 +97,7 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 				seenIDs[d.DeviceID.String()] = true
 
 				name := d.Name
-				if name == "" || strings.ToLower(name) == "syncweb" || strings.ToLower(name) == "syncthing" {
+				if name == "" || strings.EqualFold(name, "syncweb") || strings.EqualFold(name, "syncthing") {
 					name = d.DeviceID.String()[:7]
 				}
 

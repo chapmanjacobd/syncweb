@@ -27,7 +27,7 @@ Examples:
 
 // SyncwebCreateCmd creates a new syncweb folder
 type SyncwebCreateCmd struct {
-	Paths []string `arg:"" default:"." help:"Path to folder" optional:""`
+	Paths []string `help:"Path to folder" default:"." arg:"" optional:""`
 }
 
 // Help displays examples for the create command

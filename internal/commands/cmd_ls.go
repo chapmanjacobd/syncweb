@@ -39,12 +39,12 @@ Examples:
 
 // SyncwebLsCmd lists files at the current directory level
 type SyncwebLsCmd struct {
-	Paths         []string `arg:""                                       default:"."                                 help:"Path relative to the root" optional:""`
+	Paths         []string `help:"Path relative to the root" default:"." arg:"" optional:""`
 	Long          bool     `help:"Use long listing format"               short:"l"`
-	HumanReadable bool     `default:"true"                               help:"Print sizes in human readable format"`
-	FolderSize    bool     `default:"true"                               help:"Include accurate subfolder size"`
+	HumanReadable bool     `help:"Print sizes in human readable format" default:"true"`
+	FolderSize    bool     `help:"Include accurate subfolder size" default:"true"`
 	ShowAll       bool     `help:"Do not ignore entries starting with ." short:"a"`
-	Depth         int      `default:"0"                                  help:"Descend N directory levels deep"      short:"D"`
+	Depth         int      `help:"Descend N directory levels deep" default:"0" short:"D"`
 	NoHeader      bool     `help:"Suppress header in long format"`
 }
 

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -31,7 +32,7 @@ Examples:
 
 // SyncwebAcceptCmd accepts devices and optionally adds them to folders
 type SyncwebAcceptCmd struct {
-	DeviceIDs  []string `arg:""                                  help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
+	DeviceIDs  []string `help:"Syncthing device IDs (space or comma-separated)" required:"" name:"device-ids" arg:""`
 	FolderIDs  []string `help:"Add devices to folders"           short:"f"`
 	Introducer bool     `help:"Configure devices as introducers"`
 }
@@ -124,7 +125,7 @@ func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 
 		// Exit with error if all device IDs were invalid
 		if len(deviceIDs) > 0 && result.DeviceCount == 0 {
-			return fmt.Errorf("no valid devices were added")
+			return errors.New("no valid devices were added")
 		}
 
 		return nil

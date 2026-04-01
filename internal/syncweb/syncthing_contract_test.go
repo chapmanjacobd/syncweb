@@ -715,7 +715,7 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 
 		// This should respect context cancellation
 		_, err := internals.DownloadBlock(ctx, protocol.LocalDeviceID, folderID, testFile, 0, info.Blocks[0], false)
-		// Error is expected since we cancelled and there's no peer
+		// Error is expected since we canceled and there's no peer
 		_ = err
 	}
 }

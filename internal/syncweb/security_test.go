@@ -1,4 +1,4 @@
-package syncweb
+package syncweb_test
 
 import (
 	"os"
@@ -6,19 +6,21 @@ import (
 	"testing"
 
 	"github.com/syncthing/syncthing/lib/config"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
 func TestSecurity_SyncthingConfig(t *testing.T) {
 	homeDir := t.TempDir()
 
-	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
+	sw, err := syncweb.NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := sw.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer stopAndCleanup(sw, homeDir)
+	defer syncweb.StopAndCleanup(sw, homeDir)
 
 	cfg := sw.Node.Cfg.RawCopy()
 
@@ -48,14 +50,14 @@ func TestSecurity_SyncthingConfig(t *testing.T) {
 func TestSecurity_PathValidation(t *testing.T) {
 	homeDir := t.TempDir()
 
-	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
+	sw, err := syncweb.NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	defer stopAndCleanup(sw, homeDir)
+	defer syncweb.StopAndCleanup(sw, homeDir)
 
 	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)

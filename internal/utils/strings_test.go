@@ -1,7 +1,9 @@
-package utils
+package utils_test
 
 import (
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestCompareBlockStrings(t *testing.T) {
@@ -29,7 +31,7 @@ func TestCompareBlockStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CompareBlockStrings(tt.pattern, tt.value)
+			result := utils.CompareBlockStrings(tt.pattern, tt.value)
 			if result != tt.expected {
 				t.Errorf("CompareBlockStrings(%q, %q) = %v, expected %v", tt.pattern, tt.value, result, tt.expected)
 			}
@@ -53,7 +55,7 @@ func TestMatchesAny(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MatchesAny(tt.path, patterns)
+			result := utils.MatchesAny(tt.path, patterns)
 			if result != tt.expected {
 				t.Errorf("MatchesAny(%q, %v) = %v, expected %v", tt.path, patterns, result, tt.expected)
 			}
@@ -80,7 +82,7 @@ func TestCleanString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CleanString(tt.input)
+			result := utils.CleanString(tt.input)
 			if result != tt.expected {
 				t.Errorf("CleanString(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -105,7 +107,7 @@ func TestRemoveTextInsideBrackets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemoveTextInsideBrackets(tt.input)
+			result := utils.RemoveTextInsideBrackets(tt.input)
 			if result != tt.expected {
 				t.Errorf("RemoveTextInsideBrackets(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -127,7 +129,7 @@ func TestPathToSentence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := PathToSentence(tt.input)
+			result := utils.PathToSentence(tt.input)
 			if result != tt.expected {
 				t.Errorf("PathToSentence(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -154,7 +156,7 @@ func TestIsGenericTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsGenericTitle(tt.title)
+			result := utils.IsGenericTitle(tt.title)
 			if result != tt.expected {
 				t.Errorf("IsGenericTitle(%q) = %v, expected %v", tt.title, result, tt.expected)
 			}
@@ -179,7 +181,7 @@ func TestIsDigit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsDigit(tt.input)
+			result := utils.IsDigit(tt.input)
 			if result != tt.expected {
 				t.Errorf("IsDigit(%q) = %v, expected %v", tt.input, result, tt.expected)
 			}
@@ -204,7 +206,7 @@ func TestIsTimecodeLike(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsTimecodeLike(tt.input)
+			result := utils.IsTimecodeLike(tt.input)
 			if result != tt.expected {
 				t.Errorf("IsTimecodeLike(%q) = %v, expected %v", tt.input, result, tt.expected)
 			}
@@ -227,7 +229,7 @@ func TestRemoveConsecutiveWhitespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemoveConsecutiveWhitespace(tt.input)
+			result := utils.RemoveConsecutiveWhitespace(tt.input)
 			if result != tt.expected {
 				t.Errorf("RemoveConsecutiveWhitespace(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -250,7 +252,7 @@ func TestRemoveConsecutive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemoveConsecutive(tt.input, tt.char)
+			result := utils.RemoveConsecutive(tt.input, tt.char)
 			if result != tt.expected {
 				t.Errorf("RemoveConsecutive(%q, %q) = %q, expected %q", tt.input, tt.char, result, tt.expected)
 			}
@@ -263,7 +265,7 @@ func TestRemoveConsecutives(t *testing.T) {
 	chars := []string{".", "-"}
 	expected := "hello.world-test"
 
-	result := RemoveConsecutives(input, chars)
+	result := utils.RemoveConsecutives(input, chars)
 	if result != expected {
 		t.Errorf("RemoveConsecutives(%q, %v) = %q, expected %q", input, chars, result, expected)
 	}
@@ -290,7 +292,7 @@ func TestRemovePrefixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemovePrefixes(tt.input, tt.prefixes)
+			result := utils.RemovePrefixes(tt.input, tt.prefixes)
 			if result != tt.expected {
 				t.Errorf("RemovePrefixes(%q, %v) = %q, expected %q", tt.input, tt.prefixes, result, tt.expected)
 			}
@@ -318,7 +320,7 @@ func TestRemoveSuffixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemoveSuffixes(tt.input, tt.suffixes)
+			result := utils.RemoveSuffixes(tt.input, tt.suffixes)
 			if result != tt.expected {
 				t.Errorf("RemoveSuffixes(%q, %v) = %q, expected %q", tt.input, tt.suffixes, result, tt.expected)
 			}
@@ -345,7 +347,7 @@ func TestShorten(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Shorten(tt.input, tt.maxWidth)
+			result := utils.Shorten(tt.input, tt.maxWidth)
 			if result != tt.expected {
 				t.Errorf("Shorten(%q, %d) = %q, expected %q", tt.input, tt.maxWidth, result, tt.expected)
 			}
@@ -369,7 +371,7 @@ func TestShortenMiddle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShortenMiddle(tt.input, tt.maxWidth)
+			result := utils.ShortenMiddle(tt.input, tt.maxWidth)
 			if result != tt.expected {
 				t.Errorf("ShortenMiddle(%q, %d) = %q, expected %q", tt.input, tt.maxWidth, result, tt.expected)
 			}
@@ -394,7 +396,7 @@ func TestNaturalLess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := NaturalLess(tt.s1, tt.s2)
+			result := utils.NaturalLess(tt.s1, tt.s2)
 			if result != tt.expected {
 				t.Errorf("NaturalLess(%q, %q) = %v, expected %v", tt.s1, tt.s2, result, tt.expected)
 			}
@@ -418,7 +420,7 @@ func TestUnParagraph(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := UnParagraph(tt.input)
+			result := utils.UnParagraph(tt.input)
 			if result != tt.expected {
 				t.Errorf("UnParagraph(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -443,7 +445,7 @@ func TestIsMimeMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsMimeMatch(tt.terms, tt.mimeType)
+			result := utils.IsMimeMatch(tt.terms, tt.mimeType)
 			if result != tt.expected {
 				t.Errorf("IsMimeMatch(%v, %q) = %v, expected %v", tt.terms, tt.mimeType, result, tt.expected)
 			}
@@ -466,7 +468,7 @@ func TestTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Title(tt.input)
+			result := utils.Title(tt.input)
 			if result != tt.expected {
 				t.Errorf("Title(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -492,7 +494,7 @@ func TestStripEnclosingQuotes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := StripEnclosingQuotes(tt.input)
+			result := utils.StripEnclosingQuotes(tt.input)
 			if result != tt.expected {
 				t.Errorf("StripEnclosingQuotes(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -504,7 +506,7 @@ func TestSplitAndTrim(t *testing.T) {
 	input := "hello,  world , test"
 	expected := []string{"hello", "world", "test"}
 
-	result := SplitAndTrim(input, ",")
+	result := utils.SplitAndTrim(input, ",")
 	if len(result) != len(expected) {
 		t.Errorf("SplitAndTrim returned %d elements, expected %d", len(result), len(expected))
 	}
@@ -533,7 +535,7 @@ func TestCombine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Combine(tt.inputs...)
+			result := utils.Combine(tt.inputs...)
 			if result != tt.expected {
 				t.Errorf("Combine(%v) = %q, expected %q", tt.inputs, result, tt.expected)
 			}
@@ -556,7 +558,7 @@ func TestFromTimestampSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FromTimestampSeconds(tt.input)
+			result := utils.FromTimestampSeconds(tt.input)
 			if result != tt.expected {
 				t.Errorf("FromTimestampSeconds(%q) = %f, expected %f", tt.input, result, tt.expected)
 			}
@@ -581,7 +583,7 @@ func TestPartialStartswith(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := PartialStartswith(tt.input, list)
+			result, err := utils.PartialStartswith(tt.input, list)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -614,7 +616,7 @@ func TestGlobMatchAny(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GlobMatchAny(tt.path, patterns)
+			result := utils.GlobMatchAny(tt.path, patterns)
 			if result != tt.expected {
 				t.Errorf("GlobMatchAny(%q, %v) = %v, expected %v", tt.path, patterns, result, tt.expected)
 			}
@@ -637,7 +639,7 @@ func TestGlobMatchAll(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GlobMatchAll(tt.path, patterns)
+			result := utils.GlobMatchAll(tt.path, patterns)
 			if result != tt.expected {
 				t.Errorf("GlobMatchAll(%q, %v) = %v, expected %v", tt.path, patterns, result, tt.expected)
 			}
@@ -662,7 +664,7 @@ func TestRemoveExcessiveLinebreaks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RemoveExcessiveLinebreaks(tt.input)
+			result := utils.RemoveExcessiveLinebreaks(tt.input)
 			if result != tt.expected {
 				t.Errorf("RemoveExcessiveLinebreaks(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -684,7 +686,7 @@ func TestLastChars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := LastChars(tt.input)
+			result := utils.LastChars(tt.input)
 			if result != tt.expected {
 				t.Errorf("LastChars(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -708,7 +710,7 @@ func TestExtractWords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractWords(tt.input)
+			result := utils.ExtractWords(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("ExtractWords(%q) returned %d elements, expected %d", tt.input, len(result), len(tt.expected))
 				return
@@ -738,7 +740,7 @@ func TestSafeJSONLoads(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SafeJSONLoads(tt.input)
+			result := utils.SafeJSONLoads(tt.input)
 			if tt.expectNil && result != nil {
 				t.Errorf("SafeJSONLoads(%q) expected nil, got %v", tt.input, result)
 			}
@@ -763,7 +765,7 @@ func TestLoadString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := LoadString(tt.input)
+			result := utils.LoadString(tt.input)
 			if tt.expectNil && result != nil {
 				t.Errorf("LoadString(%q) expected nil, got %v", tt.input, result)
 			}
@@ -792,7 +794,7 @@ func TestFtsQuote(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FtsQuote(tt.input)
+			result := utils.FtsQuote(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("FtsQuote(%v) returned %d elements, expected %d", tt.input, len(result), len(tt.expected))
 				return
@@ -822,7 +824,7 @@ func TestEscapeXML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := EscapeXML(tt.input)
+			result := utils.EscapeXML(tt.input)
 			if result != tt.expected {
 				t.Errorf("EscapeXML(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -846,7 +848,7 @@ func TestPluralize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Pluralize(tt.n, tt.singular, tt.plural)
+			result := utils.Pluralize(tt.n, tt.singular, tt.plural)
 			if result != tt.expected {
 				t.Errorf("Pluralize(%d, %q, %q) = %q, expected %q", tt.n, tt.singular, tt.plural, result, tt.expected)
 			}

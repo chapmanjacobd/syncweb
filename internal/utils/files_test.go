@@ -1,4 +1,4 @@
-package utils
+package utils_test
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestSampleHashFile(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSampleHashFile(t *testing.T) {
 	}
 
 	// Test with default parameters
-	hash, err := SampleHashFile(testFile, 1, 0.5, 0)
+	hash, err := utils.SampleHashFile(testFile, 1, 0.5, 0)
 	if err != nil {
 		t.Fatalf("SampleHashFile failed: %v", err)
 	}
@@ -28,7 +29,7 @@ func TestSampleHashFile(t *testing.T) {
 	}
 
 	// Test with custom chunk size
-	hash2, err := SampleHashFile(testFile, 2, 0.3, 64)
+	hash2, err := utils.SampleHashFile(testFile, 2, 0.3, 64)
 	if err != nil {
 		t.Fatalf("SampleHashFile with custom chunk size failed: %v", err)
 	}
@@ -37,7 +38,7 @@ func TestSampleHashFile(t *testing.T) {
 	}
 
 	// Hash should be deterministic
-	hash3, err := SampleHashFile(testFile, 1, 0.5, 0)
+	hash3, err := utils.SampleHashFile(testFile, 1, 0.5, 0)
 	if err != nil {
 		t.Fatalf("SampleHashFile for determinism test failed: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestSampleHashFile_EmptyFile(t *testing.T) {
 		t.Fatalf("Failed to create empty test file: %v", err)
 	}
 
-	hash, err := SampleHashFile(testFile, 1, 0.5, 0)
+	hash, err := utils.SampleHashFile(testFile, 1, 0.5, 0)
 	if err != nil {
 		t.Fatalf("SampleHashFile on empty file failed: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestSampleHashFile_EmptyFile(t *testing.T) {
 }
 
 func TestSampleHashFile_NonExistent(t *testing.T) {
-	_, err := SampleHashFile("/nonexistent/path/file.txt", 1, 0.5, 0)
+	_, err := utils.SampleHashFile("/nonexistent/path/file.txt", 1, 0.5, 0)
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -79,7 +80,7 @@ func TestFullHashFile(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	hash, err := FullHashFile(testFile)
+	hash, err := utils.FullHashFile(testFile)
 	if err != nil {
 		t.Fatalf("FullHashFile failed: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestFullHashFile(t *testing.T) {
 	}
 
 	// Verify hash is deterministic
-	hash2, err := FullHashFile(testFile)
+	hash2, err := utils.FullHashFile(testFile)
 	if err != nil {
 		t.Fatalf("FullHashFile second call failed: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestFullHashFile(t *testing.T) {
 }
 
 func TestFullHashFile_NonExistent(t *testing.T) {
-	_, err := FullHashFile("/nonexistent/path/file.txt")
+	_, err := utils.FullHashFile("/nonexistent/path/file.txt")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -118,7 +119,7 @@ func TestFilterDeleted(t *testing.T) {
 
 	// Test with mix of existing and non-existing files
 	paths := []string{existingFile, deletedFile}
-	result := FilterDeleted(paths)
+	result := utils.FilterDeleted(paths)
 
 	if len(result) != 1 {
 		t.Errorf("Expected 1 existing file, got %d", len(result))
@@ -145,7 +146,7 @@ func TestFilterDeleted_WithDeletedDir(t *testing.T) {
 
 	// Test filtering - file in deleted dir should be filtered out
 	paths := []string{fileInSubdir}
-	result := FilterDeleted(paths)
+	result := utils.FilterDeleted(paths)
 
 	if len(result) != 0 {
 		t.Errorf("Expected 0 files after deleting parent dir, got %d", len(result))
@@ -161,7 +162,7 @@ func TestGetFileStats(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	stats, err := GetFileStats(testFile)
+	stats, err := utils.GetFileStats(testFile)
 	if err != nil {
 		t.Fatalf("GetFileStats failed: %v", err)
 	}
@@ -178,7 +179,7 @@ func TestGetFileStats(t *testing.T) {
 }
 
 func TestGetFileStats_NonExistent(t *testing.T) {
-	_, err := GetFileStats("/nonexistent/path/file.txt")
+	_, err := utils.GetFileStats("/nonexistent/path/file.txt")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -194,7 +195,7 @@ func TestIsFileOpen(t *testing.T) {
 	}
 
 	// File should not be open
-	if IsFileOpen(testFile) {
+	if utils.IsFileOpen(testFile) {
 		t.Error("File should not be reported as open when it's not")
 	}
 
@@ -208,7 +209,7 @@ func TestIsFileOpen(t *testing.T) {
 	// On Linux, the file might be detected as open
 	// On other platforms, this might not work
 	// We just verify the function doesn't crash
-	_ = IsFileOpen(testFile)
+	_ = utils.IsFileOpen(testFile)
 }
 
 func TestDetectMimeType(t *testing.T) {
@@ -221,7 +222,7 @@ func TestDetectMimeType(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	mime := DetectMimeType(txtFile)
+	mime := utils.DetectMimeType(txtFile)
 	if mime == "" {
 		t.Error("Expected non-empty MIME type for text file")
 	}
@@ -233,7 +234,7 @@ func TestDetectMimeType(t *testing.T) {
 		t.Fatalf("Failed to create apk file: %v", err)
 	}
 
-	mime = DetectMimeType(apkFile)
+	mime = utils.DetectMimeType(apkFile)
 	if mime != "application/vnd.android.package-archive" {
 		t.Errorf("Expected APK MIME type, got: %s", mime)
 	}
@@ -245,14 +246,14 @@ func TestDetectMimeType(t *testing.T) {
 		t.Fatalf("Failed to create zim file: %v", err)
 	}
 
-	mime = DetectMimeType(zimFile)
+	mime = utils.DetectMimeType(zimFile)
 	if mime != "application/x-zim" {
 		t.Errorf("Expected ZIM MIME type, got: %s", mime)
 	}
 }
 
 func TestDetectMimeType_NonExistent(t *testing.T) {
-	mime := DetectMimeType("/nonexistent/path/file.txt")
+	mime := utils.DetectMimeType("/nonexistent/path/file.txt")
 	if mime != "" {
 		t.Errorf("Expected empty MIME type for non-existent file, got: %s", mime)
 	}
@@ -269,7 +270,7 @@ func TestRename(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = Rename(flags, src, dst)
+	err = utils.Rename(flags, src, dst)
 	if err != nil {
 		t.Fatalf("Rename failed: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestRename_Simulate(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = Rename(flags, src, dst)
+	err = utils.Rename(flags, src, dst)
 	if err != nil {
 		t.Fatalf("Rename in simulate mode failed: %v", err)
 	}
@@ -318,7 +319,7 @@ func TestUnlink(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = Unlink(flags, testFile)
+	err = utils.Unlink(flags, testFile)
 	if err != nil {
 		t.Fatalf("Unlink failed: %v", err)
 	}
@@ -339,7 +340,7 @@ func TestUnlink_Simulate(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = Unlink(flags, testFile)
+	err = utils.Unlink(flags, testFile)
 	if err != nil {
 		t.Fatalf("Unlink in simulate mode failed: %v", err)
 	}
@@ -367,7 +368,7 @@ func TestRmtree(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = Rmtree(flags, testDir)
+	err = utils.Rmtree(flags, testDir)
 	if err != nil {
 		t.Fatalf("Rmtree failed: %v", err)
 	}
@@ -388,7 +389,7 @@ func TestRmtree_Simulate(t *testing.T) {
 	}
 
 	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = Rmtree(flags, testDir)
+	err = utils.Rmtree(flags, testDir)
 	if err != nil {
 		t.Fatalf("Rmtree in simulate mode failed: %v", err)
 	}
@@ -404,7 +405,7 @@ func TestAltName(t *testing.T) {
 
 	// Test with non-existent file - should return same path
 	testFile := filepath.Join(tmpDir, "test.txt")
-	result := AltName(testFile)
+	result := utils.AltName(testFile)
 	if result != testFile {
 		t.Errorf("Expected same path for non-existent file, got %s", result)
 	}
@@ -416,7 +417,7 @@ func TestAltName(t *testing.T) {
 	}
 
 	// Test with existing file - should return alternative
-	result = AltName(testFile)
+	result = utils.AltName(testFile)
 	expected := filepath.Join(tmpDir, "test_1.txt")
 	if result != expected {
 		t.Errorf("Expected %s, got %s", expected, result)
@@ -429,7 +430,7 @@ func TestAltName(t *testing.T) {
 	}
 
 	// Test again - should increment counter
-	result2 := AltName(testFile)
+	result2 := utils.AltName(testFile)
 	expected2 := filepath.Join(tmpDir, "test_2.txt")
 	if result2 != expected2 {
 		t.Errorf("Expected %s, got %s", expected2, result2)
@@ -471,7 +472,7 @@ func TestCommonPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CommonPath(tt.paths)
+			result := utils.CommonPath(tt.paths)
 			if result != tt.expected {
 				t.Errorf("Expected %s, got %s", tt.expected, result)
 			}
@@ -482,7 +483,7 @@ func TestCommonPath(t *testing.T) {
 func TestCommonPathFull(t *testing.T) {
 	// CommonPathFull currently just calls CommonPath
 	paths := []string{"/home/user/docs/a.txt", "/home/user/docs/b.txt"}
-	result := CommonPathFull(paths)
+	result := utils.CommonPathFull(paths)
 	expected := "/home/user/docs"
 	if result != expected {
 		t.Errorf("Expected %s, got %s", expected, result)
@@ -500,7 +501,7 @@ func TestCopyFile(t *testing.T) {
 		t.Fatalf("Failed to create source file: %v", err)
 	}
 
-	err = CopyFile(src, dst)
+	err = utils.CopyFile(src, dst)
 	if err != nil {
 		t.Fatalf("CopyFile failed: %v", err)
 	}
@@ -519,7 +520,7 @@ func TestCopyFile_NonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	dst := filepath.Join(tmpDir, "dst.txt")
 
-	err := CopyFile("/nonexistent/src.txt", dst)
+	err := utils.CopyFile("/nonexistent/src.txt", dst)
 	if err == nil {
 		t.Error("Expected error for non-existent source file")
 	}
@@ -546,7 +547,7 @@ func TestCopyDir(t *testing.T) {
 		t.Fatalf("Failed to create file2: %v", err)
 	}
 
-	err = CopyDir(src, dst)
+	err = utils.CopyDir(src, dst)
 	if err != nil {
 		t.Fatalf("CopyDir failed: %v", err)
 	}
@@ -578,7 +579,7 @@ func TestCopyDir_NonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	dst := filepath.Join(tmpDir, "dst")
 
-	err := CopyDir("/nonexistent/src", dst)
+	err := utils.CopyDir("/nonexistent/src", dst)
 	if err == nil {
 		t.Error("Expected error for non-existent source directory")
 	}
@@ -615,7 +616,7 @@ func TestGetExternalSubtitles(t *testing.T) {
 		t.Fatalf("Failed to create other file: %v", err)
 	}
 
-	subs := GetExternalSubtitles(mediaFile)
+	subs := utils.GetExternalSubtitles(mediaFile)
 	if len(subs) != 4 {
 		t.Errorf("Expected 4 subtitle files, got %d", len(subs))
 	}
@@ -630,7 +631,7 @@ func TestGetExternalSubtitles_NoSubtitles(t *testing.T) {
 		t.Fatalf("Failed to create media file: %v", err)
 	}
 
-	subs := GetExternalSubtitles(mediaFile)
+	subs := utils.GetExternalSubtitles(mediaFile)
 	if len(subs) != 0 {
 		t.Errorf("Expected 0 subtitle files, got %d", len(subs))
 	}
@@ -640,7 +641,7 @@ func TestEnsureDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	testDir := filepath.Join(tmpDir, "new", "nested", "directory")
 
-	err := EnsureDir(testDir)
+	err := utils.EnsureDir(testDir)
 	if err != nil {
 		t.Fatalf("EnsureDir failed: %v", err)
 	}
@@ -658,7 +659,7 @@ func TestEnsureDir(t *testing.T) {
 func TestEnsureDir_Existing(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	err := EnsureDir(tmpDir)
+	err := utils.EnsureDir(tmpDir)
 	if err != nil {
 		t.Fatalf("EnsureDir failed for existing directory: %v", err)
 	}

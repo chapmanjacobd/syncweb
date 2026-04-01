@@ -1,4 +1,4 @@
-package utils
+package utils_test
 
 import (
 	"bytes"
@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestFileExists(t *testing.T) {
@@ -19,11 +21,11 @@ func TestFileExists(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	if !FileExists(existingFile) {
+	if !utils.FileExists(existingFile) {
 		t.Error("FileExists should return true for existing file")
 	}
 
-	if FileExists(nonExistingFile) {
+	if utils.FileExists(nonExistingFile) {
 		t.Error("FileExists should return false for non-existing file")
 	}
 }
@@ -45,21 +47,21 @@ func TestDirExists(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	if !DirExists(existingDir) {
+	if !utils.DirExists(existingDir) {
 		t.Error("DirExists should return true for existing directory")
 	}
 
-	if DirExists(nonExistingDir) {
+	if utils.DirExists(nonExistingDir) {
 		t.Error("DirExists should return false for non-existing directory")
 	}
 
-	if DirExists(filePath) {
+	if utils.DirExists(filePath) {
 		t.Error("DirExists should return false for a file")
 	}
 }
 
 func TestGetDefaultBrowser(t *testing.T) {
-	result := GetDefaultBrowser()
+	result := utils.GetDefaultBrowser()
 	if result == "" {
 		t.Error("GetDefaultBrowser should return a non-empty string")
 	}
@@ -84,7 +86,7 @@ func TestIsSQLite(t *testing.T) {
 		t.Fatalf("Failed to create SQLite file: %v", err)
 	}
 
-	if !IsSQLite(sqliteFile) {
+	if !utils.IsSQLite(sqliteFile) {
 		t.Error("IsSQLite should return true for valid SQLite file")
 	}
 
@@ -95,12 +97,12 @@ func TestIsSQLite(t *testing.T) {
 		t.Fatalf("Failed to create non-SQLite file: %v", err)
 	}
 
-	if IsSQLite(nonSqliteFile) {
+	if utils.IsSQLite(nonSqliteFile) {
 		t.Error("IsSQLite should return false for non-SQLite file")
 	}
 
 	// Test non-existent file
-	if IsSQLite("/nonexistent/file.db") {
+	if utils.IsSQLite("/nonexistent/file.db") {
 		t.Error("IsSQLite should return false for non-existent file")
 	}
 
@@ -111,7 +113,7 @@ func TestIsSQLite(t *testing.T) {
 		t.Fatalf("Failed to create empty file: %v", err)
 	}
 
-	if IsSQLite(emptyFile) {
+	if utils.IsSQLite(emptyFile) {
 		t.Error("IsSQLite should return false for empty file")
 	}
 }
@@ -157,7 +159,7 @@ func TestReadLines(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.input)
-			result := ReadLines(reader)
+			result := utils.ReadLines(reader)
 			if len(result) != len(tt.expected) {
 				t.Errorf("ReadLines returned %d lines, expected %d", len(result), len(tt.expected))
 				return
@@ -173,7 +175,7 @@ func TestReadLines(t *testing.T) {
 
 func TestExpandStdin(t *testing.T) {
 	// Save original stdin
-	originalStdin := Stdin
+	originalStdin := utils.Stdin
 
 	tests := []struct {
 		name     string
@@ -209,8 +211,8 @@ func TestExpandStdin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Stdin = strings.NewReader(tt.stdin)
-			result := ExpandStdin(tt.input)
+			utils.Stdin = strings.NewReader(tt.stdin)
+			result := utils.ExpandStdin(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("ExpandStdin returned %d elements, expected %d", len(result), len(tt.expected))
 				return
@@ -224,12 +226,12 @@ func TestExpandStdin(t *testing.T) {
 	}
 
 	// Restore original stdin
-	Stdin = originalStdin
+	utils.Stdin = originalStdin
 }
 
 func TestConfirm(t *testing.T) {
-	originalStdin := Stdin
-	originalStdout := Stdout
+	originalStdin := utils.Stdin
+	originalStdout := utils.Stdout
 
 	tests := []struct {
 		name     string
@@ -248,11 +250,11 @@ func TestConfirm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Stdin = strings.NewReader(tt.input)
+			utils.Stdin = strings.NewReader(tt.input)
 			var output bytes.Buffer
-			Stdout = &output
+			utils.Stdout = &output
 
-			result := Confirm("Test message")
+			result := utils.Confirm("Test message")
 			if result != tt.expected {
 				t.Errorf("Confirm(%q) = %v, expected %v", tt.input, result, tt.expected)
 			}
@@ -264,13 +266,13 @@ func TestConfirm(t *testing.T) {
 		})
 	}
 
-	Stdin = originalStdin
-	Stdout = originalStdout
+	utils.Stdin = originalStdin
+	utils.Stdout = originalStdout
 }
 
 func TestPrompt(t *testing.T) {
-	originalStdin := Stdin
-	originalStdout := Stdout
+	originalStdin := utils.Stdin
+	originalStdout := utils.Stdout
 
 	tests := []struct {
 		name     string
@@ -285,11 +287,11 @@ func TestPrompt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Stdin = strings.NewReader(tt.input)
+			utils.Stdin = strings.NewReader(tt.input)
 			var output bytes.Buffer
-			Stdout = &output
+			utils.Stdout = &output
 
-			result := Prompt("Test message")
+			result := utils.Prompt("Test message")
 			if result != tt.expected {
 				t.Errorf("Prompt(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -301,6 +303,6 @@ func TestPrompt(t *testing.T) {
 		})
 	}
 
-	Stdin = originalStdin
-	Stdout = originalStdout
+	utils.Stdin = originalStdin
+	utils.Stdout = originalStdout
 }

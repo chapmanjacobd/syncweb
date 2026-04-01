@@ -1,8 +1,10 @@
-package commands
+package commands_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/commands"
 )
 
 func TestSyncwebReplCmd_CommandParsing(t *testing.T) {
@@ -42,8 +44,8 @@ func TestSyncwebReplCmd_CommandParsing(t *testing.T) {
 // Test that SyncwebReplCmd implements the command interface
 func TestSyncwebReplCmd_Interface(t *testing.T) {
 	var _ interface {
-		Run(*SyncwebCmd) error
-	} = &SyncwebReplCmd{}
+		Run(*commands.SyncwebCmd) error
+	} = &commands.SyncwebReplCmd{}
 }
 
 func TestSyncwebReplCmd_HelpText(t *testing.T) {

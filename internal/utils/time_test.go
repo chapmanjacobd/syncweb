@@ -1,8 +1,10 @@
-package utils
+package utils_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestParseDate(t *testing.T) {
@@ -18,7 +20,7 @@ func TestParseDate(t *testing.T) {
 		{"invalid", 0},
 	}
 	for _, tt := range tests {
-		got := ParseDate(tt.input)
+		got := utils.ParseDate(tt.input)
 		if got != tt.want && tt.want != 0 {
 			// time.Parse("2006-01-02", "2024-01-01") returns 2024-01-01 00:00:00 +0000 UTC
 			// which is 1704067200
@@ -29,7 +31,7 @@ func TestParseDate(t *testing.T) {
 
 func TestIsTZAware(t *testing.T) {
 	utc := time.Now().UTC()
-	if IsTZAware(utc) {
+	if utils.IsTZAware(utc) {
 		t.Errorf("IsTZAware(UTC) = true, want false")
 	}
 	// Local might be UTC on some systems (CI), so this test might be flaky
@@ -46,7 +48,7 @@ func TestSuperParser(t *testing.T) {
 		{"invalid", false},
 	}
 	for _, tt := range tests {
-		got := SuperParser(tt.input)
+		got := utils.SuperParser(tt.input)
 		if (got != nil) != tt.want {
 			t.Errorf("SuperParser(%q) = %v, want %v", tt.input, got, tt.want)
 		}
@@ -55,7 +57,7 @@ func TestSuperParser(t *testing.T) {
 
 func TestSpecificDate(t *testing.T) {
 	dates := []string{"2020-01-01", "2021-02-02", "2022-03-03"}
-	got := SpecificDate(dates...)
+	got := utils.SpecificDate(dates...)
 	if got == nil {
 		t.Fatalf("SpecificDate() = nil, want non-nil")
 	}
@@ -69,7 +71,7 @@ func TestTubeDate(t *testing.T) {
 		"upload_date": "2024-01-01",
 		"other":       "val",
 	}
-	got := TubeDate(v)
+	got := utils.TubeDate(v)
 	if got == nil {
 		t.Fatalf("TubeDate() = nil, want non-nil")
 	}
@@ -80,11 +82,11 @@ func TestTubeDate(t *testing.T) {
 
 func TestParseDateOrRelative(t *testing.T) {
 	// Absolute
-	if got := ParseDateOrRelative("2024-01-01"); got != 1704067200 {
+	if got := utils.ParseDateOrRelative("2024-01-01"); got != 1704067200 {
 		// t.Errorf("ParseDateOrRelative('2024-01-01') = %v, want 1704067200", got)
 	}
 	// Relative
-	got := ParseDateOrRelative("1h")
+	got := utils.ParseDateOrRelative("1h")
 	now := time.Now().Unix()
 	if got > now || got < now-3610 {
 		// t.Errorf("ParseDateOrRelative('1h') = %v, now = %v", got, now)
@@ -93,7 +95,7 @@ func TestParseDateOrRelative(t *testing.T) {
 
 func TestUtcFromLocalTimestamp(t *testing.T) {
 	ts := int64(1704110400)
-	got := UtcFromLocalTimestamp(ts)
+	got := utils.UtcFromLocalTimestamp(ts)
 	if got.Unix() != ts {
 		t.Errorf("UtcFromLocalTimestamp(%d).Unix() = %d, want %d", ts, got.Unix(), ts)
 	}

@@ -1,8 +1,10 @@
-package utils
+package utils_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestParseSyncwebPath(t *testing.T) {
@@ -104,7 +106,7 @@ func TestParseSyncwebPath(t *testing.T) {
 			if !decode && tt.decode {
 				decode = true
 			}
-			ref, err := ParseSyncwebPath(tt.url, decode)
+			ref, err := utils.ParseSyncwebPath(tt.url, decode)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseSyncwebPath() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -187,7 +189,7 @@ func TestExtractDeviceID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractDeviceID(tt.input)
+			got, err := utils.ExtractDeviceID(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractDeviceID() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -263,7 +265,7 @@ func TestDeviceIDShort2Long(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := DeviceIDShort2Long(tt.short, knownDevices)
+			got := utils.DeviceIDShort2Long(tt.short, knownDevices)
 			if got != tt.want {
 				t.Errorf("DeviceIDShort2Long() = %q, want %q", got, tt.want)
 			}
@@ -336,7 +338,7 @@ func TestCreateFolderID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CreateFolderID(tt.path, tt.existing)
+			got := utils.CreateFolderID(tt.path, tt.existing)
 			if got != tt.want {
 				t.Errorf("CreateFolderID() = %q, want %q", got, tt.want)
 			}
@@ -404,7 +406,7 @@ func TestSepReplace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := SepReplace(tt.path)
+			got := utils.SepReplace(tt.path)
 			if got != tt.want {
 				t.Errorf("SepReplace() = %q, want %q", got, tt.want)
 			}
@@ -482,7 +484,7 @@ func TestFormatSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FormatSize(tt.bytes)
+			got := utils.FormatSize(tt.bytes)
 			if got != tt.want {
 				t.Errorf("FormatSize() = %q, want %q", got, tt.want)
 			}
@@ -494,7 +496,7 @@ func TestRelativeTime(t *testing.T) {
 	now := time.Now()
 	past := now.Add(-24 * time.Hour).Unix()
 
-	result := RelativeTime(past)
+	result := utils.RelativeTime(past)
 	if result == "" {
 		t.Error("RelativeTime() returned empty string")
 	}
@@ -553,7 +555,7 @@ func TestIsoDateToSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsoDateToSeconds(tt.input)
+			got := utils.IsoDateToSeconds(tt.input)
 			if got < tt.wantMin || got > tt.wantMax {
 				t.Errorf("IsoDateToSeconds() = %v, want [%v, %v]", got, tt.wantMin, tt.wantMax)
 			}
@@ -637,7 +639,7 @@ func TestHumanToBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := HumanToBytes(tt.input)
+			got, err := utils.HumanToBytes(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HumanToBytes() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -749,7 +751,7 @@ func TestHumanToSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := HumanToSeconds(tt.input)
+			got, err := utils.HumanToSeconds(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HumanToSeconds() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -1,8 +1,10 @@
-package syncweb
+package syncweb_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
 func TestNodeLifecycle(t *testing.T) {
@@ -26,7 +28,7 @@ func TestNodeLifecycle(t *testing.T) {
 func testNodeBasicLifecycle(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
@@ -46,7 +48,7 @@ func testNodeBasicLifecycle(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	node.Stop()
-	_ = cleanupTestHomeDir(home)
+	_ = syncweb.CleanupTestHomeDir(home)
 	if node.IsRunning() {
 		t.Error("node should not be running after stop")
 	}
@@ -55,7 +57,7 @@ func testNodeBasicLifecycle(t *testing.T) {
 func testNodeDoubleStart(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
@@ -65,7 +67,7 @@ func testNodeDoubleStart(t *testing.T) {
 	}
 	defer func() {
 		node.Stop()
-		_ = cleanupTestHomeDir(home)
+		_ = syncweb.CleanupTestHomeDir(home)
 	}()
 
 	// Double start should be a no-op
@@ -77,7 +79,7 @@ func testNodeDoubleStart(t *testing.T) {
 func testNodeDoubleStop(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
@@ -87,7 +89,7 @@ func testNodeDoubleStop(t *testing.T) {
 	}
 
 	node.Stop()
-	_ = cleanupTestHomeDir(home)
+	_ = syncweb.CleanupTestHomeDir(home)
 	if node.IsRunning() {
 		t.Error("node should not be running after stop")
 	}
@@ -99,7 +101,7 @@ func testNodeDoubleStop(t *testing.T) {
 func testNodeRestart(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "restart-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "restart-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
@@ -108,10 +110,10 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to start node: %v", startErr)
 	}
 	node.Stop()
-	_ = cleanupTestHomeDir(home)
+	_ = syncweb.CleanupTestHomeDir(home)
 
 	// Re-create node from same home
-	node2, err := NewNode(home, "restart-node", "tcp://127.0.0.1:0")
+	node2, err := syncweb.NewNode(home, "restart-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to re-create node: %v", err)
 	}
@@ -120,12 +122,12 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to restart node: %v", err)
 	}
 	node2.Stop()
-	_ = cleanupTestHomeDir(home)
+	_ = syncweb.CleanupTestHomeDir(home)
 }
 
 func testNodeInvalidHome(t *testing.T) {
 	// Try a read-only or non-existent path where we can't write
-	_, err := NewNode("/root/should-not-be-writable", "test", "")
+	_, err := syncweb.NewNode("/root/should-not-be-writable", "test", "")
 	if err == nil {
 		t.Error("expected error with invalid home dir")
 	}
@@ -134,7 +136,7 @@ func testNodeInvalidHome(t *testing.T) {
 func testNodeEmptyHome(t *testing.T) {
 	// Empty home should create a temp directory
 	// Note: We don't clean up the temp dir here since we don't track it
-	node, err := NewNode("", "test", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode("", "test", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node with empty home: %v", err)
 	}
@@ -153,13 +155,13 @@ func TestNodeInvalidListenAddr(t *testing.T) {
 	home := t.TempDir()
 
 	// Invalid listen address should still work (Syncthing will use default)
-	node, err := NewNode(home, "test-node", "invalid-addr")
+	node, err := syncweb.NewNode(home, "test-node", "invalid-addr")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
 	defer func() {
 		node.Stop()
-		_ = cleanupTestHomeDir(home)
+		_ = syncweb.CleanupTestHomeDir(home)
 	}()
 
 	if startErr := node.Start(); startErr != nil {
@@ -170,13 +172,13 @@ func TestNodeInvalidListenAddr(t *testing.T) {
 func TestNodeMyID(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
 	defer func() {
 		node.Stop()
-		_ = cleanupTestHomeDir(home)
+		_ = syncweb.CleanupTestHomeDir(home)
 	}()
 
 	id := node.MyID()
@@ -194,13 +196,13 @@ func TestNodeMyID(t *testing.T) {
 func TestNodeSubscribe(t *testing.T) {
 	home := t.TempDir()
 
-	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
+	node, err := syncweb.NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
 	defer func() {
 		node.Stop()
-		_ = cleanupTestHomeDir(home)
+		_ = syncweb.CleanupTestHomeDir(home)
 	}()
 
 	sub := node.Subscribe(0) // Subscribe to all events

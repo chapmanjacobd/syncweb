@@ -1,9 +1,11 @@
-package utils
+package utils_test
 
 import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -18,7 +20,7 @@ func TestFormatDuration(t *testing.T) {
 		{3661, "1:01:01"},
 	}
 	for _, tt := range tests {
-		if got := FormatDuration(tt.seconds); got != tt.want {
+		if got := utils.FormatDuration(tt.seconds); got != tt.want {
 			t.Errorf("FormatDuration(%d) = %q, want %q", tt.seconds, got, tt.want)
 		}
 	}
@@ -41,19 +43,19 @@ func TestFormatDurationShort(t *testing.T) {
 		{31536000 + 86400, "1y1d"},
 	}
 	for _, tt := range tests {
-		if got := FormatDurationShort(tt.seconds); got != tt.want {
+		if got := utils.FormatDurationShort(tt.seconds); got != tt.want {
 			t.Errorf("FormatDurationShort(%d) = %q, want %q", tt.seconds, got, tt.want)
 		}
 	}
 }
 
 func TestFormatTime(t *testing.T) {
-	if got := FormatTime(0); got != "-" {
+	if got := utils.FormatTime(0); got != "-" {
 		t.Errorf("FormatTime(0) = %q, want %q", got, "-")
 	}
 	// 2024-01-01 12:00:00 UTC
 	ts := int64(1704110400)
-	got := FormatTime(ts)
+	got := utils.FormatTime(ts)
 	if !strings.Contains(got, "2024-01-01") {
 		t.Errorf("FormatTime(%d) = %q, should contain 2024-01-01", ts, got)
 	}
@@ -71,7 +73,7 @@ func TestSecondsToHHMMSS(t *testing.T) {
 		{-60, "-1:00"},
 	}
 	for _, tt := range tests {
-		if got := SecondsToHHMMSS(tt.seconds); got != tt.want {
+		if got := utils.SecondsToHHMMSS(tt.seconds); got != tt.want {
 			t.Errorf("SecondsToHHMMSS(%d) = %q, want %q", tt.seconds, got, tt.want)
 		}
 	}
@@ -87,29 +89,29 @@ func TestFormatPlaybackDuration(t *testing.T) {
 		{100, 10, 0, "Duration: 1:30 (0:10 to 1:40)"},
 	}
 	for _, tt := range tests {
-		if got := FormatPlaybackDuration(tt.duration, tt.start, tt.end); got != tt.want {
+		if got := utils.FormatPlaybackDuration(tt.duration, tt.start, tt.end); got != tt.want {
 			t.Errorf("FormatPlaybackDuration(%d, %d, %d) = %q, want %q", tt.duration, tt.start, tt.end, got, tt.want)
 		}
 	}
 }
 
 func TestRelativeDatetime(t *testing.T) {
-	if got := RelativeDatetime(0); got != "-" {
+	if got := utils.RelativeDatetime(0); got != "-" {
 		t.Errorf("RelativeDatetime(0) = %q, want %q", got, "-")
 	}
 
 	now := time.Now().Unix()
-	if got := RelativeDatetime(now); !strings.Contains(got, "today") {
+	if got := utils.RelativeDatetime(now); !strings.Contains(got, "today") {
 		t.Errorf("RelativeDatetime(now) = %q, should contain 'today'", got)
 	}
 
 	yesterday := time.Now().AddDate(0, 0, -1).Unix()
-	if got := RelativeDatetime(yesterday); !strings.Contains(got, "yesterday") {
+	if got := utils.RelativeDatetime(yesterday); !strings.Contains(got, "yesterday") {
 		t.Errorf("RelativeDatetime(yesterday) = %q, should contain 'yesterday'", got)
 	}
 
 	tomorrow := time.Now().AddDate(0, 0, 1).Unix()
-	if got := RelativeDatetime(tomorrow); !strings.Contains(got, "tomorrow") {
+	if got := utils.RelativeDatetime(tomorrow); !strings.Contains(got, "tomorrow") {
 		t.Errorf("RelativeDatetime(tomorrow) = %q, should contain 'tomorrow'", got)
 	}
 }

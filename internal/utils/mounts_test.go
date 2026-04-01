@@ -1,4 +1,4 @@
-package utils
+package utils_test
 
 import (
 	"os"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 // TestSafeUnmountRemovable tests unmounting a device mounted at multiple mountpoints
@@ -54,7 +55,7 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	t.Logf("Mounted %s to %s and %s", loopDev, mp1, mp2)
 
 	// Call our Unmount function on mp1
-	if err := Unmount(mp1); err != nil {
+	if err := utils.Unmount(mp1); err != nil {
 		t.Fatalf("Unmount failed: %v", err)
 	}
 
@@ -92,7 +93,7 @@ func TestSafePrepareForRead(t *testing.T) {
 	exec.Command("sudo", "mount", loopDev, mp2).Run()
 	defer exec.Command("sudo", "umount", "-l", loopDev).Run()
 
-	if err := SafePrepareForRead(loopDev); err != nil {
+	if err := utils.SafePrepareForRead(loopDev); err != nil {
 		t.Fatalf("SafePrepareForRead failed: %v", err)
 	}
 
@@ -133,7 +134,7 @@ func TestAutoCleanupMounts(t *testing.T) {
 	exec.Command("sudo", "mount", loopDev, mp2).Run()
 	defer exec.Command("sudo", "umount", "-l", loopDev).Run()
 
-	if err := AutoCleanupMounts(); err != nil {
+	if err := utils.AutoCleanupMounts(); err != nil {
 		t.Fatalf("AutoCleanupMounts failed: %v", err)
 	}
 
@@ -187,7 +188,7 @@ func TestSafePrepareForReadRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := SafePrepareForRead(tt.device.Name, []models.BlockDevice{tt.device})
+			err := utils.SafePrepareForRead(tt.device.Name, []models.BlockDevice{tt.device})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SafePrepareForRead(%q) error = %v, wantErr %v", tt.device.Name, err, tt.wantErr)
 			}
@@ -282,7 +283,7 @@ func TestFilterMountpointsExcludesRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mounts := FilterMountpoints(tt.devices)
+			mounts := utils.FilterMountpoints(tt.devices)
 
 			// Check count
 			if len(mounts) != tt.wantCount {
@@ -376,7 +377,7 @@ func TestParseLsblkOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			devices, err := ParseLsblkOutput([]byte(tt.input))
+			devices, err := utils.ParseLsblkOutput([]byte(tt.input))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseLsblkOutput() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -398,7 +399,7 @@ func TestSafePrepareForReadBtrfs(t *testing.T) {
 		},
 	}
 
-	err := SafePrepareForRead("btrfsdev", mockDevices)
+	err := utils.SafePrepareForRead("btrfsdev", mockDevices)
 	if err != nil {
 		t.Errorf("SafePrepareForRead() should skip Btrfs devices, got error: %v", err)
 	}
@@ -414,7 +415,7 @@ func TestSafePrepareForReadNotFound(t *testing.T) {
 		},
 	}
 
-	err := SafePrepareForRead("nonexistent", mockDevices)
+	err := utils.SafePrepareForRead("nonexistent", mockDevices)
 	if err == nil {
 		t.Error("SafePrepareForRead() should return error for non-existent device")
 	}

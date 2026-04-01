@@ -1,8 +1,10 @@
-package utils
+package utils_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestSafeMean(t *testing.T) {
@@ -16,7 +18,7 @@ func TestSafeMean(t *testing.T) {
 		{nil, 0.0},
 	}
 	for _, tt := range tests {
-		if got := SafeMean(tt.input); got != tt.want {
+		if got := utils.SafeMean(tt.input); got != tt.want {
 			t.Errorf("SafeMean(%v) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
@@ -33,7 +35,7 @@ func TestSafeMedian(t *testing.T) {
 		{[]int{}, 0.0},
 	}
 	for _, tt := range tests {
-		if got := SafeMedian(tt.input); got != tt.want {
+		if got := utils.SafeMedian(tt.input); got != tt.want {
 			t.Errorf("SafeMedian(%v) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
@@ -52,7 +54,7 @@ func TestPercentile(t *testing.T) {
 		{[]int{}, 50, 0.0},
 	}
 	for _, tt := range tests {
-		if got := Percentile(tt.input, tt.p); got != tt.want {
+		if got := utils.Percentile(tt.input, tt.p); got != tt.want {
 			t.Errorf("Percentile(%v, %v) = %v, want %v", tt.input, tt.p, got, tt.want)
 		}
 	}
@@ -77,7 +79,7 @@ func TestHumanToBits(t *testing.T) {
 		{"abc", 0, true},
 	}
 	for _, tt := range tests {
-		got, err := HumanToBits(tt.input)
+		got, err := utils.HumanToBits(tt.input)
 		if (err != nil) != tt.wantErr {
 			t.Errorf("HumanToBits(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			continue
@@ -107,18 +109,18 @@ func TestLinearInterpolation(t *testing.T) {
 		{21, 200},
 	}
 	for _, tt := range tests {
-		if got := LinearInterpolation(tt.x, dataPoints); got != tt.want {
+		if got := utils.LinearInterpolation(tt.x, dataPoints); got != tt.want {
 			t.Errorf("LinearInterpolation(%v) = %v, want %v", tt.x, got, tt.want)
 		}
 	}
-	if got := LinearInterpolation(5, nil); got != 0 {
+	if got := utils.LinearInterpolation(5, nil); got != 0 {
 		t.Errorf("LinearInterpolation(5, nil) = %v, want 0", got)
 	}
 }
 
 func TestCalculatePercentiles(t *testing.T) {
 	values := []int64{10, 20, 30, 40, 50}
-	got := CalculatePercentiles(values)
+	got := utils.CalculatePercentiles(values)
 	if len(got) != 101 {
 		t.Errorf("CalculatePercentiles() returned slice of length %d, want 101", len(got))
 	}
@@ -130,7 +132,7 @@ func TestCalculatePercentiles(t *testing.T) {
 		t.Errorf("got[100] = %v, want 50", got[100])
 	}
 
-	empty := CalculatePercentiles(nil)
+	empty := utils.CalculatePercentiles(nil)
 	if len(empty) != 101 {
 		t.Errorf("CalculatePercentiles(nil) returned slice of length %d, want 101", len(empty))
 	}
@@ -146,7 +148,7 @@ func TestPercentageDifference(t *testing.T) {
 		{0, 0, 100.0},
 	}
 	for _, tt := range tests {
-		got := PercentageDifference(tt.v1, tt.v2)
+		got := utils.PercentageDifference(tt.v1, tt.v2)
 		if reflect.DeepEqual(got, tt.want) == false && (got-tt.want) > 0.000001 {
 			t.Errorf("PercentageDifference(%v, %v) = %v, want %v", tt.v1, tt.v2, got, tt.want)
 		}
@@ -165,17 +167,17 @@ func TestSQLHumanTime(t *testing.T) {
 		{"10.5hr", "10.5 hr"},
 	}
 	for _, tt := range tests {
-		if got := SQLHumanTime(tt.input); got != tt.want {
+		if got := utils.SQLHumanTime(tt.input); got != tt.want {
 			t.Errorf("SQLHumanTime(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
 
 func TestMinMax(t *testing.T) {
-	if got := Min(1, 2); got != 1 {
+	if got := utils.Min(1, 2); got != 1 {
 		t.Errorf("Min(1, 2) = %v, want 1", got)
 	}
-	if got := Max(1, 2); got != 2 {
+	if got := utils.Max(1, 2); got != 2 {
 		t.Errorf("Max(1, 2) = %v, want 2", got)
 	}
 }
@@ -189,26 +191,26 @@ func TestParseRange(t *testing.T) {
 		wantValue *int64
 		wantErr   bool
 	}{
-		{"10-20", HumanToBytes, new(int64(10)), new(int64(20)), nil, false},
-		{">10", HumanToBytes, new(int64(11)), nil, nil, false},
-		{"<20", HumanToBytes, nil, new(int64(19)), nil, false},
-		{"+10", HumanToBytes, new(int64(10)), nil, nil, false},
-		{"-20", HumanToBytes, nil, new(int64(20)), nil, false},
-		{"100%10", HumanToBytes, new(int64(90)), new(int64(110)), nil, false},
+		{"10-20", utils.HumanToBytes, new(int64(10)), new(int64(20)), nil, false},
+		{">10", utils.HumanToBytes, new(int64(11)), nil, nil, false},
+		{"<20", utils.HumanToBytes, nil, new(int64(19)), nil, false},
+		{"+10", utils.HumanToBytes, new(int64(10)), nil, nil, false},
+		{"-20", utils.HumanToBytes, nil, new(int64(20)), nil, false},
+		{"100%10", utils.HumanToBytes, new(int64(90)), new(int64(110)), nil, false},
 		{
 			"10,20",
-			HumanToBytes,
+			utils.HumanToBytes,
 			nil,
 			nil,
 			new(int64(20)),
 			false,
 		}, // Split by ',' last one wins in ParseRange implementation
-		{"1KB-2KB", HumanToBytes, new(int64(1024)), new(int64(2048)), nil, false},
-		{"100", HumanToBytes, nil, nil, new(int64(100)), false},
-		{"", HumanToBytes, nil, nil, nil, false},
+		{"1KB-2KB", utils.HumanToBytes, new(int64(1024)), new(int64(2048)), nil, false},
+		{"100", utils.HumanToBytes, nil, nil, new(int64(100)), false},
+		{"", utils.HumanToBytes, nil, nil, nil, false},
 	}
 	for _, tt := range tests {
-		got, err := ParseRange(tt.input, tt.humanToX)
+		got, err := utils.ParseRange(tt.input, tt.humanToX)
 		if (err != nil) != tt.wantErr {
 			t.Errorf("ParseRange(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			continue
@@ -242,10 +244,10 @@ func ptrEqual(a, b *int64) bool {
 }
 
 func TestPercent(t *testing.T) {
-	if got := Percent(10, 100); got != 10.0 {
+	if got := utils.Percent(10, 100); got != 10.0 {
 		t.Errorf("Percent(10, 100) = %v, want 10.0", got)
 	}
-	if got := Percent(10, 0); got != 0.0 {
+	if got := utils.Percent(10, 0); got != 0.0 {
 		t.Errorf("Percent(10, 0) = %v, want 0.0", got)
 	}
 }
@@ -260,7 +262,7 @@ func TestFloatFromPercent(t *testing.T) {
 		{"0.5", 0.5},
 	}
 	for _, tt := range tests {
-		got, _ := FloatFromPercent(tt.input)
+		got, _ := utils.FloatFromPercent(tt.input)
 		if got != tt.want {
 			t.Errorf("FloatFromPercent(%q) = %v, want %v", tt.input, got, tt.want)
 		}
@@ -279,7 +281,7 @@ func TestParsePercentileRange(t *testing.T) {
 		{"p10", 0, 0, false},
 	}
 	for _, tt := range tests {
-		minVal, maxVal, ok := ParsePercentileRange(tt.input)
+		minVal, maxVal, ok := utils.ParsePercentileRange(tt.input)
 		if ok != tt.wantOk || minVal != tt.wantMin || maxVal != tt.wantMax {
 			t.Errorf(
 				"ParsePercentileRange(%q) = %v, %v, %v, want %v, %v, %v",
@@ -296,7 +298,7 @@ func TestParsePercentileRange(t *testing.T) {
 }
 
 func TestCalculateSegments(t *testing.T) {
-	got := CalculateSegments(110, 30, 10)
+	got := utils.CalculateSegments(110, 30, 10)
 	want := []float64{0, 40, 80}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("CalculateSegments(110, 30, 10) = %v, want %v", got, want)
@@ -304,7 +306,7 @@ func TestCalculateSegments(t *testing.T) {
 }
 
 func TestCalculateSegmentsInt(t *testing.T) {
-	got := CalculateSegmentsInt(110, 30, 10)
+	got := utils.CalculateSegmentsInt(110, 30, 10)
 	want := []int64{0, 40, 80}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("CalculateSegmentsInt(110, 30, 10) = %v, want %v", got, want)
@@ -312,16 +314,16 @@ func TestCalculateSegmentsInt(t *testing.T) {
 }
 
 func TestSafeIntFloat(t *testing.T) {
-	if got := SafeInt("10"); *got != 10 {
+	if got := utils.SafeInt("10"); *got != 10 {
 		t.Errorf("SafeInt('10') = %v, want 10", *got)
 	}
-	if got := SafeInt(""); got != nil {
+	if got := utils.SafeInt(""); got != nil {
 		t.Errorf("SafeInt('') = %v, want nil", got)
 	}
-	if got := SafeFloat("10.5"); *got != 10.5 {
+	if got := utils.SafeFloat("10.5"); *got != 10.5 {
 		t.Errorf("SafeFloat('10.5') = %v, want 10.5", *got)
 	}
-	if got := SafeFloat(""); got != nil {
+	if got := utils.SafeFloat(""); got != nil {
 		t.Errorf("SafeFloat('') = %v, want nil", got)
 	}
 }

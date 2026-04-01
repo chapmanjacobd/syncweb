@@ -1,15 +1,17 @@
-package utils
+package utils_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 func TestRandomString(t *testing.T) {
 	// Test length
-	result := RandomString(10)
+	result := utils.RandomString(10)
 	if len(result) != 10 {
 		t.Errorf("RandomString(10) returned string of length %d, expected 10", len(result))
 	}
@@ -17,7 +19,7 @@ func TestRandomString(t *testing.T) {
 	// Test uniqueness
 	seen := make(map[string]bool)
 	for range 100 {
-		result := RandomString(16)
+		result := utils.RandomString(16)
 		if seen[result] {
 			t.Error("RandomString generated a duplicate value")
 		}
@@ -25,7 +27,7 @@ func TestRandomString(t *testing.T) {
 	}
 
 	// Test hexadecimal characters
-	result = RandomString(20)
+	result = utils.RandomString(20)
 	for _, c := range result {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("RandomString returned non-hexadecimal character: %c", c)
@@ -46,7 +48,7 @@ func TestRandomFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RandomFilename(tt.input)
+			result := utils.RandomFilename(tt.input)
 			if !strings.HasPrefix(result, tt.expected) {
 				t.Errorf("RandomFilename(%q) = %q, expected to start with %q", tt.input, result, tt.expected)
 			}
@@ -74,7 +76,7 @@ func TestTrimPathSegments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := TrimPathSegments(tt.input, tt.desiredLength)
+			result := utils.TrimPathSegments(tt.input, tt.desiredLength)
 			if tt.shouldShorten && len(result) > tt.desiredLength {
 				t.Errorf("TrimPathSegments(%q, %d) = %q (len=%d), expected len <= %d",
 					tt.input, tt.desiredLength, result, len(result), tt.desiredLength)
@@ -107,7 +109,7 @@ func TestSafeJoin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := SafeJoin(tt.base, tt.userPath)
+			result := utils.SafeJoin(tt.base, tt.userPath)
 			if result != tt.expected {
 				t.Errorf("SafeJoin(%q, %q) = %q, expected %q", tt.base, tt.userPath, result, tt.expected)
 			}
@@ -131,7 +133,7 @@ func TestRelativize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := Relativize(tt.input)
+			result := utils.Relativize(tt.input)
 			if result != tt.expected {
 				t.Errorf("Relativize(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -152,7 +154,7 @@ func TestStripMountSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := StripMountSyntax(tt.input)
+			result := utils.StripMountSyntax(tt.input)
 			if result != tt.expected {
 				t.Errorf("StripMountSyntax(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
@@ -170,7 +172,7 @@ func TestIsEmptyFolder(t *testing.T) {
 		t.Fatalf("Failed to create empty directory: %v", err)
 	}
 
-	if !IsEmptyFolder(emptyDir) {
+	if !utils.IsEmptyFolder(emptyDir) {
 		t.Error("EmptyFolder should return true for empty folder")
 	}
 
@@ -185,7 +187,7 @@ func TestIsEmptyFolder(t *testing.T) {
 		t.Fatalf("Failed to create file: %v", err)
 	}
 
-	if IsEmptyFolder(nonEmptyDir) {
+	if utils.IsEmptyFolder(nonEmptyDir) {
 		t.Error("EmptyFolder should return false for non-empty folder")
 	}
 
@@ -196,7 +198,7 @@ func TestIsEmptyFolder(t *testing.T) {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
-	if !IsEmptyFolder(subdirOnly) {
+	if !utils.IsEmptyFolder(subdirOnly) {
 		t.Error("EmptyFolder should return true for folder with only empty subdirectories")
 	}
 }
@@ -216,7 +218,7 @@ func TestFolderSize(t *testing.T) {
 		t.Fatalf("Failed to create file2: %v", err)
 	}
 
-	size := FolderSize(tmpDir)
+	size := utils.FolderSize(tmpDir)
 	expected := int64(15) // 5 + 10 bytes
 	if size != expected {
 		t.Errorf("FolderSize returned %d, expected %d", size, expected)
@@ -241,7 +243,7 @@ func TestPathTupleFromURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, file := PathTupleFromURL(tt.input)
+			dir, file := utils.PathTupleFromURL(tt.input)
 			if dir != tt.expectedDir {
 				t.Errorf("PathTupleFromURL(%q) dir = %q, expected %q", tt.input, dir, tt.expectedDir)
 			}
@@ -256,56 +258,56 @@ func TestCleanPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		opts     CleanPathOptions
+		opts     utils.CleanPathOptions
 		expected string
 	}{
 		{
 			name:     "basic clean",
 			input:    "/home/user/My File.txt",
-			opts:     CleanPathOptions{},
+			opts:     utils.CleanPathOptions{},
 			expected: "/home/user/My File.txt",
 		},
 		{
 			name:     "lowercase folders",
 			input:    "/home/User/Docs",
-			opts:     CleanPathOptions{LowercaseFolders: true},
+			opts:     utils.CleanPathOptions{LowercaseFolders: true},
 			expected: "/home/user/Docs",
 		},
 		{
 			name:     "dot space",
 			input:    "/home/user/My File.txt",
-			opts:     CleanPathOptions{DotSpace: true},
+			opts:     utils.CleanPathOptions{DotSpace: true},
 			expected: "/home/user/My.File.txt",
 		},
 		{
 			name:     "dedupe parts",
 			input:    "/home/home/user/file.txt",
-			opts:     CleanPathOptions{DedupeParts: true},
+			opts:     utils.CleanPathOptions{DedupeParts: true},
 			expected: "/home/user/file.txt",
 		},
 		{
 			name:     "case insensitive",
 			input:    "/home/my_file.txt",
-			opts:     CleanPathOptions{CaseInsensitive: true},
+			opts:     utils.CleanPathOptions{CaseInsensitive: true},
 			expected: "/home/my_file.txt",
 		},
 		{
 			name:     "windows path",
 			input:    "C:\\Users\\file.txt",
-			opts:     CleanPathOptions{},
+			opts:     utils.CleanPathOptions{},
 			expected: "C:Users file.txt",
 		},
 		{
 			name:     "empty parts become underscore",
 			input:    "/home/  /file.txt",
-			opts:     CleanPathOptions{},
+			opts:     utils.CleanPathOptions{},
 			expected: "/home/_/file.txt",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CleanPath(tt.input, tt.opts)
+			result := utils.CleanPath(tt.input, tt.opts)
 			if result != tt.expected {
 				t.Errorf("CleanPath(%q, %v) = %q, expected %q", tt.input, tt.opts, result, tt.expected)
 			}
@@ -316,8 +318,8 @@ func TestCleanPath(t *testing.T) {
 func TestCleanPath_MaxNameLen(t *testing.T) {
 	// Test with very long filename
 	longName := "/home/user/" + string(make([]byte, 300)) + ".txt"
-	opts := CleanPathOptions{MaxNameLen: 255}
-	result := CleanPath(longName, opts)
+	opts := utils.CleanPathOptions{MaxNameLen: 255}
+	result := utils.CleanPath(longName, opts)
 	// Just verify it doesn't crash and returns something
 	if result == "" {
 		t.Error("CleanPath with MaxNameLen returned empty string")

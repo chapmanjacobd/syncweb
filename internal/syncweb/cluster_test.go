@@ -1,4 +1,4 @@
-package syncweb
+package syncweb_test
 
 import (
 	"context"
@@ -11,10 +11,12 @@ import (
 
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
+
+	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
 type TestCluster struct {
-	Nodes   []*Syncweb
+	Nodes   []*syncweb.Syncweb
 	TempDir string
 }
 
@@ -29,7 +31,7 @@ func NewTestCluster(t *testing.T, count int) *TestCluster {
 	for i := range count {
 		home := filepath.Join(tempDir, fmt.Sprintf("node-%d", i))
 		listenAddr := fmt.Sprintf("tcp://127.0.0.1:%d", 22000+i)
-		sw, err := NewSyncweb(home, fmt.Sprintf("node-%d", i), listenAddr)
+		sw, err := syncweb.NewSyncweb(home, fmt.Sprintf("node-%d", i), listenAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +48,7 @@ func (c *TestCluster) Close() {
 	// Clean up Syncthing files to avoid "directory not empty" errors
 	for i := range c.Nodes {
 		home := filepath.Join(c.TempDir, fmt.Sprintf("node-%d", i))
-		_ = cleanupTestHomeDir(home)
+		_ = syncweb.CleanupTestHomeDir(home)
 	}
 }
 
@@ -207,7 +209,7 @@ func TestSyncwebChain(t *testing.T) {
 	n2 := cluster.Nodes[2]
 
 	// Connect 0-1 and 1-2
-	connect := func(a, b *Syncweb, portB int) {
+	connect := func(a, b *syncweb.Syncweb, portB int) {
 		t.Helper()
 		if err := a.AddDevice(b.Node.MyID().String(), "peer", false); err != nil {
 			t.Error(err)
@@ -228,7 +230,7 @@ func TestSyncwebChain(t *testing.T) {
 	cluster.StartAll(t)
 
 	// Wait for 0-1 and 1-2 connections
-	waitConn := func(node *Syncweb, peer protocol.DeviceID) {
+	waitConn := func(node *syncweb.Syncweb, peer protocol.DeviceID) {
 		t.Helper()
 		timeout := time.After(30 * time.Second)
 		for {

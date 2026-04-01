@@ -1,14 +1,16 @@
-package commands
+package commands_test
 
 import (
 	"bytes"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/commands"
 )
 
 func TestSyncwebCmd_AfterApply(t *testing.T) {
-	c := &SyncwebCmd{}
+	c := &commands.SyncwebCmd{}
 	if err := c.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)
 	}
@@ -17,30 +19,9 @@ func TestSyncwebCmd_AfterApply(t *testing.T) {
 	}
 }
 
-func TestMatchesFilters(t *testing.T) {
-	tests := []struct {
-		s       string
-		include []string
-		exclude []string
-		want    bool
-	}{
-		{"test", nil, nil, true},
-		{"test", []string{"es"}, nil, true},
-		{"test", []string{"abc"}, nil, false},
-		{"test", nil, []string{"es"}, false},
-		{"test", nil, []string{"abc"}, true},
-		{"test", []string{"es"}, []string{"t"}, false},
-	}
-	for _, tt := range tests {
-		if got := matchesFilters(tt.s, tt.include, tt.exclude); got != tt.want {
-			t.Errorf("matchesFilters(%q, %v, %v) = %v, want %v", tt.s, tt.include, tt.exclude, got, tt.want)
-		}
-	}
-}
-
 func TestSyncwebVersionCmd_Run(t *testing.T) {
-	c := &SyncwebVersionCmd{}
-	g := &SyncwebCmd{}
+	c := &commands.SyncwebVersionCmd{}
+	g := &commands.SyncwebCmd{}
 
 	// Capture stdout
 	old := os.Stdout

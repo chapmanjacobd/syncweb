@@ -1,12 +1,14 @@
-package models
+package models_test
 
 import (
 	"log/slog"
 	"testing"
+
+	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
 func TestCoreFlags_AfterApply(t *testing.T) {
-	c := &CoreFlags{Simulate: true, NoConfirm: true}
+	c := &models.CoreFlags{Simulate: true, NoConfirm: true}
 	if err := c.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)
 	}
@@ -19,7 +21,7 @@ func TestCoreFlags_AfterApply(t *testing.T) {
 }
 
 func TestMediaFilterFlags_AfterApply(t *testing.T) {
-	m := &MediaFilterFlags{Ext: []string{"mp4", ".mkv"}}
+	m := &models.MediaFilterFlags{Ext: []string{"mp4", ".mkv"}}
 	if err := m.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)
 	}
@@ -32,7 +34,7 @@ func TestMediaFilterFlags_AfterApply(t *testing.T) {
 }
 
 func TestMergeFlags_AfterApply(t *testing.T) {
-	m := &MergeFlags{Ignore: true}
+	m := &models.MergeFlags{Ignore: true}
 	if err := m.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)
 	}
@@ -42,21 +44,21 @@ func TestMergeFlags_AfterApply(t *testing.T) {
 }
 
 func TestSetupLogging(t *testing.T) {
-	SetupLogging(true)
-	if LogLevel.Level() != slog.LevelDebug {
+	models.SetupLogging(true)
+	if models.LogLevel.Level() != slog.LevelDebug {
 		t.Errorf("LogLevel should be Debug")
 	}
-	SetupLogging(false)
-	if LogLevel.Level() != slog.LevelInfo {
+	models.SetupLogging(false)
+	if models.LogLevel.Level() != slog.LevelInfo {
 		t.Errorf("LogLevel should be Info")
 	}
 }
 
 func TestGlobalFlags_AfterApply(t *testing.T) {
-	g := &GlobalFlags{
-		CoreFlags:        CoreFlags{Simulate: true},
-		MediaFilterFlags: MediaFilterFlags{Ext: []string{"mp4"}},
-		MergeFlags:       MergeFlags{Ignore: true},
+	g := &models.GlobalFlags{
+		CoreFlags:        models.CoreFlags{Simulate: true},
+		MediaFilterFlags: models.MediaFilterFlags{Ext: []string{"mp4"}},
+		MergeFlags:       models.MergeFlags{Ignore: true},
 	}
 	if err := g.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)

@@ -9,7 +9,7 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
-// SyncwebCreateCmd creates a new syncweb folder.
+// SyncwebCreateCmd creates a new syncweb folder
 type SyncwebCreateCmd struct {
 	Paths []string `arg:"" default:"." help:"Path to folder" optional:""`
 }

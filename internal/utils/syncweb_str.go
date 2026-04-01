@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// SyncwebRef represents a parsed sync:// URL.
+// SyncwebRef represents a parsed sync:// URL
 type SyncwebRef struct {
 	FolderID string
 	Subpath  string
@@ -75,7 +75,7 @@ func ParseSyncwebPath(rawURL string, decode bool) (*SyncwebRef, error) {
 }
 
 // ExtractDeviceID extracts a device ID from a string
-// Handles both full and short device IDs.
+// Handles both full and short device IDs
 func ExtractDeviceID(s string) (string, error) {
 	s = strings.TrimSpace(s)
 
@@ -105,7 +105,7 @@ func ExtractDeviceID(s string) (string, error) {
 	return "", fmt.Errorf("invalid device ID: %s", s)
 }
 
-// DeviceIDShort2Long expands a short device ID to a full one by matching against known devices.
+// DeviceIDShort2Long expands a short device ID to a full one by matching against known devices
 func DeviceIDShort2Long(short string, knownDevices []string) string {
 	short = strings.ToUpper(strings.TrimSpace(short))
 
@@ -127,7 +127,7 @@ func DeviceIDShort2Long(short string, knownDevices []string) string {
 	return ""
 }
 
-// DeviceIDLong2Name returns a short device ID or name for display.
+// DeviceIDLong2Name returns a short device ID or name for display
 func DeviceIDLong2Name(long string, devicesMap map[string]map[string]any) string {
 	short := long
 	if len(long) >= 7 {
@@ -152,7 +152,7 @@ func DeviceIDLong2Name(long string, devicesMap map[string]map[string]any) string
 	return short + "-???????"
 }
 
-// CreateFolderID generates a folder ID from a path.
+// CreateFolderID generates a folder ID from a path
 func CreateFolderID(path string, existingFolders map[string]bool) string {
 	name := filepath.Base(path)
 
@@ -164,7 +164,7 @@ func CreateFolderID(path string, existingFolders map[string]bool) string {
 	return SepReplace(path)
 }
 
-// SepReplace replaces path separators with dashes for use as folder ID.
+// SepReplace replaces path separators with dashes for use as folder ID
 func SepReplace(path string) string {
 	// Replace both forward and back slashes with dashes
 	result := strings.ReplaceAll(path, "/", "-")
@@ -178,12 +178,12 @@ func SepReplace(path string) string {
 	return result
 }
 
-// FormatSizeHuman formats bytes to human-readable string (alias for FormatSize).
+// FormatSizeHuman formats bytes to human-readable string (alias for FormatSize)
 func FormatSizeHuman(bytes int64) string {
 	return FormatSize(bytes)
 }
 
-// RelativeTime formats a timestamp to relative time string.
+// RelativeTime formats a timestamp to relative time string
 func RelativeTime(timestamp int64) string {
 	if timestamp == 0 {
 		return "-"
@@ -239,7 +239,7 @@ func RelativeTime(timestamp int64) string {
 	return t.Format("2006-01-02")
 }
 
-// FormatTimeLong formats a timestamp for long listing.
+// FormatTimeLong formats a timestamp for long listing
 func FormatTimeLong(timestamp int64) string {
 	if timestamp == 0 {
 		return "-"
@@ -256,7 +256,7 @@ func FormatTimeLong(timestamp int64) string {
 	return t.Format("02 Jan 2006")
 }
 
-// IsoDateToSeconds converts ISO 8601 datetime to Unix timestamp.
+// IsoDateToSeconds converts ISO 8601 datetime to Unix timestamp
 func IsoDateToSeconds(isoDate string) int64 {
 	if isoDate == "" {
 		return 0
@@ -289,7 +289,7 @@ func IsoDateToSeconds(isoDate string) int64 {
 }
 
 // ParseHumanToRange parses human-readable constraints into a Range
-// Supports formats like: "3 days", "+6", "-10", "5%10", ">100", "<50".
+// Supports formats like: "3 days", "+6", "-10", "5%10", ">100", "<50"
 func ParseHumanToRange(s string, converter func(string) (int64, error)) (Range, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

@@ -424,7 +424,7 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 }
 
 // isLocalhost checks if a host is a localhost variant
-// This includes 127.0.0.0/8 range, ::1, and "localhost" hostname.
+// This includes 127.0.0.0/8 range, ::1, and "localhost" hostname
 func isLocalhost(host string) bool {
 	// Strip port if present
 	hostOnly, _, err := net.SplitHostPort(host)

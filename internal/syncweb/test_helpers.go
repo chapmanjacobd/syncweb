@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-// cleanupTestHomeDir removes Syncthing temp, database, and config files from a test home directory.
+// cleanupTestHomeDir removes Syncthing temp, database, and config files from a test home directory
 // This should be called in tests after Stop() to avoid "directory not empty" errors
-// during t.TempDir() cleanup.
+// during t.TempDir() cleanup
 func cleanupTestHomeDir(homeDir string) error {
 	entries, err := os.ReadDir(homeDir)
 	if err != nil {
@@ -32,16 +32,9 @@ func cleanupTestHomeDir(homeDir string) error {
 	return nil
 }
 
-// stopAndCleanup stops a Syncweb instance and cleans up its home directory.
+// stopAndCleanup stops a Syncweb instance and cleans up its home directory
 // Use this with defer: defer stopAndCleanup(sw, homeDir)
 func stopAndCleanup(sw *Syncweb, homeDir string) {
 	sw.Stop()
-	_ = cleanupTestHomeDir(homeDir)
-}
-
-// stopNodeAndCleanup stops a Node and cleans up its home directory.
-// Use this with defer: defer stopNodeAndCleanup(node, homeDir)
-func stopNodeAndCleanup(node *Node, homeDir string) {
-	node.Stop()
 	_ = cleanupTestHomeDir(homeDir)
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
-// SyncwebScanCmd triggers a scan on all folders.
+// SyncwebScanCmd triggers a scan on all folders
 type SyncwebScanCmd struct{}
 
 func (c *SyncwebScanCmd) Run(g *SyncwebCmd) error {

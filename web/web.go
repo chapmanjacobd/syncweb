@@ -1,4 +1,4 @@
-// Package web provides the embedded static web assets.
+// Package web provides the embedded static web assets
 package web
 
 import (
@@ -12,7 +12,7 @@ import (
 //go:embed dist/*
 var fsRaw embed.FS
 
-// FS is the web asset file system with "dist" prefix removed.
+// FS is the web asset file system with "dist" prefix removed
 var FS fs.FS
 
 func init() {

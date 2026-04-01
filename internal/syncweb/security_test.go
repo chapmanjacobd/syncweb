@@ -39,8 +39,8 @@ func TestSecurity_SyncthingConfig(t *testing.T) {
 
 	// 4. Check folder defaults
 	if cfg.Defaults.Folder.Path != "" {
-		// Syncthing lib sometimes sets default path to ~, which we want to avoid or at least be aware of.
-		// In our NewNode, we don't explicitly change Defaults.Folder.Path, so it might be whatever Syncthing uses.
+		// Syncthing lib sometimes sets default path to ~, which we want to avoid or at least be aware of
+		// In our NewNode, we don't explicitly change Defaults.Folder.Path, so it might be whatever Syncthing uses
 		t.Logf("Default folder path: %s", cfg.Defaults.Folder.Path)
 	}
 }

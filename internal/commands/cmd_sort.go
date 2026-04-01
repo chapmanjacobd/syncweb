@@ -12,7 +12,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-// SyncwebSortCmd sorts Syncthing files by multiple criteria.
+// SyncwebSortCmd sorts Syncthing files by multiple criteria
 type SyncwebSortCmd struct {
 	Paths          []string `arg:""                                        help:"File paths to sort"              optional:""`
 	Sort           []string `default:"name"                                help:"Sort criteria"`
@@ -175,7 +175,7 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 }
 
 // calculateFrecency computes a score based on recency and popularity (seed count)
-// Higher score = more recently modified and/or more popular (more seeders).
+// Higher score = more recently modified and/or more popular (more seeders)
 func calculateFrecency(f fileWithInfo, weight int) float64 {
 	now := time.Now().Unix()
 
@@ -208,7 +208,7 @@ func FrecencyScore(modified int64, seeders int, weight int) float64 {
 	return recencyScore*float64(weight) + freqScore
 }
 
-// NicheScore calculates how close a file is to the ideal seeder count.
+// NicheScore calculates how close a file is to the ideal seeder count
 func NicheScore(seeders, ideal int) int {
 	diff := seeders - ideal
 	if diff < 0 {

@@ -16,19 +16,19 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 )
 
-// Constants for chunk size interpolation.
+// Constants for chunk size interpolation
 const (
-	// MinFileSize is the minimum file size for interpolation (25MB).
+	// MinFileSize is the minimum file size for interpolation (25MB)
 	MinFileSize = 25 * 1024 * 1024 // 26214400
-	// MinChunkSize is the minimum chunk size (256KB).
+	// MinChunkSize is the minimum chunk size (256KB)
 	MinChunkSize = 256 * 1024 // 262144
-	// MaxFileSize is the maximum file size for interpolation (50GB).
+	// MaxFileSize is the maximum file size for interpolation (50GB)
 	MaxFileSize = 50 * 1024 * 1024 * 1024 // 52428800000
-	// MaxChunkSize is the maximum chunk size (10MB).
+	// MaxChunkSize is the maximum chunk size (10MB)
 	MaxChunkSize = 10 * 1024 * 1024 // 10485760
 )
 
-// SampleHashFile calculates a hash based on small file segments.
+// SampleHashFile calculates a hash based on small file segments
 func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -116,7 +116,7 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 	return hex.EncodeToString(finalHash.Sum(nil)), nil
 }
 
-// FullHashFile calculates a full sha256 hash of a file.
+// FullHashFile calculates a full sha256 hash of a file
 func FullHashFile(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -132,7 +132,7 @@ func FullHashFile(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// FilterDeleted returns only the paths that currently exist on the filesystem.
+// FilterDeleted returns only the paths that currently exist on the filesystem
 func FilterDeleted(paths []string) []string {
 	var existing []string
 	deletedDirs := make(map[string]bool)
@@ -161,7 +161,7 @@ type FileStats struct {
 	TimeModified int64
 }
 
-// GetFileStats returns size and timestamps for a file.
+// GetFileStats returns size and timestamps for a file
 func GetFileStats(path string) (FileStats, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -175,7 +175,7 @@ func GetFileStats(path string) (FileStats, error) {
 	}, nil
 }
 
-// IsFileOpen checks if a file is currently open by any process.
+// IsFileOpen checks if a file is currently open by any process
 func IsFileOpen(path string) bool {
 	if runtime.GOOS == "windows" {
 		// On Windows, try to open the file with exclusive access
@@ -232,7 +232,7 @@ func IsFileOpen(path string) bool {
 	return false
 }
 
-// DetectMimeType returns the mimetype of a file.
+// DetectMimeType returns the mimetype of a file
 func DetectMimeType(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".apk" {
@@ -249,7 +249,7 @@ func DetectMimeType(path string) string {
 	return mime.String()
 }
 
-// Rename renames a file, respecting simulation mode.
+// Rename renames a file, respecting simulation mode
 func Rename(flags models.GlobalFlags, src, dst string) error {
 	if flags.Simulate {
 		fmt.Printf("rename %s %s\n", src, dst)
@@ -259,7 +259,7 @@ func Rename(flags models.GlobalFlags, src, dst string) error {
 	return os.Rename(src, dst)
 }
 
-// Unlink deletes a file, respecting simulation mode.
+// Unlink deletes a file, respecting simulation mode
 func Unlink(flags models.GlobalFlags, path string) error {
 	if flags.Simulate {
 		fmt.Printf("unlink %s\n", path)
@@ -269,7 +269,7 @@ func Unlink(flags models.GlobalFlags, path string) error {
 	return os.Remove(path)
 }
 
-// Rmtree deletes a directory tree, respecting simulation mode.
+// Rmtree deletes a directory tree, respecting simulation mode
 func Rmtree(flags models.GlobalFlags, path string) error {
 	if flags.Simulate {
 		fmt.Printf("rmtree %s\n", path)
@@ -279,7 +279,7 @@ func Rmtree(flags models.GlobalFlags, path string) error {
 	return os.RemoveAll(path)
 }
 
-// AltName returns an alternative filename if the given path already exists.
+// AltName returns an alternative filename if the given path already exists
 func AltName(path string) string {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return path
@@ -297,7 +297,7 @@ func AltName(path string) string {
 	}
 }
 
-// CommonPath returns the longest common path prefix.
+// CommonPath returns the longest common path prefix
 func CommonPath(paths []string) string {
 	if len(paths) == 0 {
 		return ""
@@ -328,13 +328,13 @@ func CommonPath(paths []string) string {
 	return strings.Join(parts, sep)
 }
 
-// CommonPathFull returns a common path prefix.
-// Previously it included common words in the suffix, but this was confusing for UI.
+// CommonPathFull returns a common path prefix
+// Previously it included common words in the suffix, but this was confusing for UI
 func CommonPathFull(paths []string) string {
 	return CommonPath(paths)
 }
 
-// CopyFile copies a single file from src to dst.
+// CopyFile copies a single file from src to dst
 func CopyFile(src, dst string) error {
 	s, err := os.Open(src)
 	if err != nil {
@@ -355,7 +355,7 @@ func CopyFile(src, dst string) error {
 	return nil
 }
 
-// CopyDir recursively copies a directory tree.
+// CopyDir recursively copies a directory tree
 func CopyDir(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
@@ -389,7 +389,7 @@ func CopyDir(src, dst string) error {
 	return nil
 }
 
-// GetExternalSubtitles finds external subtitle files associated with a media file.
+// GetExternalSubtitles finds external subtitle files associated with a media file
 func GetExternalSubtitles(path string) []string {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
@@ -416,7 +416,7 @@ func GetExternalSubtitles(path string) []string {
 	return Unique(subs)
 }
 
-// EnsureDir creates a directory and all its parent directories if they don't exist.
+// EnsureDir creates a directory and all its parent directories if they don't exist
 func EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }

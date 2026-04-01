@@ -37,7 +37,6 @@ linters:
     - gochecknoinits
     - gochecksumtype
     - gocritic
-    - godot
     - gomoddirectives
     - goprintffuncname
     - grouper
@@ -207,13 +206,6 @@ linters-settings:
 
   gofumpt:
     extra-rules: true
-
-  godot:
-    scope: all
-    exclude:
-      - go:generate
-    capital: true
-    period: false
 
   goimports:
     local-prefixes: github.com/chapmanjacobd/syncweb

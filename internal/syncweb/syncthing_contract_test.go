@@ -1,5 +1,5 @@
-// Package syncweb_test contains contract tests that verify Syncthing internal API behavior.
-// These tests ensure that when Syncthing updates, we detect breaking changes early.
+// Package syncweb_test contains contract tests that verify Syncthing internal API behavior
+// These tests ensure that when Syncthing updates, we detect breaking changes early
 //
 // Contract tests verify:
 // 1. Expected inputs/outputs from Syncthing APIs

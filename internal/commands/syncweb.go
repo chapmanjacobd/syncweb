@@ -18,9 +18,9 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
-// Constants for automatic sync operations.
+// Constants for automatic sync operations
 const (
-	// AutoSyncInterval is the default interval for automatic sync operations.
+	// AutoSyncInterval is the default interval for automatic sync operations
 	AutoSyncInterval = 30 * time.Second
 )
 
@@ -67,7 +67,7 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
 	return fn(s)
 }
 
-// SyncwebAutomaticCmd starts the syncweb-automatic daemon.
+// SyncwebAutomaticCmd starts the syncweb-automatic daemon
 type SyncwebAutomaticCmd struct {
 	Devices        bool     `help:"Auto-accept devices"`
 	Folders        bool     `help:"Auto-join folders"`
@@ -169,7 +169,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// matchesFilters checks if a string matches include/exclude filters.
+// matchesFilters checks if a string matches include/exclude filters
 func matchesFilters(s string, include, exclude []string) bool {
 	// Check include filters
 	if len(include) > 0 {
@@ -197,7 +197,7 @@ func matchesFilters(s string, include, exclude []string) bool {
 	return true
 }
 
-// SyncwebStartCmd starts the Syncweb daemon.
+// SyncwebStartCmd starts the Syncweb daemon
 type SyncwebStartCmd struct{}
 
 func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
@@ -231,7 +231,7 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 	return nil
 }
 
-// SyncwebStopCmd stops the Syncweb daemon.
+// SyncwebStopCmd stops the Syncweb daemon
 type SyncwebStopCmd struct{}
 
 func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
@@ -263,7 +263,7 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 	return nil
 }
 
-// SyncwebVersionCmd shows the Syncweb version.
+// SyncwebVersionCmd shows the Syncweb version
 type SyncwebVersionCmd struct{}
 
 func (c *SyncwebVersionCmd) Run(g *SyncwebCmd) error {

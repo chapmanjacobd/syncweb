@@ -10,7 +10,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
-// SyncwebReplCmd provides an interactive REPL for debugging.
+// SyncwebReplCmd provides an interactive REPL for debugging
 type SyncwebReplCmd struct{}
 
 func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {

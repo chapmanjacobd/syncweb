@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// RandomString returns a random hexadecimal string of the given length.
+// RandomString returns a random hexadecimal string of the given length
 func RandomString(n int) string {
 	b := make([]byte, n/2+1)
 	if _, err := rand.Read(b); err != nil {
@@ -19,15 +19,15 @@ func RandomString(n int) string {
 	return hex.EncodeToString(b)[:n]
 }
 
-// RandomFilename appends a random string to the filename before the extension.
+// RandomFilename appends a random string to the filename before the extension
 func RandomFilename(path string) string {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
 	return fmt.Sprintf("%s.%s%s", base, RandomString(6), ext)
 }
 
-// TrimPathSegments reduces the length of path segments to fit within desiredLength.
-// It uses a fish-shell style where parent/grandparent segments are reduced to their first letter.
+// TrimPathSegments reduces the length of path segments to fit within desiredLength
+// It uses a fish-shell style where parent/grandparent segments are reduced to their first letter
 func TrimPathSegments(path string, desiredLength int) string {
 	if len(path) <= desiredLength {
 		return path
@@ -78,7 +78,7 @@ func TrimPathSegments(path string, desiredLength int) string {
 	return res
 }
 
-// SafeJoin joins a base path with a user-provided path, preventing directory traversal.
+// SafeJoin joins a base path with a user-provided path, preventing directory traversal
 func SafeJoin(base string, userPath string) string {
 	// Clean the user path to remove .. and other traversal elements
 	userPath = filepath.Clean(userPath)
@@ -96,7 +96,7 @@ func SafeJoin(base string, userPath string) string {
 	return filepath.Join(append([]string{base}, safeParts...)...)
 }
 
-// Relativize removes leading slashes and drive letters.
+// Relativize removes leading slashes and drive letters
 func Relativize(path string) string {
 	// Remove drive letter on Windows
 	if len(path) >= 2 && path[1] == ':' {
@@ -109,12 +109,12 @@ func Relativize(path string) string {
 	return path
 }
 
-// StripMountSyntax is a repeated relativize.
+// StripMountSyntax is a repeated relativize
 func StripMountSyntax(path string) string {
 	return Relativize(path)
 }
 
-// IsEmptyFolder checks if a folder contains no files (recursively).
+// IsEmptyFolder checks if a folder contains no files (recursively)
 func IsEmptyFolder(path string) bool {
 	empty := true
 	err := filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
@@ -136,7 +136,7 @@ func IsEmptyFolder(path string) bool {
 	return empty
 }
 
-// FolderSize calculates the total size of all files in a folder (recursively).
+// FolderSize calculates the total size of all files in a folder (recursively)
 func FolderSize(path string) int64 {
 	var size int64
 	_ = filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
@@ -155,7 +155,7 @@ func FolderSize(path string) int64 {
 	return size
 }
 
-// PathTupleFromURL returns (parentDir, filename) from a URL.
+// PathTupleFromURL returns (parentDir, filename) from a URL
 func PathTupleFromURL(rawURL string) (string, string) {
 	u, err := url.Parse(rawURL)
 	if err != nil {

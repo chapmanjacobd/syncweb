@@ -17,7 +17,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebFoldersCmd lists Syncthing folders.
+// SyncwebFoldersCmd lists Syncthing folders
 type SyncwebFoldersCmd struct {
 	Joined      bool     `help:"Only show joined folders"`
 	Pending     bool     `help:"Only show pending folders"`

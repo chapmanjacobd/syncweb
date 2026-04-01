@@ -15,7 +15,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebLsCmd lists files at the current directory level.
+// SyncwebLsCmd lists files at the current directory level
 type SyncwebLsCmd struct {
 	Paths         []string `arg:""                                       default:"."                                 help:"Path relative to the root" optional:""`
 	Long          bool     `help:"Use long listing format"               short:"l"`

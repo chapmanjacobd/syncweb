@@ -10,7 +10,7 @@ func TestParseDate(t *testing.T) {
 		input string
 		want  int64
 	}{
-		{"2024-01-01", 1704067200}, // Depends on local timezone if not specified, but time.Parse uses UTC if no offset. Wait, time.Parse uses UTC for "2006-01-02" if no timezone.
+		{"2024-01-01", 1704067200}, // Depends on local timezone if not specified, but time.Parse uses UTC if no offset. Wait, time.Parse uses UTC for "2006-01-02" if no timezone
 		{"2024-01-01 12:00", 1704110400},
 		{"invalid", 0},
 	}
@@ -18,7 +18,7 @@ func TestParseDate(t *testing.T) {
 		got := ParseDate(tt.input)
 		if got != tt.want && tt.want != 0 {
 			// time.Parse("2006-01-02", "2024-01-01") returns 2024-01-01 00:00:00 +0000 UTC
-			// which is 1704067200.
+			// which is 1704067200
 			t.Errorf("ParseDate(%q) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
@@ -29,7 +29,7 @@ func TestIsTZAware(t *testing.T) {
 	if IsTZAware(utc) {
 		t.Errorf("IsTZAware(UTC) = true, want false")
 	}
-	// Local might be UTC on some systems (CI), so this test might be flaky.
+	// Local might be UTC on some systems (CI), so this test might be flaky
 }
 
 func TestSuperParser(t *testing.T) {
@@ -56,9 +56,9 @@ func TestSpecificDate(t *testing.T) {
 	if got == nil {
 		t.Fatalf("SpecificDate() = nil, want non-nil")
 	}
-	// Earliest most-specific. 2022-03-03 is more recent.
-	// The implementation sorts and finds the "best".
-	// Let's just check it doesn't crash and returns something.
+	// Earliest most-specific. 2022-03-03 is more recent
+	// The implementation sorts and finds the "best"
+	// Let's just check it doesn't crash and returns something
 }
 
 func TestTubeDate(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebStatCmd displays detailed file status information.
+// SyncwebStatCmd displays detailed file status information
 type SyncwebStatCmd struct {
 	Paths       []string `arg:""                                 help:"Files or directories to stat" required:""`
 	Terse       bool     `help:"Print information in terse form" short:"t"`
@@ -159,7 +159,7 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// getDeviceAvailability returns a list of device IDs that have the file.
+// getDeviceAvailability returns a list of device IDs that have the file
 func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.FileInfo) []string {
 	deviceSet := make(map[string]bool)
 	for _, block := range info.Blocks {
@@ -183,7 +183,7 @@ func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.Fi
 	return devices
 }
 
-// getFileType returns a human-readable file type string.
+// getFileType returns a human-readable file type string
 func getFileType(info protocol.FileInfo) string {
 	switch info.Type {
 	case protocol.FileInfoTypeDirectory:
@@ -197,7 +197,7 @@ func getFileType(info protocol.FileInfo) string {
 	}
 }
 
-// formatVersion formats the version vector for display.
+// formatVersion formats the version vector for display
 func formatVersion(version protocol.Vector) string {
 	if len(version.Counters) == 0 {
 		return "none"

@@ -15,7 +15,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebFindCmd searches for files by filename, size, and modified date.
+// SyncwebFindCmd searches for files by filename, size, and modified date
 type SyncwebFindCmd struct {
 	Pattern        string   `arg:""                                                         default:".*"                      help:"Search patterns" optional:""`
 	Type           string   `help:"Filter by type (f=file, d=directory)"                    short:"t"`
@@ -302,7 +302,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// globToRegex converts a glob pattern to a regex pattern.
+// globToRegex converts a glob pattern to a regex pattern
 func globToRegex(glob string) string {
 	// Escape special regex characters except * and ?
 	var result strings.Builder

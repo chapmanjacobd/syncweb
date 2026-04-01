@@ -10,8 +10,8 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
-// TestSafeUnmountRemovable tests unmounting a device mounted at multiple mountpoints.
-// This test requires root privileges and loop device support.
+// TestSafeUnmountRemovable tests unmounting a device mounted at multiple mountpoints
+// This test requires root privileges and loop device support
 func TestSafeUnmountRemovable(t *testing.T) {
 	if os.Getenv("CI") != "" || os.Getuid() != 0 {
 		t.Skip("This test requires root and loop device support")
@@ -67,8 +67,8 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	}
 }
 
-// TestSafePrepareForRead tests preparing a device for read by unmounting duplicate mountpoints.
-// This test requires root privileges and loop device support.
+// TestSafePrepareForRead tests preparing a device for read by unmounting duplicate mountpoints
+// This test requires root privileges and loop device support
 func TestSafePrepareForRead(t *testing.T) {
 	if os.Getenv("CI") != "" || os.Getuid() != 0 {
 		t.Skip("This test requires root and loop device support")
@@ -108,8 +108,8 @@ func TestSafePrepareForRead(t *testing.T) {
 	}
 }
 
-// TestAutoCleanupMounts tests automatic cleanup of duplicate mountpoints.
-// This test requires root privileges and loop device support.
+// TestAutoCleanupMounts tests automatic cleanup of duplicate mountpoints
+// This test requires root privileges and loop device support
 func TestAutoCleanupMounts(t *testing.T) {
 	if os.Getenv("CI") != "" || os.Getuid() != 0 {
 		t.Skip("This test requires root and loop device support")
@@ -149,7 +149,7 @@ func TestAutoCleanupMounts(t *testing.T) {
 	}
 }
 
-// TestSafePrepareForReadRoot tests that root devices are skipped for safety.
+// TestSafePrepareForReadRoot tests that root devices are skipped for safety
 func TestSafePrepareForReadRoot(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -195,7 +195,7 @@ func TestSafePrepareForReadRoot(t *testing.T) {
 	}
 }
 
-// TestFilterMountpointsExcludesRoot tests that root filesystem is excluded from mountpoints.
+// TestFilterMountpointsExcludesRoot tests that root filesystem is excluded from mountpoints
 func TestFilterMountpointsExcludesRoot(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -315,7 +315,7 @@ func TestFilterMountpointsExcludesRoot(t *testing.T) {
 	}
 }
 
-// TestParseLsblkOutput tests parsing of lsblk JSON output.
+// TestParseLsblkOutput tests parsing of lsblk JSON output
 func TestParseLsblkOutput(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -388,7 +388,7 @@ func TestParseLsblkOutput(t *testing.T) {
 	}
 }
 
-// TestSafePrepareForReadBtrfs tests that Btrfs filesystems are skipped (thread-safe).
+// TestSafePrepareForReadBtrfs tests that Btrfs filesystems are skipped (thread-safe)
 func TestSafePrepareForReadBtrfs(t *testing.T) {
 	mockDevices := []models.BlockDevice{
 		{
@@ -404,7 +404,7 @@ func TestSafePrepareForReadBtrfs(t *testing.T) {
 	}
 }
 
-// TestSafePrepareForReadNotFound tests error handling when device is not found.
+// TestSafePrepareForReadNotFound tests error handling when device is not found
 func TestSafePrepareForReadNotFound(t *testing.T) {
 	mockDevices := []models.BlockDevice{
 		{

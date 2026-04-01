@@ -11,7 +11,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-// SyncwebDevicesCmd lists Syncthing devices.
+// SyncwebDevicesCmd lists Syncthing devices
 type SyncwebDevicesCmd struct {
 	Accepted   bool     `help:"Only show accepted devices"`
 	Pending    bool     `help:"Only show pending devices"`

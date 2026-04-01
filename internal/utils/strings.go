@@ -15,7 +15,7 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// CompareBlockStrings implements SQL-like % wildcard matching.
+// CompareBlockStrings implements SQL-like % wildcard matching
 func CompareBlockStrings(pattern, value string) bool {
 	pattern = strings.ToLower(pattern)
 	value = strings.ToLower(value)
@@ -581,7 +581,7 @@ func LoadString(s string) any {
 	return s
 }
 
-// FtsQuote quotes search terms for FTS5 unless they already contain FTS operators.
+// FtsQuote quotes search terms for FTS5 unless they already contain FTS operators
 func FtsQuote(query []string) []string {
 	ftsOperators := []string{" NOT ", " AND ", " OR ", "*", ":", "NEAR("}
 	res := make([]string, len(query))
@@ -614,7 +614,7 @@ func EscapeXML(s string) string {
 	return xmlReplacer.Replace(s)
 }
 
-// Pluralize returns the singular form if n is 1, otherwise the plural form.
+// Pluralize returns the singular form if n is 1, otherwise the plural form
 func Pluralize(n int, singular, plural string) string {
 	if n == 1 {
 		return singular

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// CoreFlags are essential flags shared across most binaries/commands.
+// CoreFlags are essential flags shared across most binaries/commands
 type CoreFlags struct {
 	// Common options
 	Verbose   bool   `help:"Enable verbose logging"              short:"v"`
@@ -17,7 +17,7 @@ type CoreFlags struct {
 	Timeout   string `help:"Quit after N minutes/seconds"        short:"T"`
 }
 
-// SyncwebFlags are flags related to Syncweb configuration.
+// SyncwebFlags are flags related to Syncweb configuration
 type SyncwebFlags struct {
 	SyncwebURL      string `env:"SYNCWEB_URL"     group:"Syncweb" help:"Syncweb/Syncthing API URL"`
 	SyncwebAPIKey   string `env:"SYNCWEB_API_KEY" group:"Syncweb" help:"Syncweb/Syncthing API Key"`
@@ -253,7 +253,7 @@ type MergeFlags struct {
 	SkipColumns       []string `group:"Merge" help:"Columns to skip during merge"`
 }
 
-// GlobalFlags are flags available to disco data commands (print, search, du, etc).
+// GlobalFlags are flags available to disco data commands (print, search, du, etc)
 type GlobalFlags struct {
 	CoreFlags        `embed:""`
 	SyncwebFlags     `embed:""`
@@ -280,7 +280,7 @@ type GlobalFlags struct {
 	IgnoreErrors bool `help:"Ignore errors and continue to next file" short:"i"`
 }
 
-// ControlFlags are a subset of flags for simple control commands.
+// ControlFlags are a subset of flags for simple control commands
 type ControlFlags struct {
 	MpvSocket  string `group:"Playback"              help:"Mpv socket path"`
 	CastDevice string `alias:"cast-to"               group:"Playback"       help:"Chromecast device name"`

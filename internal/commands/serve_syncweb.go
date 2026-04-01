@@ -20,19 +20,19 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// Constants for serve command.
+// Constants for serve command
 const (
-	// FolderRootPriority is the priority value for folder roots in search results.
+	// FolderRootPriority is the priority value for folder roots in search results
 	FolderRootPriority = 1000
-	// MaxPathLength is the maximum allowed length for path inputs.
+	// MaxPathLength is the maximum allowed length for path inputs
 	MaxPathLength = 1024
-	// MaxQueryLength is the maximum allowed length for query string inputs.
+	// MaxQueryLength is the maximum allowed length for query string inputs
 	MaxQueryLength = 256
-	// MaxPerPage is the maximum number of items per page in pagination.
+	// MaxPerPage is the maximum number of items per page in pagination
 	MaxPerPage = 1000
 )
 
-// validateFolderID checks if a folder ID is valid (alphanumeric, dashes, underscores).
+// validateFolderID checks if a folder ID is valid (alphanumeric, dashes, underscores)
 func validateFolderID(folderID string) error {
 	if folderID == "" {
 		return errors.New("folder ID cannot be empty")
@@ -48,7 +48,7 @@ func validateFolderID(folderID string) error {
 	return nil
 }
 
-// validatePath checks if a path is safe and within allowed bounds.
+// validatePath checks if a path is safe and within allowed bounds
 func validatePath(path string) error {
 	if path == "" {
 		return errors.New("path cannot be empty")
@@ -67,7 +67,7 @@ func validatePath(path string) error {
 	return nil
 }
 
-// validateQuery checks if a query string is safe and within allowed bounds.
+// validateQuery checks if a query string is safe and within allowed bounds
 func validateQuery(query string) error {
 	if len(query) > MaxQueryLength {
 		return fmt.Errorf("query too long (max %d characters)", MaxQueryLength)
@@ -79,7 +79,7 @@ func validateQuery(query string) error {
 	return nil
 }
 
-// validatePaginationParams validates and sanitizes pagination parameters.
+// validatePaginationParams validates and sanitizes pagination parameters
 func validatePaginationParams(pageStr, perPageStr string) (page, perPage int, err error) {
 	page = 1
 	perPage = 100
@@ -180,8 +180,8 @@ func (c *ServeCmd) addSyncwebRoots(resultsMap map[string]models.LsEntry, counts 
 	}
 }
 
-// handleSyncwebEvents returns recent sync events.
-// GET /api/syncweb/events.
+// handleSyncwebEvents returns recent sync events
+// GET /api/syncweb/events
 func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -194,8 +194,8 @@ func (c *ServeCmd) handleSyncwebEvents(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, events)
 }
 
-// handleSyncwebFolders returns a list of configured Syncweb folders.
-// GET /api/syncweb/folders.
+// handleSyncwebFolders returns a list of configured Syncweb folders
+// GET /api/syncweb/folders
 func (c *ServeCmd) handleSyncwebFolders(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -211,9 +211,9 @@ func (c *ServeCmd) handleSyncwebFolders(w http.ResponseWriter, r *http.Request) 
 	writeOK(w, folders)
 }
 
-// handleSyncwebFoldersAdd adds a new sync folder.
+// handleSyncwebFoldersAdd adds a new sync folder
 // POST /api/syncweb/folders/add
-// Body: {"id": "...", "path": "..."}.
+// Body: {"id": "...", "path": "..."}
 func (c *ServeCmd) handleSyncwebFoldersAdd(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -240,9 +240,9 @@ func (c *ServeCmd) handleSyncwebFoldersAdd(w http.ResponseWriter, r *http.Reques
 	writeAccepted(w, "Folder add request accepted")
 }
 
-// handleSyncwebFoldersDelete removes a sync folder.
+// handleSyncwebFoldersDelete removes a sync folder
 // POST /api/syncweb/folders/delete
-// Body: {"id": "..."}.
+// Body: {"id": "..."}
 func (c *ServeCmd) handleSyncwebFoldersDelete(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -267,8 +267,8 @@ func (c *ServeCmd) handleSyncwebFoldersDelete(w http.ResponseWriter, r *http.Req
 	writeAccepted(w, "Folder deletion request accepted")
 }
 
-// handleSyncwebLs lists global files in a Syncweb folder.
-// GET /api/syncweb/ls?folder=...&prefix=...
+// handleSyncwebLs lists global files in a Syncweb folder
+// GET /api/syncweb/ls?folder=...&prefix=..
 func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -377,7 +377,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, results)
 }
 
-// handleSyncwebDownload triggers a download for a Syncweb file.
+// handleSyncwebDownload triggers a download for a Syncweb file
 // POST /api/syncweb/download
 // Body: {"path": "sync://..."}
 func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request) {
@@ -441,9 +441,9 @@ func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request)
 	writeAccepted(w, "Download triggered")
 }
 
-// handleSyncwebToggle toggles Syncweb between online and offline modes.
+// handleSyncwebToggle toggles Syncweb between online and offline modes
 // POST /api/syncweb/toggle
-// Body: {"offline": bool}.
+// Body: {"offline": bool}
 func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -480,7 +480,7 @@ func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, map[string]bool{"offline": !c.sw.IsRunning()})
 }
 
-// handleSyncwebStatus returns the current status of Syncweb.
+// handleSyncwebStatus returns the current status of Syncweb
 func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -503,8 +503,8 @@ func (c *ServeCmd) handleSyncwebStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSyncwebFind searches for files across all Syncweb folders.
-// GET /api/syncweb/find?q=...
+// handleSyncwebFind searches for files across all Syncweb folders
+// GET /api/syncweb/find?q=..
 func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -565,8 +565,8 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, results)
 }
 
-// handleSyncwebStat returns detailed metadata for a file.
-// GET /api/syncweb/stat?path=sync://...
+// handleSyncwebStat returns detailed metadata for a file
+// GET /api/syncweb/stat?path=sync://..
 func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -621,8 +621,8 @@ func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, res)
 }
 
-// handleSyncwebDevices returns a list of configured Syncthing devices.
-// GET /api/syncweb/devices.
+// handleSyncwebDevices returns a list of configured Syncthing devices
+// GET /api/syncweb/devices
 func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -635,8 +635,8 @@ func (c *ServeCmd) handleSyncwebDevices(w http.ResponseWriter, r *http.Request) 
 	writeOK(w, devices)
 }
 
-// handleSyncwebPendingDevices returns a list of rejected/pending device IDs.
-// GET /api/syncweb/pending.
+// handleSyncwebPendingDevices returns a list of rejected/pending device IDs
+// GET /api/syncweb/pending
 func (c *ServeCmd) handleSyncwebPendingDevices(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -649,9 +649,9 @@ func (c *ServeCmd) handleSyncwebPendingDevices(w http.ResponseWriter, r *http.Re
 	writeOK(w, pending)
 }
 
-// handleSyncwebDevicesAdd adds a new device.
+// handleSyncwebDevicesAdd adds a new device
 // POST /api/syncweb/devices/add
-// Body: {"id": "...", "name": "...", "introducer": bool}.
+// Body: {"id": "...", "name": "...", "introducer": bool}
 func (c *ServeCmd) handleSyncwebDevicesAdd(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -678,8 +678,8 @@ func (c *ServeCmd) handleSyncwebDevicesAdd(w http.ResponseWriter, r *http.Reques
 	writeAccepted(w, "Device add request accepted")
 }
 
-// handleSyncwebPendingFolders returns a list of pending folder invitations.
-// GET /api/syncweb/pending-folders.
+// handleSyncwebPendingFolders returns a list of pending folder invitations
+// GET /api/syncweb/pending-folders
 func (c *ServeCmd) handleSyncwebPendingFolders(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -692,9 +692,9 @@ func (c *ServeCmd) handleSyncwebPendingFolders(w http.ResponseWriter, r *http.Re
 	writeOK(w, pending)
 }
 
-// handleSyncwebFoldersJoin joins a pending folder.
+// handleSyncwebFoldersJoin joins a pending folder
 // POST /api/syncweb/folders/join
-// Body: {"folder_id": "...", "device_id": "...", "path": "..."}.
+// Body: {"folder_id": "...", "device_id": "...", "path": "..."}
 func (c *ServeCmd) handleSyncwebFoldersJoin(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -730,9 +730,9 @@ func (c *ServeCmd) handleSyncwebFoldersJoin(w http.ResponseWriter, r *http.Reque
 	writeAccepted(w, "Folder join request accepted")
 }
 
-// handleSyncwebDevicesDelete removes a device.
+// handleSyncwebDevicesDelete removes a device
 // POST /api/syncweb/devices/delete
-// Body: {"id": "..."}.
+// Body: {"id": "..."}
 func (c *ServeCmd) handleSyncwebDevicesDelete(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -757,8 +757,8 @@ func (c *ServeCmd) handleSyncwebDevicesDelete(w http.ResponseWriter, r *http.Req
 	writeAccepted(w, "Device deletion request accepted")
 }
 
-// handleSyncwebCompletion returns folder completion percentage for a device.
-// GET /api/syncweb/completion?device_id=...&folder_id=...
+// handleSyncwebCompletion returns folder completion percentage for a device
+// GET /api/syncweb/completion?device_id=...&folder_id=..
 func (c *ServeCmd) handleSyncwebCompletion(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -796,8 +796,8 @@ func (c *ServeCmd) handleSyncwebCompletion(w http.ResponseWriter, r *http.Reques
 	writeOK(w, completion)
 }
 
-// handleSyncwebTree returns folder tree structure for browsing.
-// GET /api/syncweb/tree?folder_id=...&prefix=...&levels=-1&dirs_only=false.
+// handleSyncwebTree returns folder tree structure for browsing
+// GET /api/syncweb/tree?folder_id=...&prefix=...&levels=-1&dirs_only=false
 func (c *ServeCmd) handleSyncwebTree(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -850,8 +850,8 @@ func (c *ServeCmd) handleSyncwebTree(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, map[string]any{"tree": tree})
 }
 
-// handleSyncwebLocalChanged returns locally changed files for a folder.
-// GET /api/syncweb/local-changed?folder_id=...&page=1&per_page=100.
+// handleSyncwebLocalChanged returns locally changed files for a folder
+// GET /api/syncweb/local-changed?folder_id=...&page=1&per_page=100
 func (c *ServeCmd) handleSyncwebLocalChanged(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -891,8 +891,8 @@ func (c *ServeCmd) handleSyncwebLocalChanged(w http.ResponseWriter, r *http.Requ
 	writeOK(w, map[string]any{"files": files, "page": page, "per_page": perPage})
 }
 
-// handleSyncwebNeed returns paginated list of needed files for a folder.
-// GET /api/syncweb/need?folder_id=...&page=1&per_page=100.
+// handleSyncwebNeed returns paginated list of needed files for a folder
+// GET /api/syncweb/need?folder_id=...&page=1&per_page=100
 func (c *ServeCmd) handleSyncwebNeed(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()
@@ -938,8 +938,8 @@ func (c *ServeCmd) handleSyncwebNeed(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSyncwebRemoteNeed returns files needed by a specific remote device.
-// GET /api/syncweb/remote-need?folder_id=...&device_id=...&page=1&per_page=100.
+// handleSyncwebRemoteNeed returns files needed by a specific remote device
+// GET /api/syncweb/remote-need?folder_id=...&device_id=...&page=1&per_page=100
 func (c *ServeCmd) handleSyncwebRemoteNeed(w http.ResponseWriter, r *http.Request) {
 	c.swMu.Lock()
 	defer c.swMu.Unlock()

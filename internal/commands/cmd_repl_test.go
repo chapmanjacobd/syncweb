@@ -39,7 +39,7 @@ func TestSyncwebReplCmd_CommandParsing(t *testing.T) {
 	}
 }
 
-// Test that SyncwebReplCmd implements the command interface.
+// Test that SyncwebReplCmd implements the command interface
 func TestSyncwebReplCmd_Interface(t *testing.T) {
 	var _ interface {
 		Run(*SyncwebCmd) error

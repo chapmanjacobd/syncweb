@@ -20,9 +20,9 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// Constants for syncweb configuration.
+// Constants for syncweb configuration
 const (
-	// EventBufferLimit is the maximum number of events to keep in memory.
+	// EventBufferLimit is the maximum number of events to keep in memory
 	EventBufferLimit = 100
 )
 
@@ -88,7 +88,7 @@ func (m *Measurements) Score(id protocol.DeviceID) float64 {
 	avgTime := float64(meas.TotalTime) / float64(meas.Count)
 	errorRate := float64(meas.Errors) / float64(meas.Count+meas.Errors)
 
-	// Lower is better. Penalty for errors.
+	// Lower is better. Penalty for errors
 	return avgTime * (1.0 + errorRate*10.0)
 }
 
@@ -279,17 +279,17 @@ func (s *Syncweb) IsRunning() bool {
 	return s.Node.IsRunning()
 }
 
-// ScanFolders triggers a scan on all folders.
+// ScanFolders triggers a scan on all folders
 func (s *Syncweb) ScanFolders() map[string]error {
 	return s.Node.App.Internals.ScanFolders()
 }
 
-// ScanFolderSubdirs triggers a scan on specific subdirectories of a folder.
+// ScanFolderSubdirs triggers a scan on specific subdirectories of a folder
 func (s *Syncweb) ScanFolderSubdirs(folderID string, paths []string) error {
 	return s.Node.App.Internals.ScanFolderSubdirs(folderID, paths)
 }
 
-// AddDevice adds a device to the Syncthing configuration.
+// AddDevice adds a device to the Syncthing configuration
 func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error {
 	id, err := protocol.DeviceIDFromString(deviceID)
 	if err != nil {
@@ -318,7 +318,7 @@ func (s *Syncweb) AddDevice(deviceID string, name string, introducer bool) error
 	return s.Node.Cfg.Save()
 }
 
-// SetDeviceAddresses sets explicit addresses for a device.
+// SetDeviceAddresses sets explicit addresses for a device
 func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error {
 	id, err := protocol.DeviceIDFromString(deviceID)
 	if err != nil {
@@ -340,7 +340,7 @@ func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error 
 	return s.Node.Cfg.Save()
 }
 
-// AddFolder adds a folder to the Syncthing configuration.
+// AddFolder adds a folder to the Syncthing configuration
 func (s *Syncweb) AddFolder(id string, label string, path string, folderType config.FolderType) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -374,7 +374,7 @@ func (s *Syncweb) AddFolder(id string, label string, path string, folderType con
 	return nil
 }
 
-// AddFolderDevice shares a folder with a device.
+// AddFolderDevice shares a folder with a device
 func (s *Syncweb) AddFolderDevice(folderID string, deviceID string) error {
 	devID, err := protocol.DeviceIDFromString(deviceID)
 	if err != nil {
@@ -403,7 +403,7 @@ func (s *Syncweb) AddFolderDevice(folderID string, deviceID string) error {
 	return s.Node.Cfg.Save()
 }
 
-// AddFolderDevices shares a folder with multiple devices.
+// AddFolderDevices shares a folder with multiple devices
 func (s *Syncweb) AddFolderDevices(folderID string, deviceIDs []string) error {
 	ids := make([]protocol.DeviceID, 0, len(deviceIDs))
 	for _, did := range deviceIDs {
@@ -440,7 +440,7 @@ func (s *Syncweb) AddFolderDevices(folderID string, deviceIDs []string) error {
 	return s.Node.Cfg.Save()
 }
 
-// RemoveFolderDevices removes devices from a folder.
+// RemoveFolderDevices removes devices from a folder
 func (s *Syncweb) RemoveFolderDevices(folderID string, deviceIDs []string) error {
 	ids := make([]protocol.DeviceID, 0, len(deviceIDs))
 	for _, did := range deviceIDs {
@@ -581,7 +581,7 @@ func (s *Syncweb) DeleteDevice(id string) error {
 	return s.Node.Cfg.Save()
 }
 
-// GetFolders returns a list of folder information.
+// GetFolders returns a list of folder information
 func (s *Syncweb) GetFolders() []FolderInfo {
 	cfg := s.Node.Cfg.RawCopy()
 	folders := make([]FolderInfo, 0, len(cfg.Folders))
@@ -602,7 +602,7 @@ func (s *Syncweb) GetFolders() []FolderInfo {
 	return folders
 }
 
-// GetDevices returns a list of device information.
+// GetDevices returns a list of device information
 func (s *Syncweb) GetDevices() []DeviceInfo {
 	cfg := s.Node.Cfg.RawCopy()
 	devices := make([]DeviceInfo, 0, len(cfg.Devices))
@@ -619,7 +619,7 @@ func (s *Syncweb) GetDevices() []DeviceInfo {
 }
 
 // ResolveLocalPath resolves a sync:// or syncweb:// URL to a local filesystem path,
-// ensuring the path is within the folder's root directory.
+// ensuring the path is within the folder's root directory
 func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 	var trimmed string
 	if after, ok := strings.CutPrefix(syncPath, "sync://"); ok {
@@ -658,7 +658,7 @@ func (s *Syncweb) ResolveLocalPath(syncPath string) (string, string, error) {
 	return "", "", fmt.Errorf("folder not found: %s", folderID)
 }
 
-// GetFolderPath returns the local path for a folder ID (internal use only).
+// GetFolderPath returns the local path for a folder ID (internal use only)
 func (s *Syncweb) GetFolderPath(folderID string) (string, bool) {
 	cfg := s.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
@@ -669,7 +669,7 @@ func (s *Syncweb) GetFolderPath(folderID string) (string, bool) {
 	return "", false
 }
 
-// Unignore removes a file from the ignore list by adding an unignore (!) pattern.
+// Unignore removes a file from the ignore list by adding an unignore (!) pattern
 func (s *Syncweb) Unignore(folderID, relativePath string) error {
 	lines, _, err := s.Node.App.Internals.Ignores(folderID)
 	if err != nil {
@@ -685,12 +685,12 @@ func (s *Syncweb) Unignore(folderID, relativePath string) error {
 	return s.Node.App.Internals.SetIgnores(folderID, lines)
 }
 
-// GetGlobalFileInfo returns information about a file across the cluster.
+// GetGlobalFileInfo returns information about a file across the cluster
 func (s *Syncweb) GetGlobalFileInfo(folderID, path string) (protocol.FileInfo, bool, error) {
 	return s.Node.App.Internals.GlobalFileInfo(folderID, path)
 }
 
-// SyncwebReadSeeker implements io.ReadSeeker by fetching blocks from Syncthing peers.
+// SyncwebReadSeeker implements io.ReadSeeker by fetching blocks from Syncthing peers
 type SyncwebReadSeeker struct {
 	s        *Syncweb
 	folderID string
@@ -827,19 +827,19 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	return int(totalRead), nil
 }
 
-// GetIgnores returns the ignore patterns for a folder.
+// GetIgnores returns the ignore patterns for a folder
 func (s *Syncweb) GetIgnores(folderID string) ([]string, error) {
 	lines, _, err := s.Node.App.Internals.Ignores(folderID)
 	return lines, err
 }
 
-// SetIgnores sets the ignore patterns for a folder.
+// SetIgnores sets the ignore patterns for a folder
 func (s *Syncweb) SetIgnores(folderID string, lines []string) error {
 	return s.Node.App.Internals.SetIgnores(folderID, lines)
 }
 
 // AddIgnores adds unignore patterns to a folder's ignore list
-// This is used to mark files for download in receiveonly folders.
+// This is used to mark files for download in receiveonly folders
 func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 	existing, _, err := s.Node.App.Internals.Ignores(folderID)
 	if err != nil {
@@ -894,7 +894,7 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 	return s.Node.App.Internals.SetIgnores(folderID, final)
 }
 
-// GetFolderStats returns statistics for all folders.
+// GetFolderStats returns statistics for all folders
 func (s *Syncweb) GetFolderStats() map[string]map[string]any {
 	stats := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -912,7 +912,7 @@ func (s *Syncweb) GetFolderStats() map[string]map[string]any {
 	return stats
 }
 
-// GetDeviceStats returns statistics for all devices.
+// GetDeviceStats returns statistics for all devices
 func (s *Syncweb) GetDeviceStats() map[string]map[string]any {
 	stats := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -930,7 +930,7 @@ func (s *Syncweb) GetDeviceStats() map[string]map[string]any {
 	return stats
 }
 
-// GetPendingFolders returns pending folder invitations from other devices.
+// GetPendingFolders returns pending folder invitations from other devices
 func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 	pending := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -954,7 +954,7 @@ func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 	return pending
 }
 
-// GetDiscoveredDevices returns devices from the discovery cache.
+// GetDiscoveredDevices returns devices from the discovery cache
 func (s *Syncweb) GetDiscoveredDevices() map[string]map[string]any {
 	discovered := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -972,7 +972,7 @@ func (s *Syncweb) GetDiscoveredDevices() map[string]map[string]any {
 	return discovered
 }
 
-// GetPendingDevices returns devices waiting to be accepted.
+// GetPendingDevices returns devices waiting to be accepted
 func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
 	pending := make(map[string]map[string]any)
 	cfg := s.Node.Cfg.RawCopy()
@@ -990,7 +990,7 @@ func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
 	return pending
 }
 
-// CountSeeders returns the number of unique devices that have blocks for a file.
+// CountSeeders returns the number of unique devices that have blocks for a file
 func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
 	info, ok, err := s.GetGlobalFileInfo(folderID, path)
 	if err != nil || !ok {
@@ -1011,7 +1011,7 @@ func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
 	return len(seederSet), nil
 }
 
-// GetCompletion returns folder completion percentage for a device.
+// GetCompletion returns folder completion percentage for a device
 func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (map[string]any, error) {
 	comp, err := s.Node.App.Internals.Completion(deviceID, folderID)
 	if err != nil {
@@ -1030,8 +1030,8 @@ func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (ma
 }
 
 // GetGlobalTree returns folder tree structure for browsing
-// levels: -1 for all levels, 0 for root only, etc.
-// returnOnlyDirectories: if true, only return directory entries.
+// levels: -1 for all levels, 0 for root only, etc
+// returnOnlyDirectories: if true, only return directory entries
 func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]map[string]any, error) {
 	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
 	if err != nil {
@@ -1050,7 +1050,7 @@ func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyD
 	return result, nil
 }
 
-// GetLocalChangedFiles returns locally changed files for a folder (paginated).
+// GetLocalChangedFiles returns locally changed files for a folder (paginated)
 func (s *Syncweb) GetLocalChangedFiles(folderID string, page, perPage int) ([]map[string]any, error) {
 	files, err := s.Node.App.Internals.LocalChangedFolderFiles(folderID, page, perPage)
 	if err != nil {
@@ -1072,7 +1072,7 @@ func (s *Syncweb) GetLocalChangedFiles(folderID string, page, perPage int) ([]ma
 }
 
 // GetNeedFiles returns paginated list of needed files for a folder
-// Returns three lists: remote (needed from remote), local (local changes), queued (queued for sync).
+// Returns three lists: remote (needed from remote), local (local changes), queued (queued for sync)
 func (s *Syncweb) GetNeedFiles(folderID string, page, perPage int) (remote, local, queued []map[string]any, err error) {
 	remoteFiles, localFiles, queuedFiles, err := s.Node.App.Internals.NeedFolderFiles(folderID, page, perPage)
 	if err != nil {
@@ -1097,7 +1097,7 @@ func (s *Syncweb) GetNeedFiles(folderID string, page, perPage int) (remote, loca
 	return convertFiles(remoteFiles), convertFiles(localFiles), convertFiles(queuedFiles), nil
 }
 
-// GetRemoteNeedFiles returns files needed by a specific remote device.
+// GetRemoteNeedFiles returns files needed by a specific remote device
 func (s *Syncweb) GetRemoteNeedFiles(folderID string, deviceID protocol.DeviceID, page, perPage int) ([]map[string]any, error) {
 	files, err := s.Node.App.Internals.RemoteNeedFolderFiles(folderID, deviceID, page, perPage)
 	if err != nil {

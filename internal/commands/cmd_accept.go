@@ -9,7 +9,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-// SyncwebAcceptCmd accepts devices and optionally adds them to folders.
+// SyncwebAcceptCmd accepts devices and optionally adds them to folders
 type SyncwebAcceptCmd struct {
 	DeviceIDs  []string `arg:""                                  help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
 	FolderIDs  []string `help:"Add devices to folders"           short:"f"`

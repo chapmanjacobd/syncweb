@@ -72,7 +72,7 @@ func (h *syncthingRedirectHandler) WithGroup(name string) slog.Handler {
 
 var once sync.Once
 
-// setupLogging redirects Syncthing-related logs to a file in the home directory.
+// setupLogging redirects Syncthing-related logs to a file in the home directory
 func setupLogging(homeDir string) {
 	once.Do(func() {
 		logPath := filepath.Join(homeDir, "syncthing.log")

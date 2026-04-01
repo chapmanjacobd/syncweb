@@ -125,8 +125,8 @@ func TestDivisors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		got := Divisors(tt.n)
-		// Since we don't sort the result in Divisors, we should sort or check if it contains all.
-		// For simplicity, let's check length and content if not nil.
+		// Since we don't sort the result in Divisors, we should sort or check if it contains all
+		// For simplicity, let's check length and content if not nil
 		if tt.want == nil {
 			if got != nil {
 				t.Errorf("Divisors(%d) = %v, want nil", tt.n, got)

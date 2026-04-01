@@ -15,7 +15,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebDownloadCmd marks file paths for download/sync.
+// SyncwebDownloadCmd marks file paths for download/sync
 type SyncwebDownloadCmd struct {
 	Paths []string `arg:""                                       help:"File or directory paths to download" optional:""`
 	Depth int      `help:"Maximum depth for directory traversal"`
@@ -152,7 +152,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// getFolderSpaceInfo gets disk space information for a folder.
+// getFolderSpaceInfo gets disk space information for a folder
 func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
 	var folderPath string
 	var minFreeCfg minDiskFreeConfig
@@ -215,7 +215,7 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	}
 }
 
-// calculateMinDiskFree calculates the minimum free space to preserve.
+// calculateMinDiskFree calculates the minimum free space to preserve
 func calculateMinDiskFree(totalSpace int64, cfg minDiskFreeConfig) int64 {
 	value := cfg.Value
 	unit := strings.ToLower(cfg.Unit)
@@ -239,14 +239,14 @@ func calculateMinDiskFree(totalSpace int64, cfg minDiskFreeConfig) int64 {
 	return int64(value) * multiplier
 }
 
-// getMountpoint returns the mountpoint for a path.
+// getMountpoint returns the mountpoint for a path
 func getMountpoint(path string) string {
 	// Simplified: just return the directory for now
 	// A full implementation would check /proc/mounts or use stat.st_dev
 	return filepath.Dir(path)
 }
 
-// groupFoldersByMountpoint groups folders by their mountpoint.
+// groupFoldersByMountpoint groups folders by their mountpoint
 func groupFoldersByMountpoint(folderSpaceInfos map[string]*folderSpaceInfo) map[string][]string {
 	groups := make(map[string][]string)
 
@@ -261,7 +261,7 @@ func groupFoldersByMountpoint(folderSpaceInfos map[string]*folderSpaceInfo) map[
 	return groups
 }
 
-// mountpointUsageInfo holds calculated usage info for a mountpoint.
+// mountpointUsageInfo holds calculated usage info for a mountpoint
 type mountpointUsageInfo struct {
 	TotalDownload int64
 	Usable        int64
@@ -272,7 +272,7 @@ type mountpointUsageInfo struct {
 	Shared        bool
 }
 
-// calculateMountpointUsage calculates usage per mountpoint.
+// calculateMountpointUsage calculates usage per mountpoint
 func calculateMountpointUsage(
 	mountpointGroups map[string][]string,
 	folderSpaceInfos map[string]*folderSpaceInfo,
@@ -328,7 +328,7 @@ func calculateMountpointUsage(
 	return result
 }
 
-// printDownloadSummary prints the download summary table.
+// printDownloadSummary prints the download summary table
 //
 //nolint:unparam // mountpointGroups kept for future use
 func printDownloadSummary(
@@ -413,7 +413,7 @@ func printDownloadSummary(
 	}
 }
 
-// generateWarnings generates warnings for insufficient space.
+// generateWarnings generates warnings for insufficient space
 func generateWarnings(
 	mountpointUsage map[string]*mountpointUsageInfo,
 	folderSpaceInfos map[string]*folderSpaceInfo,
@@ -446,7 +446,7 @@ func generateWarnings(
 }
 
 // safeMulUint64 multiplies two uint64 values with overflow protection
-// Returns math.MaxInt64 if overflow would occur.
+// Returns math.MaxInt64 if overflow would occur
 func safeMulUint64(a, b uint64) int64 {
 	if a == 0 || b == 0 {
 		return 0

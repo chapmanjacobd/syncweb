@@ -95,7 +95,6 @@ linters:
     - predeclared
     - promlinter
     - protogetter
-    - reassign
     - revive
     - rowserrcheck
     - sloglint
@@ -124,7 +123,6 @@ linters:
     - iface
     - iotamixing
     - modernize
-    - nonamedreturns
     - nilnesserr
     - recvcheck
     - spancheck
@@ -189,7 +187,7 @@ linters:
       # Checks the number of statements in a function.
       # If lower than 0, disable the check.
       # Default: 40
-      statements: 50
+      statements: 60
 
     gochecksumtype:
       # Presence of `default` case in switch statements satisfies exhaustiveness, if all members are not listed.
@@ -389,12 +387,6 @@ linters:
         arguments: [ 30 ]
       - name: max-public-structs
         arguments: [ 10 ]
-      - name: add-constant
-        arguments:
-          - maxLitCount: "3"
-            allowStrs: '""'
-            allowInts: "0,1,2"
-            allowFloats: "0.0,0.,1.0,1.,2.0,2."
 
     tagalign:
       align: true

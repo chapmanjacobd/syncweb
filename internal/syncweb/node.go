@@ -30,7 +30,7 @@ type Node struct {
 	mu      sync.RWMutex
 }
 
-func NewNode(homeDir, name, listenAddr string) (*Node, error) {
+func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	if homeDir == "" {
 		var err error
 		homeDir, err = os.MkdirTemp("", "syncweb-")

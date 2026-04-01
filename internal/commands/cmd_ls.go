@@ -349,8 +349,7 @@ func (c *SyncwebLsCmd) printDirectory(items []*fileEntry, indent int, printHeade
 	}
 }
 
-//nolint:unparam // printHeader kept for potential future use
-func (c *SyncwebLsCmd) printEntry(item *fileEntry, printHeader func()) {
+func (c *SyncwebLsCmd) printEntry(item *fileEntry, _ func()) {
 	if c.Long {
 		typeChar := "d"
 		if !item.IsDir {

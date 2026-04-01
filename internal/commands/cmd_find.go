@@ -183,18 +183,18 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			// Handle alternative time-modified syntax
 			for _, tm := range c.TimeModified {
 				// Check if it starts with + (older than) or - (newer than)
-				if after, ok := strings.CutPrefix(tm, "-"); ok {
+				if newerThan, ok := strings.CutPrefix(tm, "-"); ok {
 					// Newer than (e.g., -3 days)
-					duration := after
+					duration := newerThan
 					seconds, err := utils.HumanToSeconds(duration)
 					if err != nil {
 						return fmt.Errorf("invalid time-modified duration: %s", tm)
 					}
 					ts := now - seconds
 					modifiedAfterTS = &ts
-				} else if after, ok := strings.CutPrefix(tm, "+"); ok {
+				} else if olderThan, ok := strings.CutPrefix(tm, "+"); ok {
 					// Older than (e.g., +3 days)
-					duration := after
+					duration := olderThan
 					seconds, err := utils.HumanToSeconds(duration)
 					if err != nil {
 						return fmt.Errorf("invalid time-modified duration: %s", tm)
@@ -203,8 +203,8 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					modifiedBeforeTS = &ts
 				} else {
 					// Try parsing as date or duration
-					seconds, err := utils.HumanToSeconds(tm)
-					if err == nil {
+					seconds, parseErr := utils.HumanToSeconds(tm)
+					if parseErr == nil {
 						ts := now - seconds
 						modifiedAfterTS = &ts
 					} else {
@@ -231,17 +231,17 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			for _, d := range c.Depth {
 				// Try parsing as plain int first
 				var val int
-				_, err := fmt.Sscanf(d, "%d", &val)
-				if err == nil {
+				_, scanErr := fmt.Sscanf(d, "%d", &val)
+				if scanErr == nil {
 					depthMin = &val
 					depthMax = &val
 				} else {
 					// Try range parsing
-					depthRange, err := utils.ParseRange(d, func(s string) (int64, error) {
-						v, err := strconv.ParseInt(s, 10, 64)
-						return v, err
+					depthRange, rangeErr := utils.ParseRange(d, func(s string) (int64, error) {
+						v, parseErr := strconv.ParseInt(s, 10, 64)
+						return v, parseErr
 					})
-					if err == nil {
+					if rangeErr == nil {
 						if depthRange.Min != nil {
 							v := int(*depthRange.Min)
 							depthMin = &v

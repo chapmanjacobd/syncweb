@@ -118,8 +118,8 @@ func testNodeRestart(t *testing.T) {
 		t.Fatalf("failed to re-create node: %v", err)
 	}
 
-	if err := node2.Start(); err != nil {
-		t.Fatalf("failed to restart node: %v", err)
+	if startErr2 := node2.Start(); startErr2 != nil {
+		t.Fatalf("failed to restart node: %v", startErr2)
 	}
 	node2.Stop()
 	_ = syncweb.CleanupTestHomeDir(home)

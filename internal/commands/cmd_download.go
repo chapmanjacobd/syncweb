@@ -117,10 +117,10 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 			for _, f := range cfg.Folders {
 				if strings.HasPrefix(absPath, f.Path) {
 					folderID = f.ID
-					var err error
-					relPath, err = filepath.Rel(f.Path, absPath)
-					if err != nil {
-						errMsg := fmt.Sprintf("Error: Failed to compute relative path for %s: %v", p, err)
+					var relErr error
+					relPath, relErr = filepath.Rel(f.Path, absPath)
+					if relErr != nil {
+						errMsg := fmt.Sprintf("Error: Failed to compute relative path for %s: %v", p, relErr)
 						result.Errors = append(result.Errors, errMsg)
 						if !g.JSON {
 							fmt.Println(errMsg)

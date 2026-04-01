@@ -55,18 +55,23 @@ func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
 			existingFolders[folderID] = true
 
 			// Create directory if it doesn't exist
-			if err := utils.EnsureDir(absPath); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", absPath, err)
+			if createErr := utils.EnsureDir(absPath); createErr != nil {
+				return fmt.Errorf("failed to create directory %s: %w", absPath, createErr)
 			}
 
 			// Add folder as sendonly
-			if err := s.AddFolder(folderID, filepath.Base(absPath), absPath, config.FolderTypeSendOnly); err != nil {
-				return fmt.Errorf("failed to add folder %s: %w", folderID, err)
+			if addErr := s.AddFolder(
+				folderID,
+				filepath.Base(absPath),
+				absPath,
+				config.FolderTypeSendOnly,
+			); addErr != nil {
+				return fmt.Errorf("failed to add folder %s: %w", folderID, addErr)
 			}
 
 			// Set empty ignore patterns
-			if err := s.SetIgnores(folderID, []string{}); err != nil {
-				return fmt.Errorf("failed to set ignores for %s: %w", folderID, err)
+			if ignoreErr := s.SetIgnores(folderID, []string{}); ignoreErr != nil {
+				return fmt.Errorf("failed to set ignores for %s: %w", folderID, ignoreErr)
 			}
 
 			// Trigger scan to index files immediately

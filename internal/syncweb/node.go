@@ -68,7 +68,7 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 
 	// Load or create config
 	var cfg config.Wrapper
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(cfgPath); os.IsNotExist(statErr) {
 		slog.Info("Creating new Syncthing config", "path", cfgPath)
 		newCfg := config.New(myID)
 		// Customize defaults similar to syncweb-py

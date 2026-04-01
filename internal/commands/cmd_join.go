@@ -45,16 +45,16 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 
 		for _, url := range c.URLs {
 			// Parse syncweb URL
-			ref, err := utils.ParseSyncwebPath(url, true)
-			if err != nil {
-				fmt.Printf("Invalid URL format %s: %v\n", url, err)
+			ref, parseErr := utils.ParseSyncwebPath(url, true)
+			if parseErr != nil {
+				fmt.Printf("Invalid URL format %s: %v\n", url, parseErr)
 				continue
 			}
 
 			// Add device if specified
 			if ref.DeviceID != "" {
-				if err := s.AddDevice(ref.DeviceID, "", false); err != nil {
-					fmt.Printf("Failed to add device %s: %v\n", ref.DeviceID, err)
+				if addDevErr := s.AddDevice(ref.DeviceID, "", false); addDevErr != nil {
+					fmt.Printf("Failed to add device %s: %v\n", ref.DeviceID, addDevErr)
 					continue
 				}
 				deviceCount++
@@ -75,9 +75,9 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 					existingFolders[f.ID] = true
 				}
 
-				absPath, err := filepath.Abs(path)
-				if err != nil {
-					fmt.Printf("Error resolving path %s: %v\n", path, err)
+				absPath, absErr := filepath.Abs(path)
+				if absErr != nil {
+					fmt.Printf("Error resolving path %s: %v\n", path, absErr)
 					continue
 				}
 				if _, exists := existingFolders[ref.FolderID]; !exists {
@@ -91,26 +91,31 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 				}
 
 				// Create directory
-				if err := os.MkdirAll(path, 0o755); err != nil {
-					fmt.Printf("Failed to create directory %s: %v\n", path, err)
+				if mkdirErr := os.MkdirAll(path, 0o755); mkdirErr != nil {
+					fmt.Printf("Failed to create directory %s: %v\n", path, mkdirErr)
 					continue
 				}
 
 				// Add folder as receiveonly, paused
 				if _, exists := existingFolders[folderID]; !exists {
-					if err := s.AddFolder(folderID, ref.FolderID, path, config.FolderTypeReceiveOnly); err != nil {
-						fmt.Printf("Failed to add folder %s: %v\n", folderID, err)
+					if addFldErr := s.AddFolder(
+						folderID,
+						ref.FolderID,
+						path,
+						config.FolderTypeReceiveOnly,
+					); addFldErr != nil {
+						fmt.Printf("Failed to add folder %s: %v\n", folderID, addFldErr)
 						continue
 					}
 
 					// Set empty ignores and resume
-					if err := s.SetIgnores(folderID, []string{}); err != nil {
-						fmt.Printf("Failed to set ignores: %v\n", err)
+					if ignoreErr := s.SetIgnores(folderID, []string{}); ignoreErr != nil {
+						fmt.Printf("Failed to set ignores: %v\n", ignoreErr)
 						continue
 					}
 
-					if err := s.ResumeFolder(folderID); err != nil {
-						fmt.Printf("Failed to resume folder: %v\n", err)
+					if resumeErr := s.ResumeFolder(folderID); resumeErr != nil {
+						fmt.Printf("Failed to resume folder: %v\n", resumeErr)
 						continue
 					}
 
@@ -119,8 +124,8 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 
 				// Share folder with device
 				if ref.DeviceID != "" {
-					if err := s.AddFolderDevice(folderID, ref.DeviceID); err != nil {
-						fmt.Printf("Failed to share folder with device: %v\n", err)
+					if shareErr := s.AddFolderDevice(folderID, ref.DeviceID); shareErr != nil {
+						fmt.Printf("Failed to share folder with device: %v\n", shareErr)
 						continue
 					}
 				}

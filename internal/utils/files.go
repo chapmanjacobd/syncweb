@@ -79,10 +79,10 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 			defer func() { <-sem }()
 
 			buf := make([]byte, chunkSize)
-			n, err := file.ReadAt(buf, offset)
-			if err != nil && err != io.EOF {
-				slog.Error("Read error during hashing", "path", path, "offset", offset, "error", err)
-				errChan <- fmt.Errorf("read error at offset %d: %w", offset, err)
+			n, readErr := file.ReadAt(buf, offset)
+			if readErr != nil && readErr != io.EOF {
+				slog.Error("Read error during hashing", "path", path, "offset", offset, "error", readErr)
+				errChan <- fmt.Errorf("read error at offset %d: %w", offset, readErr)
 				return
 			}
 			data := buf[:n]
@@ -119,15 +119,15 @@ func SampleHashFile(path string, threads int, gap float64, chunkSize int64) (str
 
 // FullHashFile calculates a full sha256 hash of a file
 func FullHashFile(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
+	file, openErr := os.Open(path)
+	if openErr != nil {
+		return "", openErr
 	}
 	defer func() { _ = file.Close() }()
 
 	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
-		return "", err
+	if _, copyErr := io.Copy(h, file); copyErr != nil {
+		return "", copyErr
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -216,14 +216,14 @@ func IsFileOpen(path string) bool {
 			}
 
 			fdDir := filepath.Join("/proc", f.Name(), "fd")
-			fds, err := os.ReadDir(fdDir)
-			if err != nil {
+			fds, readDirErr := os.ReadDir(fdDir)
+			if readDirErr != nil {
 				continue
 			}
 
 			for _, fd := range fds {
-				link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
-				if err == nil && link == absPath {
+				link, linkErr := os.Readlink(filepath.Join(fdDir, fd.Name()))
+				if linkErr == nil && link == absPath {
 					return true
 				}
 			}
@@ -337,20 +337,20 @@ func CommonPathFull(paths []string) string {
 
 // CopyFile copies a single file from src to dst
 func CopyFile(src, dst string) error {
-	s, err := os.Open(src)
-	if err != nil {
-		return err
+	s, openErr := os.Open(src)
+	if openErr != nil {
+		return openErr
 	}
 	defer func() { _ = s.Close() }()
 
-	d, err := os.Create(dst)
-	if err != nil {
-		return err
+	d, createErr := os.Create(dst)
+	if createErr != nil {
+		return createErr
 	}
 	defer func() { _ = d.Close() }()
 
-	if _, err := io.Copy(d, s); err != nil {
-		return err
+	if _, copyErr := io.Copy(d, s); copyErr != nil {
+		return copyErr
 	}
 
 	return nil
@@ -358,18 +358,18 @@ func CopyFile(src, dst string) error {
 
 // CopyDir recursively copies a directory tree
 func CopyDir(src, dst string) error {
-	info, err := os.Stat(src)
-	if err != nil {
-		return err
+	info, statErr := os.Stat(src)
+	if statErr != nil {
+		return statErr
 	}
 
-	if err := os.MkdirAll(dst, info.Mode()); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(dst, info.Mode()); mkdirErr != nil {
+		return mkdirErr
 	}
 
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
+	entries, readDirErr := os.ReadDir(src)
+	if readDirErr != nil {
+		return readDirErr
 	}
 
 	for _, entry := range entries {
@@ -377,12 +377,12 @@ func CopyDir(src, dst string) error {
 		destinationPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
-			if err := CopyDir(sourcePath, destinationPath); err != nil {
-				return err
+			if copyDirErr := CopyDir(sourcePath, destinationPath); copyDirErr != nil {
+				return copyDirErr
 			}
 		} else {
-			if err := CopyFile(sourcePath, destinationPath); err != nil {
-				return err
+			if copyFileErr := CopyFile(sourcePath, destinationPath); copyFileErr != nil {
+				return copyFileErr
 			}
 		}
 	}

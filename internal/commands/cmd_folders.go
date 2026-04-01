@@ -135,9 +135,9 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 
 				// Get free space
 				if f.Path != "" {
-					if info, err := os.Stat(f.Path); err == nil && info.IsDir() {
+					if info, statErr := os.Stat(f.Path); statErr == nil && info.IsDir() {
 						var stat syscall.Statfs_t
-						if err := syscall.Statfs(f.Path, &stat); err == nil {
+						if statfsErr := syscall.Statfs(f.Path, &stat); statfsErr == nil {
 							entry.FreeSpace = utils.FormatSize(
 								int64(stat.Bavail) * stat.Bsize,
 							)
@@ -399,18 +399,18 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 
 					if exists {
 						// Just add devices
-						if err := s.AddFolderDevices(folderID, deviceIDs); err != nil {
-							fmt.Printf("Error adding devices to %s: %v\n", folderID, err)
+						if addErr := s.AddFolderDevices(folderID, deviceIDs); addErr != nil {
+							fmt.Printf("Error adding devices to %s: %v\n", folderID, addErr)
 						} else {
 							// Pause/resume to unstuck
 							for _, devID := range deviceIDs {
-								if err := s.PauseDevice(devID); err != nil {
-									slog.Warn("Failed to pause device", "device", devID, "error", err)
+								if pauseErr := s.PauseDevice(devID); pauseErr != nil {
+									slog.Warn("Failed to pause device", "device", devID, "error", pauseErr)
 								}
 							}
 							for _, devID := range deviceIDs {
-								if err := s.ResumeDevice(devID); err != nil {
-									slog.Warn("Failed to resume device", "device", devID, "error", err)
+								if resumeErr := s.ResumeDevice(devID); resumeErr != nil {
+									slog.Warn("Failed to resume device", "device", devID, "error", resumeErr)
 								}
 							}
 							fmt.Printf("Joined folder %s with %d devices\n", folderID, len(deviceIDs))
@@ -418,13 +418,18 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 					} else {
 						// Create folder
 						dest := filepath.Join(os.Getenv("HOME"), "Syncweb", folderID)
-						if err := os.MkdirAll(dest, 0o755); err != nil {
-							fmt.Printf("Error creating directory for %s: %v\n", folderID, err)
+						if mkdirErr := os.MkdirAll(dest, 0o755); mkdirErr != nil {
+							fmt.Printf("Error creating directory for %s: %v\n", folderID, mkdirErr)
 							continue
 						}
 
-						if err := s.AddFolder(folderID, folderID, dest, config.FolderTypeReceiveOnly); err != nil {
-							fmt.Printf("Error creating folder %s: %v\n", folderID, err)
+						if addErr := s.AddFolder(
+							folderID,
+							folderID,
+							dest,
+							config.FolderTypeReceiveOnly,
+						); addErr != nil {
+							fmt.Printf("Error creating folder %s: %v\n", folderID, addErr)
 							continue
 						}
 
@@ -493,8 +498,8 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 			count := 0
 			for _, f := range filtered {
 				if len(f.Devices) > 0 && f.Path != "" && f.Path != "(not joined)" {
-					if _, err := os.Stat(f.Path); err == nil {
-						if err := os.RemoveAll(f.Path); err == nil {
+					if _, statErr := os.Stat(f.Path); statErr == nil {
+						if removeErr := os.RemoveAll(f.Path); removeErr == nil {
 							count++
 						}
 					}

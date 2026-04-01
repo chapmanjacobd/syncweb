@@ -1,3 +1,4 @@
+// Package web provides the embedded static web assets.
 package web
 
 import (
@@ -6,17 +7,17 @@ import (
 	"io/fs"
 )
 
-// FS_RAW embeds the static web assets from the dist folder
+// fsRaw embeds the static web assets from the dist folder
 //
 //go:embed dist/*
-var FS_RAW embed.FS
+var fsRaw embed.FS
 
 // FS is the web asset file system with "dist" prefix removed.
 var FS fs.FS
 
 func init() {
 	var err error
-	FS, err = fs.Sub(FS_RAW, "dist")
+	FS, err = fs.Sub(fsRaw, "dist")
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize embedded filesystem: %v. Ensure the 'dist' directory exists before building.", err))
 	}

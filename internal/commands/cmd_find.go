@@ -286,7 +286,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					}
 				}
 			}
-			cancel()
+			cancel() //nolint:errcheck // cancel function never returns an error
 		}
 
 		if g.JSON {

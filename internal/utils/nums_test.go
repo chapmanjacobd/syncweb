@@ -212,7 +212,9 @@ func TestParseRange(t *testing.T) {
 	}
 }
 
+//nolint:gocheckcompilerdirectives // inline directive for test helper
 //go:fix inline
+
 func int64Ptr(i int64) *int64 { return new(i) }
 
 func ptrEqual(a, b *int64) bool {

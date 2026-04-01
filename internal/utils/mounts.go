@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,7 +65,7 @@ func FilterMountpoints(devices []models.BlockDevice) []models.Mountpoint {
 }
 
 func GetBlockDevices() ([]models.BlockDevice, error) {
-	out, err := exec.Command("lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").Output()
+	out, err := exec.CommandContext(context.Background(), "lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").Output()
 	if err != nil {
 		return nil, fmt.Errorf("lsblk failed: %w", err)
 	}
@@ -82,7 +83,7 @@ func ParseLsblkOutput(data []byte) ([]models.BlockDevice, error) {
 }
 
 func Mount(device string, mountpoint string) error {
-	out, err := exec.Command("mount", device, mountpoint).CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), "mount", device, mountpoint).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mount failed: %s: %w", string(out), err)
 	}
@@ -113,7 +114,7 @@ func Unmount(mountpoint string) error {
 
 	if targetDevice == nil {
 		// Fallback to simple unmount if device not found in lsblk
-		out, err := exec.Command("sudo", "umount", mountpoint).CombinedOutput()
+		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mountpoint).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("unmount failed: %s: %w", string(out), err)
 		}
@@ -129,7 +130,7 @@ func Unmount(mountpoint string) error {
 		if mp == "" || strings.HasPrefix(mp, "[") {
 			continue
 		}
-		out, err := exec.Command("sudo", "umount", mp).CombinedOutput()
+		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to unmount %s: %s: %w", mp, string(out), err)
 		}
@@ -264,7 +265,7 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 		if mp == "/" {
 			continue // Safety
 		}
-		out, err := exec.Command("sudo", "umount", mp).CombinedOutput()
+		out, err := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to unmount extra mountpoint %s: %s: %w", mp, string(out), err)
 		}

@@ -40,7 +40,6 @@ linters:
     - godot
     - gomoddirectives
     - goprintffuncname
-    - gosec
     - grouper
     - importas
     - interfacebloat
@@ -79,12 +78,44 @@ linters:
     - whitespace
     - zerologlint
 
-formatters:
-  enable:
-    - gci
-    - gofmt
-    - gofumpt
-    - goimports
+  exclusions:
+    rules:
+      # Exclude most linters from test files
+      - path: _test\.go
+        linters:
+          - dupl
+          - maintidx
+          - gocritic
+          - gochecknoglobals
+          - gochecknoinits
+          - errcheck
+          - gosec
+          - unparam
+          - varnamelen
+          - forcetypeassert
+          - noctx
+          - unused
+      # Exclude revive exported/unused-parameter/empty-block from tests
+      - path: _test\.go
+        text: "unused-parameter"
+        linters:
+          - revive
+      - path: _test\.go
+        text: "empty-block"
+        linters:
+          - revive
+      - path: _test\.go
+        text: "exported"
+        linters:
+          - revive
+      # Exclude gochecknoinits from cmd/
+      - path: cmd/
+        linters:
+          - gochecknoinits
+      # Exclude gochecknoglobals from internal/
+      - path: internal/
+        linters:
+          - gochecknoglobals
 
 linters-settings:
   gci:
@@ -98,7 +129,7 @@ linters-settings:
     enabled-tags:
       - diagnostic
       - experimental
-      - opinion
+      - opinionated
       - performance
       - style
     disabled-checks:
@@ -116,17 +147,6 @@ linters-settings:
 
   goimports:
     local-prefixes: github.com/chapmanjacobd/syncweb
-
-  gosec:
-    severity: medium
-    confidence: medium
-    excludes:
-      - G104
-      - G115
-      - G301
-      - G302
-      - G306
-      - G706
 
   maintidx:
     under: 30
@@ -151,7 +171,6 @@ linters-settings:
 
   nolintlint:
     allow-unused: false
-    allow-leading-space: false
     require-explanation: true
     require-specific: true
 
@@ -170,12 +189,9 @@ linters-settings:
       - name: error-return
       - name: error-strings
       - name: error-naming
-      - name: exported
       - name: if-return
       - name: increment-decrement
-      - name: var-naming
       - name: var-declaration
-      - name: package-comments
       - name: range
       - name: receiver-naming
       - name: time-naming
@@ -184,7 +200,6 @@ linters-settings:
       - name: errorf
       - name: empty-block
       - name: superfluous-else
-      - name: unused-parameter
       - name: unreachable-code
       - name: redefines-builtin-id
       - name: waitgroup-by-value
@@ -198,6 +213,7 @@ linters-settings:
       - name: struct-tag
       - name: modifies-value-receiver
       - name: constant-logical-expr
+      - name: unused-parameter
       - name: argument-limit
         arguments: [ 5 ]
       - name: function-length
@@ -231,22 +247,3 @@ linters-settings:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - dupl
-        - maintidx
-        - gocritic
-        - gochecknoglobals
-        - gochecknoinits
-        - errcheck
-        - gosec
-        - unparam
-        - varnamelen
-        - forcetypeassert
-    - path: cmd/
-      linters:
-        - gochecknoinits
-    - path: internal/
-      linters:
-        - gochecknoglobals

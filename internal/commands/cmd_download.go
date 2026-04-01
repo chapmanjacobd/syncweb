@@ -182,8 +182,8 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	// stat.Bavail = free blocks available to non-super user
 	// stat.Blocks = total data blocks in filesystem
 	// stat.Bsize = block size
-	free := safeMulUint64(uint64(stat.Bavail), uint64(stat.Bsize))
-	total := safeMulUint64(uint64(stat.Blocks), uint64(stat.Bsize))
+	free := safeMulUint64(uint64(stat.Bavail), uint64(stat.Bsize))  //nolint:unconvert // explicit conversion for clarity
+	total := safeMulUint64(uint64(stat.Blocks), uint64(stat.Bsize)) //nolint:unconvert // explicit conversion for clarity
 
 	// Calculate minimum free space to preserve
 	minFree := calculateMinDiskFree(total, minFreeCfg)

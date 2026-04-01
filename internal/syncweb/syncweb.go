@@ -187,7 +187,7 @@ func (s *Syncweb) watchEvents() {
 	for {
 		select {
 		case ev := <-sub.C():
-			switch ev.Type {
+			switch ev.Type { //nolint:exhaustive // only handle specific events
 			case events.DeviceRejected:
 				var deviceIDStr string
 				if m, ok := ev.Data.(map[string]any); ok {

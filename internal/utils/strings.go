@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// CompareBlockStrings implements SQL-like % wildcard matching
+// CompareBlockStrings implements SQL-like % wildcard matching.
 func CompareBlockStrings(pattern, value string) bool {
 	pattern = strings.ToLower(pattern)
 	value = strings.ToLower(value)
@@ -478,14 +479,14 @@ func FromTimestampSeconds(s string) float64 {
 
 func PartialStartswith(s string, list []string) (string, error) {
 	if s == "" {
-		return "", fmt.Errorf("empty string")
+		return "", errors.New("empty string")
 	}
 	for _, item := range list {
 		if strings.HasPrefix(item, s) {
 			return item, nil
 		}
 	}
-	return "", fmt.Errorf("no match found")
+	return "", errors.New("no match found")
 }
 
 func GlobMatchAny(path string, patterns []string) bool {
@@ -568,7 +569,7 @@ func LoadString(s string) any {
 	return s
 }
 
-// FtsQuote quotes search terms for FTS5 unless they already contain FTS operators
+// FtsQuote quotes search terms for FTS5 unless they already contain FTS operators.
 func FtsQuote(query []string) []string {
 	ftsOperators := []string{" NOT ", " AND ", " OR ", "*", ":", "NEAR("}
 	res := make([]string, len(query))
@@ -601,7 +602,7 @@ func EscapeXML(s string) string {
 	return xmlReplacer.Replace(s)
 }
 
-// Pluralize returns the singular form if n is 1, otherwise the plural form
+// Pluralize returns the singular form if n is 1, otherwise the plural form.
 func Pluralize(n int, singular, plural string) string {
 	if n == 1 {
 		return singular

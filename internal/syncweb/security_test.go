@@ -9,11 +9,7 @@ import (
 )
 
 func TestSecurity_SyncthingConfig(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-security-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
+	homeDir := t.TempDir()
 
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -50,11 +46,7 @@ func TestSecurity_SyncthingConfig(t *testing.T) {
 }
 
 func TestSecurity_PathValidation(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-path-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
+	homeDir := t.TempDir()
 
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {

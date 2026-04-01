@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,9 +18,9 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
-// Constants for automatic sync operations
+// Constants for automatic sync operations.
 const (
-	// AutoSyncInterval is the default interval for automatic sync operations
+	// AutoSyncInterval is the default interval for automatic sync operations.
 	AutoSyncInterval = 30 * time.Second
 )
 
@@ -27,24 +28,24 @@ type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
 
-	Create    SyncwebCreateCmd    `cmd:"" help:"Create a syncweb folder" aliases:"init,in,share"`
-	Join      SyncwebJoinCmd      `cmd:"" help:"Join syncweb folders/devices" aliases:"import,clone"`
-	Accept    SyncwebAcceptCmd    `cmd:"" help:"Add a device to syncweb" aliases:"add"`
-	Drop      SyncwebDropCmd      `cmd:"" help:"Remove a device from syncweb" aliases:"remove,reject"`
-	Folders   SyncwebFoldersCmd   `cmd:"" help:"List Syncthing folders" aliases:"list-folders,lsf"`
-	Devices   SyncwebDevicesCmd   `cmd:"" help:"List Syncthing devices" aliases:"list-devices,lsd"`
-	Ls        SyncwebLsCmd        `cmd:"" help:"List files at the current directory level" aliases:"list"`
-	Find      SyncwebFindCmd      `cmd:"" help:"Search for files by filename, size, and modified date" aliases:"fd,search"`
-	Scan      SyncwebScanCmd      `cmd:"" help:"Trigger a scan on all folders"`
-	Stat      SyncwebStatCmd      `cmd:"" help:"Display detailed file status information from Syncthing"`
-	Sort      SyncwebSortCmd      `cmd:"" help:"Sort Syncthing files by multiple criteria"`
-	Download  SyncwebDownloadCmd  `cmd:"" help:"Mark file paths for download/sync" aliases:"dl,upload,unignore,sync"`
-	Automatic SyncwebAutomaticCmd `cmd:"" help:"Start syncweb-automatic daemon"`
-	Serve     ServeCmd            `cmd:"" help:"Start the Syncweb Web UI server"`
-	Start     SyncwebStartCmd     `cmd:"" help:"Start Syncweb daemon" aliases:"restart"`
-	Stop      SyncwebStopCmd      `cmd:"" help:"Stop Syncweb daemon" aliases:"shutdown,quit"`
-	Version   SyncwebVersionCmd   `cmd:"" help:"Show Syncweb version"`
-	Repl      SyncwebReplCmd      `cmd:"" help:"Interactive REPL for debugging" aliases:"debug"`
+	Create    SyncwebCreateCmd    `aliases:"init,in,share"           cmd:""                                                         help:"Create a syncweb folder"`
+	Join      SyncwebJoinCmd      `aliases:"import,clone"            cmd:""                                                         help:"Join syncweb folders/devices"`
+	Accept    SyncwebAcceptCmd    `aliases:"add"                     cmd:""                                                         help:"Add a device to syncweb"`
+	Drop      SyncwebDropCmd      `aliases:"remove,reject"           cmd:""                                                         help:"Remove a device from syncweb"`
+	Folders   SyncwebFoldersCmd   `aliases:"list-folders,lsf"        cmd:""                                                         help:"List Syncthing folders"`
+	Devices   SyncwebDevicesCmd   `aliases:"list-devices,lsd"        cmd:""                                                         help:"List Syncthing devices"`
+	Ls        SyncwebLsCmd        `aliases:"list"                    cmd:""                                                         help:"List files at the current directory level"`
+	Find      SyncwebFindCmd      `aliases:"fd,search"               cmd:""                                                         help:"Search for files by filename, size, and modified date"`
+	Scan      SyncwebScanCmd      `cmd:""                            help:"Trigger a scan on all folders"`
+	Stat      SyncwebStatCmd      `cmd:""                            help:"Display detailed file status information from Syncthing"`
+	Sort      SyncwebSortCmd      `cmd:""                            help:"Sort Syncthing files by multiple criteria"`
+	Download  SyncwebDownloadCmd  `aliases:"dl,upload,unignore,sync" cmd:""                                                         help:"Mark file paths for download/sync"`
+	Automatic SyncwebAutomaticCmd `cmd:""                            help:"Start syncweb-automatic daemon"`
+	Serve     ServeCmd            `cmd:""                            help:"Start the Syncweb Web UI server"`
+	Start     SyncwebStartCmd     `aliases:"restart"                 cmd:""                                                         help:"Start Syncweb daemon"`
+	Stop      SyncwebStopCmd      `aliases:"shutdown,quit"           cmd:""                                                         help:"Stop Syncweb daemon"`
+	Version   SyncwebVersionCmd   `cmd:""                            help:"Show Syncweb version"`
+	Repl      SyncwebReplCmd      `aliases:"debug"                   cmd:""                                                         help:"Interactive REPL for debugging"`
 }
 
 func (c *SyncwebCmd) AfterApply() error {
@@ -66,18 +67,18 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
 	return fn(s)
 }
 
-// SyncwebAutomaticCmd starts the syncweb-automatic daemon
+// SyncwebAutomaticCmd starts the syncweb-automatic daemon.
 type SyncwebAutomaticCmd struct {
 	Devices        bool     `help:"Auto-accept devices"`
 	Folders        bool     `help:"Auto-join folders"`
-	Local          bool     `default:"true" help:"Only auto-accept local devices"`
+	Local          bool     `default:"true"                                              help:"Only auto-accept local devices"`
 	FoldersInclude []string `help:"Search for folders which match by label, ID, or path"`
 	FoldersExclude []string `help:"Exclude folders which match by label, ID, or path"`
 	FolderTypes    []string `help:"Filter folders by type"`
 	DevicesInclude []string `help:"Search for devices which match by name or ID"`
 	DevicesExclude []string `help:"Exclude devices which match by name or ID"`
 	JoinNewFolders bool     `help:"Join non-existing folders from other devices"`
-	Sort           string   `default:"-niche,-frecency" help:"Sort criteria for download prioritization"`
+	Sort           string   `default:"-niche,-frecency"                                  help:"Sort criteria for download prioritization"`
 }
 
 func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
@@ -168,7 +169,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// matchesFilters checks if a string matches include/exclude filters
+// matchesFilters checks if a string matches include/exclude filters.
 func matchesFilters(s string, include, exclude []string) bool {
 	// Check include filters
 	if len(include) > 0 {
@@ -196,7 +197,7 @@ func matchesFilters(s string, include, exclude []string) bool {
 	return true
 }
 
-// SyncwebStartCmd starts the Syncweb daemon
+// SyncwebStartCmd starts the Syncweb daemon.
 type SyncwebStartCmd struct{}
 
 func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
@@ -230,7 +231,7 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 	return nil
 }
 
-// SyncwebStopCmd stops the Syncweb daemon
+// SyncwebStopCmd stops the Syncweb daemon.
 type SyncwebStopCmd struct{}
 
 func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
@@ -242,7 +243,7 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 
 	pidFile := filepath.Join(home, "syncweb.pid")
 	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
-		return fmt.Errorf("syncweb daemon is not running (PID file not found)")
+		return errors.New("syncweb daemon is not running (PID file not found)")
 	}
 
 	cntxt := &daemon.Context{
@@ -262,7 +263,7 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 	return nil
 }
 
-// SyncwebVersionCmd shows the Syncweb version
+// SyncwebVersionCmd shows the Syncweb version.
 type SyncwebVersionCmd struct{}
 
 func (c *SyncwebVersionCmd) Run(g *SyncwebCmd) error {

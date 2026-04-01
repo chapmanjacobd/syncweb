@@ -8,7 +8,7 @@ import (
 	"github.com/araddon/dateparse"
 )
 
-// ParseDate parses a date string into a Unix timestamp using a fixed set of layouts
+// ParseDate parses a date string into a Unix timestamp using a fixed set of layouts.
 func ParseDate(dateStr string) int64 {
 	layouts := []string{
 		"2006-01-02",
@@ -32,7 +32,7 @@ func IsTZAware(t time.Time) bool {
 	return name != "UTC" && name != "Local" || offset != 0
 }
 
-// SuperParser uses dateparse to attempt to parse a date string with various strategies
+// SuperParser uses dateparse to attempt to parse a date string with various strategies.
 func SuperParser(dateStr string) *time.Time {
 	t, err := dateparse.ParseAny(dateStr)
 	if err == nil {
@@ -72,7 +72,7 @@ func getDateSortKey(t time.Time) dateSortKey {
 	}
 }
 
-// SpecificDate finds the earliest most-specific past date from a list of strings
+// SpecificDate finds the earliest most-specific past date from a list of strings.
 func SpecificDate(dates ...string) *int64 {
 	var pastDates []time.Time
 	now := time.Now()
@@ -135,7 +135,7 @@ func SpecificDate(dates ...string) *int64 {
 	return &ts
 }
 
-// TubeDate extracts and parses dates from various common metadata keys
+// TubeDate extracts and parses dates from various common metadata keys.
 func TubeDate(v map[string]any) *int64 {
 	keys := []string{"release_date", "timestamp", "upload_date", "date", "created_at", "published", "updated"}
 	var uploadDate any

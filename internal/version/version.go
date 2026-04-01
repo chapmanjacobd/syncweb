@@ -1,18 +1,18 @@
 package version
 
-// Build-time variables set via -ldflags
+// Build-time variables set via -ldflags.
 var (
-	// Version is the git tag or commit hash
+	// Version is the git tag or commit hash.
 	Version = "dev"
-	// BuildTime is the build timestamp
+	// BuildTime is the build timestamp.
 	BuildTime = "unknown"
-	// GitHash is the git commit hash
+	// GitHash is the git commit hash.
 	GitHash = "unknown"
-	// GitDirty is set to "-dirty" if the working tree had uncommitted changes
+	// GitDirty is set to "-dirty" if the working tree had uncommitted changes.
 	GitDirty = ""
 )
 
-// Info returns the full version string
+// Info returns the full version string.
 func Info() string {
 	v := "syncweb " + Version
 	if GitDirty != "" {
@@ -24,7 +24,7 @@ func Info() string {
 	return v
 }
 
-// FullInfo returns detailed version information
+// FullInfo returns detailed version information.
 func FullInfo() string {
 	v := "syncweb " + Version
 	if GitDirty != "" {

@@ -271,14 +271,14 @@ func TestRemoveConsecutives(t *testing.T) {
 
 func TestRemovePrefixes(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		prefixes  []string
-		expected  string
+		name     string
+		input    string
+		prefixes []string
+		expected string
 	}{
 		{"single prefix", "hello world", []string{"hello "}, "world"},
 		{"multiple prefixes", "the hello world", []string{"the ", "hello "}, "world"},
-		{"repeated prefix", "hello hello world", []string{"hello "}, "world"},
+		{"repeated prefix", "hello hello world", []string{"hello"}, "hello world"}, //nolint:dupword // intentional test case for repeated words
 		{"no prefix", "hello world", []string{"goodbye "}, "hello world"},
 		{"multiple prefix types", "the a hello", []string{"the ", "a "}, "hello"},
 	}
@@ -295,14 +295,14 @@ func TestRemovePrefixes(t *testing.T) {
 
 func TestRemoveSuffixes(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		suffixes  []string
-		expected  string
+		name     string
+		input    string
+		suffixes []string
+		expected string
 	}{
 		{"single suffix", "hello world", []string{" world"}, "hello"},
 		{"multiple suffixes", "hello world test", []string{" world", " test"}, "hello"},
-		{"repeated suffix", "hello world world", []string{" world"}, "hello"},
+		{"repeated suffix", "hello world world", []string{" world"}, "hello world"}, //nolint:dupword // intentional test case for repeated words
 		{"no suffix", "hello world", []string{" goodbye"}, "hello world"},
 	}
 
@@ -318,10 +318,10 @@ func TestRemoveSuffixes(t *testing.T) {
 
 func TestShorten(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		maxWidth  int
-		expected  string
+		name     string
+		input    string
+		maxWidth int
+		expected string
 	}{
 		{"shorter than max", "hello", 10, "hello"},
 		{"exactly max", "hello", 5, "hello"},
@@ -345,10 +345,10 @@ func TestShorten(t *testing.T) {
 
 func TestShortenMiddle(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		maxWidth  int
-		expected  string
+		name     string
+		input    string
+		maxWidth int
+		expected string
 	}{
 		{"shorter than max", "hello", 10, "hello"},
 		{"exactly max", "hello", 5, "hello"},
@@ -418,10 +418,10 @@ func TestUnParagraph(t *testing.T) {
 
 func TestIsMimeMatch(t *testing.T) {
 	tests := []struct {
-		name      string
-		terms     []string
-		mimeType  string
-		expected  bool
+		name     string
+		terms    []string
+		mimeType string
+		expected bool
 	}{
 		{"exact match", []string{"video"}, "video/mp4", true},
 		{"case insensitive", []string{"VIDEO"}, "video/mp4", true},
@@ -714,8 +714,8 @@ func TestExtractWords(t *testing.T) {
 
 func TestSafeJSONLoads(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
+		name      string
+		input     string
 		expectNil bool
 	}{
 		{"valid object", `{"key": "value"}`, false},
@@ -741,8 +741,8 @@ func TestSafeJSONLoads(t *testing.T) {
 
 func TestLoadString(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
+		name      string
+		input     string
 		expectNil bool
 	}{
 		{"valid json", `{"key": "value"}`, false},

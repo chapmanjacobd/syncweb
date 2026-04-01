@@ -19,7 +19,7 @@ import (
 )
 
 type ServeCmd struct {
-	Port      int    `short:"p" default:"8889" help:"Port to listen on"`
+	Port      int    `default:"8889"                                           help:"Port to listen on" short:"p"`
 	Listen    string `help:"Address to listen on (default: 127.0.0.1)"`
 	PublicDir string `help:"Override embedded web assets with local directory"`
 	ReadOnly  bool   `help:"Disable file modifications"`
@@ -95,7 +95,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 		listenAddr = fmt.Sprintf("127.0.0.1:%d", c.Port)
 	} else if !strings.Contains(listenAddr, ":") {
 		// If only port specified (e.g., "8889"), prepend localhost
-		listenAddr = fmt.Sprintf("127.0.0.1:%s", listenAddr)
+		listenAddr = "127.0.0.1:" + listenAddr
 	}
 
 	slog.Info("Syncweb server starting", "addr", listenAddr)
@@ -346,8 +346,7 @@ func (c *ServeCmd) handleMounts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(devices)
+	writeOK(w, devices)
 }
 
 func (c *ServeCmd) handleMount(w http.ResponseWriter, r *http.Request) {
@@ -421,12 +420,11 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	writeOK(w, results)
 }
 
 // isLocalhost checks if a host is a localhost variant
-// This includes 127.0.0.0/8 range, ::1, and "localhost" hostname
+// This includes 127.0.0.0/8 range, ::1, and "localhost" hostname.
 func isLocalhost(host string) bool {
 	// Strip port if present
 	hostOnly, _, err := net.SplitHostPort(host)

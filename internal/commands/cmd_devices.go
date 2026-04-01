@@ -4,21 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-// SyncwebDevicesCmd lists Syncthing devices
+// SyncwebDevicesCmd lists Syncthing devices.
 type SyncwebDevicesCmd struct {
 	Accepted   bool     `help:"Only show accepted devices"`
 	Pending    bool     `help:"Only show pending devices"`
 	Discovered bool     `help:"Only show discovered devices"`
 	Accept     bool     `help:"Accept pending devices"`
 	LocalOnly  bool     `help:"Only include local devices"`
-	Include    []string `short:"s" help:"Search for devices which match by name or ID"`
-	Exclude    []string `short:"E" help:"Exclude devices which match by name or ID"`
+	Include    []string `help:"Search for devices which match by name or ID" short:"s"`
+	Exclude    []string `help:"Exclude devices which match by name or ID"    short:"E"`
 	Introducer bool     `help:"Configure devices as introducers"`
 	Pause      bool     `help:"Pause matching devices"`
 	Resume     bool     `help:"Resume matching devices"`
@@ -292,10 +293,10 @@ func formatBandwidth(sendKbps, recvKbps int) string {
 	sendStr := "∞"
 	recvStr := "∞"
 	if sendKbps > 0 {
-		sendStr = fmt.Sprintf("%d", sendKbps)
+		sendStr = strconv.Itoa(sendKbps)
 	}
 	if recvKbps > 0 {
-		recvStr = fmt.Sprintf("%d", recvKbps)
+		recvStr = strconv.Itoa(recvKbps)
 	}
 	return fmt.Sprintf("↑%s/↓%s Kbps", sendStr, recvStr)
 }

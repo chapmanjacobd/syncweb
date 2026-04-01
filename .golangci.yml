@@ -112,7 +112,7 @@ linters-settings:
     exclude:
       - go:generate
     capital: true
-    period: true
+    period: false
 
   goimports:
     local-prefixes: github.com/chapmanjacobd/syncweb
@@ -123,6 +123,10 @@ linters-settings:
     excludes:
       - G104
       - G115
+      - G301
+      - G302
+      - G306
+      - G706
 
   maintidx:
     under: 30

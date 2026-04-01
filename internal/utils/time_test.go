@@ -56,7 +56,7 @@ func TestSpecificDate(t *testing.T) {
 	if got == nil {
 		t.Fatalf("SpecificDate() = nil, want non-nil")
 	}
-	// Earliest most-specific. 2022-03-03 is more recent. 
+	// Earliest most-specific. 2022-03-03 is more recent.
 	// The implementation sorts and finds the "best".
 	// Let's just check it doesn't crash and returns something.
 }

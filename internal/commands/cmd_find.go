@@ -15,27 +15,27 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebFindCmd searches for files by filename, size, and modified date
+// SyncwebFindCmd searches for files by filename, size, and modified date.
 type SyncwebFindCmd struct {
-	Pattern        string   `arg:"" optional:"" default:".*" help:"Search patterns"`
-	Type           string   `short:"t" help:"Filter by type (f=file, d=directory)"`
-	FullPath       bool     `short:"p" help:"Search full path (default: filename only)"`
-	IgnoreCase     bool     `short:"i" help:"Case insensitive search"`
-	CaseSensitive  bool     `short:"s" help:"Case sensitive search"`
-	FixedStrings   bool     `short:"F" help:"Treat all patterns as literals"`
-	Glob           bool     `short:"g" help:"Glob-based search"`
-	Exact          bool     `short:"x" help:"Exact match search"`
-	Hidden         bool     `short:"H" help:"Search hidden files and directories"`
-	AbsolutePath   bool     `short:"a" help:"Print absolute paths"`
+	Pattern        string   `arg:""                                                         default:".*"                      help:"Search patterns" optional:""`
+	Type           string   `help:"Filter by type (f=file, d=directory)"                    short:"t"`
+	FullPath       bool     `help:"Search full path (default: filename only)"               short:"p"`
+	IgnoreCase     bool     `help:"Case insensitive search"                                 short:"i"`
+	CaseSensitive  bool     `help:"Case sensitive search"                                   short:"s"`
+	FixedStrings   bool     `help:"Treat all patterns as literals"                          short:"F"`
+	Glob           bool     `help:"Glob-based search"                                       short:"g"`
+	Exact          bool     `help:"Exact match search"                                      short:"x"`
+	Hidden         bool     `help:"Search hidden files and directories"                     short:"H"`
+	AbsolutePath   bool     `help:"Print absolute paths"                                    short:"a"`
 	Downloadable   bool     `help:"Exclude sendonly folders"`
-	Depth          []string `short:"d" help:"Depth constraints (e.g., +2, -3, 2)"`
+	Depth          []string `help:"Depth constraints (e.g., +2, -3, 2)"                     short:"d"`
 	MinDepth       int      `help:"Minimum depth"`
 	MaxDepth       int      `help:"Maximum depth"`
-	Size           []string `short:"S" help:"Size constraints"`
+	Size           []string `help:"Size constraints"                                        short:"S"`
 	ModifiedWithin string   `help:"Modified within duration (e.g., 1d, 2h, 30m)"`
 	ModifiedBefore string   `help:"Modified before duration or date (e.g., 1d, 2024-01-01)"`
-	Ext            []string `short:"e" help:"File extensions to include"`
-	Paths          []string `arg:"" optional:"" help:"Root directories to search"`
+	Ext            []string `help:"File extensions to include"                              short:"e"`
+	Paths          []string `arg:""                                                         help:"Root directories to search" optional:""`
 }
 
 func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
@@ -301,7 +301,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// globToRegex converts a glob pattern to a regex pattern
+// globToRegex converts a glob pattern to a regex pattern.
 func globToRegex(glob string) string {
 	// Escape special regex characters except * and ?
 	var result strings.Builder

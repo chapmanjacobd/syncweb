@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
-// SyncwebReplCmd provides an interactive REPL for debugging
+// SyncwebReplCmd provides an interactive REPL for debugging.
 type SyncwebReplCmd struct{}
 
 func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {
@@ -104,7 +105,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "ignores":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: ignores <folder-id>")
+			return errors.New("usage: ignores <folder-id>")
 		}
 		folderID := args[0]
 		lines, err := s.GetIgnores(folderID)
@@ -117,7 +118,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "set-ignores":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: set-ignores <folder-id> <pattern1> [pattern2]")
+			return errors.New("usage: set-ignores <folder-id> <pattern1> [pattern2]")
 		}
 		folderID := args[0]
 		patterns := args[1:]
@@ -128,7 +129,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "add-device":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: add-device <device-id> [name]")
+			return errors.New("usage: add-device <device-id> [name]")
 		}
 		deviceID := args[0]
 		name := ""
@@ -142,7 +143,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "add-folder":
 		if len(args) < 3 {
-			return fmt.Errorf("usage: add-folder <id> <label> <path>")
+			return errors.New("usage: add-folder <id> <label> <path>")
 		}
 		id := args[0]
 		label := args[1]
@@ -154,7 +155,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "pause-folder":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: pause-folder <folder-id>")
+			return errors.New("usage: pause-folder <folder-id>")
 		}
 		if err := s.PauseFolder(args[0]); err != nil {
 			return err
@@ -163,7 +164,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "resume-folder":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: resume-folder <folder-id>")
+			return errors.New("usage: resume-folder <folder-id>")
 		}
 		if err := s.ResumeFolder(args[0]); err != nil {
 			return err
@@ -172,7 +173,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "pause-device":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: pause-device <device-id>")
+			return errors.New("usage: pause-device <device-id>")
 		}
 		if err := s.PauseDevice(args[0]); err != nil {
 			return err
@@ -181,7 +182,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "resume-device":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: resume-device <device-id>")
+			return errors.New("usage: resume-device <device-id>")
 		}
 		if err := s.ResumeDevice(args[0]); err != nil {
 			return err
@@ -190,7 +191,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "delete-folder":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: delete-folder <folder-id>")
+			return errors.New("usage: delete-folder <folder-id>")
 		}
 		if err := s.DeleteFolder(args[0]); err != nil {
 			return err
@@ -199,7 +200,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 
 	case "delete-device":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: delete-device <device-id>")
+			return errors.New("usage: delete-device <device-id>")
 		}
 		if err := s.DeleteDevice(args[0]); err != nil {
 			return err

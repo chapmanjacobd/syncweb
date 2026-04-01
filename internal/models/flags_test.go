@@ -54,9 +54,9 @@ func TestSetupLogging(t *testing.T) {
 
 func TestGlobalFlags_AfterApply(t *testing.T) {
 	g := &GlobalFlags{
-		CoreFlags: CoreFlags{Simulate: true},
+		CoreFlags:        CoreFlags{Simulate: true},
 		MediaFilterFlags: MediaFilterFlags{Ext: []string{"mp4"}},
-		MergeFlags: MergeFlags{Ignore: true},
+		MergeFlags:       MergeFlags{Ignore: true},
 	}
 	if err := g.AfterApply(); err != nil {
 		t.Errorf("AfterApply() error = %v", err)

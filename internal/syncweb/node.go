@@ -22,11 +22,12 @@ type Node struct {
 	App      *syncthing.App
 	Cfg      config.Wrapper
 	EvLogger events.Logger
-	Ctx      context.Context
-	Cancel   context.CancelFunc
-	db       io.Closer
-	running  bool
-	mu       sync.RWMutex
+	//nolint:containedctx // Context is used to manage Node lifecycle
+	Ctx     context.Context
+	Cancel  context.CancelFunc
+	db      io.Closer
+	running bool
+	mu      sync.RWMutex
 }
 
 func NewNode(homeDir string, name string, listenAddr string) (*Node, error) {

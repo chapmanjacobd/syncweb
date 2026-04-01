@@ -30,12 +30,7 @@ import (
 // =============================================================================
 
 func TestSyncthingContract_ConfigDefaults(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-config-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -97,12 +92,7 @@ func TestSyncthingContract_ConfigFolderTypes(t *testing.T) {
 }
 
 func TestSyncthingContract_ConfigRawCopyIsolation(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-copy-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -130,12 +120,7 @@ func TestSyncthingContract_ConfigRawCopyIsolation(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_ProtocolDeviceID(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-protocol-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -242,12 +227,7 @@ func TestSyncthingContract_ProtocolVector(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_EventsLogger(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-events-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -278,12 +258,7 @@ func TestSyncthingContract_EventsLogger(t *testing.T) {
 }
 
 func TestSyncthingContract_EventsSubscription(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-eventsub-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -332,12 +307,7 @@ func TestSyncthingContract_EventsEventTypes(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_AppInternals(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-app-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -391,12 +361,7 @@ func TestSyncthingContract_AppInternals(t *testing.T) {
 }
 
 func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-ignores-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -448,12 +413,7 @@ func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 }
 
 func TestSyncthingContract_AppInternalsFolderState(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-state-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -490,12 +450,7 @@ func TestSyncthingContract_AppInternalsFolderState(t *testing.T) {
 }
 
 func TestSyncthingContract_AppInternalsAllGlobalFiles(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-files-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -530,12 +485,7 @@ func TestSyncthingContract_AppInternalsAllGlobalFiles(t *testing.T) {
 }
 
 func TestSyncthingContract_AppInternalsPendingFolders(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-pending-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -578,19 +528,14 @@ func TestSyncthingContract_ModelAvailability(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_TLSUtilCertificate(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-tls-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	certPath := filepath.Join(homeDir, "cert.pem")
 	keyPath := filepath.Join(homeDir, "key.pem")
 
 	// CONTRACT: NewCertificate should create valid cert
 	// Note: We use the same parameters as node.go
 	// The 0 means use default validity, false means use RSA (not ECDSA)
-	_, err = tlsutil.NewCertificate(certPath, keyPath, "syncthing", 0, false)
+	_, err := tlsutil.NewCertificate(certPath, keyPath, "syncthing", 0, false)
 	if err != nil {
 		t.Fatalf("NewCertificate failed: %v", err)
 	}
@@ -620,12 +565,7 @@ func TestSyncthingContract_SvcUtilExitCodes(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_InternalsGlobalFileInfo(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-globalfi-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -655,12 +595,7 @@ func TestSyncthingContract_InternalsGlobalFileInfo(t *testing.T) {
 }
 
 func TestSyncthingContract_InternalsIsConnectedTo(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-connected-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -684,12 +619,7 @@ func TestSyncthingContract_InternalsIsConnectedTo(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_BlockAvailability(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-blockavail-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -737,12 +667,7 @@ func TestSyncthingContract_BlockAvailability(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_DownloadBlock(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-downloadblock-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -794,12 +719,7 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_Completion(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-completion-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -848,12 +768,7 @@ func TestSyncthingContract_Completion(t *testing.T) {
 }
 
 func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-completion-remote-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -899,12 +814,7 @@ func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_DeviceStatistics(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-devstats-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -942,12 +852,7 @@ func TestSyncthingContract_DeviceStatistics(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_GlobalTree(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-tree-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1010,12 +915,7 @@ func TestSyncthingContract_GlobalTree(t *testing.T) {
 }
 
 func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-tree-empty-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1052,12 +952,7 @@ func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-localchanged-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1107,12 +1002,7 @@ func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-needfiles-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1164,12 +1054,7 @@ func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
 }
 
 func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-needfiles-multi-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1216,12 +1101,7 @@ func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
 // =============================================================================
 
 func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
-	homeDir, err := os.MkdirTemp("", "syncweb-contract-remoteneed-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(homeDir)
-
+	homeDir := t.TempDir()
 	sw, err := NewSyncweb(homeDir, "test-node", "tcp://127.0.1:0")
 	if err != nil {
 		t.Fatal(err)

@@ -45,6 +45,9 @@ fmt:
 	go fix -tags "$(BUILD_TAGS)" ./...
 
 lint:
+	golangci-lint run --build-tags "$(BUILD_TAGS)" --fix ./...
+
+lint-no-fix:
 	golangci-lint run --build-tags "$(BUILD_TAGS)" ./...
 
 test:

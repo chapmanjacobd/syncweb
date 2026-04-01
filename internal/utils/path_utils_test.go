@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestRandomString(t *testing.T) {
 
 	// Test uniqueness
 	seen := make(map[string]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		result := RandomString(16)
 		if seen[result] {
 			t.Error("RandomString generated a duplicate value")
@@ -46,7 +47,7 @@ func TestRandomFilename(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := RandomFilename(tt.input)
-			if !filepath.HasPrefix(result, tt.expected) {
+			if !strings.HasPrefix(result, tt.expected) {
 				t.Errorf("RandomFilename(%q) = %q, expected to start with %q", tt.input, result, tt.expected)
 			}
 			// Should have random suffix
@@ -59,11 +60,11 @@ func TestRandomFilename(t *testing.T) {
 
 func TestTrimPathSegments(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		desiredLength  int
-		expectedLen    int
-		shouldShorten  bool
+		name          string
+		input         string
+		desiredLength int
+		expectedLen   int
+		shouldShorten bool
 	}{
 		{"short path", "/home/user/file.txt", 100, -1, false},
 		{"long path", "/home/user/verylongdirectoryname/anotherlongname/file.txt", 40, 40, true},
@@ -224,9 +225,9 @@ func TestFolderSize(t *testing.T) {
 
 func TestPathTupleFromURL(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expectedDir string
+		name         string
+		input        string
+		expectedDir  string
 		expectedFile string
 	}{
 		{"simple url", "http://example.com/file.txt", "example.com", "file.txt"},
@@ -259,45 +260,45 @@ func TestCleanPath(t *testing.T) {
 		expected string
 	}{
 		{
-			name:  "basic clean",
-			input: "/home/user/My File.txt",
-			opts:  CleanPathOptions{},
+			name:     "basic clean",
+			input:    "/home/user/My File.txt",
+			opts:     CleanPathOptions{},
 			expected: "/home/user/My File.txt",
 		},
 		{
-			name:  "lowercase folders",
-			input: "/home/User/Docs",
-			opts:  CleanPathOptions{LowercaseFolders: true},
+			name:     "lowercase folders",
+			input:    "/home/User/Docs",
+			opts:     CleanPathOptions{LowercaseFolders: true},
 			expected: "/home/user/Docs",
 		},
 		{
-			name:  "dot space",
-			input: "/home/user/My File.txt",
-			opts:  CleanPathOptions{DotSpace: true},
+			name:     "dot space",
+			input:    "/home/user/My File.txt",
+			opts:     CleanPathOptions{DotSpace: true},
 			expected: "/home/user/My.File.txt",
 		},
 		{
-			name:  "dedupe parts",
-			input: "/home/home/user/file.txt",
-			opts:  CleanPathOptions{DedupeParts: true},
+			name:     "dedupe parts",
+			input:    "/home/home/user/file.txt",
+			opts:     CleanPathOptions{DedupeParts: true},
 			expected: "/home/user/file.txt",
 		},
 		{
-			name:  "case insensitive",
-			input: "/home/my_file.txt",
-			opts:  CleanPathOptions{CaseInsensitive: true},
+			name:     "case insensitive",
+			input:    "/home/my_file.txt",
+			opts:     CleanPathOptions{CaseInsensitive: true},
 			expected: "/home/my_file.txt",
 		},
 		{
-			name:  "windows path",
-			input: "C:\\Users\\file.txt",
-			opts:  CleanPathOptions{},
+			name:     "windows path",
+			input:    "C:\\Users\\file.txt",
+			opts:     CleanPathOptions{},
 			expected: "C:Users file.txt",
 		},
 		{
-			name:  "empty parts become underscore",
-			input: "/home/  /file.txt",
-			opts:  CleanPathOptions{},
+			name:     "empty parts become underscore",
+			input:    "/home/  /file.txt",
+			opts:     CleanPathOptions{},
 			expected: "/home/_/file.txt",
 		},
 	}

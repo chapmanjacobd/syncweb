@@ -189,15 +189,15 @@ func TestParseRange(t *testing.T) {
 		wantValue *int64
 		wantErr   bool
 	}{
-		{"10-20", HumanToBytes, int64Ptr(10), int64Ptr(20), nil, false},
-		{">10", HumanToBytes, int64Ptr(11), nil, nil, false},
-		{"<20", HumanToBytes, nil, int64Ptr(19), nil, false},
-		{"+10", HumanToBytes, int64Ptr(10), nil, nil, false},
-		{"-20", HumanToBytes, nil, int64Ptr(20), nil, false},
-		{"100%10", HumanToBytes, int64Ptr(90), int64Ptr(110), nil, false},
-		{"10,20", HumanToBytes, nil, nil, int64Ptr(20), false}, // Split by ',' last one wins in ParseRange implementation
-		{"1KB-2KB", HumanToBytes, int64Ptr(1024), int64Ptr(2048), nil, false},
-		{"100", HumanToBytes, nil, nil, int64Ptr(100), false},
+		{"10-20", HumanToBytes, new(int64(10)), new(int64(20)), nil, false},
+		{">10", HumanToBytes, new(int64(11)), nil, nil, false},
+		{"<20", HumanToBytes, nil, new(int64(19)), nil, false},
+		{"+10", HumanToBytes, new(int64(10)), nil, nil, false},
+		{"-20", HumanToBytes, nil, new(int64(20)), nil, false},
+		{"100%10", HumanToBytes, new(int64(90)), new(int64(110)), nil, false},
+		{"10,20", HumanToBytes, nil, nil, new(int64(20)), false}, // Split by ',' last one wins in ParseRange implementation
+		{"1KB-2KB", HumanToBytes, new(int64(1024)), new(int64(2048)), nil, false},
+		{"100", HumanToBytes, nil, nil, new(int64(100)), false},
 		{"", HumanToBytes, nil, nil, nil, false},
 	}
 	for _, tt := range tests {
@@ -212,7 +212,9 @@ func TestParseRange(t *testing.T) {
 	}
 }
 
-func int64Ptr(i int64) *int64 { return &i }
+//go:fix inline
+func int64Ptr(i int64) *int64 { return new(i) }
+
 func ptrEqual(a, b *int64) bool {
 	if a == nil && b == nil {
 		return true

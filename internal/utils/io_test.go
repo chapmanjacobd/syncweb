@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -65,13 +66,7 @@ func TestGetDefaultBrowser(t *testing.T) {
 
 	// Check it returns a known command
 	validCommands := []string{"xdg-open", "open", "start"}
-	found := false
-	for _, cmd := range validCommands {
-		if result == cmd {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(validCommands, result)
 	if !found {
 		t.Errorf("GetDefaultBrowser returned unknown command: %s", result)
 	}

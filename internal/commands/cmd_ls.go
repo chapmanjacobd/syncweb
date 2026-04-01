@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,20 +15,20 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebLsCmd lists files at the current directory level
+// SyncwebLsCmd lists files at the current directory level.
 type SyncwebLsCmd struct {
-	Paths         []string `arg:"" optional:"" default:"." help:"Path relative to the root"`
-	Long          bool     `short:"l" help:"Use long listing format"`
-	HumanReadable bool     `help:"Print sizes in human readable format" default:"true"`
-	FolderSize    bool     `help:"Include accurate subfolder size" default:"true"`
-	ShowAll       bool     `short:"a" help:"Do not ignore entries starting with ."`
-	Depth         int      `short:"D" help:"Descend N directory levels deep" default:"0"`
+	Paths         []string `arg:""                                       default:"."                                 help:"Path relative to the root" optional:""`
+	Long          bool     `help:"Use long listing format"               short:"l"`
+	HumanReadable bool     `default:"true"                               help:"Print sizes in human readable format"`
+	FolderSize    bool     `default:"true"                               help:"Include accurate subfolder size"`
+	ShowAll       bool     `help:"Do not ignore entries starting with ." short:"a"`
+	Depth         int      `default:"0"                                  help:"Descend N directory levels deep"      short:"D"`
 	NoHeader      bool     `help:"Suppress header in long format"`
 }
 
 func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		headerPrinted := !(c.Long && !c.NoHeader)
+		headerPrinted := !c.Long || c.NoHeader
 		allEntries := []*fileEntry{}
 
 		printHeader := func() {
@@ -179,7 +180,7 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 		slog.Debug("ls: processing", "name", name, "parts", len(parts), "depth", c.Depth)
 
 		// Build tree
-		var currentMap map[string]*fileEntry = tree
+		currentMap := tree
 		var currentPath string
 
 		for i, part := range parts {
@@ -335,7 +336,7 @@ func (c *SyncwebLsCmd) printEntry(item *fileEntry, printHeader func()) {
 			if c.HumanReadable {
 				sizeStr = utils.FormatSize(item.Size)
 			} else {
-				sizeStr = fmt.Sprintf("%d", item.Size)
+				sizeStr = strconv.FormatInt(item.Size, 10)
 			}
 		}
 

@@ -80,7 +80,7 @@ func TestSecondsToHHMMSS(t *testing.T) {
 func TestFormatPlaybackDuration(t *testing.T) {
 	tests := []struct {
 		duration, start, end int64
-		want                string
+		want                 string
 	}{
 		{100, 0, 0, "Duration: 1:40"},
 		{100, 10, 20, "Duration: 0:10 (0:10 to 0:20)"},

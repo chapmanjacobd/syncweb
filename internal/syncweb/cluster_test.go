@@ -20,10 +20,7 @@ type TestCluster struct {
 
 func NewTestCluster(t *testing.T, count int) *TestCluster {
 	t.Helper()
-	tempDir, err := os.MkdirTemp("", "syncweb-cluster-")
-	if err != nil {
-		t.Fatal(err)
-	}
+	tempDir := t.TempDir()
 
 	cluster := &TestCluster{
 		TempDir: tempDir,
@@ -46,7 +43,6 @@ func (c *TestCluster) Close() {
 	for _, node := range c.Nodes {
 		node.Stop()
 	}
-	os.RemoveAll(c.TempDir)
 }
 
 func (c *TestCluster) ConnectAll(t *testing.T) {

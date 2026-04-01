@@ -48,7 +48,7 @@ func TestSyncwebVersionCmd_Run(t *testing.T) {
 	os.Stdout = w
 
 	err := c.Run(g)
-	
+
 	w.Close()
 	os.Stdout = old
 

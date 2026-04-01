@@ -10,10 +10,10 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
-// SyncwebJoinCmd joins sync folders/devices
+// SyncwebJoinCmd joins sync folders/devices.
 type SyncwebJoinCmd struct {
-	URLs   []string `arg:"" required:"" name:"urls" help:"Sync URLs (sync://folder-id#device-id)"`
-	Prefix string   `help:"Path to parent folder" env:"SYNCWEB_HOME" default:"."`
+	URLs   []string `arg:""      help:"Sync URLs (sync://folder-id#device-id)" name:"urls"                  required:""`
+	Prefix string   `default:"." env:"SYNCWEB_HOME"                            help:"Path to parent folder"`
 }
 
 func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {

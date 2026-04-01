@@ -9,10 +9,10 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
-// SyncwebDropCmd removes devices from syncweb
+// SyncwebDropCmd removes devices from syncweb.
 type SyncwebDropCmd struct {
-	DeviceIDs []string `arg:"" required:"" name:"device-ids" help:"Syncthing device IDs (space or comma-separated)"`
-	FolderIDs []string `short:"f" help:"Remove devices from folders"`
+	DeviceIDs []string `arg:""                             help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
+	FolderIDs []string `help:"Remove devices from folders" short:"f"`
 }
 
 func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {

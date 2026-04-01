@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebFoldersCmd lists Syncthing folders
+// SyncwebFoldersCmd lists Syncthing folders.
 type SyncwebFoldersCmd struct {
 	Joined      bool     `help:"Only show joined folders"`
 	Pending     bool     `help:"Only show pending folders"`
@@ -24,9 +25,9 @@ type SyncwebFoldersCmd struct {
 	Join        bool     `help:"Join pending folders"`
 	Missing     bool     `help:"Only show orphaned folders"`
 	LocalOnly   bool     `help:"Only include local devices"`
-	Include     []string `short:"s" help:"Search for folders by label, ID, or path"`
-	Exclude     []string `short:"E" help:"Exclude folders by label, ID, or path"`
-	FolderTypes []string `short:"t" help:"Filter by folder type"`
+	Include     []string `help:"Search for folders by label, ID, or path"        short:"s"`
+	Exclude     []string `help:"Exclude folders by label, ID, or path"           short:"E"`
+	FolderTypes []string `help:"Filter by folder type"                           short:"t"`
 	Introduce   bool     `help:"Introduce devices to all local folders"`
 	Delete      bool     `help:"Delete Syncweb metadata for filtered folders"`
 	DeleteFiles bool     `help:"Delete actual folders/files in filtered folders"`
@@ -115,11 +116,11 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 				localSize, _ := s.Node.App.Internals.LocalSize(f.ID)
 				needSize, _ := s.Node.App.Internals.NeedSize(f.ID, protocol.LocalDeviceID)
 
-				entry.LocalFiles = int(localSize.Files)
+				entry.LocalFiles = int(localSize.Files) //nolint:unconvert // Files is int64, struct field is int
 				entry.LocalBytes = localSize.Bytes
-				entry.NeededFiles = int(needSize.Files)
+				entry.NeededFiles = int(needSize.Files) //nolint:unconvert // Files is int64, struct field is int
 				entry.NeededBytes = needSize.Bytes
-				entry.GlobalFiles = int(globalSize.Files)
+				entry.GlobalFiles = int(globalSize.Files) //nolint:unconvert // Files is int64, struct field is int
 				entry.GlobalBytes = globalSize.Bytes
 
 				// Calculate sync percentage from live progress
@@ -297,7 +298,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 				syncStatus = fmt.Sprintf("%.0f%% (%s)", progress, utils.FormatSize(f.Completed))
 			}
 
-			peers := fmt.Sprintf("%d", f.Peers)
+			peers := strconv.Itoa(f.Peers)
 			if f.PendingPeers > 0 {
 				peers += fmt.Sprintf(" (%d)", f.PendingPeers)
 			}

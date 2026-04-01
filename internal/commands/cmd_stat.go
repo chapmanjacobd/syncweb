@@ -4,18 +4,19 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// SyncwebStatCmd displays detailed file status information
+// SyncwebStatCmd displays detailed file status information.
 type SyncwebStatCmd struct {
-	Paths       []string `arg:"" required:"" help:"Files or directories to stat"`
-	Terse       bool     `short:"t" help:"Print information in terse form"`
-	Format      string   `short:"c" help:"Use custom format"`
-	Dereference bool     `short:"L" help:"Follow symbolic links"`
+	Paths       []string `arg:""                                 help:"Files or directories to stat" required:""`
+	Terse       bool     `help:"Print information in terse form" short:"t"`
+	Format      string   `help:"Use custom format"               short:"c"`
+	Dereference bool     `help:"Follow symbolic links"           short:"L"`
 }
 
 func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
@@ -88,8 +89,8 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 				// Custom format
 				output := c.Format
 				output = strings.ReplaceAll(output, "%n", info.Name)
-				output = strings.ReplaceAll(output, "%s", fmt.Sprintf("%d", info.Size))
-				output = strings.ReplaceAll(output, "%b", fmt.Sprintf("%d", len(info.Blocks)))
+				output = strings.ReplaceAll(output, "%s", strconv.FormatInt(info.Size, 10))
+				output = strings.ReplaceAll(output, "%b", strconv.Itoa(len(info.Blocks)))
 				output = strings.ReplaceAll(output, "%f", fmt.Sprintf("%o", info.Permissions))
 				output = strings.ReplaceAll(output, "%y", info.ModTime().Format("2006-01-02 15:04:05"))
 				fmt.Println(output)
@@ -158,7 +159,7 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// getDeviceAvailability returns a list of device IDs that have the file
+// getDeviceAvailability returns a list of device IDs that have the file.
 func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.FileInfo) []string {
 	deviceSet := make(map[string]bool)
 	for _, block := range info.Blocks {
@@ -182,7 +183,7 @@ func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.Fi
 	return devices
 }
 
-// getFileType returns a human-readable file type string
+// getFileType returns a human-readable file type string.
 func getFileType(info protocol.FileInfo) string {
 	switch info.Type {
 	case protocol.FileInfoTypeDirectory:
@@ -196,7 +197,7 @@ func getFileType(info protocol.FileInfo) string {
 	}
 }
 
-// formatVersion formats the version vector for display
+// formatVersion formats the version vector for display.
 func formatVersion(version protocol.Vector) string {
 	if len(version.Counters) == 0 {
 		return "none"

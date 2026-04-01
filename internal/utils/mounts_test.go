@@ -17,12 +17,7 @@ func TestSafeUnmountRemovable(t *testing.T) {
 		t.Skip("This test requires root and loop device support")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "syncweb-mount-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
+	tmpDir := t.TempDir()
 	imagePath := filepath.Join(tmpDir, "test.img")
 	// Create a 64MB FAT32 image
 	if err := exec.Command("truncate", "-s", "64M", imagePath).Run(); err != nil {
@@ -79,12 +74,7 @@ func TestSafePrepareForRead(t *testing.T) {
 		t.Skip("This test requires root and loop device support")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "syncweb-prepare-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
+	tmpDir := t.TempDir()
 	imagePath := filepath.Join(tmpDir, "test.img")
 	exec.Command("truncate", "-s", "64M", imagePath).Run()
 	exec.Command("mkfs.vfat", imagePath).Run()
@@ -125,12 +115,7 @@ func TestAutoCleanupMounts(t *testing.T) {
 		t.Skip("This test requires root and loop device support")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "syncweb-auto-cleanup-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
+	tmpDir := t.TempDir()
 	imagePath := filepath.Join(tmpDir, "test.img")
 	exec.Command("truncate", "-s", "64M", imagePath).Run()
 	exec.Command("mkfs.vfat", imagePath).Run()

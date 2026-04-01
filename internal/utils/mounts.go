@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -120,7 +121,7 @@ func Unmount(mountpoint string) error {
 	}
 
 	if slices.Contains(targetDevice.Mountpoints, "/") {
-		return fmt.Errorf("cannot unmount root filesystem")
+		return errors.New("cannot unmount root filesystem")
 	}
 
 	// Unmount ALL mountpoints for this device

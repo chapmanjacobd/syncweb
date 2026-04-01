@@ -1,7 +1,6 @@
 package syncweb
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -25,11 +24,7 @@ func TestNodeLifecycle(t *testing.T) {
 }
 
 func testNodeBasicLifecycle(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -57,11 +52,7 @@ func testNodeBasicLifecycle(t *testing.T) {
 }
 
 func testNodeDoubleStart(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -80,11 +71,7 @@ func testNodeDoubleStart(t *testing.T) {
 }
 
 func testNodeDoubleStop(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -105,11 +92,7 @@ func testNodeDoubleStop(t *testing.T) {
 }
 
 func testNodeRestart(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-restart-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "restart-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -159,11 +142,7 @@ func testNodeEmptyHome(t *testing.T) {
 }
 
 func TestNodeInvalidListenAddr(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	// Invalid listen address should still work (Syncthing will use default)
 	node, err := NewNode(home, "test-node", "invalid-addr")
@@ -178,11 +157,7 @@ func TestNodeInvalidListenAddr(t *testing.T) {
 }
 
 func TestNodeMyID(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
@@ -203,11 +178,7 @@ func TestNodeMyID(t *testing.T) {
 }
 
 func TestNodeSubscribe(t *testing.T) {
-	home, err := os.MkdirTemp("", "node-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
+	home := t.TempDir()
 
 	node, err := NewNode(home, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {

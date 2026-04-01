@@ -190,5 +190,5 @@ func FormatPlaybackDuration(duration, segmentStart, segmentEnd int64) string {
 	}
 
 	durationStr := strings.TrimSpace(SecondsToHHMMSS(duration))
-	return fmt.Sprintf("Duration: %s", durationStr)
+	return "Duration: " + durationStr
 }

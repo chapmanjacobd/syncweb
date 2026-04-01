@@ -291,6 +291,22 @@ linters-settings:
             allowInts: "0,1,2"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
 
+  tagalign:
+    align: true
+    sort: true
+    order:
+      - required
+      - help
+      - default
+      - cmd
+      - alias
+      - short
+      - aliases
+      - name
+      - env
+      - group
+      - kong
+
   testifylint:
     enable-all: true
 

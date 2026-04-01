@@ -18,6 +18,25 @@ import (
 	"github.com/chapmanjacobd/syncweb/web"
 )
 
+// Serve command examples
+const serveExamples = `
+Examples:
+  # Start the web UI server (default port 8889)
+  syncweb serve
+
+  # Start on custom port
+  syncweb serve -p 9000
+
+  # Listen on all interfaces
+  syncweb serve --listen=0.0.0.0
+
+  # Use local web assets directory
+  syncweb serve --public-dir=./web/dist
+
+  # Enable read-only mode
+  syncweb serve --read-only
+`
+
 type ServeCmd struct {
 	Port      int    `default:"8889"                                           help:"Port to listen on" short:"p"`
 	Listen    string `help:"Address to listen on (default: 127.0.0.1)"`
@@ -29,6 +48,11 @@ type ServeCmd struct {
 	// Syncweb instance (dependency injection for testability)
 	sw   *syncweb.Syncweb
 	swMu sync.RWMutex
+}
+
+// Help displays examples for the serve command
+func (c *ServeCmd) Help() string {
+	return serveExamples
 }
 
 func (c *ServeCmd) Run(g *SyncwebCmd) error {

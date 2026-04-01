@@ -15,6 +15,28 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Ls command examples
+const lsExamples = `
+Examples:
+  # List files in current directory
+  syncweb ls
+
+  # Long listing format
+  syncweb ls -l
+
+  # List with human-readable sizes
+  syncweb ls -l --human-readable
+
+  # Include hidden files
+  syncweb ls -a
+
+  # Descend 2 directory levels
+  syncweb ls -D2
+
+  # List specific paths
+  syncweb ls music/ documents/
+`
+
 // SyncwebLsCmd lists files at the current directory level
 type SyncwebLsCmd struct {
 	Paths         []string `arg:""                                       default:"."                                 help:"Path relative to the root" optional:""`
@@ -24,6 +46,11 @@ type SyncwebLsCmd struct {
 	ShowAll       bool     `help:"Do not ignore entries starting with ." short:"a"`
 	Depth         int      `default:"0"                                  help:"Descend N directory levels deep"      short:"D"`
 	NoHeader      bool     `help:"Suppress header in long format"`
+}
+
+// Help displays examples for the ls command
+func (c *SyncwebLsCmd) Help() string {
+	return lsExamples
 }
 
 func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {

@@ -24,6 +24,7 @@ type SyncwebFlags struct {
 	SyncwebHome     string `env:"SYNCWEB_HOME"    group:"Syncweb" help:"Syncweb home directory"`
 	SyncwebPublic_  string `env:"SYNCWEB_PUBLIC"  kong:"-"`
 	SyncwebPrivate_ string `env:"SYNCWEB_PRIVATE" kong:"-"`
+	Decode          bool   `default:"true"        group:"Syncweb" help:"Decode percent-encoding and punycode in URLs" negatable:""`
 }
 
 type QueryFlags struct {

@@ -12,18 +12,42 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
+// Sort command examples
+const sortExamples = `
+Examples:
+  # Sort by multiple criteria
+  syncweb sort "balanced,frecency" < files.txt
+  syncweb sort --sort=date,-seeds < files.txt    # Old and popular first
+  syncweb sort --sort=-size,name < files.txt     # Large to small, then by name
+
+  # Filter by seeders
+  syncweb sort --min-seeders=2 < files.txt       # Only files with 2+ seeders
+  syncweb sort --max-seeders=5 < files.txt       # Only files with ≤5 seeders
+
+  # Niche sorting (files closer to ideal peer count rank higher)
+  syncweb sort --niche=3 < files.txt             # Ideal is 3 peers
+
+  # Frecency sorting (recent + popular)
+  syncweb sort --frecency-weight=3 < files.txt   # Lower weight = more recency
+`
+
 // SyncwebSortCmd sorts Syncthing files by multiple criteria
 type SyncwebSortCmd struct {
-	Paths          []string `arg:""                                        help:"File paths to sort"              optional:""`
-	Sort           []string `default:"name"                                help:"Sort criteria"`
+	Paths          []string `arg:""                                        help:"File paths to sort (or read from stdin)" optional:""`
+	Sort           []string `default:"name"                                help:"Sort by: name, size, seeds, niche, frecency, modified"`
 	LimitSize      string   `help:"Stop after printing N bytes"            short:"S"`
 	MinSeeders     int      `help:"Filter files with fewer than N seeders"`
 	MaxSeeders     int      `help:"Filter files with more than N seeders"`
-	Niche          int      `default:"3"                                   help:"Ideal popularity for niche sort"`
-	FrecencyWeight int      `default:"3"                                   help:"Weight for frecency calculation"`
+	Niche          int      `default:"3"                                   help:"Ideal peer count for niche sorting"`
+	FrecencyWeight int      `default:"3"                                   help:"Recency weight for frecency (lower=more recency)"`
 	Depth          []string `help:"Depth constraints"                      short:"d"`
 	MinDepth       int      `help:"Minimum depth"`
 	MaxDepth       int      `help:"Maximum depth"`
+}
+
+// Help displays examples for the sort command
+func (c *SyncwebSortCmd) Help() string {
+	return sortExamples
 }
 
 type fileWithInfo struct {

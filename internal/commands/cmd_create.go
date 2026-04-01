@@ -9,9 +9,30 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
+// Create command examples
+const createExamples = `
+Examples:
+  # Create a syncweb folder from current directory
+  syncweb create
+
+  # Create a syncweb folder from specific path
+  syncweb create ./music/
+
+  # Create multiple folders
+  syncweb create ./audio/ ./video/ ./documents/
+
+  # Create with existing folder
+  syncweb create /path/to/existing/folder/
+`
+
 // SyncwebCreateCmd creates a new syncweb folder
 type SyncwebCreateCmd struct {
 	Paths []string `arg:"" default:"." help:"Path to folder" optional:""`
+}
+
+// Help displays examples for the create command
+func (c *SyncwebCreateCmd) Help() string {
+	return createExamples
 }
 
 func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {

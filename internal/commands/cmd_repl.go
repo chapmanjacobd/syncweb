@@ -10,8 +10,32 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
+// Repl command examples
+const replExamples = `
+Examples:
+  # Start interactive REPL
+  syncweb repl
+
+  # Available REPL commands:
+  #   folders, lsf       - List folders
+  #   devices, lsd       - List devices
+  #   pending            - List pending devices
+  #   events             - Show recent events
+  #   stats              - Show folder statistics
+  #   ignores <folder>   - Show ignore patterns
+  #   add-device <id>    - Add a device
+  #   pause-folder <id>  - Pause a folder
+  #   whoami             - Show node info
+  #   exit, quit, q      - Exit REPL
+`
+
 // SyncwebReplCmd provides an interactive REPL for debugging
 type SyncwebReplCmd struct{}
+
+// Help displays examples for the repl command
+func (c *SyncwebReplCmd) Help() string {
+	return replExamples
+}
 
 func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {

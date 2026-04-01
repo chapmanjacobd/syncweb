@@ -17,6 +17,31 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Folders command examples
+const foldersExamples = `
+Examples:
+  # Show all folders
+  syncweb folders
+
+  # Show only pending folders and join them
+  syncweb folders --pending --join
+
+  # Search for folders by label or ID
+  syncweb folders -s music,audio
+
+  # Exclude folders by pattern
+  syncweb folders -E backup,temp
+
+  # Filter by folder type
+  syncweb folders -t sendonly,receiveonly
+
+  # Pause matching folders
+  syncweb folders -s test --pause
+
+  # Delete metadata and files for test folders
+  syncweb folders -s test --delete --delete-files
+`
+
 // SyncwebFoldersCmd lists Syncthing folders
 type SyncwebFoldersCmd struct {
 	Joined      bool     `help:"Only show joined folders"`
@@ -34,6 +59,11 @@ type SyncwebFoldersCmd struct {
 	Pause       bool     `help:"Pause matching folders"`
 	Resume      bool     `help:"Resume matching folders"`
 	Print       bool     `help:"Print only folder IDs"`
+}
+
+// Help displays examples for the folders command
+func (c *SyncwebFoldersCmd) Help() string {
+	return foldersExamples
 }
 
 //nolint:maintidx // CLI command with many flags is inherently complex

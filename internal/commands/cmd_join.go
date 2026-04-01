@@ -10,10 +10,31 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 )
 
+// Join command examples
+const joinExamples = `
+Examples:
+  # Join a syncweb folder/device
+  syncweb join sync://audio#CKTVWGQ-XBRFFRH-YTRPQ5G-YDA5YXI-N66GA5J-XVBGEZ3-PD56G6Y-N7TEAQC
+
+  # Join with custom prefix path
+  syncweb join --prefix=/data sync://music#DEVICE-ID
+
+  # Join multiple URLs
+  syncweb join sync://folder1#DEV1 sync://folder2#DEV2
+
+  # Join specific subfolder for immediate download
+  syncweb join sync://music/albums#DEVICE-ID
+`
+
 // SyncwebJoinCmd joins sync folders/devices
 type SyncwebJoinCmd struct {
 	URLs   []string `arg:""      help:"Sync URLs (sync://folder-id#device-id)" name:"urls"                  required:""`
 	Prefix string   `default:"." env:"SYNCWEB_HOME"                            help:"Path to parent folder"`
+}
+
+// Help displays examples for the join command
+func (c *SyncwebJoinCmd) Help() string {
+	return joinExamples
 }
 
 func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {

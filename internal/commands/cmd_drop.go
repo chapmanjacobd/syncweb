@@ -10,10 +10,31 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
+// Drop command examples
+const dropExamples = `
+Examples:
+  # Drop a device
+  syncweb drop NXL7XBL-VPNDOSR-QXU7WI7-NEUI65A-TWN7YGT-WS2U457-NTZNGB4-J6IYDQH
+
+  # Drop multiple devices (comma-separated)
+  syncweb drop DEV1,DEV2,DEV3
+
+  # Drop device from specific folders
+  syncweb drop --folders=audio,video DEVICE-ID
+
+  # Drop multiple devices (space-separated)
+  syncweb drop DEV1 DEV2 DEV3
+`
+
 // SyncwebDropCmd removes devices from syncweb
 type SyncwebDropCmd struct {
 	DeviceIDs []string `arg:""                             help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
 	FolderIDs []string `help:"Remove devices from folders" short:"f"`
+}
+
+// Help displays examples for the drop command
+func (c *SyncwebDropCmd) Help() string {
+	return dropExamples
 }
 
 type DropResult struct {

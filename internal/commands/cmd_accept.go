@@ -10,11 +10,35 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
+// Accept command examples
+const acceptExamples = `
+Examples:
+  # Accept a device
+  syncweb accept NXL7XBL-VPNDOSR-QXU7WI7-NEUI65A-TWN7YGT-WS2U457-NTZNGB4-J6IYDQH
+
+  # Accept multiple devices (comma-separated)
+  syncweb accept DEV1,DEV2,DEV3
+
+  # Accept device and add to specific folders
+  syncweb accept --folders=audio,video DEVICE-ID
+
+  # Accept device as introducer
+  syncweb accept --introducer DEVICE-ID
+
+  # Accept multiple devices (space-separated)
+  syncweb accept DEV1 DEV2 DEV3
+`
+
 // SyncwebAcceptCmd accepts devices and optionally adds them to folders
 type SyncwebAcceptCmd struct {
 	DeviceIDs  []string `arg:""                                  help:"Syncthing device IDs (space or comma-separated)" name:"device-ids" required:""`
 	FolderIDs  []string `help:"Add devices to folders"           short:"f"`
 	Introducer bool     `help:"Configure devices as introducers"`
+}
+
+// Help displays examples for the accept command
+func (c *SyncwebAcceptCmd) Help() string {
+	return acceptExamples
 }
 
 type AcceptResult struct {

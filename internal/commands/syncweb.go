@@ -24,6 +24,56 @@ const (
 	AutoSyncInterval = 30 * time.Second
 )
 
+// Automatic command examples
+const automaticExamples = `
+Examples:
+  # Auto-accept local devices only
+  syncweb automatic --devices
+
+  # Auto-join folders from local devices
+  syncweb automatic --folders
+
+  # Auto-accept devices and auto-join folders
+  syncweb automatic --devices --folders
+
+  # Auto-accept all devices (including remote)
+  syncweb automatic --devices --global
+
+  # Auto-join only specific folder types
+  syncweb automatic --folders --folder-types=sendreceive
+
+  # Auto-accept devices matching pattern
+  syncweb automatic --devices --devices-include=server-
+`
+
+// Start command examples
+const startExamples = `
+Examples:
+  # Start Syncweb daemon
+  syncweb start
+
+  # Start daemon (alias)
+  syncweb restart
+`
+
+// Stop command examples
+const stopExamples = `
+Examples:
+  # Stop Syncweb daemon
+  syncweb stop
+
+  # Stop daemon (aliases)
+  syncweb shutdown
+  syncweb quit
+`
+
+// Version command examples
+const versionExamples = `
+Examples:
+  # Show version information
+  syncweb version
+`
+
 type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
@@ -79,6 +129,11 @@ type SyncwebAutomaticCmd struct {
 	DevicesExclude []string `help:"Exclude devices which match by name or ID"`
 	JoinNewFolders bool     `help:"Join non-existing folders from other devices"`
 	Sort           string   `default:"-niche,-frecency"                                  help:"Sort criteria for download prioritization"`
+}
+
+// Help displays examples for the automatic command
+func (c *SyncwebAutomaticCmd) Help() string {
+	return automaticExamples
 }
 
 func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
@@ -200,6 +255,11 @@ func matchesFilters(s string, include, exclude []string) bool {
 // SyncwebStartCmd starts the Syncweb daemon
 type SyncwebStartCmd struct{}
 
+// Help displays examples for the start command
+func (c *SyncwebStartCmd) Help() string {
+	return startExamples
+}
+
 func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
@@ -234,6 +294,11 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 // SyncwebStopCmd stops the Syncweb daemon
 type SyncwebStopCmd struct{}
 
+// Help displays examples for the stop command
+func (c *SyncwebStopCmd) Help() string {
+	return stopExamples
+}
+
 func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
 	home := g.SyncwebHome
@@ -265,6 +330,11 @@ func (c *SyncwebStopCmd) Run(g *SyncwebCmd) error {
 
 // SyncwebVersionCmd shows the Syncweb version
 type SyncwebVersionCmd struct{}
+
+// Help displays examples for the version command
+func (c *SyncwebVersionCmd) Help() string {
+	return versionExamples
+}
 
 func (c *SyncwebVersionCmd) Run(g *SyncwebCmd) error {
 	fmt.Println(version.FullInfo())

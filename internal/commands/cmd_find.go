@@ -15,27 +15,57 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Find command examples (displayed in help)
+const findExamples = `
+Examples:
+  # Search by depth
+  syncweb find -d 2              # Show only items at depth 2
+  syncweb find -d=+2             # Show items at depth 2 and deeper
+  syncweb find -d=-2             # Show items up to depth 2
+  syncweb find -d=+1 -d=-3       # Show items from depth 1 to 3
+
+  # Search by size
+  syncweb find -S 6              # 6 MB exactly
+  syncweb find -S-6              # Less than 6 MB
+  syncweb find -S+6              # More than 6 MB
+  syncweb find -S 6%10           # 6 MB ±10 percent
+  syncweb find -S+5GB -S-7GB     # Between 5 and 7 GB
+
+  # Search by modification time
+  syncweb find --modified-within '3 days'    # Modified in last 3 days
+  syncweb find --modified-before '3 years'   # Modified more than 3 years ago
+  syncweb find --time-modified='-3 days'     # Newer than 3 days ago
+  syncweb find --time-modified='+3 days'     # Older than 3 days ago
+`
+
 // SyncwebFindCmd searches for files by filename, size, and modified date
 type SyncwebFindCmd struct {
-	Pattern        string   `arg:""                                                         default:".*"                      help:"Search patterns" optional:""`
-	Type           string   `help:"Filter by type (f=file, d=directory)"                    short:"t"`
-	FullPath       bool     `help:"Search full path (default: filename only)"               short:"p"`
+	Pattern        string   `arg:""                                                         default:".*"                      help:"Search patterns (default: all files)" optional:""`
+	Type           string   `help:"Filter by type: f=file, d=directory"                     short:"t"`
+	FullPath       bool     `help:"Search full abs. path (default: filename only)"          short:"p"`
 	IgnoreCase     bool     `help:"Case insensitive search"                                 short:"i"`
 	CaseSensitive  bool     `help:"Case sensitive search"                                   short:"s"`
 	FixedStrings   bool     `help:"Treat all patterns as literals"                          short:"F"`
 	Glob           bool     `help:"Glob-based search"                                       short:"g"`
 	Exact          bool     `help:"Exact match search"                                      short:"x"`
 	Hidden         bool     `help:"Search hidden files and directories"                     short:"H"`
+	FollowLinks    bool     `help:"Follow symbolic links"                                   short:"L"`
 	AbsolutePath   bool     `help:"Print absolute paths"                                    short:"a"`
 	Downloadable   bool     `help:"Exclude sendonly folders"`
-	Depth          []string `help:"Depth constraints (e.g., +2, -3, 2)"                     short:"d"`
-	MinDepth       int      `help:"Minimum depth"`
-	MaxDepth       int      `help:"Maximum depth"`
-	Size           []string `help:"Size constraints"                                        short:"S"`
-	ModifiedWithin string   `help:"Modified within duration (e.g., 1d, 2h, 30m)"`
-	ModifiedBefore string   `help:"Modified before duration or date (e.g., 1d, 2024-01-01)"`
-	Ext            []string `help:"File extensions to include"                              short:"e"`
+	Depth          []string `help:"Constrain files by file depth"                           short:"d"`
+	MinDepth       int      `help:"Alternative depth notation (default: 0)"`
+	MaxDepth       int      `help:"Alternative depth notation"`
+	Size           []string `help:"Constrain files by file size"                            short:"S"`
+	ModifiedWithin string   `help:"Constrain files by time_modified (newer than)"`
+	ModifiedBefore string   `help:"Constrain files by time_modified (older than)"`
+	TimeModified   []string `help:"Constrain media by time_modified (alternative syntax)"`
+	Ext            []string `help:"Include only specific file extensions"                     short:"e"`
 	Paths          []string `arg:""                                                         help:"Root directories to search" optional:""`
+}
+
+// Help displays examples for the find command
+func (c *SyncwebFindCmd) Help() string {
+	return findExamples
 }
 
 //nolint:maintidx // CLI command with many flags is inherently complex
@@ -144,6 +174,46 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					modifiedBeforeTs = &ts
 				} else {
 					return fmt.Errorf("invalid modified-before: %s", c.ModifiedBefore)
+				}
+			}
+		}
+
+		if len(c.TimeModified) > 0 {
+			// Handle alternative time-modified syntax
+			for _, tm := range c.TimeModified {
+				// Check if it starts with + (older than) or - (newer than)
+				if strings.HasPrefix(tm, "-") {
+					// Newer than (e.g., -3 days)
+					duration := strings.TrimPrefix(tm, "-")
+					seconds, err := utils.HumanToSeconds(duration)
+					if err != nil {
+						return fmt.Errorf("invalid time-modified duration: %s", tm)
+					}
+					ts := now - seconds
+					modifiedAfterTs = &ts
+				} else if strings.HasPrefix(tm, "+") {
+					// Older than (e.g., +3 days)
+					duration := strings.TrimPrefix(tm, "+")
+					seconds, err := utils.HumanToSeconds(duration)
+					if err != nil {
+						return fmt.Errorf("invalid time-modified duration: %s", tm)
+					}
+					ts := now - seconds
+					modifiedBeforeTs = &ts
+				} else {
+					// Try parsing as date or duration
+					seconds, err := utils.HumanToSeconds(tm)
+					if err == nil {
+						ts := now - seconds
+						modifiedAfterTs = &ts
+					} else {
+						ts := utils.ParseDateOrRelative(tm)
+						if ts > 0 {
+							modifiedAfterTs = &ts
+						} else {
+							return fmt.Errorf("invalid time-modified: %s", tm)
+						}
+					}
 				}
 			}
 		}

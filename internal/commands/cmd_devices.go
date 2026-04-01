@@ -11,6 +11,31 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
+// Devices command examples
+const devicesExamples = `
+Examples:
+  # Show all devices
+  syncweb devices
+
+  # Show only pending devices and accept them
+  syncweb devices --pending --accept
+
+  # Search for devices by name or ID
+  syncweb devices -s server,backup
+
+  # Exclude devices by pattern
+  syncweb devices -E test,temp
+
+  # Show transfer statistics (wait 5 seconds)
+  syncweb devices --xfer
+
+  # Configure device as introducer
+  syncweb devices -s main-server --introducer
+
+  # Pause matching devices
+  syncweb devices -s test --pause
+`
+
 // SyncwebDevicesCmd lists Syncthing devices
 type SyncwebDevicesCmd struct {
 	Accepted   bool     `help:"Only show accepted devices"`
@@ -25,6 +50,11 @@ type SyncwebDevicesCmd struct {
 	Resume     bool     `help:"Resume matching devices"`
 	Print      bool     `help:"Print only device IDs"`
 	Xfer       bool     `help:"Show transfer statistics"`
+}
+
+// Help displays examples for the devices command
+func (c *SyncwebDevicesCmd) Help() string {
+	return devicesExamples
 }
 
 //nolint:maintidx // CLI command with many flags is inherently complex

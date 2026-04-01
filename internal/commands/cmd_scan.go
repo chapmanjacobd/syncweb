@@ -6,8 +6,23 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
+// Scan command examples
+const scanExamples = `
+Examples:
+  # Scan all folders
+  syncweb scan
+
+  # Trigger rescan after adding files externally
+  syncweb scan
+`
+
 // SyncwebScanCmd triggers a scan on all folders
 type SyncwebScanCmd struct{}
+
+// Help displays examples for the scan command
+func (c *SyncwebScanCmd) Help() string {
+	return scanExamples
+}
 
 func (c *SyncwebScanCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {

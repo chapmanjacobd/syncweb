@@ -11,12 +11,36 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Stat command examples
+const statExamples = `
+Examples:
+  # Show detailed file information
+  syncweb stat file.txt
+
+  # Terse output format
+  syncweb stat -t file.txt
+
+  # Custom format output
+  syncweb stat -c '%n %s %y' file.txt    # name, size, mtime
+
+  # Stat multiple files
+  syncweb stat file1.txt file2.txt
+
+  # Stat directory
+  syncweb stat music/
+`
+
 // SyncwebStatCmd displays detailed file status information
 type SyncwebStatCmd struct {
 	Paths       []string `arg:""                                 help:"Files or directories to stat" required:""`
 	Terse       bool     `help:"Print information in terse form" short:"t"`
 	Format      string   `help:"Use custom format"               short:"c"`
 	Dereference bool     `help:"Follow symbolic links"           short:"L"`
+}
+
+// Help displays examples for the stat command
+func (c *SyncwebStatCmd) Help() string {
+	return statExamples
 }
 
 func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {

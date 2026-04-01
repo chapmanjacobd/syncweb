@@ -16,10 +16,34 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
+// Download command examples
+const downloadExamples = `
+Examples:
+  # Mark files for download
+  syncweb download file.txt
+
+  # Mark directory for download
+  syncweb download music/
+
+  # Download from stdin
+  cat files.txt | syncweb download
+
+  # Download with depth limit
+  syncweb download --depth=2 folder/
+
+  # Skip confirmation prompt
+  syncweb download --yes file.txt
+`
+
 // SyncwebDownloadCmd marks file paths for download/sync
 type SyncwebDownloadCmd struct {
 	Paths []string `arg:""                                       help:"File or directory paths to download" optional:""`
 	Depth int      `help:"Maximum depth for directory traversal"`
+}
+
+// Help displays examples for the download command
+func (c *SyncwebDownloadCmd) Help() string {
+	return downloadExamples
 }
 
 type DownloadItemInfo struct {

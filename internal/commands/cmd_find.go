@@ -98,7 +98,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			}
 		} else if c.Glob {
 			// Glob match mode
-			pattern := globToRegex(c.Pattern)
+			pattern := GlobToRegex(c.Pattern)
 			if c.IgnoreCase || (!c.CaseSensitive && c.Pattern == strings.ToLower(c.Pattern)) {
 				pattern = "(?i)" + pattern
 			}
@@ -373,8 +373,8 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-// globToRegex converts a glob pattern to a regex pattern
-func globToRegex(glob string) string {
+// GlobToRegex converts a glob pattern to a regex pattern
+func GlobToRegex(glob string) string {
 	// Escape special regex characters except * and ?
 	var result strings.Builder
 	result.WriteString("^")

@@ -121,7 +121,7 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 				fmt.Println(output)
 			} else {
 				// Full format
-				fileType := getFileType(info)
+				fileType := GetFileType(info)
 				fmt.Printf("  Path: %s\n", p)
 				fmt.Printf("  Size: %-15d Blocks: %-10d %s\n", info.Size, len(info.Blocks), fileType)
 
@@ -144,7 +144,7 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 				}
 
 				// Version vector display
-				versionStr := formatVersion(info.Version)
+				versionStr := FormatVersion(info.Version)
 
 				fmt.Printf("Device: %-15s Version: %s\n", deviceStr, versionStr)
 
@@ -208,8 +208,8 @@ func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.Fi
 	return devices
 }
 
-// getFileType returns a human-readable file type string
-func getFileType(info protocol.FileInfo) string {
+// GetFileType returns a human-readable file type string
+func GetFileType(info protocol.FileInfo) string {
 	switch info.Type {
 	case protocol.FileInfoTypeDirectory:
 		return "directory"
@@ -222,8 +222,8 @@ func getFileType(info protocol.FileInfo) string {
 	}
 }
 
-// formatVersion formats the version vector for display
-func formatVersion(version protocol.Vector) string {
+// FormatVersion formats the version vector for display
+func FormatVersion(version protocol.Vector) string {
 	if len(version.Counters) == 0 {
 		return "none"
 	}

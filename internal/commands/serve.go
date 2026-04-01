@@ -70,40 +70,40 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux := http.NewServeMux()
 
 	// API Routes
-	mux.HandleFunc("/api/syncweb/folders", c.authMiddleware(c.handleSyncwebFolders))
-	mux.HandleFunc("/api/syncweb/folders/add", c.authMiddleware(c.handleSyncwebFoldersAdd))
-	mux.HandleFunc("/api/syncweb/folders/delete", c.authMiddleware(c.handleSyncwebFoldersDelete))
-	mux.HandleFunc("/api/syncweb/folders/join", c.authMiddleware(c.handleSyncwebFoldersJoin))
-	mux.HandleFunc("/api/syncweb/pending-folders", c.authMiddleware(c.handleSyncwebPendingFolders))
-	mux.HandleFunc("/api/syncweb/ls", c.authMiddleware(c.handleSyncwebLs))
-	mux.HandleFunc("/api/syncweb/find", c.authMiddleware(c.handleSyncwebFind))
-	mux.HandleFunc("/api/syncweb/stat", c.authMiddleware(c.handleSyncwebStat))
-	mux.HandleFunc("/api/syncweb/download", c.authMiddleware(c.handleSyncwebDownload))
-	mux.HandleFunc("/api/syncweb/toggle", c.authMiddleware(c.handleSyncwebToggle))
-	mux.HandleFunc("/api/syncweb/status", c.authMiddleware(c.handleSyncwebStatus))
-	mux.HandleFunc("/api/syncweb/events", c.authMiddleware(c.handleSyncwebEvents))
-	mux.HandleFunc("/api/syncweb/devices", c.authMiddleware(c.handleSyncwebDevices))
-	mux.HandleFunc("/api/syncweb/pending", c.authMiddleware(c.handleSyncwebPendingDevices))
-	mux.HandleFunc("/api/syncweb/devices/add", c.authMiddleware(c.handleSyncwebDevicesAdd))
-	mux.HandleFunc("/api/syncweb/devices/delete", c.authMiddleware(c.handleSyncwebDevicesDelete))
+	mux.HandleFunc("/api/syncweb/folders", c.AuthMiddleware(c.handleSyncwebFolders))
+	mux.HandleFunc("/api/syncweb/folders/add", c.AuthMiddleware(c.handleSyncwebFoldersAdd))
+	mux.HandleFunc("/api/syncweb/folders/delete", c.AuthMiddleware(c.handleSyncwebFoldersDelete))
+	mux.HandleFunc("/api/syncweb/folders/join", c.AuthMiddleware(c.handleSyncwebFoldersJoin))
+	mux.HandleFunc("/api/syncweb/pending-folders", c.AuthMiddleware(c.handleSyncwebPendingFolders))
+	mux.HandleFunc("/api/syncweb/ls", c.AuthMiddleware(c.handleSyncwebLs))
+	mux.HandleFunc("/api/syncweb/find", c.AuthMiddleware(c.handleSyncwebFind))
+	mux.HandleFunc("/api/syncweb/stat", c.AuthMiddleware(c.handleSyncwebStat))
+	mux.HandleFunc("/api/syncweb/download", c.AuthMiddleware(c.handleSyncwebDownload))
+	mux.HandleFunc("/api/syncweb/toggle", c.AuthMiddleware(c.handleSyncwebToggle))
+	mux.HandleFunc("/api/syncweb/status", c.AuthMiddleware(c.handleSyncwebStatus))
+	mux.HandleFunc("/api/syncweb/events", c.AuthMiddleware(c.handleSyncwebEvents))
+	mux.HandleFunc("/api/syncweb/devices", c.AuthMiddleware(c.handleSyncwebDevices))
+	mux.HandleFunc("/api/syncweb/pending", c.AuthMiddleware(c.handleSyncwebPendingDevices))
+	mux.HandleFunc("/api/syncweb/devices/add", c.AuthMiddleware(c.handleSyncwebDevicesAdd))
+	mux.HandleFunc("/api/syncweb/devices/delete", c.AuthMiddleware(c.handleSyncwebDevicesDelete))
 
 	// New Syncthing Contract endpoints
-	mux.HandleFunc("/api/syncweb/completion", c.authMiddleware(c.handleSyncwebCompletion))
-	mux.HandleFunc("/api/syncweb/tree", c.authMiddleware(c.handleSyncwebTree))
-	mux.HandleFunc("/api/syncweb/local-changed", c.authMiddleware(c.handleSyncwebLocalChanged))
-	mux.HandleFunc("/api/syncweb/need", c.authMiddleware(c.handleSyncwebNeed))
-	mux.HandleFunc("/api/syncweb/remote-need", c.authMiddleware(c.handleSyncwebRemoteNeed))
+	mux.HandleFunc("/api/syncweb/completion", c.AuthMiddleware(c.handleSyncwebCompletion))
+	mux.HandleFunc("/api/syncweb/tree", c.AuthMiddleware(c.handleSyncwebTree))
+	mux.HandleFunc("/api/syncweb/local-changed", c.AuthMiddleware(c.handleSyncwebLocalChanged))
+	mux.HandleFunc("/api/syncweb/need", c.AuthMiddleware(c.handleSyncwebNeed))
+	mux.HandleFunc("/api/syncweb/remote-need", c.AuthMiddleware(c.handleSyncwebRemoteNeed))
 
-	mux.HandleFunc("/api/mounts", c.authMiddleware(c.handleMounts))
-	mux.HandleFunc("/api/mount", c.authMiddleware(c.handleMount))
-	mux.HandleFunc("/api/unmount", c.authMiddleware(c.handleUnmount))
-	mux.HandleFunc("/api/local/ls", c.authMiddleware(c.handleLocalLs))
-	mux.HandleFunc("/api/raw", c.authMiddleware(c.handleRaw))
+	mux.HandleFunc("/api/mounts", c.AuthMiddleware(c.handleMounts))
+	mux.HandleFunc("/api/mount", c.AuthMiddleware(c.handleMount))
+	mux.HandleFunc("/api/unmount", c.AuthMiddleware(c.handleUnmount))
+	mux.HandleFunc("/api/local/ls", c.AuthMiddleware(c.handleLocalLs))
+	mux.HandleFunc("/api/raw", c.AuthMiddleware(c.handleRaw))
 
 	// File Management Routes
-	mux.HandleFunc("/api/file/move", c.authMiddleware(c.handleFileMove))
-	mux.HandleFunc("/api/file/copy", c.authMiddleware(c.handleFileCopy))
-	mux.HandleFunc("/api/file/delete", c.authMiddleware(c.handleFileDelete))
+	mux.HandleFunc("/api/file/move", c.AuthMiddleware(c.handleFileMove))
+	mux.HandleFunc("/api/file/copy", c.AuthMiddleware(c.handleFileCopy))
+	mux.HandleFunc("/api/file/delete", c.AuthMiddleware(c.handleFileDelete))
 
 	// Static Files
 	if c.PublicDir != "" {
@@ -136,14 +136,14 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	return server.ListenAndServe()
 }
 
-func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func (c *ServeCmd) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Set basic security headers
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		remoteHost, _, _ := net.SplitHostPort(r.RemoteAddr)
-		isLocal := isLocalhost(remoteHost)
+		isLocal := IsLocalhost(remoteHost)
 
 		// Host header validation (DNS rebinding protection)
 		// If connection is from localhost, only allow localhost-related Host headers
@@ -152,7 +152,7 @@ func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			if host == "" {
 				host = r.Host // No port in Host header
 			}
-			if !isLocalhost(host) {
+			if !IsLocalhost(host) {
 				http.Error(w, "Host check failed (DNS rebinding protection)", http.StatusForbidden)
 				return
 			}
@@ -186,7 +186,7 @@ func (c *ServeCmd) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				originHost := strings.TrimPrefix(origin, "http://")
 				originHost = strings.TrimPrefix(originHost, "https://")
 				originHost, _, _ = strings.Cut(originHost, "/")
-				if !isLocalhost(originHost) {
+				if !IsLocalhost(originHost) {
 					http.Error(w, "CSRF block", http.StatusForbidden)
 					return
 				}
@@ -447,9 +447,9 @@ func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, results)
 }
 
-// isLocalhost checks if a host is a localhost variant
+// IsLocalhost checks if a host is a localhost variant
 // This includes 127.0.0.0/8 range, ::1, and "localhost" hostname
-func isLocalhost(host string) bool {
+func IsLocalhost(host string) bool {
 	// Strip port if present
 	hostOnly, _, err := net.SplitHostPort(host)
 	if err != nil {

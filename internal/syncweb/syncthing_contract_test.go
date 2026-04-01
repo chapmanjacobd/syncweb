@@ -37,7 +37,7 @@ func TestSyncthingContract_ConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -99,7 +99,7 @@ func TestSyncthingContract_ConfigRawCopyIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -127,7 +127,7 @@ func TestSyncthingContract_ProtocolDeviceID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -234,7 +234,7 @@ func TestSyncthingContract_EventsLogger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -265,7 +265,7 @@ func TestSyncthingContract_EventsSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -314,7 +314,7 @@ func TestSyncthingContract_AppInternals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -368,7 +368,7 @@ func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -420,7 +420,7 @@ func TestSyncthingContract_AppInternalsFolderState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -457,7 +457,7 @@ func TestSyncthingContract_AppInternalsAllGlobalFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -492,7 +492,7 @@ func TestSyncthingContract_AppInternalsPendingFolders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -572,7 +572,7 @@ func TestSyncthingContract_InternalsGlobalFileInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -602,7 +602,7 @@ func TestSyncthingContract_InternalsIsConnectedTo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -626,7 +626,7 @@ func TestSyncthingContract_BlockAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -677,7 +677,7 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -740,7 +740,7 @@ func TestSyncthingContract_Completion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -794,7 +794,7 @@ func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -843,7 +843,7 @@ func TestSyncthingContract_DeviceStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -881,7 +881,7 @@ func TestSyncthingContract_GlobalTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -948,7 +948,7 @@ func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -985,7 +985,7 @@ func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -1038,7 +1038,7 @@ func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -1093,7 +1093,7 @@ func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
@@ -1146,7 +1146,7 @@ func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
+	if startErr := sw.Start(); startErr != nil {
 		t.Fatal(err)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)

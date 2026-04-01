@@ -17,8 +17,8 @@ func TestSecurity_SyncthingConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.Start(); err != nil {
-		t.Fatal(err)
+	if startErr := sw.Start(); startErr != nil {
+		t.Fatal(startErr)
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 

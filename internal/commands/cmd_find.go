@@ -192,7 +192,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					}
 					ts := now - seconds
 					modifiedAfterTS = &ts
-				} else if olderThan, ok := strings.CutPrefix(tm, "+"); ok {
+				} else if olderThan, ok2 := strings.CutPrefix(tm, "+"); ok2 {
 					// Older than (e.g., +3 days)
 					duration := olderThan
 					seconds, err := utils.HumanToSeconds(duration)

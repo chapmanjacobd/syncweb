@@ -60,7 +60,7 @@ func (c *SyncwebDevicesCmd) Help() string {
 }
 
 func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		// If no filter specified, show all
 		if !c.Accepted && !c.Pending && !c.Discovered {
 			c.Accepted = true
@@ -68,8 +68,8 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 			c.Discovered = true
 		}
 
-		cfg := s.Node.Cfg.RawCopy()
-		localDeviceID := s.Node.MyID().String()
+		cfg := s.RawConfig()
+		localDeviceID := s.MyID().String()
 
 		// Collect all devices
 		devices := c.collectDevices(s, cfg, localDeviceID)
@@ -120,7 +120,7 @@ type deviceEntry struct {
 }
 
 func (c *SyncwebDevicesCmd) collectDevices(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	cfg config.Configuration,
 	localDeviceID string,
 ) []deviceEntry {
@@ -149,7 +149,7 @@ func (c *SyncwebDevicesCmd) collectAcceptedDevices(
 	devices []deviceEntry,
 	seenIDs map[string]bool,
 	cfg config.Configuration,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	localDeviceID string,
 ) []deviceEntry {
 	for _, d := range cfg.Devices {
@@ -165,7 +165,7 @@ func (c *SyncwebDevicesCmd) collectAcceptedDevices(
 func (c *SyncwebDevicesCmd) collectPendingDevices(
 	devices []deviceEntry,
 	seenIDs map[string]bool,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 ) []deviceEntry {
 	pending := s.GetPendingDevices()
 	for id := range pending {
@@ -187,10 +187,10 @@ func (c *SyncwebDevicesCmd) collectDiscoveredDevices(
 	devices []deviceEntry,
 	seenIDs map[string]bool,
 	cfg config.Configuration,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 ) []deviceEntry {
 	discovered := s.GetDiscoveredDevices()
-	for id, info := range discovered {
+	for id := range discovered {
 		if seenIDs[id] {
 			continue
 		}
@@ -199,10 +199,7 @@ func (c *SyncwebDevicesCmd) collectDiscoveredDevices(
 			continue
 		}
 
-		name, _ := info["name"].(string)
-		if name == "" {
-			name = id[:7]
-		}
+		name := id[:7]
 
 		devices = append(devices, deviceEntry{
 			ID:         id,
@@ -225,7 +222,7 @@ func (c *SyncwebDevicesCmd) isDeviceAccepted(id string, cfg config.Configuration
 
 func (c *SyncwebDevicesCmd) buildAcceptedDeviceEntry(
 	d config.DeviceConfiguration,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	localDeviceID string,
 ) deviceEntry {
 	name := d.Name
@@ -239,7 +236,7 @@ func (c *SyncwebDevicesCmd) buildAcceptedDeviceEntry(
 		status = "🏠"
 	} else if d.Paused {
 		status = "⏸️"
-	} else if s.Node.App.Internals.IsConnectedTo(d.DeviceID) {
+	} else if s.IsConnectedTo(d.DeviceID) {
 		status = "🌐"
 	}
 
@@ -248,7 +245,7 @@ func (c *SyncwebDevicesCmd) buildAcceptedDeviceEntry(
 		Name:      name,
 		Status:    status,
 		Paused:    d.Paused,
-		Connected: s.Node.App.Internals.IsConnectedTo(d.DeviceID),
+		Connected: s.IsConnectedTo(d.DeviceID),
 		Bandwidth: formatBandwidth(d.MaxSendKbps, d.MaxRecvKbps),
 	}
 }
@@ -310,7 +307,7 @@ func (c *SyncwebDevicesCmd) outputPrint(filtered []deviceEntry) error {
 	return nil
 }
 
-func (c *SyncwebDevicesCmd) outputTable(s *syncweb.Syncweb, filtered []deviceEntry, localDeviceID string) error {
+func (c *SyncwebDevicesCmd) outputTable(s syncweb.Engine, filtered []deviceEntry, localDeviceID string) error {
 	// Print header
 	if c.Xfer {
 		fmt.Printf("%-63s  %-8s  %-22s  %-10s  %-25s  %s\n",
@@ -354,7 +351,7 @@ func (c *SyncwebDevicesCmd) printDeviceRow(d deviceEntry) {
 	}
 }
 
-func (c *SyncwebDevicesCmd) executeActions(s *syncweb.Syncweb, filtered []deviceEntry, localDeviceID string) {
+func (c *SyncwebDevicesCmd) executeActions(s syncweb.Engine, filtered []deviceEntry, localDeviceID string) {
 	if c.Accept {
 		c.actionAccept(s, filtered)
 	}
@@ -368,7 +365,7 @@ func (c *SyncwebDevicesCmd) executeActions(s *syncweb.Syncweb, filtered []device
 	}
 }
 
-func (c *SyncwebDevicesCmd) actionAccept(s *syncweb.Syncweb, filtered []deviceEntry) {
+func (c *SyncwebDevicesCmd) actionAccept(s syncweb.Engine, filtered []deviceEntry) {
 	var toAccept []string
 	for _, d := range filtered {
 		if d.Pending {
@@ -385,7 +382,7 @@ func (c *SyncwebDevicesCmd) actionAccept(s *syncweb.Syncweb, filtered []deviceEn
 	}
 }
 
-func (c *SyncwebDevicesCmd) actionPause(s *syncweb.Syncweb, filtered []deviceEntry, localDeviceID string) {
+func (c *SyncwebDevicesCmd) actionPause(s syncweb.Engine, filtered []deviceEntry, localDeviceID string) {
 	count := 0
 	for _, d := range filtered {
 		if !d.Paused && d.ID != localDeviceID {
@@ -397,7 +394,7 @@ func (c *SyncwebDevicesCmd) actionPause(s *syncweb.Syncweb, filtered []deviceEnt
 	fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "device", "devices"))
 }
 
-func (c *SyncwebDevicesCmd) actionResume(s *syncweb.Syncweb, filtered []deviceEntry) {
+func (c *SyncwebDevicesCmd) actionResume(s syncweb.Engine, filtered []deviceEntry) {
 	count := 0
 	for _, d := range filtered {
 		if d.Paused {

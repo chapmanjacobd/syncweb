@@ -46,8 +46,8 @@ func (c *SyncwebStatCmd) Help() string {
 }
 
 func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		cfg := s.Node.Cfg.RawCopy()
+	return g.WithSyncweb(func(s syncweb.Engine) error {
+		cfg := s.RawConfig()
 		deviceNames := buildDeviceNamesMap(cfg.Devices)
 
 		for _, p := range c.Paths {
@@ -73,7 +73,7 @@ func buildDeviceNamesMap(devices []config.DeviceConfiguration) map[string]string
 
 // processPath processes a single path for stat command
 func (c *SyncwebStatCmd) processPath(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	path string,
 	cfg config.Configuration,
 	deviceNames map[string]string,
@@ -235,10 +235,10 @@ func (c *SyncwebStatCmd) printModifiedBy(modifiedBy protocol.ShortID, deviceName
 }
 
 // getDeviceAvailability returns a list of device IDs that have the file
-func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.FileInfo) []string {
+func getDeviceAvailability(s syncweb.Engine, folderID string, info protocol.FileInfo) []string {
 	deviceSet := make(map[string]bool)
 	for _, block := range info.Blocks {
-		availables, err := s.Node.App.Internals.BlockAvailability(folderID, info, block)
+		availables, err := s.BlockAvailability(folderID, info, block)
 		if err != nil {
 			continue
 		}
@@ -248,7 +248,7 @@ func getDeviceAvailability(s *syncweb.Syncweb, folderID string, info protocol.Fi
 	}
 
 	// Also include the local device
-	deviceSet[s.Node.MyID().String()] = true
+	deviceSet[s.MyID().String()] = true
 
 	devices := make([]string, 0, len(deviceSet))
 	for devID := range deviceSet {

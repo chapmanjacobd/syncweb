@@ -37,7 +37,7 @@ func (c *SyncwebCreateCmd) Help() string {
 }
 
 func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		// Get existing folder IDs to avoid collisions
 		existingFolders := make(map[string]bool)
 		for _, f := range s.GetFolders() {
@@ -78,7 +78,7 @@ func (c *SyncwebCreateCmd) Run(g *SyncwebCmd) error {
 			_ = s.ScanFolderSubdirs(folderID, []string{""})
 
 			// Print syncweb URL
-			fmt.Printf("sync://%s#%s\n", folderID, s.Node.MyID())
+			fmt.Printf("sync://%s#%s\n", folderID, s.MyID())
 		}
 		return nil
 	})

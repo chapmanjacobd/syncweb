@@ -63,7 +63,7 @@ type fileWithInfo struct {
 }
 
 func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		limitBytes := int64(0)
 		if c.LimitSize != "" {
 			limitBytes, _ = utils.HumanToBytes(c.LimitSize)
@@ -79,8 +79,8 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 }
 
 // collectFiles collects files from syncweb folders
-func (c *SyncwebSortCmd) collectFiles(s *syncweb.Syncweb) []fileWithInfo {
-	cfg := s.Node.Cfg.RawCopy()
+func (c *SyncwebSortCmd) collectFiles(s syncweb.Engine) []fileWithInfo {
+	cfg := s.RawConfig()
 	files := make([]fileWithInfo, 0, len(c.Paths))
 
 	for _, p := range c.Paths {
@@ -91,7 +91,7 @@ func (c *SyncwebSortCmd) collectFiles(s *syncweb.Syncweb) []fileWithInfo {
 }
 
 // collectFilesForPath collects files for a single path
-func (c *SyncwebSortCmd) collectFilesForPath(s *syncweb.Syncweb, cfg config.Configuration, path string) []fileWithInfo {
+func (c *SyncwebSortCmd) collectFilesForPath(s syncweb.Engine, cfg config.Configuration, path string) []fileWithInfo {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		fmt.Printf("Error: %s: %v\n", path, err)

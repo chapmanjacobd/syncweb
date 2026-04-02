@@ -116,7 +116,7 @@ func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
 		if err := sw.Start(); err != nil {
 			logger.Error("Failed to start Syncweb instance", "error", err)
 		} else {
-			logger.Info("Syncweb instance started", "myID", sw.Node.MyID())
+			logger.Info("Syncweb instance started", "myID", sw.MyID())
 			if err := utils.AutoCleanupMounts(); err != nil {
 				logger.Warn("Failed to auto-cleanup mounts", "error", err)
 			}
@@ -282,6 +282,7 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 
 	folderID := r.URL.Query().Get("folder")
 	prefix := r.URL.Query().Get("prefix")
+	recursive := r.URL.Query().Get("recursive") == "true"
 
 	// Validate folder ID if provided
 	if err := c.validateFolderIDParam(folderID); err != nil {
@@ -306,7 +307,12 @@ func (c *ServeCmd) handleSyncwebLs(w http.ResponseWriter, r *http.Request) {
 	if folderID == "" || folderID == "/" {
 		c.addSyncwebRoots(resultsMap, counts, "/")
 	} else {
-		c.collectFolderEntries(r, folderID, prefix, resultsMap)
+		// levels=0 means just the entries at the specified prefix, -1 means recursive
+		levels := 0
+		if recursive {
+			levels = -1
+		}
+		c.collectFolderEntries(r, folderID, prefix, resultsMap, levels)
 	}
 
 	results := make([]models.LsEntry, 0, len(resultsMap))
@@ -345,6 +351,7 @@ func (c *ServeCmd) collectFolderEntries(
 	r *http.Request,
 	folderID, prefix string,
 	resultsMap map[string]models.LsEntry,
+	levels int,
 ) {
 	// Trim trailing slash from prefix for GetGlobalTree if it's not root
 	searchPrefix := prefix
@@ -353,45 +360,32 @@ func (c *ServeCmd) collectFolderEntries(
 	}
 
 	// levels=0 means just the entries at the specified prefix
-	tree, err := c.sw.GetGlobalTree(folderID, searchPrefix, 0, false)
+	entries, err := c.sw.GetGlobalTree(folderID, searchPrefix, levels, false)
 	if err != nil {
 		slog.Error("Failed to get global tree", "folderID", folderID, "prefix", searchPrefix, "error", err)
 		return
 	}
 
-	for _, entry := range tree {
+	for _, entry := range entries {
 		if r.Context().Err() != nil {
 			return
 		}
 
-		// treeEntry.Name is the full path from folder root
-		name := entry.Name
-		if name == searchPrefix {
-			continue
+		fullSyncwebPath := entry.Path
+		if !strings.HasPrefix(fullSyncwebPath, "sync://") {
+			fullSyncwebPath = fmt.Sprintf("sync://%s/%s", folderID, entry.Path)
 		}
-
-		entryName := filepath.Base(name)
-		fullSyncwebPath := fmt.Sprintf("sync://%s/%s", folderID, name)
 		if _, ok := resultsMap[fullSyncwebPath]; ok {
 			continue
 		}
 
 		localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
-		isLocal := utils.FileExists(localPath)
+		entry.Local = utils.FileExists(localPath)
 
-		isDir := entry.Type == "FILE_INFO_TYPE_DIRECTORY"
-		lsEntry := models.LsEntry{
-			Name:     entryName,
-			Path:     fullSyncwebPath,
-			IsDir:    isDir,
-			Local:    isLocal,
-			Size:     entry.Size,
-			Modified: entry.ModTime.Format(time.RFC3339),
+		if !entry.IsDir {
+			entry.Type = utils.DetectMimeType(entry.Name)
 		}
-		if !isDir {
-			lsEntry.Type = utils.DetectMimeType(entryName)
-		}
-		resultsMap[fullSyncwebPath] = lsEntry
+		resultsMap[fullSyncwebPath] = entry
 	}
 }
 
@@ -554,17 +548,17 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	var results []models.LsEntry
 	const maxResults = 1000
 
-	cfg := c.sw.Node.Cfg.RawCopy()
+	cfg := c.sw.RawConfig()
 	for _, f := range cfg.Folders {
 		// Wait for Syncthing to index local files
 		_ = c.sw.WaitUntilIdle(f.ID, 2*time.Second)
 
-		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(f.ID)
+		seq, cancel := c.sw.AllGlobalFiles(f.ID)
 
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
-				_ = cancel()
+				cancel()
 				return
 			}
 
@@ -588,12 +582,12 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				results = append(results, entry)
 
 				if len(results) >= maxResults {
-					_ = cancel()
+					cancel()
 					goto done
 				}
 			}
 		}
-		_ = cancel()
+		cancel()
 	}
 
 done:

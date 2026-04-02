@@ -70,7 +70,7 @@ func (c *SyncwebFindCmd) Help() string {
 }
 
 func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		results := []findResult{}
 
 		// Build search pattern based on mode
@@ -94,7 +94,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 		// Parse depth constraints
 		depthMin, depthMax := c.parseDepthConstraints()
 
-		cfg := s.Node.Cfg.RawCopy()
+		cfg := s.RawConfig()
 		for _, f := range cfg.Folders {
 			// Skip sendonly folders if downloadable flag is set
 			if c.Downloadable && f.Type == config.FolderTypeSendOnly {
@@ -104,7 +104,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			// Wait for Syncthing to index local files
 			_ = s.WaitUntilIdle(f.ID, 5*time.Second)
 
-			seq, cancel := s.Node.App.Internals.AllGlobalFiles(f.ID)
+			seq, cancel := s.AllGlobalFiles(f.ID)
 			for meta := range seq {
 				ctx := &processFileContext{
 					matchFunc:        matchFunc,

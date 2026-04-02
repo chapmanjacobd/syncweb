@@ -110,9 +110,26 @@ func (c *SyncwebCmd) AfterApply() error {
 	return nil
 }
 
-func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
+func (c *SyncwebCmd) WithSyncweb(fn func(s syncweb.Engine) error) error {
 	s, err := syncweb.NewSyncweb(c.SyncwebHome, "syncweb", "")
 	if err != nil {
+		// Fallback to REST API if lock fails
+		if strings.Contains(err.Error(), "failed to lock home directory") {
+			addrFile := filepath.Join(c.SyncwebHome, "syncweb.addr")
+			addrData, addrErr := os.ReadFile(addrFile)
+			if addrErr == nil {
+				tokenFile := filepath.Join(c.SyncwebHome, "syncweb.token")
+				tokenData, _ := os.ReadFile(tokenFile)
+				baseURL := strings.TrimSpace(string(addrData))
+				token := strings.TrimSpace(string(tokenData))
+
+				logger := slog.Default().With("component", "cli-rest")
+				logger.Debug("Fallback to REST API", "url", baseURL)
+
+				engine := syncweb.NewRESTEngine(baseURL, token)
+				return fn(engine)
+			}
+		}
 		return err
 	}
 	if err := s.Start(); err != nil {
@@ -170,7 +187,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 		"localOnly", c.Local,
 		"joinNewFolders", c.JoinNewFolders)
 
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		ticker := time.NewTicker(AutoSyncInterval)
 		defer ticker.Stop()
 
@@ -189,7 +206,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-func (c *SyncwebAutomaticCmd) runOnce(g *SyncwebCmd, s *syncweb.Syncweb, logger *slog.Logger) {
+func (c *SyncwebAutomaticCmd) runOnce(g *SyncwebCmd, s syncweb.Engine, logger *slog.Logger) {
 	// 1. Auto-accept devices
 	if c.Devices {
 		c.autoAcceptDevices(s, logger)
@@ -201,7 +218,7 @@ func (c *SyncwebAutomaticCmd) runOnce(g *SyncwebCmd, s *syncweb.Syncweb, logger 
 	}
 }
 
-func (c *SyncwebAutomaticCmd) autoAcceptDevices(s *syncweb.Syncweb, logger *slog.Logger) {
+func (c *SyncwebAutomaticCmd) autoAcceptDevices(s syncweb.Engine, logger *slog.Logger) {
 	pending := s.GetPendingDevices()
 	for id := range pending {
 		// Apply include/exclude filters
@@ -216,15 +233,23 @@ func (c *SyncwebAutomaticCmd) autoAcceptDevices(s *syncweb.Syncweb, logger *slog
 	}
 }
 
-func (c *SyncwebAutomaticCmd) autoJoinFolders(s *syncweb.Syncweb, logger *slog.Logger, syncwebHome string) {
-	cfg := s.Node.Cfg.RawCopy()
-	for _, dev := range cfg.Devices {
-		pending, _ := s.Node.App.Internals.PendingFolders(dev.DeviceID)
-		for folderID := range pending {
+func (c *SyncwebAutomaticCmd) autoJoinFolders(s syncweb.Engine, logger *slog.Logger, syncwebHome string) {
+	cfg := s.RawConfig()
+	pendingFolders := s.GetPendingFolders()
+	for folderID, info := range pendingFolders {
+		offeredBy, ok := info["offeredBy"].(map[string]map[string]any)
+		if !ok {
+			continue
+		}
+		for devIDStr := range offeredBy {
+			devID, err := protocol.DeviceIDFromString(devIDStr)
+			if err != nil {
+				continue
+			}
 			ctx := &processPendingFolderContext{
 				logger:      logger,
 				cfg:         cfg,
-				devID:       dev.DeviceID,
+				devID:       devID,
 				folderID:    folderID,
 				syncwebHome: syncwebHome,
 			}
@@ -243,7 +268,7 @@ type processPendingFolderContext struct {
 }
 
 func (c *SyncwebAutomaticCmd) processPendingFolder(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	ctx *processPendingFolderContext,
 ) {
 	// Apply filters
@@ -270,7 +295,7 @@ func (c *SyncwebAutomaticCmd) processPendingFolder(
 		}
 	}
 
-	if err := s.AddFolderDevice(ctx.folderID, ctx.devID.String()); err != nil {
+	if err := s.AddFolderDevices(ctx.folderID, []string{ctx.devID.String()}); err != nil {
 		ctx.logger.Error(
 			"Failed to share folder with device",
 			"folder",
@@ -292,7 +317,7 @@ func (c *SyncwebAutomaticCmd) folderExists(cfg config.Configuration, folderID st
 	return false
 }
 
-func (c *SyncwebAutomaticCmd) createFolder(s *syncweb.Syncweb, logger *slog.Logger, folderID, path string) error {
+func (c *SyncwebAutomaticCmd) createFolder(s syncweb.Engine, logger *slog.Logger, folderID, path string) error {
 	if err := s.AddFolder(folderID, folderID, path, config.FolderTypeReceiveOnly); err != nil {
 		logger.Error("Failed to create folder", "id", folderID, "error", err)
 		return err

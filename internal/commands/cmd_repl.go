@@ -38,7 +38,7 @@ func (c *SyncwebReplCmd) Help() string {
 }
 
 func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		fmt.Println("Syncweb REPL - Interactive Debug Mode")
 		fmt.Println("Type 'help' for available commands, 'exit' to quit")
 		fmt.Println()
@@ -71,7 +71,7 @@ func (c *SyncwebReplCmd) Run(g *SyncwebCmd) error {
 	})
 }
 
-func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error {
+func (c *SyncwebReplCmd) executeCommand(input string, s syncweb.Engine) error {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return nil
@@ -128,7 +128,7 @@ func (c *SyncwebReplCmd) executeCommand(input string, s *syncweb.Syncweb) error 
 }
 
 // printFolders prints the list of folders
-func (c *SyncwebReplCmd) printFolders(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printFolders(s syncweb.Engine) {
 	folders := s.GetFolders()
 	for _, f := range folders {
 		fmt.Printf("%s (%s): %s [type=%s, paused=%v]\n", f.ID, f.Label, f.Path, f.Type, f.Paused)
@@ -139,7 +139,7 @@ func (c *SyncwebReplCmd) printFolders(s *syncweb.Syncweb) {
 }
 
 // printDevices prints the list of devices
-func (c *SyncwebReplCmd) printDevices(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printDevices(s syncweb.Engine) {
 	devices := s.GetDevices()
 	for _, d := range devices {
 		fmt.Printf("%s (%s): %v [paused=%v]\n", d.ID, d.Name, d.Addresses, d.Paused)
@@ -147,7 +147,7 @@ func (c *SyncwebReplCmd) printDevices(s *syncweb.Syncweb) {
 }
 
 // printPendingDevices prints pending devices
-func (c *SyncwebReplCmd) printPendingDevices(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printPendingDevices(s syncweb.Engine) {
 	pending := s.GetPendingDevices()
 	if len(pending) == 0 {
 		fmt.Println("No pending devices")
@@ -159,7 +159,7 @@ func (c *SyncwebReplCmd) printPendingDevices(s *syncweb.Syncweb) {
 }
 
 // printEvents prints recent events
-func (c *SyncwebReplCmd) printEvents(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printEvents(s syncweb.Engine) {
 	events := s.GetEvents()
 	for _, ev := range events {
 		fmt.Printf("%s: %s\n", ev.Type, ev.Message)
@@ -167,7 +167,7 @@ func (c *SyncwebReplCmd) printEvents(s *syncweb.Syncweb) {
 }
 
 // printFolderStats prints folder statistics
-func (c *SyncwebReplCmd) printFolderStats(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printFolderStats(s syncweb.Engine) {
 	stats := s.GetFolderStats()
 	for id, stat := range stats {
 		fmt.Printf("%s: %v\n", id, stat)
@@ -175,7 +175,7 @@ func (c *SyncwebReplCmd) printFolderStats(s *syncweb.Syncweb) {
 }
 
 // printDeviceStats prints device statistics
-func (c *SyncwebReplCmd) printDeviceStats(s *syncweb.Syncweb) {
+func (c *SyncwebReplCmd) printDeviceStats(s syncweb.Engine) {
 	stats := s.GetDeviceStats()
 	for id, stat := range stats {
 		fmt.Printf("%s: %v\n", id, stat)
@@ -183,7 +183,7 @@ func (c *SyncwebReplCmd) printDeviceStats(s *syncweb.Syncweb) {
 }
 
 // handleIgnores handles the ignores command
-func (c *SyncwebReplCmd) handleIgnores(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleIgnores(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: ignores <folder-id>")
 	}
@@ -199,7 +199,7 @@ func (c *SyncwebReplCmd) handleIgnores(s *syncweb.Syncweb, args []string) error 
 }
 
 // handleSetIgnores handles the set-ignores command
-func (c *SyncwebReplCmd) handleSetIgnores(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleSetIgnores(s syncweb.Engine, args []string) error {
 	if len(args) < 2 {
 		return errors.New("usage: set-ignores <folder-id> <pattern1> [pattern2]")
 	}
@@ -213,7 +213,7 @@ func (c *SyncwebReplCmd) handleSetIgnores(s *syncweb.Syncweb, args []string) err
 }
 
 // handleAddDevice handles the add-device command
-func (c *SyncwebReplCmd) handleAddDevice(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleAddDevice(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: add-device <device-id> [name]")
 	}
@@ -230,7 +230,7 @@ func (c *SyncwebReplCmd) handleAddDevice(s *syncweb.Syncweb, args []string) erro
 }
 
 // handleAddFolder handles the add-folder command
-func (c *SyncwebReplCmd) handleAddFolder(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleAddFolder(s syncweb.Engine, args []string) error {
 	if len(args) < 3 {
 		return errors.New("usage: add-folder <id> <label> <path>")
 	}
@@ -245,7 +245,7 @@ func (c *SyncwebReplCmd) handleAddFolder(s *syncweb.Syncweb, args []string) erro
 }
 
 // handlePauseFolder handles the pause-folder command
-func (c *SyncwebReplCmd) handlePauseFolder(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handlePauseFolder(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: pause-folder <folder-id>")
 	}
@@ -257,7 +257,7 @@ func (c *SyncwebReplCmd) handlePauseFolder(s *syncweb.Syncweb, args []string) er
 }
 
 // handleResumeFolder handles the resume-folder command
-func (c *SyncwebReplCmd) handleResumeFolder(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleResumeFolder(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: resume-folder <folder-id>")
 	}
@@ -269,7 +269,7 @@ func (c *SyncwebReplCmd) handleResumeFolder(s *syncweb.Syncweb, args []string) e
 }
 
 // handlePauseDevice handles the pause-device command
-func (c *SyncwebReplCmd) handlePauseDevice(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handlePauseDevice(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: pause-device <device-id>")
 	}
@@ -281,7 +281,7 @@ func (c *SyncwebReplCmd) handlePauseDevice(s *syncweb.Syncweb, args []string) er
 }
 
 // handleResumeDevice handles the resume-device command
-func (c *SyncwebReplCmd) handleResumeDevice(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleResumeDevice(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: resume-device <device-id>")
 	}
@@ -293,7 +293,7 @@ func (c *SyncwebReplCmd) handleResumeDevice(s *syncweb.Syncweb, args []string) e
 }
 
 // handleDeleteFolder handles the delete-folder command
-func (c *SyncwebReplCmd) handleDeleteFolder(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleDeleteFolder(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: delete-folder <folder-id>")
 	}
@@ -305,7 +305,7 @@ func (c *SyncwebReplCmd) handleDeleteFolder(s *syncweb.Syncweb, args []string) e
 }
 
 // handleDeleteDevice handles the delete-device command
-func (c *SyncwebReplCmd) handleDeleteDevice(s *syncweb.Syncweb, args []string) error {
+func (c *SyncwebReplCmd) handleDeleteDevice(s syncweb.Engine, args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: delete-device <device-id>")
 	}
@@ -326,8 +326,8 @@ func (c *SyncwebReplCmd) handleList(args []string) {
 }
 
 // printWhoami prints current node information
-func (c *SyncwebReplCmd) printWhoami(s *syncweb.Syncweb) {
-	fmt.Printf("Node ID: %s\n", s.Node.MyID())
+func (c *SyncwebReplCmd) printWhoami(s syncweb.Engine) {
+	fmt.Printf("Node ID: %s\n", s.MyID())
 }
 
 func (c *SyncwebReplCmd) printHelp() {

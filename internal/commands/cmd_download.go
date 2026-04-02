@@ -86,8 +86,8 @@ type downloadItem struct {
 }
 
 func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		cfg := s.Node.Cfg.RawCopy()
+	return g.WithSyncweb(func(s syncweb.Engine) error {
+		cfg := s.RawConfig()
 
 		// Build download plan
 		items, result := c.buildDownloadPlan(g, s, cfg)
@@ -140,7 +140,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 
 func (c *SyncwebDownloadCmd) buildDownloadPlan(
 	g *SyncwebCmd,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	cfg config.Configuration,
 ) ([]downloadItem, DownloadResult) {
 	var items []downloadItem
@@ -184,7 +184,7 @@ func (c *SyncwebDownloadCmd) buildDownloadPlan(
 }
 
 func (c *SyncwebDownloadCmd) traverseAndAddItems(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	folderID, relPath string,
 	currentDepth int,
 	items *[]downloadItem,
@@ -271,7 +271,7 @@ func (c *SyncwebDownloadCmd) groupItemsByFolder(items []downloadItem) map[string
 
 func (c *SyncwebDownloadCmd) getFolderSpaceInfos(
 	cfg config.Configuration,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	itemsByFolder map[string][]downloadItem,
 ) map[string]*folderSpaceInfo {
 	folderSpaceInfos := make(map[string]*folderSpaceInfo)
@@ -336,7 +336,7 @@ func (c *SyncwebDownloadCmd) confirmDownload(items []downloadItem, totalSize int
 }
 
 func (c *SyncwebDownloadCmd) triggerDownloads(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	items []downloadItem,
 	g *SyncwebCmd,
 	result *DownloadResult,
@@ -358,7 +358,7 @@ func (c *SyncwebDownloadCmd) triggerDownloads(
 }
 
 // getFolderSpaceInfo gets disk space information for a folder
-func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID string) *folderSpaceInfo {
+func getFolderSpaceInfo(cfg config.Configuration, s syncweb.Engine, folderID string) *folderSpaceInfo {
 	var folderPath string
 	var minFreeCfg minDiskFreeConfig
 
@@ -402,7 +402,7 @@ func getFolderSpaceInfo(cfg config.Configuration, s *syncweb.Syncweb, folderID s
 	// Get pending download size from NeedSize
 	var pendingDownload int64
 	logger := slog.Default().With("folderID", folderID)
-	needSize, err := s.Node.App.Internals.NeedSize(folderID, protocol.LocalDeviceID)
+	needSize, err := s.NeedSize(folderID, protocol.LocalDeviceID)
 	if err != nil {
 		logger.Warn("Failed to get NeedSize", "error", err)
 		pendingDownload = 0

@@ -49,7 +49,7 @@ type AcceptResult struct {
 }
 
 func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		deviceIDs := parseDeviceIDs(c.DeviceIDs)
 
 		result := c.acceptDevices(s, deviceIDs, g.JSON)
@@ -86,7 +86,7 @@ func parseDeviceIDs(deviceIDs []string) []string {
 }
 
 // acceptDevices validates and adds devices to syncweb
-func (c *SyncwebAcceptCmd) acceptDevices(s *syncweb.Syncweb, deviceIDs []string, isJSON bool) AcceptResult {
+func (c *SyncwebAcceptCmd) acceptDevices(s syncweb.Engine, deviceIDs []string, isJSON bool) AcceptResult {
 	result := AcceptResult{
 		Devices: []string{},
 		Errors:  []string{},
@@ -105,7 +105,7 @@ func (c *SyncwebAcceptCmd) acceptDevices(s *syncweb.Syncweb, deviceIDs []string,
 
 // validateAndAddDevice validates a device ID and adds it to syncweb
 func (c *SyncwebAcceptCmd) validateAndAddDevice(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	devID string,
 	isJSON bool,
 	result *AcceptResult,
@@ -133,7 +133,7 @@ func (c *SyncwebAcceptCmd) validateAndAddDevice(
 
 // addDevicesToFolders adds accepted devices to specified folders
 func (c *SyncwebAcceptCmd) addDevicesToFolders(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	folderIDs, deviceIDs []string,
 	isJSON bool,
 	result *AcceptResult,
@@ -154,7 +154,7 @@ func (c *SyncwebAcceptCmd) addDevicesToFolders(
 }
 
 // pauseAndResumeDevices pauses and resumes devices to refresh connections
-func (c *SyncwebAcceptCmd) pauseAndResumeDevices(s *syncweb.Syncweb, deviceIDs []string) {
+func (c *SyncwebAcceptCmd) pauseAndResumeDevices(s syncweb.Engine, deviceIDs []string) {
 	logger := slog.Default()
 	for _, devID := range deviceIDs {
 		if err := s.PauseDevice(devID); err != nil {

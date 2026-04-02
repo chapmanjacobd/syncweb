@@ -45,7 +45,7 @@ type DropResult struct {
 }
 
 func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		deviceIDs := parseDropDeviceIDs(c.DeviceIDs)
 
 		// If folder IDs specified, remove devices from folders
@@ -67,7 +67,7 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 
 // removeDevicesFromFolders removes devices from specified folders
 func (c *SyncwebDropCmd) removeDevicesFromFolders(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	folderIDs, deviceIDs []string,
 	isJSON bool,
 ) error {
@@ -105,7 +105,7 @@ func (c *SyncwebDropCmd) removeDevicesFromFolders(
 }
 
 // removeDevices removes devices entirely from syncweb
-func (c *SyncwebDropCmd) removeDevices(s *syncweb.Syncweb, deviceIDs []string, isJSON bool) DropResult {
+func (c *SyncwebDropCmd) removeDevices(s syncweb.Engine, deviceIDs []string, isJSON bool) DropResult {
 	result := DropResult{
 		Devices: []string{},
 		Errors:  []string{},
@@ -139,7 +139,7 @@ func (c *SyncwebDropCmd) removeDevices(s *syncweb.Syncweb, deviceIDs []string, i
 }
 
 // pauseAndResumeDevices pauses and resumes devices to refresh connections
-func (c *SyncwebDropCmd) pauseAndResumeDevices(s *syncweb.Syncweb, deviceIDs []string) {
+func (c *SyncwebDropCmd) pauseAndResumeDevices(s syncweb.Engine, deviceIDs []string) {
 	logger := slog.Default()
 	for _, devID := range deviceIDs {
 		if err := s.PauseDevice(devID); err != nil {

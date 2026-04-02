@@ -67,7 +67,7 @@ func (c *SyncwebFoldersCmd) Help() string {
 }
 
 func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		// If no filter specified, show all
 		if !c.Joined && !c.Pending && !c.Discovered {
 			c.Joined = true
@@ -75,8 +75,8 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 			c.Discovered = true
 		}
 
-		cfg := s.Node.Cfg.RawCopy()
-		localDeviceID := s.Node.MyID().String()
+		cfg := s.RawConfig()
+		localDeviceID := s.MyID().String()
 
 		// Collect all folders
 		folders := c.collectFolders(s, cfg)
@@ -127,7 +127,7 @@ type folderEntry struct {
 	Completed      int64    `json:"completed"`
 }
 
-func (c *SyncwebFoldersCmd) collectFolders(s *syncweb.Syncweb, cfg config.Configuration) []folderEntry {
+func (c *SyncwebFoldersCmd) collectFolders(s syncweb.Engine, cfg config.Configuration) []folderEntry {
 	var folders []folderEntry
 	seenIDs := make(map[string]bool)
 
@@ -188,7 +188,7 @@ func (c *SyncwebFoldersCmd) collectFolders(s *syncweb.Syncweb, cfg config.Config
 	return folders
 }
 
-func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s *syncweb.Syncweb, f config.FolderConfiguration) folderEntry {
+func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s syncweb.Engine, f config.FolderConfiguration) folderEntry {
 	devices := make([]string, 0, len(f.Devices))
 	for _, d := range f.Devices {
 		devices = append(devices, d.DeviceID.String())
@@ -216,9 +216,9 @@ func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s *syncweb.Syncweb, f config.
 	}
 
 	// Get live sync progress from Internals
-	globalSize, _ := s.Node.App.Internals.GlobalSize(f.ID)
-	localSize, _ := s.Node.App.Internals.LocalSize(f.ID)
-	needSize, _ := s.Node.App.Internals.NeedSize(f.ID, protocol.LocalDeviceID)
+	globalSize, _ := s.GlobalSize(f.ID)
+	localSize, _ := s.LocalSize(f.ID)
+	needSize, _ := s.NeedSize(f.ID, protocol.LocalDeviceID)
 
 	entry.LocalFiles = int(localSize.Files) //nolint:unconvert // Files is int64, struct field is int
 	entry.LocalBytes = localSize.Bytes
@@ -233,11 +233,11 @@ func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s *syncweb.Syncweb, f config.
 	}
 
 	// Get folder state (idle, scanning, syncing)
-	state, _, _ := s.Node.App.Internals.FolderState(f.ID)
+	state, _, _ := s.FolderState(f.ID)
 	entry.State = state
 
 	// Get bytes completed for real-time progress
-	completed := s.Node.App.Internals.FolderProgressBytesCompleted(f.ID)
+	completed := s.FolderProgressBytesCompleted(f.ID)
 	entry.Completed = completed
 
 	return entry
@@ -337,7 +337,7 @@ func (c *SyncwebFoldersCmd) outputPrint(filtered []folderEntry, localDeviceID st
 }
 
 func (c *SyncwebFoldersCmd) outputTable(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	filtered []folderEntry,
 	_ string,
 	cfg config.Configuration,
@@ -425,7 +425,7 @@ func (c *SyncwebFoldersCmd) printFolderRow(f folderEntry) {
 		f.ID, f.Label, path, local, needed, global, f.FreeSpace, syncStatus, peers, state, errors)
 }
 
-func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg config.Configuration, s *syncweb.Syncweb) {
+func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg config.Configuration, s syncweb.Engine) {
 	if c.Join {
 		c.actionJoin(filtered, cfg, s)
 	}
@@ -447,7 +447,7 @@ func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg config.Co
 	}
 }
 
-func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Configuration, s *syncweb.Syncweb) {
+func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Configuration, s syncweb.Engine) {
 	var toJoin []folderEntry
 	for _, f := range filtered {
 		if len(f.PendingDevices) > 0 {
@@ -465,7 +465,7 @@ func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Config
 	}
 }
 
-func (c *SyncwebFoldersCmd) joinFolder(f folderEntry, cfg config.Configuration, s *syncweb.Syncweb) {
+func (c *SyncwebFoldersCmd) joinFolder(f folderEntry, cfg config.Configuration, s syncweb.Engine) {
 	folderID := f.ID
 	deviceIDs := f.PendingDevices
 
@@ -488,7 +488,7 @@ func (c *SyncwebFoldersCmd) folderExists(cfg config.Configuration, folderID stri
 	return false
 }
 
-func (c *SyncwebFoldersCmd) addDevicesToFolder(folderID string, deviceIDs []string, s *syncweb.Syncweb) {
+func (c *SyncwebFoldersCmd) addDevicesToFolder(folderID string, deviceIDs []string, s syncweb.Engine) {
 	if addErr := s.AddFolderDevices(folderID, deviceIDs); addErr != nil {
 		fmt.Printf("Error adding devices to %s: %v\n", folderID, addErr)
 		return
@@ -508,7 +508,7 @@ func (c *SyncwebFoldersCmd) addDevicesToFolder(folderID string, deviceIDs []stri
 	fmt.Printf("Joined folder %s with %d devices\n", folderID, len(deviceIDs))
 }
 
-func (c *SyncwebFoldersCmd) createAndJoinFolder(folderID string, deviceIDs []string, s *syncweb.Syncweb) {
+func (c *SyncwebFoldersCmd) createAndJoinFolder(folderID string, deviceIDs []string, s syncweb.Engine) {
 	dest := filepath.Join(os.Getenv("HOME"), "Syncweb", folderID)
 	if mkdirErr := os.MkdirAll(dest, 0o755); mkdirErr != nil {
 		fmt.Printf("Error creating directory for %s: %v\n", folderID, mkdirErr)
@@ -543,7 +543,7 @@ func (c *SyncwebFoldersCmd) createAndJoinFolder(folderID string, deviceIDs []str
 	fmt.Printf("Created and joined folder %s\n", folderID)
 }
 
-func (c *SyncwebFoldersCmd) actionPause(s *syncweb.Syncweb, filtered []folderEntry) {
+func (c *SyncwebFoldersCmd) actionPause(s syncweb.Engine, filtered []folderEntry) {
 	count := 0
 	for _, f := range filtered {
 		if !f.Paused {
@@ -555,7 +555,7 @@ func (c *SyncwebFoldersCmd) actionPause(s *syncweb.Syncweb, filtered []folderEnt
 	fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 }
 
-func (c *SyncwebFoldersCmd) actionResume(s *syncweb.Syncweb, filtered []folderEntry) {
+func (c *SyncwebFoldersCmd) actionResume(s syncweb.Engine, filtered []folderEntry) {
 	count := 0
 	for _, f := range filtered {
 		if f.Paused {
@@ -567,7 +567,7 @@ func (c *SyncwebFoldersCmd) actionResume(s *syncweb.Syncweb, filtered []folderEn
 	fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "folder", "folders"))
 }
 
-func (c *SyncwebFoldersCmd) actionDelete(s *syncweb.Syncweb, filtered []folderEntry) {
+func (c *SyncwebFoldersCmd) actionDelete(s syncweb.Engine, filtered []folderEntry) {
 	count := 0
 	for _, f := range filtered {
 		if len(f.Devices) > 0 {

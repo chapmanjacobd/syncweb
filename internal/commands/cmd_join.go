@@ -39,7 +39,7 @@ func (c *SyncwebJoinCmd) Help() string {
 }
 
 func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		deviceCount := 0
 		folderCount := 0
 
@@ -49,7 +49,7 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 			folderCount += fc
 		}
 
-		fmt.Printf("Local Device ID: %s\n", s.Node.MyID())
+		fmt.Printf("Local Device ID: %s\n", s.MyID())
 		fmt.Printf("Added %d %s\n", deviceCount, utils.Pluralize(deviceCount, "device", "devices"))
 		fmt.Printf("Added %d %s\n", folderCount, utils.Pluralize(folderCount, "folder", "folders"))
 		return nil
@@ -57,7 +57,7 @@ func (c *SyncwebJoinCmd) Run(g *SyncwebCmd) error {
 }
 
 // processURL processes a single syncweb URL and returns device and folder counts
-func (c *SyncwebJoinCmd) processURL(s *syncweb.Syncweb, url string) (deviceCount, folderCount int) {
+func (c *SyncwebJoinCmd) processURL(s syncweb.Engine, url string) (deviceCount, folderCount int) {
 	ref, parseErr := utils.ParseSyncwebPath(url, true)
 	if parseErr != nil {
 		fmt.Printf("Invalid URL format %s: %v\n", url, parseErr)
@@ -84,7 +84,7 @@ func (c *SyncwebJoinCmd) processURL(s *syncweb.Syncweb, url string) (deviceCount
 }
 
 // addFolderAndDevice adds a folder and optionally shares it with a device
-func (c *SyncwebJoinCmd) addFolderAndDevice(s *syncweb.Syncweb, ref *utils.SyncwebRef) bool {
+func (c *SyncwebJoinCmd) addFolderAndDevice(s syncweb.Engine, ref *utils.SyncwebRef) bool {
 	prefix := c.Prefix
 	if prefix == "" {
 		prefix = "."
@@ -128,7 +128,7 @@ func (c *SyncwebJoinCmd) addFolderAndDevice(s *syncweb.Syncweb, ref *utils.Syncw
 
 // resolveFolderID resolves the folder ID and absolute path
 func (c *SyncwebJoinCmd) resolveFolderID(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	folderID, path string,
 ) (resolvedFolderID, absPath string, ok bool) {
 	existingFolders := make(map[string]bool)
@@ -156,7 +156,7 @@ func (c *SyncwebJoinCmd) resolveFolderID(
 }
 
 // createOrUseFolder creates a new folder or uses existing one
-func (c *SyncwebJoinCmd) createOrUseFolder(s *syncweb.Syncweb, folderID, label, path string) bool {
+func (c *SyncwebJoinCmd) createOrUseFolder(s syncweb.Engine, folderID, label, path string) bool {
 	existingFolders := make(map[string]bool)
 	for _, f := range s.GetFolders() {
 		existingFolders[f.ID] = true

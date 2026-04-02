@@ -54,7 +54,7 @@ func (c *SyncwebLsCmd) Help() string {
 }
 
 func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		headerPrinted := !c.Long || c.NoHeader
 		allEntries := []*fileEntry{}
 
@@ -88,7 +88,7 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 
 func (c *SyncwebLsCmd) processPath(
 	p string,
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	g *SyncwebCmd,
 	ctx *lsPrintHeaderContext,
 ) error {
@@ -147,7 +147,7 @@ type lsPrintHeaderContext struct {
 }
 
 func (c *SyncwebLsCmd) handleEmptyFilesWithContext(
-	s *syncweb.Syncweb,
+	s syncweb.Engine,
 	folderID, prefix string,
 	g *SyncwebCmd,
 	ctx *lsPrintHeaderContext,
@@ -169,7 +169,7 @@ func (c *SyncwebLsCmd) handleEmptyFilesWithContext(
 }
 
 // findFolderForPath finds the folder ID and prefix for a given path
-func (c *SyncwebLsCmd) findFolderForPath(path string, s *syncweb.Syncweb) (folderID, prefix string, ok bool) {
+func (c *SyncwebLsCmd) findFolderForPath(path string, s syncweb.Engine) (folderID, prefix string, ok bool) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", "", false
@@ -193,7 +193,7 @@ func (c *SyncwebLsCmd) findFolderForPath(path string, s *syncweb.Syncweb) (folde
 	}
 
 	// Find folder by path
-	cfg := s.Node.Cfg.RawCopy()
+	cfg := s.RawConfig()
 	for _, f := range cfg.Folders {
 		fPath := filepath.Clean(f.Path)
 		if absPath == fPath || strings.HasPrefix(absPath, fPath+string(filepath.Separator)) {
@@ -212,8 +212,8 @@ func (c *SyncwebLsCmd) findFolderForPath(path string, s *syncweb.Syncweb) (folde
 	return "", "", false
 }
 
-func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*fileEntry {
-	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
+func (c *SyncwebLsCmd) getFiles(s syncweb.Engine, folderID, prefix string) []*fileEntry {
+	seq, cancel := s.AllGlobalFiles(folderID)
 	defer func() { _ = cancel() }()
 
 	// Build a tree structure
@@ -233,21 +233,13 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 }
 
 func (c *SyncwebLsCmd) processFile(
-	meta struct {
-		Name       string
-		Sequence   int64
-		ModNanos   int64
-		Size       int64
-		LocalFlags protocol.FlagLocal
-		Type       protocol.FileInfoType
-		Deleted    bool
-	},
+	meta syncweb.FileMetadata,
 	prefix string, tree map[string]*fileEntry, rootItems *[]*fileEntry,
 ) {
 	// Access meta fields directly
 	name := meta.Name
 	sizeVal := meta.Size
-	modTimeVal := time.Unix(0, meta.ModNanos)
+	modTimeVal := meta.ModTime()
 
 	// Filter by prefix
 	if prefix != "" {
@@ -323,7 +315,7 @@ func (c *SyncwebLsCmd) processFile(
 	}
 }
 
-func (c *SyncwebLsCmd) getFile(s *syncweb.Syncweb, folderID, path string) (fileEntry, bool) {
+func (c *SyncwebLsCmd) getFile(s syncweb.Engine, folderID, path string) (fileEntry, bool) {
 	info, ok, err := s.GetGlobalFileInfo(folderID, path)
 	if err != nil || !ok {
 		return fileEntry{}, false

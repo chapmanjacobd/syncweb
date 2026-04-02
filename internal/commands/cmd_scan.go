@@ -25,7 +25,7 @@ func (c *SyncwebScanCmd) Help() string {
 }
 
 func (c *SyncwebScanCmd) Run(g *SyncwebCmd) error {
-	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
+	return g.WithSyncweb(func(s syncweb.Engine) error {
 		errors := s.ScanFolders()
 		if len(errors) > 0 {
 			for folderID, err := range errors {

@@ -49,7 +49,7 @@ type ServeCmd struct {
 	APIToken string `kong:"-"`
 
 	// Syncweb instance (dependency injection for testability)
-	sw   *syncweb.Syncweb
+	sw   syncweb.Engine
 	swMu sync.RWMutex
 }
 
@@ -136,6 +136,19 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	logger := slog.Default().With("addr", listenAddr)
 	logger.Info("Syncweb server starting")
 	logger.Debug("API token", "token", c.APIToken)
+
+	// Save address and token for CLI discovery
+	addrFile := filepath.Join(g.SyncwebHome, "syncweb.addr")
+	if err := os.WriteFile(addrFile, []byte(listenAddr), 0o600); err != nil {
+		logger.Warn("Failed to write address file", "error", err)
+	}
+	defer os.Remove(addrFile)
+
+	tokenFile := filepath.Join(g.SyncwebHome, "syncweb.token")
+	if err := os.WriteFile(tokenFile, []byte(c.APIToken), 0o600); err != nil {
+		logger.Warn("Failed to write token file", "error", err)
+	}
+	defer os.Remove(tokenFile)
 
 	server := &http.Server{
 		Addr:         listenAddr,

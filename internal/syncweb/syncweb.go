@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"iter"
 
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
@@ -29,13 +30,6 @@ const (
 	EventBufferLimit = 100
 )
 
-type Measurement struct {
-	TotalTime  time.Duration
-	TotalBytes int64
-	Count      int64
-	Errors     int64
-}
-
 type DeviceInfo struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
@@ -45,17 +39,29 @@ type DeviceInfo struct {
 }
 
 type FolderInfo struct {
-	ID      string   `json:"id"`
-	Label   string   `json:"label"`
-	Path    string   `json:"path"`
-	Type    string   `json:"type"`
-	Paused  bool     `json:"paused"`
-	Devices []string `json:"devices"`
+	ID         string   `json:"id"`
+	Label      string   `json:"label"`
+	Path       string   `json:"path"`
+	Type       string   `json:"type"`
+	Paused     bool     `json:"paused"`
+	Devices    []string `json:"devices"`
+	GlobalSize Counts   `json:"globalSize"`
+	LocalSize  Counts   `json:"localSize"`
+	NeedSize   Counts   `json:"needSize"`
+	State      string   `json:"state"`
+	Completed  int64    `json:"completed"`
 }
 
 type Measurements struct {
 	mutex sync.RWMutex
 	data  map[protocol.DeviceID]*Measurement
+}
+
+type Measurement struct {
+	TotalTime  time.Duration
+	TotalBytes int
+	Count      int
+	Errors     int
 }
 
 func NewMeasurements() *Measurements {
@@ -64,34 +70,35 @@ func NewMeasurements() *Measurements {
 	}
 }
 
-func (m *Measurements) Record(id protocol.DeviceID, duration time.Duration, bytes int, err error) {
+func (m *Measurements) Record(deviceID protocol.DeviceID, duration time.Duration, bytes int, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if _, ok := m.data[id]; !ok {
-		m.data[id] = &Measurement{}
+	meas, ok := m.data[deviceID]
+	if !ok {
+		meas = &Measurement{}
+		m.data[deviceID] = meas
 	}
-	meas := m.data[id]
+
+	meas.TotalTime += duration
+	meas.TotalBytes += bytes
+	meas.Count++
 	if err != nil {
 		meas.Errors++
-	} else {
-		meas.TotalTime += duration
-		meas.TotalBytes += int64(bytes)
-		meas.Count++
 	}
 }
 
-func (m *Measurements) Score(id protocol.DeviceID) float64 {
+func (m *Measurements) Score(deviceID protocol.DeviceID) float64 {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	meas, ok := m.data[id]
+	meas, ok := m.data[deviceID]
 	if !ok || (meas.Count == 0 && meas.Errors == 0) {
-		return 0.5 // Neutral base score, slightly better than peers with errors
+		return 1.0 // Neutral score
 	}
 
-	if meas.Count == 0 {
-		return 1e18 + float64(meas.Errors) // Extremely high penalty for peers with only errors
+	if meas.Count == 0 && meas.Errors > 0 {
+		return 1e9 // Extremely high penalty for peers with only errors
 	}
 
 	// Calculate average time per byte (inverse of bandwidth)
@@ -164,6 +171,111 @@ func (s *Syncweb) GetEvents() []models.SyncEvent {
 		return nil
 	}
 	return slices.Clone(v.([]models.SyncEvent))
+}
+
+// MyID returns the local device ID
+func (s *Syncweb) MyID() protocol.DeviceID {
+	return s.Node.MyID()
+}
+
+// RawConfig returns a copy of the current Syncthing configuration
+func (s *Syncweb) RawConfig() config.Configuration {
+	return s.Node.Cfg.RawCopy()
+}
+
+// SaveConfig saves the current Syncthing configuration to disk
+func (s *Syncweb) SaveConfig() error {
+	return s.Node.Cfg.Save()
+}
+
+// IsConnectedTo returns true if the node is connected to the specified device
+func (s *Syncweb) IsConnectedTo(deviceID protocol.DeviceID) bool {
+	return s.Node.App.Internals.IsConnectedTo(deviceID)
+}
+
+// AllGlobalFiles returns an iterator that streams all global files in a folder
+func (s *Syncweb) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], func() error) {
+	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
+	return func(yield func(FileMetadata) bool) {
+		for meta := range seq {
+			if !yield(FileMetadata{
+				Name:       meta.Name,
+				Sequence:   meta.Sequence,
+				ModNanos:   meta.ModNanos,
+				Size:       meta.Size,
+				LocalFlags: meta.LocalFlags,
+				Type:       meta.Type,
+				Deleted:    meta.Deleted,
+			}) {
+				return
+			}
+		}
+	}, func() error { return cancel() }
+}
+
+// GlobalSize returns the total size of all global files in a folder
+func (s *Syncweb) GlobalSize(folderID string) (Counts, error) {
+	c, err := s.Node.App.Internals.GlobalSize(folderID)
+	return Counts{
+		Files:       c.Files,
+		Directories: c.Directories,
+		Symlinks:    c.Symlinks,
+		Deleted:     c.Deleted,
+		Bytes:       c.Bytes,
+		Sequence:    c.Sequence,
+		DeviceID:    c.DeviceID,
+		LocalFlags:  c.LocalFlags,
+	}, err
+}
+
+// LocalSize returns the total size of all local files in a folder
+func (s *Syncweb) LocalSize(folderID string) (Counts, error) {
+	c, err := s.Node.App.Internals.LocalSize(folderID)
+	return Counts{
+		Files:       c.Files,
+		Directories: c.Directories,
+		Symlinks:    c.Symlinks,
+		Deleted:     c.Deleted,
+		Bytes:       c.Bytes,
+		Sequence:    c.Sequence,
+		DeviceID:    c.DeviceID,
+		LocalFlags:  c.LocalFlags,
+	}, err
+}
+
+// NeedSize returns the total size of files needed from other devices
+func (s *Syncweb) NeedSize(folderID string, deviceID protocol.DeviceID) (Counts, error) {
+	c, err := s.Node.App.Internals.NeedSize(folderID, deviceID)
+	return Counts{
+		Files:       c.Files,
+		Directories: c.Directories,
+		Symlinks:    c.Symlinks,
+		Deleted:     c.Deleted,
+		Bytes:       c.Bytes,
+		Sequence:    c.Sequence,
+		DeviceID:    c.DeviceID,
+		LocalFlags:  c.LocalFlags,
+	}, err
+}
+
+// FolderState returns the current state of a folder
+func (s *Syncweb) FolderState(folderID string) (string, time.Time, error) {
+	return s.Node.App.Internals.FolderState(folderID)
+}
+
+// FolderProgressBytesCompleted returns the number of bytes completed for a folder sync
+func (s *Syncweb) FolderProgressBytesCompleted(folderID string) int64 {
+	return s.Node.App.Internals.FolderProgressBytesCompleted(folderID)
+}
+
+// GetCompletion returns the completion status for a folder on a specific device
+func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (stmodel.FolderCompletion, error) {
+	return s.Node.App.Internals.Completion(deviceID, folderID)
+}
+
+// BlockAvailability returns a list of devices that have the specified block
+func (s *Syncweb) BlockAvailability(folderID string, info protocol.FileInfo, block protocol.BlockInfo) ([]stmodel.Availability, error) {
+	return s.Node.App.Internals.BlockAvailability(folderID, info, block)
 }
 
 func (s *Syncweb) watchEvents() {
@@ -373,6 +485,11 @@ func (s *Syncweb) SetDeviceAddresses(deviceID string, addresses []string) error 
 	}
 	waiter.Wait()
 	return s.Node.Cfg.Save()
+}
+
+func (s *Syncweb) GetDiscoveredDevices() map[string]time.Time {
+	// Syncthing doesn't easily expose this via Internals yet
+	return nil
 }
 
 // AddFolder adds a folder to the Syncthing configuration
@@ -622,13 +739,25 @@ func (s *Syncweb) GetFolders() []FolderInfo {
 		for _, d := range f.Devices {
 			devices = append(devices, d.DeviceID.String())
 		}
+
+		globalSize, _ := s.GlobalSize(f.ID)
+		localSize, _ := s.LocalSize(f.ID)
+		needSize, _ := s.NeedSize(f.ID, protocol.LocalDeviceID)
+		state, _, _ := s.FolderState(f.ID)
+		completed := s.FolderProgressBytesCompleted(f.ID)
+
 		folders = append(folders, FolderInfo{
-			ID:      f.ID,
-			Label:   f.Label,
-			Path:    f.Path,
-			Type:    f.Type.String(),
-			Paused:  f.Paused,
-			Devices: devices,
+			ID:         f.ID,
+			Label:      f.Label,
+			Path:       f.Path,
+			Type:       f.Type.String(),
+			Paused:     f.Paused,
+			Devices:    devices,
+			GlobalSize: globalSize,
+			LocalSize:  localSize,
+			NeedSize:   needSize,
+			State:      state,
+			Completed:  completed,
 		})
 	}
 	return folders
@@ -721,7 +850,7 @@ type SyncwebReadSeeker struct {
 	ctx context.Context
 }
 
-func (s *Syncweb) NewReadSeeker(ctx context.Context, folderID, path string) (*SyncwebReadSeeker, error) {
+func (s *Syncweb) NewReadSeeker(ctx context.Context, folderID, path string) (io.ReadSeeker, error) {
 	info, ok, err := s.GetGlobalFileInfo(folderID, path)
 	if err != nil {
 		return nil, err
@@ -999,15 +1128,20 @@ func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 			continue
 		}
 
-		for folderID := range devPending {
-			if _, exists := pending[folderID]; !exists {
-				pending[folderID] = map[string]any{
-					"offeredBy": make(map[string]map[string]any),
+		for id, f := range devPending {
+			// Find the label from OfferedBy map
+			label := id
+			for _, observed := range f.OfferedBy {
+				if observed.Label != "" {
+					label = observed.Label
+					break
 				}
 			}
-			offeredBy, ok := pending[folderID]["offeredBy"].(map[string]map[string]any)
-			if ok {
-				offeredBy[d.DeviceID.String()] = map[string]any{}
+
+			pending[id] = map[string]any{
+				"id":        id,
+				"label":     label,
+				"offeredBy": d.DeviceID.String(),
 			}
 		}
 	}
@@ -1015,88 +1149,32 @@ func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 	return pending
 }
 
-// GetDiscoveredDevices returns devices from the discovery cache
-func (s *Syncweb) GetDiscoveredDevices() map[string]map[string]any {
-	discovered := make(map[string]map[string]any)
-	cfg := s.Node.Cfg.RawCopy()
-
-	for _, d := range cfg.Devices {
-		// For now, just return device info
-		// Discovery cache access would require additional API calls
-		discovered[d.DeviceID.String()] = map[string]any{
-			"id":        d.DeviceID.String(),
-			"name":      d.Name,
-			"addresses": d.Addresses,
-		}
-	}
-
-	return discovered
-}
-
-// GetPendingDevicesMap returns devices waiting to be accepted
-func (s *Syncweb) GetPendingDevicesMap() map[string]map[string]any {
-	pending := make(map[string]map[string]any)
-	cfg := s.Node.Cfg.RawCopy()
-
-	// Check for rejected/pending devices
-	for _, d := range cfg.Devices {
-		if d.Paused && d.Name == "" {
-			pending[d.DeviceID.String()] = map[string]any{
-				"id":   d.DeviceID.String(),
-				"time": time.Now().Format(time.RFC3339),
-			}
-		}
-	}
-
-	return pending
-}
-
-// CountSeeders returns the number of unique devices that have blocks for a file
-func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
-	info, ok, err := s.GetGlobalFileInfo(folderID, path)
-	if err != nil || !ok {
-		return 0, fmt.Errorf("file not found: %s", path)
-	}
-
-	seederSet := make(map[protocol.DeviceID]bool)
-	for _, block := range info.Blocks {
-		availables, availErr := s.Node.App.Internals.BlockAvailability(folderID, info, block)
-		if availErr != nil {
-			continue
-		}
-		for _, av := range availables {
-			seederSet[av.ID] = true
-		}
-	}
-
-	return len(seederSet), nil
-}
-
-// GetCompletion returns folder completion percentage for a device
-func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (map[string]any, error) {
-	comp, err := s.Node.App.Internals.Completion(deviceID, folderID)
+// GetGlobalTree returns a list of entries at a specific prefix
+func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]models.LsEntry, error) {
+	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
 	if err != nil {
 		return nil, err
 	}
 
-	return map[string]any{
-		"completion_pct": comp.CompletionPct,
-		"global_bytes":   comp.GlobalBytes,
-		"need_bytes":     comp.NeedBytes,
-		"global_items":   comp.GlobalItems,
-		"need_items":     comp.NeedItems,
-		"need_deletes":   comp.NeedDeletes,
-		"sequence":       comp.Sequence,
-	}, nil
+	return s.flattenTree(tree, prefix), nil
 }
 
-// GetGlobalTree returns folder tree structure for browsing
-func (s *Syncweb) GetGlobalTree(
-	folderID, prefix string,
-	levels int,
-	returnOnlyDirectories bool,
-) ([]*stmodel.TreeEntry, error) {
-	return s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
+func (s *Syncweb) flattenTree(tree []*stmodel.TreeEntry, prefix string) []models.LsEntry {
+	var res []models.LsEntry
+	for _, entry := range tree {
+		entryPath := filepath.Join(prefix, entry.Name)
+		res = append(res, models.LsEntry{
+			Name:     entry.Name,
+			Path:     entryPath,
+			IsDir:    entry.Type == "directory",
+			Size:     entry.Size,
+			Modified: entry.ModTime.Format(time.RFC3339),
+		})
+		if len(entry.Children) > 0 {
+			res = append(res, s.flattenTree(entry.Children, entryPath)...)
+		}
+	}
+	return res
 }
 
 // GetLocalChangedFiles returns locally changed files for a folder (paginated)
@@ -1169,4 +1247,24 @@ func (s *Syncweb) GetRemoteNeedFiles(
 		}
 	}
 	return result, nil
+}
+
+func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
+	info, ok, err := s.GetGlobalFileInfo(folderID, path)
+	if err != nil || !ok {
+		return 0, err
+	}
+
+	deviceSet := make(map[string]bool)
+	for _, block := range info.Blocks {
+		availables, err := s.Node.App.Internals.BlockAvailability(folderID, info, block)
+		if err != nil {
+			continue
+		}
+		for _, av := range availables {
+			deviceSet[av.ID.String()] = true
+		}
+	}
+
+	return len(deviceSet), nil
 }

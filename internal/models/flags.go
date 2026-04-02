@@ -14,7 +14,7 @@ type CoreFlags struct {
 
 // SyncwebFlags are flags related to Syncweb configuration
 type SyncwebFlags struct {
-	SyncwebHome string `help:"Syncweb home directory" env:"SYNCWEB_HOME"`
+	SyncwebHome string `help:"Syncweb home directory" env:"SYNCWEB_HOME" aliases:"home"`
 }
 
 // PathFilterFlags are flags for filtering paths

@@ -3,9 +3,13 @@ package syncweb
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"iter"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,13 +17,11 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"iter"
-	"crypto/tls"
 
 	"github.com/araddon/dateparse"
 	"github.com/syncthing/syncthing/lib/config"
-	"github.com/syncthing/syncthing/lib/protocol"
 	stmodel "github.com/syncthing/syncthing/lib/model"
+	"github.com/syncthing/syncthing/lib/protocol"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )
@@ -156,7 +158,7 @@ func (e *RESTEngine) IsRunning() bool {
 func (e *RESTEngine) MyID() protocol.DeviceID {
 	certPath := filepath.Join(e.HomeDir, "cert.pem")
 	keyPath := filepath.Join(e.HomeDir, "key.pem")
-	
+
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return protocol.EmptyDeviceID
@@ -182,7 +184,7 @@ func (e *RESTEngine) RawConfig() config.Configuration {
 }
 
 func (e *RESTEngine) SaveConfig() error {
-	return fmt.Errorf("cannot save config in REST mode (server is running)")
+	return errors.New("cannot save config in REST mode (server is running)")
 }
 
 func (e *RESTEngine) GetFolders() []FolderInfo {
@@ -272,9 +274,7 @@ func (e *RESTEngine) GetFolderStats() map[string]map[string]any {
 	if time.Since(e.folderStatsCacheTime) < 5*time.Second && e.folderStatsCache != nil {
 		// Return a copy to prevent mutation
 		result := make(map[string]map[string]any, len(e.folderStatsCache))
-		for k, v := range e.folderStatsCache {
-			result[k] = v
-		}
+		maps.Copy(result, e.folderStatsCache)
 		e.folderStatsMu.RUnlock()
 		return result
 	}
@@ -286,9 +286,7 @@ func (e *RESTEngine) GetFolderStats() map[string]map[string]any {
 	// Double-check after acquiring write lock
 	if time.Since(e.folderStatsCacheTime) < 5*time.Second && e.folderStatsCache != nil {
 		result := make(map[string]map[string]any, len(e.folderStatsCache))
-		for k, v := range e.folderStatsCache {
-			result[k] = v
-		}
+		maps.Copy(result, e.folderStatsCache)
 		return result
 	}
 
@@ -469,7 +467,7 @@ func (e *RESTEngine) WaitUntilIdle(folderID string, timeout time.Duration) error
 		if res.Error != "" {
 			return fmt.Errorf("folder not idle: %s", res.Error)
 		}
-		return fmt.Errorf("folder not idle")
+		return errors.New("folder not idle")
 	}
 	return nil
 }
@@ -529,7 +527,7 @@ func (e *RESTEngine) ResolveLocalPath(syncPath string) (folderID, localPath stri
 	// For REST engine, we can't directly resolve local paths because
 	// the server may be on a different machine. We return an error
 	// indicating this limitation.
-	// 
+	//
 	// However, we can attempt to get folder info and construct a path
 	// if the folder is known locally (same machine scenario).
 	var trimmed string
@@ -626,7 +624,11 @@ func (e *RESTEngine) Unignore(folderID, relativePath string) error {
 	return nil
 }
 
-func (e *RESTEngine) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]models.LsEntry, error) {
+func (e *RESTEngine) GetGlobalTree(
+	folderID, prefix string,
+	levels int,
+	returnOnlyDirectories bool,
+) ([]models.LsEntry, error) {
 	var entries []models.LsEntry
 	err := e.getJSON(fmt.Sprintf("/api/syncweb/ls?folder=%s&prefix=%s", folderID, url.QueryEscape(prefix)), &entries)
 	return entries, err
@@ -634,23 +636,45 @@ func (e *RESTEngine) GetGlobalTree(folderID, prefix string, levels int, returnOn
 
 func (e *RESTEngine) GetLocalChangedFiles(folderID string, page, perPage int) ([]map[string]any, error) {
 	var files []map[string]any
-	err := e.getJSON(fmt.Sprintf("/api/syncweb/folders/local-changed?folder=%s&page=%d&per_page=%d", folderID, page, perPage), &files)
+	err := e.getJSON(
+		fmt.Sprintf("/api/syncweb/folders/local-changed?folder=%s&page=%d&per_page=%d", folderID, page, perPage),
+		&files,
+	)
 	return files, err
 }
 
-func (e *RESTEngine) GetNeedFiles(folderID string, page, perPage int) (remote, local, queued []map[string]any, err error) {
+func (e *RESTEngine) GetNeedFiles(
+	folderID string,
+	page, perPage int,
+) (remote, local, queued []map[string]any, err error) {
 	var res struct {
 		Remote []map[string]any `json:"remote"`
 		Local  []map[string]any `json:"local"`
 		Queued []map[string]any `json:"queued"`
 	}
-	err = e.getJSON(fmt.Sprintf("/api/syncweb/folders/need?folder=%s&page=%d&per_page=%d", folderID, page, perPage), &res)
+	err = e.getJSON(
+		fmt.Sprintf("/api/syncweb/folders/need?folder=%s&page=%d&per_page=%d", folderID, page, perPage),
+		&res,
+	)
 	return res.Remote, res.Local, res.Queued, err
 }
 
-func (e *RESTEngine) GetRemoteNeedFiles(folderID string, deviceID protocol.DeviceID, page, perPage int) ([]map[string]any, error) {
+func (e *RESTEngine) GetRemoteNeedFiles(
+	folderID string,
+	deviceID protocol.DeviceID,
+	page, perPage int,
+) ([]map[string]any, error) {
 	var files []map[string]any
-	err := e.getJSON(fmt.Sprintf("/api/syncweb/folders/remote-need?folder=%s&device=%s&page=%d&per_page=%d", folderID, deviceID.String(), page, perPage), &files)
+	err := e.getJSON(
+		fmt.Sprintf(
+			"/api/syncweb/folders/remote-need?folder=%s&device=%s&page=%d&per_page=%d",
+			folderID,
+			deviceID.String(),
+			page,
+			perPage,
+		),
+		&files,
+	)
 	return files, err
 }
 
@@ -682,7 +706,11 @@ func (e *RESTEngine) GetCompletion(deviceID protocol.DeviceID, folderID string) 
 	return comp, err
 }
 
-func (e *RESTEngine) BlockAvailability(folderID string, info protocol.FileInfo, block protocol.BlockInfo) ([]stmodel.Availability, error) {
+func (e *RESTEngine) BlockAvailability(
+	folderID string,
+	info protocol.FileInfo,
+	block protocol.BlockInfo,
+) ([]stmodel.Availability, error) {
 	return nil, nil
 }
 
@@ -740,7 +768,7 @@ func (r *RESTReadSeeker) Read(p []byte) (n int, err error) {
 
 	// Build URL with range header
 	reqURL := fmt.Sprintf("/api/raw?path=sync://%s/%s", r.folderID, url.QueryEscape(r.path))
-	req, err := http.NewRequestWithContext(r.ctx, "GET", r.engine.BaseURL+reqURL, nil)
+	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, r.engine.BaseURL+reqURL, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -800,7 +828,7 @@ func (r *RESTReadSeeker) Seek(offset int64, whence int) (int64, error) {
 		newOffset = r.offset + offset
 	case io.SeekEnd:
 		if r.size < 0 {
-			return 0, fmt.Errorf("cannot seek from end: size unknown")
+			return 0, errors.New("cannot seek from end: size unknown")
 		}
 		newOffset = r.size + offset
 	default:

@@ -2,6 +2,7 @@ package syncweb
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,15 +10,15 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"crypto/tls"
 
-	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/svcutil"
 	"github.com/syncthing/syncthing/lib/syncthing"
 	"github.com/syncthing/syncthing/lib/tlsutil"
+
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
 type Node struct {

@@ -3,10 +3,11 @@ package syncweb_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,10 +24,18 @@ func TestRESTEngineBasic(t *testing.T) {
 			w.Write([]byte(`{"status": "Online", "offline": false}`))
 		case "/api/syncweb/folders":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"id": "test", "label": "Test", "path": "/tmp/test", "type": "sendreceive", "paused": false, "devices": [], "globalSize": {"Files": 0, "Bytes": 0}, "localSize": {"Files": 0, "Bytes": 0}, "needSize": {"Files": 0, "Bytes": 0}, "state": "idle", "completed": 0}]`))
+			w.Write(
+				[]byte(
+					`[{"id": "test", "label": "Test", "path": "/tmp/test", "type": "sendreceive", "paused": false, "devices": [], "globalSize": {"Files": 0, "Bytes": 0}, "localSize": {"Files": 0, "Bytes": 0}, "needSize": {"Files": 0, "Bytes": 0}, "state": "idle", "completed": 0}]`,
+				),
+			)
 		case "/api/syncweb/devices":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"id": "TESTDEVICE", "name": "Test Device", "addresses": ["dynamic"], "introducer": false, "paused": false}]`))
+			w.Write(
+				[]byte(
+					`[{"id": "TESTDEVICE", "name": "Test Device", "addresses": ["dynamic"], "introducer": false, "paused": false}]`,
+				),
+			)
 		default:
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{}`))
@@ -63,11 +72,9 @@ func TestRESTEngineBasic(t *testing.T) {
 // TestRESTEngineRetry tests retry logic
 func TestRESTEngineRetry(t *testing.T) {
 	attempts := 0
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		if attempts < 2 {
-			// Fail first attempt by closing connection
 			panic(http.ErrAbortHandler)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -94,7 +101,11 @@ func TestRESTEngineCache(t *testing.T) {
 		requestCount++
 		if r.URL.Path == "/api/syncweb/devices" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"id": "TEST", "name": "Test", "addresses": ["dynamic"], "introducer": false, "paused": false}]`))
+			w.Write(
+				[]byte(
+					`[{"id": "TEST", "name": "Test", "addresses": ["dynamic"], "introducer": false, "paused": false}]`,
+				),
+			)
 		}
 	}))
 	defer server.Close()
@@ -128,7 +139,7 @@ func TestRESTEngineFolderOperations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastPath = r.URL.Path
 		// Decode body for POST requests
-		if r.Method == "POST" {
+		if r.Method == http.MethodPost {
 			decoder := json.NewDecoder(r.Body)
 			decoder.Decode(&lastBody)
 		}
@@ -166,7 +177,7 @@ func TestRESTEngineDeviceOperations(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastPath = r.URL.Path
-		if r.Method == "POST" {
+		if r.Method == http.MethodPost {
 			decoder := json.NewDecoder(r.Body)
 			decoder.Decode(&lastBody)
 		}
@@ -199,7 +210,7 @@ func TestRESTEngineSetDeviceAddresses(t *testing.T) {
 	var lastBody map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
+		if r.Method == http.MethodPost {
 			decoder := json.NewDecoder(r.Body)
 			decoder.Decode(&lastBody)
 		}
@@ -253,7 +264,7 @@ func TestRESTEngineReadSeeker(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/raw" {
 			w.Header().Set("Content-Type", "application/octet-stream")
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(testContent)))
+			w.Header().Set("Content-Length", strconv.Itoa(len(testContent)))
 			w.Write([]byte(testContent))
 		}
 	}))
@@ -269,7 +280,7 @@ func TestRESTEngineReadSeeker(t *testing.T) {
 	// Read all content
 	buf := make([]byte, 100)
 	n, err := rs.Read(buf)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		t.Errorf("Read failed: %v", err)
 	}
 	if string(buf[:n]) != testContent {
@@ -293,7 +304,7 @@ func TestRESTEngineIgnoresOperations(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastPath = r.URL.Path
-		if r.Method == "POST" {
+		if r.Method == http.MethodPost {
 			decoder := json.NewDecoder(r.Body)
 			decoder.Decode(&lastBody)
 		}
@@ -343,7 +354,7 @@ func TestRESTEngineFolderDevicesOperations(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastPath = r.URL.Path
-		if r.Method == "POST" {
+		if r.Method == http.MethodPost {
 			decoder := json.NewDecoder(r.Body)
 			decoder.Decode(&lastBody)
 		}
@@ -381,7 +392,11 @@ func TestRESTEngineResolveLocalPath(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/syncweb/folders" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"id": "test", "label": "Test", "path": "/tmp/test", "type": "sendreceive", "paused": false, "devices": [], "globalSize": {"Files": 0, "Bytes": 0}, "localSize": {"Files": 0, "Bytes": 0}, "needSize": {"Files": 0, "Bytes": 0}, "state": "idle", "completed": 0}]`))
+			w.Write(
+				[]byte(
+					`[{"id": "test", "label": "Test", "path": "/tmp/test", "type": "sendreceive", "paused": false, "devices": [], "globalSize": {"Files": 0, "Bytes": 0}, "localSize": {"Files": 0, "Bytes": 0}, "needSize": {"Files": 0, "Bytes": 0}, "state": "idle", "completed": 0}]`,
+				),
+			)
 		}
 	}))
 	defer server.Close()

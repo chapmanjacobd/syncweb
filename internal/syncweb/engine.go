@@ -3,12 +3,12 @@ package syncweb
 import (
 	"context"
 	"io"
-	"time"
 	"iter"
+	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
-	"github.com/syncthing/syncthing/lib/protocol"
 	stmodel "github.com/syncthing/syncthing/lib/model"
+	"github.com/syncthing/syncthing/lib/protocol"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )

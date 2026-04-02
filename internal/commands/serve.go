@@ -40,7 +40,7 @@ Examples:
 `
 
 type ServeCmd struct {
-	Port      int      `help:"Port to listen on"                                 default:"8889" short:"p"`
+	Port      int      `help:"Port to listen on"                                     default:"8889" short:"p"`
 	Listen    string   `help:"Address to listen on (default: 127.0.0.1)"`
 	PublicDir string   `help:"Override embedded web assets with local directory"`
 	ReadOnly  bool     `help:"Disable file modifications"`

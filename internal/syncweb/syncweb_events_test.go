@@ -2,12 +2,13 @@ package syncweb
 
 import (
 	"testing"
+
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
 func TestGetEvents(t *testing.T) {
 	s := &Syncweb{}
-	
+
 	// Test before initialization
 	events := s.GetEvents()
 	if events != nil {

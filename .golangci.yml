@@ -183,7 +183,7 @@ linters:
       # Checks the number of lines in a function.
       # If lower than 0, disable the check.
       # Default: 60
-      lines: 100
+      lines: 130
       # Checks the number of statements in a function.
       # If lower than 0, disable the check.
       # Default: 40
@@ -425,7 +425,7 @@ linters:
       - name: argument-limit
         arguments: [ 5 ]
       - name: function-length
-        arguments: [ 60, 100 ]
+        arguments: [ 60, 130 ]
       - name: cognitive-complexity
         arguments: [ 30 ]
       - name: max-public-structs

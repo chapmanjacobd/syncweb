@@ -74,7 +74,7 @@ test.describe('cli-download', () => {
     expect([0, 1]).toContain(result.exitCode);
 
     // Should show warning message
-    expect(result.stdout.toLowerCase()).toContain('warning');
+    expect(result.stdout.toLowerCase()).toContain('no files available to download');
   });
 
   test('download directory', async ({ cli, createDummyDir, createDummyFile, syncFolder }) => {

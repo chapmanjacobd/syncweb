@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -80,6 +81,8 @@ type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
 
+	Context context.Context `kong:"-"`
+
 	Create    SyncwebCreateCmd    `help:"Create a syncweb folder"                                 cmd:"" aliases:"init,in,share"`
 	Join      SyncwebJoinCmd      `help:"Join syncweb folders/devices"                            cmd:"" aliases:"import,clone"`
 	Accept    SyncwebAcceptCmd    `help:"Add a device to syncweb"                                 cmd:"" aliases:"add"`
@@ -115,7 +118,28 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s *syncweb.Syncweb) error) error {
 	if err := s.Start(); err != nil {
 		return err
 	}
-	defer s.Stop()
+
+	// Use background context if none provided
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Ensure Stop() is called on cancellation or return
+	stopChan := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.Stop()
+		case <-stopChan:
+		}
+	}()
+
+	defer func() {
+		close(stopChan)
+		s.Stop()
+	}()
+
 	return fn(s)
 }
 
@@ -150,20 +174,31 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 		ticker := time.NewTicker(AutoSyncInterval)
 		defer ticker.Stop()
 
+		// Initial run
+		c.runOnce(g, s, logger)
+
 		for {
-			// 1. Auto-accept devices
-			if c.Devices {
-				c.autoAcceptDevices(s, logger)
+			select {
+			case <-ticker.C:
+				c.runOnce(g, s, logger)
+			case <-g.Context.Done():
+				logger.Info("Stopping syncweb-automatic")
+				return nil
 			}
-
-			// 2. Auto-join folders
-			if c.Folders {
-				c.autoJoinFolders(s, logger, g.SyncwebHome)
-			}
-
-			<-ticker.C
 		}
 	})
+}
+
+func (c *SyncwebAutomaticCmd) runOnce(g *SyncwebCmd, s *syncweb.Syncweb, logger *slog.Logger) {
+	// 1. Auto-accept devices
+	if c.Devices {
+		c.autoAcceptDevices(s, logger)
+	}
+
+	// 2. Auto-join folders
+	if c.Folders {
+		c.autoJoinFolders(s, logger, g.SyncwebHome)
+	}
 }
 
 func (c *SyncwebAutomaticCmd) autoAcceptDevices(s *syncweb.Syncweb, logger *slog.Logger) {

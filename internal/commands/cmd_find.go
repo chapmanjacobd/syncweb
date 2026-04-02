@@ -102,7 +102,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 			}
 
 			// Wait for Syncthing to index local files
-			time.Sleep(1 * time.Second)
+			_ = s.WaitUntilIdle(f.ID, 5*time.Second)
 
 			seq, cancel := s.Node.App.Internals.AllGlobalFiles(f.ID)
 			for meta := range seq {

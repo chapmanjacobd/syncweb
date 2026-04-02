@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/alecthomas/kong"
 
@@ -25,10 +28,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, err := parser.Parse(os.Args[1:])
+	parserCtx, err := parser.Parse(os.Args[1:])
 	if err != nil {
 		parser.FatalIfErrorf(err)
 	}
+
+	// Set up signal handling
+	sigCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		cancel()
+	}()
+
+	cli.Context = sigCtx
 
 	// Configure logger
 	models.SetupLogging(cli.Verbose)
@@ -38,7 +54,7 @@ func main() {
 	})
 	slog.SetDefault(logger)
 
-	err = ctx.Run()
+	err = parserCtx.Run()
 	if err != nil {
 		logger.Error("Syncweb command failed", "error", err)
 		os.Exit(1)

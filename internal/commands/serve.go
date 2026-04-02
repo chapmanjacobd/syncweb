@@ -144,7 +144,30 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	return server.ListenAndServe()
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("HTTP server failed", "error", err)
+		}
+	}()
+
+	// Wait for context cancellation
+	<-g.Context.Done()
+	logger.Info("Stopping Syncweb server")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("HTTP server shutdown failed", "error", err)
+	}
+
+	c.swMu.Lock()
+	if c.sw != nil {
+		c.sw.Stop()
+	}
+	c.swMu.Unlock()
+
+	return nil
 }
 
 func (c *ServeCmd) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {

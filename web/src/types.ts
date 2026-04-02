@@ -91,4 +91,8 @@ export interface State {
     localChangedData: LocalChangedData;
     needData: NeedData;
     remoteNeedData: RemoteNeedData;
+    // Pagination and Layout
+    filesPage: number;
+    filesPerPage: number;
+    isActivityOpen: boolean;
 }

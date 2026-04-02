@@ -556,6 +556,9 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 
 	cfg := c.sw.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
+		// Wait for Syncthing to index local files
+		_ = c.sw.WaitUntilIdle(f.ID, 2*time.Second)
+
 		seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(f.ID)
 
 		for meta := range seq {

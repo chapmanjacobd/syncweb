@@ -20,7 +20,10 @@ export const state: State = {
     treeData: [],
     localChangedData: { files: [], page: 1, perPage: 100 },
     needData: { remote: [], local: [], queued: [], page: 1, perPage: 100 },
-    remoteNeedData: { files: [], page: 1, perPage: 100 }
+    remoteNeedData: { files: [], page: 1, perPage: 100 },
+    filesPage: 1,
+    filesPerPage: 50,
+    isActivityOpen: true
 };
 
 // Initialize token from localStorage or URL if in browser
@@ -59,8 +62,73 @@ export function logout(): void {
 }
 
 export function toggleSidebar(): void {
-    const sidebar = document.querySelector('aside');
+    const sidebar = document.querySelector('.sidebar-left');
     sidebar?.classList.toggle('open');
+}
+
+export function toggleActivity(): void {
+    state.isActivityOpen = !state.isActivityOpen;
+    const container = document.getElementById('app-container');
+    const btn = document.getElementById('activity-toggle-btn');
+    
+    if (state.isActivityOpen) {
+        container?.classList.remove('activity-closed');
+        container?.classList.add('activity-open');
+        btn?.classList.add('btn-primary');
+    } else {
+        container?.classList.add('activity-closed');
+        container?.classList.remove('activity-open');
+        btn?.classList.remove('btn-primary');
+    }
+}
+
+export function renderBreadcrumbs(): void {
+    const container = document.getElementById('breadcrumbs');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const rootItem = document.createElement('div');
+    rootItem.className = 'breadcrumb-item';
+    rootItem.innerHTML = `<i data-lucide="home" style="width: 14px;"></i> Home`;
+    rootItem.onclick = () => selectFolder(null);
+    container.appendChild(rootItem);
+
+    if (state.currentFolder) {
+        const sep = document.createElement('span');
+        sep.className = 'breadcrumb-separator';
+        sep.textContent = '/';
+        container.appendChild(sep);
+
+        const folderItem = document.createElement('div');
+        folderItem.className = 'breadcrumb-item';
+        folderItem.textContent = state.currentFolder;
+        folderItem.onclick = () => selectFolder(state.currentFolder);
+        container.appendChild(folderItem);
+
+        // Subpaths
+        const prefix = state.currentPath.split('/').slice(3).filter(p => p !== '');
+        let currentBuildPath = `sync://${state.currentFolder}/`;
+        
+        prefix.forEach((part, index) => {
+            const sep = document.createElement('span');
+            sep.className = 'breadcrumb-separator';
+            sep.textContent = '/';
+            container.appendChild(sep);
+
+            currentBuildPath += part + '/';
+            const subItem = document.createElement('div');
+            subItem.className = 'breadcrumb-item';
+            subItem.textContent = part;
+            const targetPath = currentBuildPath;
+            subItem.onclick = () => {
+                state.currentPath = targetPath;
+                loadFiles();
+            };
+            container.appendChild(subItem);
+        });
+    }
+    if ((window as any).lucide) (window as any).lucide.createIcons();
 }
 
 export async function loadFolders(): Promise<void> {
@@ -428,6 +496,7 @@ export async function selectFolder(id: string | null): Promise<void> {
         state.currentFolder = id;
         state.currentPath = `sync://${id}/`;
     }
+    state.filesPage = 1;
     renderFolders();
     loadFiles();
 }
@@ -460,6 +529,7 @@ export async function searchFiles(): Promise<void> {
     try {
         const resp = await fetchAPI(`/api/syncweb/find?q=${encodeURIComponent(query)}`);
         state.files = await resp.json();
+        state.filesPage = 1;
         state.selectedItems = []; // Clear selection on reload
         updateBulkActions();
         state.currentPath = `Search results for "${query}"`;
@@ -470,12 +540,13 @@ export async function searchFiles(): Promise<void> {
 }
 
 export function renderFiles(isSearch: boolean = false): void {
-    const list = document.getElementById('file-list');
-    const pathHeader = document.getElementById('current-path');
-    if (!list || !pathHeader) return;
+    const tbody = document.getElementById('file-list-body');
+    const folderTitle = document.getElementById('current-folder-title');
+    if (!tbody || !folderTitle) return;
 
-    pathHeader.textContent = state.currentPath;
-    list.innerHTML = '';
+    renderBreadcrumbs();
+    folderTitle.textContent = state.currentFolder ? state.currentFolder : "Home";
+    tbody.innerHTML = '';
 
     // Sort files
     const sortedFiles = [...state.files].sort((a, b) => {
@@ -492,94 +563,131 @@ export function renderFiles(isSearch: boolean = false): void {
         }
     });
 
-    if (!isSearch) {
-        // Parent dir
-        if (state.currentFolder && state.currentPath !== `sync://${state.currentFolder}/`) {
-            const li = document.createElement('li');
-            li.className = 'file-item';
-            li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> ..`;
-            li.onclick = goUp;
-            list.appendChild(li);
-        } else if (state.currentFolder && state.currentPath === `sync://${state.currentFolder}/`) {
-            const li = document.createElement('li');
-            li.className = 'file-item';
-            li.innerHTML = `<span class="icon"><i data-lucide="arrow-up"></i></span> [Root]`;
-            li.onclick = () => selectFolder(null);
-            list.appendChild(li);
-        }
-    }
+    // Pagination
+    const totalItems = sortedFiles.length;
+    const totalPages = Math.ceil(totalItems / state.filesPerPage);
+    const start = (state.filesPage - 1) * state.filesPerPage;
+    const end = start + state.filesPerPage;
+    const paginatedFiles = sortedFiles.slice(start, end);
 
-    sortedFiles.forEach(f => {
-        const li = document.createElement('li');
-        li.className = 'file-item';
-        if (f.is_dir) li.classList.add('is-dir');
-        if (state.selectedItems.includes(f.path)) li.classList.add('selected');
-        li.draggable = true;
+    paginatedFiles.forEach(f => {
+        const tr = document.createElement('tr');
+        if (state.selectedItems.includes(f.path)) tr.classList.add('selected');
+        
         const displayName = isSearch ? f.path : f.name;
         const icon = f.is_dir ? 'folder' : 'file';
-        const cloudIcon = !f.local && !f.is_dir ? ' <span class="icon" style="display:inline-block; margin-left: 0.5rem;"><i data-lucide="cloud"></i></span>' : '';
-        const sizeInfo = f.is_dir ? '' : `<span class="secondary-info">${formatSize(f.size)}</span>`;
-
+        const sourceIcon = !f.local && !f.is_dir ? '<i data-lucide="cloud" style="width: 14px; margin-left: 0.5rem; color: var(--accent-color);"></i>' : '';
+        
+        const checkboxCell = document.createElement('td');
+        checkboxCell.className = 'checkbox-cell';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = state.selectedItems.includes(f.path);
-        checkbox.style.marginRight = '0.5rem';
         checkbox.onclick = (e) => {
             e.stopPropagation();
             toggleSelection(f.path);
         };
-
-        li.innerHTML = `<span class="icon"><i data-lucide="${icon}"></i></span> <span style="flex: 1">${displayName}${cloudIcon}</span> ${sizeInfo}`;
-        li.prepend(checkbox);
-
-        li.onclick = () => {
+        checkboxCell.appendChild(checkbox);
+        
+        const iconCell = document.createElement('td');
+        iconCell.className = 'icon-cell';
+        iconCell.innerHTML = `<i data-lucide="${icon}" style="width: 18px;"></i>`;
+        
+        const nameCell = document.createElement('td');
+        nameCell.innerHTML = `<span style="display: flex; align-items: center; gap: 0.25rem;">${displayName} ${sourceIcon}</span>`;
+        nameCell.style.cursor = 'pointer';
+        nameCell.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
-                // Extract folder ID from path sync://id/ or syncweb://id/
                 const parts = f.path.split('/');
-                const folderID = parts[0].startsWith('syncweb:') ? parts[2] : parts[2]; // Both are at index 2
+                const folderID = parts[2];
                 selectFolder(folderID);
                 return;
             }
 
             if (f.is_dir) {
                 state.currentPath = f.path + (f.path.endsWith('/') ? '' : '/');
+                state.filesPage = 1;
                 loadFiles();
             } else if (!f.local) {
                 triggerDownload(f.path);
             }
         };
-
-        li.oncontextmenu = (e) => {
+        nameCell.oncontextmenu = (e) => {
             e.preventDefault();
             showFileProperties(f.path);
         };
 
-        // Drag and Drop
-        li.ondragstart = (e) => {
-            e.dataTransfer!.setData('text/plain', f.path);
-            list.classList.add('dragging-active');
-        };
-        li.ondragend = () => list.classList.remove('dragging-active');
+        const sizeCell = document.createElement('td');
+        sizeCell.textContent = f.is_dir ? '--' : formatSize(f.size);
+        sizeCell.style.color = 'var(--secondary-text)';
+        
+        const dateCell = document.createElement('td');
+        dateCell.textContent = f.modified ? new Date(f.modified).toLocaleDateString() : '--';
+        dateCell.style.color = 'var(--secondary-text)';
 
-        if (f.is_dir) {
-            li.ondragover = (e) => {
-                e.preventDefault();
-                li.classList.add('drag-over');
-            };
-            li.ondragleave = () => li.classList.remove('drag-over');
-            li.ondrop = async (e) => {
-                e.preventDefault();
-                li.classList.remove('drag-over');
-                const srcPath = e.dataTransfer!.getData('text/plain');
-                if (srcPath === f.path) return;
-                const dstPath = f.path + '/' + srcPath.split('/').pop();
-                moveFile(srcPath, dstPath);
-            };
-        }
+        tr.appendChild(checkboxCell);
+        tr.appendChild(iconCell);
+        tr.appendChild(nameCell);
+        tr.appendChild(sizeCell);
+        tr.appendChild(dateCell);
 
-        list.appendChild(li);
+        tbody.appendChild(tr);
     });
+
+    renderFilesPagination(totalPages);
     if ((window as any).lucide) (window as any).lucide.createIcons();
+}
+
+export function renderFilesPagination(totalPages: number): void {
+    const container = document.getElementById('files-pagination');
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.innerHTML = '<i data-lucide="chevron-left" style="width: 14px;"></i>';
+    prevBtn.disabled = state.filesPage === 1;
+    prevBtn.onclick = () => {
+        state.filesPage--;
+        renderFiles();
+    };
+    container.appendChild(prevBtn);
+
+    const pageInfo = document.createElement('span');
+    pageInfo.textContent = `Page ${state.filesPage} of ${totalPages}`;
+    pageInfo.style.fontSize = '0.85rem';
+    pageInfo.style.margin = '0 0.75rem';
+    container.appendChild(pageInfo);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.innerHTML = '<i data-lucide="chevron-right" style="width: 14px;"></i>';
+    nextBtn.disabled = state.filesPage === totalPages;
+    nextBtn.onclick = () => {
+        state.filesPage++;
+        renderFiles();
+    };
+    container.appendChild(nextBtn);
+    if ((window as any).lucide) (window as any).lucide.createIcons();
+}
+
+export function setSort(by: string): void {
+    state.sortBy = by;
+    const select = document.getElementById('sort-select') as HTMLSelectElement;
+    if (select) select.value = by;
+    renderFiles();
+}
+
+export function toggleSelectAll(checkbox: HTMLInputElement): void {
+    if (checkbox.checked) {
+        state.files.forEach(f => {
+            if (!state.selectedItems.includes(f.path)) state.selectedItems.push(f.path);
+        });
+    } else {
+        state.selectedItems = [];
+    }
+    updateBulkActions();
+    renderFiles();
 }
 
 export function goUp(): void {
@@ -838,22 +946,24 @@ export function renderEvents(): void {
 
     list.innerHTML = '';
     sortedEvents.forEach(ev => {
-        const li = document.createElement('li');
-        li.className = 'folder-item';
-        li.style.padding = '0.4rem 0.5rem';
-        li.style.fontSize = '0.8rem';
+        const item = document.createElement('div');
+        item.className = 'activity-item';
 
         let icon = 'info';
-        if (ev.type === 'ItemFinished') icon = 'check-circle';
-        if (ev.type === 'ItemStarted') icon = 'refresh-cw';
-        if (ev.type.includes('Rejected')) icon = 'alert-triangle';
+        let color = 'var(--secondary-text)';
+        if (ev.type === 'ItemFinished') { icon = 'check-circle'; color = 'var(--success-color)'; }
+        if (ev.type === 'ItemStarted') { icon = 'refresh-cw'; color = 'var(--accent-color)'; }
+        if (ev.type.includes('Rejected')) { icon = 'alert-triangle'; color = 'var(--error-color)'; }
 
         const time = new Date(ev.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        li.innerHTML = `<span class="icon" style="width:14px; height:14px;"><i data-lucide="${icon}" style="width:12px; height:12px;"></i></span>
-                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <span style="color: var(--secondary-text)">[${time}]</span> ${ev.message}
-                        </div>`;
-        list.appendChild(li);
+        item.innerHTML = `
+            <span class="activity-time">${time}</span>
+            <div class="activity-message" style="display: flex; gap: 0.5rem; align-items: flex-start;">
+                <i data-lucide="${icon}" style="width: 14px; height: 14px; margin-top: 2px; color: ${color}; flex-shrink: 0;"></i>
+                <span>${ev.message}</span>
+            </div>
+        `;
+        list.appendChild(item);
     });
     if ((window as any).lucide) (window as any).lucide.createIcons();
 }
@@ -901,10 +1011,6 @@ export function switchView(viewName: string): void {
         case 'need':
             populateFolderSelect('need-folder-select');
             loadNeed();
-            break;
-        case 'remote-need':
-            populateFolderSelect('remote-need-folder-select');
-            populateDeviceSelect('remote-need-device-select');
             break;
     }
 
@@ -1368,6 +1474,9 @@ if (typeof window !== 'undefined' && window.document) {
     (window as any).bulkCopy = bulkCopy;
     (window as any).toggleOffline = toggleOffline;
     (window as any).logout = logout;
+    (window as any).toggleActivity = toggleActivity;
+    (window as any).setSort = setSort;
+    (window as any).toggleSelectAll = toggleSelectAll;
     (window as any).toggleSidebar = toggleSidebar;
     (window as any).addDevice = addDevice;
     (window as any).deleteDevice = deleteDevice;

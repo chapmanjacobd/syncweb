@@ -200,6 +200,46 @@ linters:
       min-complexity: 20
 
     gocritic:
+      # Enable specific checkers.
+      # Default: []
+      enable:
+        # Default checkers (diagnostic + style, non-experimental, non-opinionated)
+        - appendAssign
+        - argOrder
+        - badCall
+        - badCond
+        - caseOrder
+        - codegenComment
+        - deprecatedComment
+        - dupArg
+        - dupBranchBody
+        - dupCase
+        - dupSubExpr
+        - exitAfterDefer
+        - flagDeref
+        - flagName
+        - mapKey
+        - offBy1
+        - sloppyLen
+        - sloppyTypeAssert
+        - assignOp
+        - captLocal
+        - commentFormatting
+        - defaultCaseOrder
+        - elseif
+        - ifElseChain
+        - newDeref
+        - regexpMust
+        - singleCaseSwitch
+        - switchTrue
+        - typeSwitchVar
+        - underef
+        - unlambda
+        - unslice
+        - valSwap
+        - wrapperFunc
+        # Additional checkers
+        - hugeParam
       # Settings passed to gocritic.
       # The settings key is the name of a supported gocritic checker.
       # The list of supported checkers can be found at https://go-critic.com/overview.
@@ -455,6 +495,7 @@ linters:
           - forcetypeassert
           - noctx
           - unused
+          - funlen
       # Exclude revive exported/unused-parameter/empty-block from tests
       - path: _test\.go
         text: "unused-parameter"
@@ -462,10 +503,6 @@ linters:
           - revive
       - path: _test\.go
         text: "empty-block"
-        linters:
-          - revive
-      - path: _test\.go
-        text: "exported"
         linters:
           - revive
       - path: _test\.go
@@ -480,43 +517,14 @@ linters:
         text: "SA9003"
         linters:
           - staticcheck
-      # Exclude gochecknoinits from cmd/
-      - path: cmd/
-        linters:
-          - gochecknoinits
       # Exclude gochecknoglobals from internal/
       - path: internal/
         linters:
           - gochecknoglobals
-      # Exclude revive exported comment requirements
-      - path: internal/
-        text: "exported:"
-        linters:
-          - revive
-      # Exclude revive unused-parameter
-      - path: internal/
-        text: "unused-parameter"
-        linters:
-          - revive
       # Exclude nestif (too strict for complex business logic)
       - path: internal/
         linters:
           - nestif
-      # Exclude revive package-comments for internal packages
-      - path: internal/
-        text: "package-comments"
-        linters:
-          - revive
-      # Exclude revive var-naming for ALL_CAPS consts
-      - path: internal/
-        text: "don't use ALL_CAPS"
-        linters:
-          - revive
-      # Exclude revive var-naming for trailing underscores
-      - path: internal/
-        text: "don't use underscores in Go names"
-        linters:
-          - revive
       # Exclude revive indent-error-flow
       - path: internal/
         text: "indent-error-flow"
@@ -525,11 +533,6 @@ linters:
       # Exclude revive var-declaration
       - path: internal/
         text: "var-declaration"
-        linters:
-          - revive
-      # Exclude revive empty-block
-      - path: internal/
-        text: "empty-block"
         linters:
           - revive
       # Exclude gocritic ifElseChain (these are legitimate comparisons, not switch candidates)
@@ -557,8 +560,3 @@ linters:
       - path: internal/utils/consts.go
         linters:
           - gochecknoinits
-      # Exclude revive package-comments for cmd package
-      - path: cmd/
-        text: "package-comments"
-        linters:
-          - revive

@@ -235,7 +235,7 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fileEntry, rootItems *[]*fileEntry) {
 	// Access meta fields using helper functions
 	name := getMetaName(meta)
-	_ = getMetaType(meta)
+	metaType := getMetaType(meta)
 	sizeVal := getMetaSize(meta)
 	modTimeVal := getMetaModTime(meta)
 
@@ -258,6 +258,9 @@ func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fil
 		return
 	}
 
+	// Determine if this is a directory from metadata type
+	isDir := metaType == protocol.FileInfoTypeDirectory
+
 	// Build tree
 	currentMap := tree
 	var currentPath string
@@ -272,10 +275,12 @@ func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fil
 		}
 
 		if _, exists := currentMap[part]; !exists {
+			// For intermediate parts or last part that's a directory, mark as directory
+			entryIsDir := !isLast || (isLast && isDir)
 			entry := &fileEntry{
 				Name:     part,
 				Path:     entryPath,
-				IsDir:    !isLast,
+				IsDir:    entryIsDir,
 				Size:     0,
 				ModTime:  time.Time{},
 				Children: make(map[string]*fileEntry),

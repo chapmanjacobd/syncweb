@@ -39,10 +39,11 @@ Examples:
 `
 
 type ServeCmd struct {
-	Port      int    `help:"Port to listen on"                                 default:"8889" short:"p"`
-	Listen    string `help:"Address to listen on (default: 127.0.0.1)"`
-	PublicDir string `help:"Override embedded web assets with local directory"`
-	ReadOnly  bool   `help:"Disable file modifications"`
+	Port      int      `help:"Port to listen on"                                 default:"8889" short:"p"`
+	Listen    string   `help:"Address to listen on (default: 127.0.0.1)"`
+	PublicDir string   `help:"Override embedded web assets with local directory"`
+	ReadOnly  bool     `help:"Disable file modifications"`
+	SafeRoots []string `help:"Restrict local filesystem access to these directories"`
 
 	APIToken string `kong:"-"`
 
@@ -58,6 +59,14 @@ func (c *ServeCmd) Help() string {
 
 func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
+
+	// Default safe roots to home directory if not specified
+	if len(c.SafeRoots) == 0 {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			c.SafeRoots = []string{home}
+		}
+	}
 
 	// Use environment variable for API token if set (for testing)
 	if envToken := os.Getenv("SYNCWEB_API_TOKEN"); envToken != "" {
@@ -355,10 +364,8 @@ func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
 
 func (c *ServeCmd) isPathBlacklisted(path string) bool {
 	// Normalize the path to resolve any .. or . components
-	cleanPath := filepath.Clean(path)
-
-	// Block directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
 		return true
 	}
 
@@ -370,6 +377,8 @@ func (c *ServeCmd) isPathBlacklisted(path string) bool {
 		"/dev",
 		"/root",
 		"/boot",
+		"/var/lib",
+		"/var/log",
 	}
 
 	for _, sensitive := range sensitivePaths {
@@ -378,7 +387,48 @@ func (c *ServeCmd) isPathBlacklisted(path string) bool {
 		}
 	}
 
-	// Block paths with null bytes or other dangerous characters
+	// Block sensitive user files in any directory
+	sensitiveFiles := []string{
+		".ssh",
+		".gnupg",
+		".config",
+		".bash_history",
+		".zsh_history",
+		".netrc",
+		".aws",
+		".docker",
+		".kube",
+		"id_rsa",
+		"id_ed25519",
+		"id_ecdsa",
+		"id_dsa",
+	}
+
+	for _, sf := range sensitiveFiles {
+		if filepath.Base(cleanPath) == sf || strings.Contains(cleanPath, "/"+sf+"/") {
+			return true
+		}
+	}
+
+	// Check if path is within any of the safe roots
+	if len(c.SafeRoots) > 0 {
+		isSafe := false
+		for _, root := range c.SafeRoots {
+			absRoot, err := filepath.Abs(root)
+			if err != nil {
+				continue
+			}
+			if cleanPath == absRoot || strings.HasPrefix(cleanPath, absRoot+string(filepath.Separator)) {
+				isSafe = true
+				break
+			}
+		}
+		if !isSafe {
+			return true
+		}
+	}
+
+	// Block paths with null bytes
 	if strings.ContainsAny(cleanPath, "\x00") {
 		return true
 	}
@@ -439,12 +489,22 @@ func (c *ServeCmd) handleUnmount(w http.ResponseWriter, r *http.Request) {
 func (c *ServeCmd) handleLocalLs(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		path = "/"
+		if len(c.SafeRoots) > 0 {
+			path = c.SafeRoots[0]
+		} else {
+			path = "/"
+		}
 	}
 
 	// Validate path
 	if err := validatePath(path); err != nil {
 		http.Error(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check blacklist and safe roots
+	if c.isPathBlacklisted(path) {
+		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
 

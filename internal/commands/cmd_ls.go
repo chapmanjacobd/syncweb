@@ -221,14 +221,7 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 	var rootItems []*fileEntry
 
 	for meta := range seq {
-		// Wrap meta to convert fields to methods
-		wrapped := fileMetadataWrapper{
-			name:     meta.Name,
-			fileType: meta.Type,
-			size:     meta.Size,
-			modNanos: meta.ModNanos,
-		}
-		c.processFile(wrapped, prefix, tree, &rootItems)
+		c.processFile(meta, prefix, tree, &rootItems)
 	}
 
 	// Calculate folder sizes if needed
@@ -240,18 +233,21 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 }
 
 func (c *SyncwebLsCmd) processFile(
-	meta interface {
-		Name() string
-		Type() protocol.FileInfoType
-		Size() int64
-		ModNanos() int64
+	meta struct {
+		Name       string
+		Sequence   int64
+		ModNanos   int64
+		Size       int64
+		LocalFlags protocol.FlagLocal
+		Type       protocol.FileInfoType
+		Deleted    bool
 	},
 	prefix string, tree map[string]*fileEntry, rootItems *[]*fileEntry,
 ) {
 	// Access meta fields directly
-	name := meta.Name()
-	sizeVal := meta.Size()
-	modTimeVal := time.Unix(0, meta.ModNanos())
+	name := meta.Name
+	sizeVal := meta.Size
+	modTimeVal := time.Unix(0, meta.ModNanos)
 
 	// Filter by prefix
 	if prefix != "" {
@@ -273,7 +269,7 @@ func (c *SyncwebLsCmd) processFile(
 	}
 
 	// Determine if this is a directory from metadata type
-	isDir := meta.Type() == protocol.FileInfoTypeDirectory
+	isDir := meta.Type == protocol.FileInfoTypeDirectory
 
 	// Build tree
 	currentMap := tree

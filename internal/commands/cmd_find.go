@@ -117,14 +117,7 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					folder:           f,
 					cmd:              g,
 				}
-				// Wrap meta to convert fields to methods
-				wrapped := fileMetadataWrapper{
-					name:     meta.Name,
-					fileType: meta.Type,
-					size:     meta.Size,
-					modNanos: meta.ModNanos,
-				}
-				result, include := c.processFile(wrapped, ctx)
+				result, include := c.processFile(meta, ctx)
 				if include {
 					results = append(results, result)
 				}
@@ -352,33 +345,20 @@ type processFileContext struct {
 	cmd              *SyncwebCmd
 }
 
-// processFileMeta is the interface for file metadata from Syncthing
-type processFileMeta interface {
-	Name() string
-	Type() protocol.FileInfoType
-	Size() int64
-	ModNanos() int64
-}
-
-// fileMetadataWrapper wraps db.FileMetadata to provide method access
-type fileMetadataWrapper struct {
-	name     string
-	fileType protocol.FileInfoType
-	size     int64
-	modNanos int64
-}
-
-func (w fileMetadataWrapper) Name() string              { return w.name }
-func (w fileMetadataWrapper) Type() protocol.FileInfoType { return w.fileType }
-func (w fileMetadataWrapper) Size() int64               { return w.size }
-func (w fileMetadataWrapper) ModNanos() int64           { return w.modNanos }
-
 func (c *SyncwebFindCmd) processFile(
-	meta processFileMeta,
+	meta struct {
+		Name       string
+		Sequence   int64
+		ModNanos   int64
+		Size       int64
+		LocalFlags protocol.FlagLocal
+		Type       protocol.FileInfoType
+		Deleted    bool
+	},
 	ctx *processFileContext,
 ) (findResult, bool) {
-	isDir := meta.Type() == protocol.FileInfoTypeDirectory
-	name := meta.Name()
+	isDir := meta.Type == protocol.FileInfoTypeDirectory
+	name := meta.Name
 
 	// Type filter
 	if !c.checkTypeFilter(isDir) {
@@ -396,12 +376,12 @@ func (c *SyncwebFindCmd) processFile(
 	}
 
 	// Size filter (files only)
-	if !c.checkSizeFilter(isDir, meta.Size(), ctx.sizeMin, ctx.sizeMax) {
+	if !c.checkSizeFilter(isDir, meta.Size, ctx.sizeMin, ctx.sizeMax) {
 		return findResult{}, false
 	}
 
 	// Time filter
-	if !c.checkTimeFilter(time.Unix(0, meta.ModNanos()), ctx.modifiedAfterTS, ctx.modifiedBeforeTS) {
+	if !c.checkTimeFilter(time.Unix(0, meta.ModNanos), ctx.modifiedAfterTS, ctx.modifiedBeforeTS) {
 		return findResult{}, false
 	}
 
@@ -434,8 +414,8 @@ func (c *SyncwebFindCmd) processFile(
 		return findResult{
 			Name:     filepath.Base(name),
 			Path:     path,
-			Size:     meta.Size(),
-			Modified: time.Unix(0, meta.ModNanos()),
+			Size:     meta.Size,
+			Modified: time.Unix(0, meta.ModNanos),
 			IsDir:    isDir,
 		}, true
 	}

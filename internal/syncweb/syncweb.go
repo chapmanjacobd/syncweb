@@ -28,9 +28,10 @@ const (
 )
 
 type Measurement struct {
-	TotalTime time.Duration
-	Count     int64
-	Errors    int64
+	TotalTime  time.Duration
+	TotalBytes int64
+	Count      int64
+	Errors     int64
 }
 
 type DeviceInfo struct {
@@ -61,7 +62,7 @@ func NewMeasurements() *Measurements {
 	}
 }
 
-func (m *Measurements) Record(id protocol.DeviceID, duration time.Duration, err error) {
+func (m *Measurements) Record(id protocol.DeviceID, duration time.Duration, bytes int, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -73,6 +74,7 @@ func (m *Measurements) Record(id protocol.DeviceID, duration time.Duration, err 
 		meas.Errors++
 	} else {
 		meas.TotalTime += duration
+		meas.TotalBytes += int64(bytes)
 		meas.Count++
 	}
 }
@@ -82,15 +84,27 @@ func (m *Measurements) Score(id protocol.DeviceID) float64 {
 	defer m.mutex.RUnlock()
 
 	meas, ok := m.data[id]
-	if !ok || meas.Count == 0 {
-		return 0 // Neutral score for new peers
+	if !ok || (meas.Count == 0 && meas.Errors == 0) {
+		return 0.5 // Neutral base score, slightly better than peers with errors
 	}
 
-	avgTime := float64(meas.TotalTime) / float64(meas.Count)
+	if meas.Count == 0 {
+		return 1e18 + float64(meas.Errors) // Extremely high penalty for peers with only errors
+	}
+
+	// Calculate average time per byte (inverse of bandwidth)
+	var timePerByte float64
+	if meas.TotalBytes > 0 {
+		timePerByte = float64(meas.TotalTime) / float64(meas.TotalBytes)
+	} else {
+		// Use a conservative estimate if we have counts but no bytes (should be rare)
+		timePerByte = float64(meas.TotalTime) / float64(meas.Count) / 128e3
+	}
+
 	errorRate := float64(meas.Errors) / float64(meas.Count+meas.Errors)
 
-	// Lower is better. Penalty for errors
-	return avgTime * (1.0 + errorRate*10.0)
+	// Lower is better. Strong penalty for errors.
+	return timePerByte * (1.0 + errorRate*100.0)
 }
 
 type Syncweb struct {
@@ -824,7 +838,7 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 				block,
 				peer.FromTemporary,
 			)
-			r.s.Measurements.Record(peer.ID, time.Since(startTime), downloadErr)
+			r.s.Measurements.Record(peer.ID, time.Since(startTime), len(data), downloadErr)
 			if downloadErr == nil {
 				break
 			}

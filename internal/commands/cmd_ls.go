@@ -261,7 +261,7 @@ func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fil
 	// Build tree
 	currentMap := tree
 	var currentPath string
-	var isNewRootItem bool
+	var newRootEntry *fileEntry
 
 	for i, part := range parts {
 		isLast := i == len(parts)-1
@@ -287,7 +287,10 @@ func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fil
 			}
 
 			currentMap[part] = entry
-			isNewRootItem = (currentPath == "")
+			// Track if this is a new root-level item
+			if currentPath == "" {
+				newRootEntry = entry
+			}
 		} else if !isLast {
 			currentMap[part].IsDir = true
 		}
@@ -300,10 +303,8 @@ func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fil
 		}
 	}
 
-	if isNewRootItem {
-		if entry, ok := currentMap[parts[0]]; ok {
-			*rootItems = append(*rootItems, entry)
-		}
+	if newRootEntry != nil {
+		*rootItems = append(*rootItems, newRootEntry)
 	}
 }
 

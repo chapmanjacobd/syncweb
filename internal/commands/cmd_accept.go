@@ -50,78 +50,16 @@ type AcceptResult struct {
 
 func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		// Parse device IDs (support comma-separated)
-		var deviceIDs []string
-		for _, id := range c.DeviceIDs {
-			parts := strings.SplitSeq(id, ",")
-			for p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					deviceIDs = append(deviceIDs, p)
-				}
-			}
-		}
+		deviceIDs := parseDeviceIDs(c.DeviceIDs)
 
-		result := AcceptResult{
-			Devices: []string{},
-			Errors:  []string{},
-		}
-
-		for _, devID := range deviceIDs {
-			// Validate device ID format
-			if _, err := utils.ExtractDeviceID(devID); err != nil {
-				errMsg := fmt.Sprintf("Invalid Device ID %s: %v", devID, err)
-				result.Errors = append(result.Errors, errMsg)
-				if !g.JSON {
-					fmt.Println(errMsg)
-				}
-				continue
-			}
-
-			if err := s.AddDevice(devID, "", c.Introducer); err != nil {
-				errMsg := fmt.Sprintf("Failed to add device %s: %v", devID, err)
-				result.Errors = append(result.Errors, errMsg)
-				if !g.JSON {
-					fmt.Println(errMsg)
-				}
-				continue
-			}
-			result.Devices = append(result.Devices, devID)
-			result.DeviceCount++
-		}
+		result := c.acceptDevices(s, deviceIDs, g.JSON)
 
 		// Add devices to folders if specified
-		if len(c.FolderIDs) > 0 {
-			for _, fldID := range c.FolderIDs {
-				if err := s.AddFolderDevices(fldID, result.Devices); err != nil {
-					errMsg := fmt.Sprintf("Failed to add devices to folder %s: %v", fldID, err)
-					result.Errors = append(result.Errors, errMsg)
-					if !g.JSON {
-						fmt.Println(errMsg)
-					}
-					continue
-				}
-
-				// Pause and resume devices to unstuck connections
-				for _, devID := range result.Devices {
-					if err := s.PauseDevice(devID); err != nil {
-						slog.Warn("Failed to pause device", "device", devID, "error", err)
-					}
-				}
-				for _, devID := range result.Devices {
-					if err := s.ResumeDevice(devID); err != nil {
-						slog.Warn("Failed to resume device", "device", devID, "error", err)
-					}
-				}
-			}
+		if len(c.FolderIDs) > 0 && len(result.Devices) > 0 {
+			c.addDevicesToFolders(s, c.FolderIDs, result.Devices, g.JSON, &result)
 		}
 
-		if g.JSON {
-			jsonData, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(jsonData))
-		} else {
-			fmt.Printf("Added %d %s\n", result.DeviceCount, utils.Pluralize(result.DeviceCount, "device", "devices"))
-		}
+		c.printResult(result, g.JSON)
 
 		// Exit with error if all device IDs were invalid
 		if len(deviceIDs) > 0 && result.DeviceCount == 0 {
@@ -130,4 +68,116 @@ func (c *SyncwebAcceptCmd) Run(g *SyncwebCmd) error {
 
 		return nil
 	})
+}
+
+// parseDeviceIDs parses comma-separated device IDs
+func parseDeviceIDs(deviceIDs []string) []string {
+	var result []string
+	for _, id := range deviceIDs {
+		parts := strings.SplitSeq(id, ",")
+		for p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+	}
+	return result
+}
+
+// acceptDevices validates and adds devices to syncweb
+func (c *SyncwebAcceptCmd) acceptDevices(s *syncweb.Syncweb, deviceIDs []string, isJSON bool) AcceptResult {
+	result := AcceptResult{
+		Devices: []string{},
+		Errors:  []string{},
+	}
+
+	for _, devID := range deviceIDs {
+		if !c.validateAndAddDevice(s, devID, isJSON, &result) {
+			continue
+		}
+		result.Devices = append(result.Devices, devID)
+		result.DeviceCount++
+	}
+
+	return result
+}
+
+// validateAndAddDevice validates a device ID and adds it to syncweb
+func (c *SyncwebAcceptCmd) validateAndAddDevice(
+	s *syncweb.Syncweb,
+	devID string,
+	isJSON bool,
+	result *AcceptResult,
+) bool {
+	if _, err := utils.ExtractDeviceID(devID); err != nil {
+		errMsg := fmt.Sprintf("Invalid Device ID %s: %v", devID, err)
+		result.Errors = append(result.Errors, errMsg)
+		if !isJSON {
+			fmt.Println(errMsg)
+		}
+		return false
+	}
+
+	if err := s.AddDevice(devID, "", c.Introducer); err != nil {
+		errMsg := fmt.Sprintf("Failed to add device %s: %v", devID, err)
+		result.Errors = append(result.Errors, errMsg)
+		if !isJSON {
+			fmt.Println(errMsg)
+		}
+		return false
+	}
+
+	return true
+}
+
+// addDevicesToFolders adds accepted devices to specified folders
+func (c *SyncwebAcceptCmd) addDevicesToFolders(
+	s *syncweb.Syncweb,
+	folderIDs, deviceIDs []string,
+	isJSON bool,
+	result *AcceptResult,
+) {
+	for _, fldID := range folderIDs {
+		if err := s.AddFolderDevices(fldID, deviceIDs); err != nil {
+			errMsg := fmt.Sprintf("Failed to add devices to folder %s: %v", fldID, err)
+			result.Errors = append(result.Errors, errMsg)
+			if !isJSON {
+				fmt.Println(errMsg)
+			}
+			continue
+		}
+
+		// Pause and resume devices to unstuck connections
+		c.pauseAndResumeDevices(s, deviceIDs)
+	}
+}
+
+// pauseAndResumeDevices pauses and resumes devices to refresh connections
+func (c *SyncwebAcceptCmd) pauseAndResumeDevices(s *syncweb.Syncweb, deviceIDs []string) {
+	logger := slog.Default()
+	for _, devID := range deviceIDs {
+		if err := s.PauseDevice(devID); err != nil {
+			logger.Warn("Failed to pause device", "device", devID, "error", err)
+		}
+	}
+	for _, devID := range deviceIDs {
+		if err := s.ResumeDevice(devID); err != nil {
+			logger.Warn("Failed to resume device", "device", devID, "error", err)
+		}
+	}
+}
+
+// printResult prints the accept result
+func (c *SyncwebAcceptCmd) printResult(result AcceptResult, isJSON bool) {
+	if isJSON {
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf("Error marshaling result: %v\n", err)
+			return
+		}
+		fmt.Println(string(jsonData))
+	} else {
+		fmt.Printf("Added %d %s\n", result.DeviceCount, utils.Pluralize(result.DeviceCount, "device", "devices"))
+	}
 }

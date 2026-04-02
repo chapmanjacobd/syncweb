@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/protocol"
 
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
@@ -47,141 +48,190 @@ func (c *SyncwebStatCmd) Help() string {
 func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
 		cfg := s.Node.Cfg.RawCopy()
-
-		// Build device ID to name map
-		deviceNames := make(map[string]string)
-		for _, d := range cfg.Devices {
-			name := d.Name
-			if name == "" {
-				name = d.DeviceID.String()[:7]
-			}
-			deviceNames[d.DeviceID.String()] = name
-		}
+		deviceNames := buildDeviceNamesMap(cfg.Devices)
 
 		for _, p := range c.Paths {
-			absPath, err := filepath.Abs(p)
-			if err != nil {
-				fmt.Printf("Error: %s: %v\n", p, err)
-				continue
-			}
-
-			// Find folder and relative path
-			var folderID string
-			var relPath string
-
-			for _, f := range cfg.Folders {
-				if strings.HasPrefix(absPath, f.Path) {
-					folderID = f.ID
-					var relErr error
-					relPath, relErr = filepath.Rel(f.Path, absPath)
-					if relErr != nil {
-						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, relErr)
-						continue
-					}
-					break
-				}
-			}
-
-			if folderID == "" {
-				fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
-				continue
-			}
-
-			info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-				continue
-			}
-			if !ok {
-				fmt.Printf("%s: Not found in cluster\n", p)
-				continue
-			}
-
-			// Get device availability
-			availability := getDeviceAvailability(s, folderID, info)
-
-			if c.Terse {
-				// Terse format: name|size|blocks|permissions|type|modified|device_count|has_diffs
-				fmt.Printf("%s|%d|%d|%o|file|%d|%d|0\n",
-					info.Name,
-					info.Size,
-					len(info.Blocks),
-					info.Permissions,
-					info.ModTime().Unix(),
-					len(availability),
-				)
-			} else if c.Format != "" {
-				// Custom format
-				output := c.Format
-				output = strings.ReplaceAll(output, "%n", info.Name)
-				output = strings.ReplaceAll(output, "%s", strconv.FormatInt(info.Size, 10))
-				output = strings.ReplaceAll(output, "%b", strconv.Itoa(len(info.Blocks)))
-				output = strings.ReplaceAll(output, "%f", fmt.Sprintf("%o", info.Permissions))
-				output = strings.ReplaceAll(output, "%y", info.ModTime().Format("2006-01-02 15:04:05"))
-				fmt.Println(output)
-			} else {
-				// Full format
-				fileType := GetFileType(info)
-				fmt.Printf("  Path: %s\n", p)
-				fmt.Printf("  Size: %-15d Blocks: %-10d %s\n", info.Size, len(info.Blocks), fileType)
-
-				// Device availability
-				var deviceStr string
-				if len(availability) == 0 {
-					deviceStr = "none"
-				} else if len(availability) <= 3 {
-					names := make([]string, 0, len(availability))
-					for _, devID := range availability {
-						if name, ok := deviceNames[devID]; ok {
-							names = append(names, name)
-						} else {
-							names = append(names, devID[:7])
-						}
-					}
-					deviceStr = strings.Join(names, ", ")
-				} else {
-					deviceStr = fmt.Sprintf("%d devices", len(availability))
-				}
-
-				// Version vector display
-				versionStr := FormatVersion(info.Version)
-
-				fmt.Printf("Device: %-15s Version: %s\n", deviceStr, versionStr)
-
-				// Flags display
-				var flags []string
-				if info.Deleted {
-					flags = append(flags, "deleted")
-				}
-				if info.LocalFlags.IsInvalid() {
-					flags = append(flags, "invalid")
-				}
-				if info.LocalFlags&protocol.FlagLocalIgnored != 0 {
-					flags = append(flags, "ignored")
-				}
-				flagStr := ""
-				if len(flags) > 0 {
-					flagStr = fmt.Sprintf(" [%s]", strings.Join(flags, ", "))
-				}
-
-				fmt.Printf("Access: (%o/---------)%s\n", info.Permissions, flagStr)
-
-				// Timestamps
-				fmt.Printf("Modify: %s\n", info.ModTime().Format("2006-01-02 15:04:05"))
-
-				// Modified by tracking
-				if info.ModifiedBy != 0 {
-					modifiedByID := info.ModifiedBy.String()
-					modifiedByName := deviceNames[modifiedByID]
-					if modifiedByName == "" {
-						modifiedByName = modifiedByID[:7]
-					}
-					fmt.Printf("Modified by: %s\n", modifiedByName)
-				}
-			}
+			c.processPath(s, p, cfg, deviceNames, g.JSON)
 		}
+
 		return nil
 	})
+}
+
+// buildDeviceNamesMap builds a map of device ID to name
+func buildDeviceNamesMap(devices []config.DeviceConfiguration) map[string]string {
+	deviceNames := make(map[string]string)
+	for _, d := range devices {
+		name := d.Name
+		if name == "" {
+			name = d.DeviceID.String()[:7]
+		}
+		deviceNames[d.DeviceID.String()] = name
+	}
+	return deviceNames
+}
+
+// processPath processes a single path for stat command
+func (c *SyncwebStatCmd) processPath(
+	s *syncweb.Syncweb,
+	path string,
+	cfg config.Configuration,
+	deviceNames map[string]string,
+	_ bool,
+) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		fmt.Printf("Error: %s: %v\n", path, err)
+		return
+	}
+
+	folderID, relPath, found := c.findFolderAndPath(absPath, cfg)
+	if !found {
+		fmt.Printf("Error: %s is not inside of a Syncweb folder\n", path)
+		return
+	}
+
+	info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	if !ok {
+		fmt.Printf("%s: Not found in cluster\n", path)
+		return
+	}
+
+	availability := getDeviceAvailability(s, folderID, info)
+	c.printStatInfo(path, info, availability, deviceNames)
+}
+
+// findFolderAndPath finds the folder ID and relative path for a given absolute path
+func (c *SyncwebStatCmd) findFolderAndPath(
+	absPath string,
+	cfg config.Configuration,
+) (folderID, relPath string, found bool) {
+	for _, f := range cfg.Folders {
+		if strings.HasPrefix(absPath, f.Path) {
+			folderID = f.ID
+			relPath, relErr := filepath.Rel(f.Path, absPath)
+			if relErr != nil {
+				return "", "", false
+			}
+			return folderID, relPath, true
+		}
+	}
+	return "", "", false
+}
+
+// printStatInfo prints file stat information in the appropriate format
+func (c *SyncwebStatCmd) printStatInfo(
+	path string,
+	info protocol.FileInfo,
+	availability []string,
+	deviceNames map[string]string,
+) {
+	if c.Terse {
+		c.printTerseStat(info, availability)
+	} else if c.Format != "" {
+		c.printCustomStat(info)
+	} else {
+		c.printFullStat(path, info, availability, deviceNames)
+	}
+}
+
+// printTerseStat prints terse format stat output
+func (c *SyncwebStatCmd) printTerseStat(info protocol.FileInfo, availability []string) {
+	fmt.Printf("%s|%d|%d|%o|file|%d|%d|0\n",
+		info.Name,
+		info.Size,
+		len(info.Blocks),
+		info.Permissions,
+		info.ModTime().Unix(),
+		len(availability),
+	)
+}
+
+// printCustomStat prints custom format stat output
+func (c *SyncwebStatCmd) printCustomStat(info protocol.FileInfo) {
+	output := c.Format
+	output = strings.ReplaceAll(output, "%n", info.Name)
+	output = strings.ReplaceAll(output, "%s", strconv.FormatInt(info.Size, 10))
+	output = strings.ReplaceAll(output, "%b", strconv.Itoa(len(info.Blocks)))
+	output = strings.ReplaceAll(output, "%f", fmt.Sprintf("%o", info.Permissions))
+	output = strings.ReplaceAll(output, "%y", info.ModTime().Format("2006-01-02 15:04:05"))
+	fmt.Println(output)
+}
+
+// printFullStat prints full format stat output
+func (c *SyncwebStatCmd) printFullStat(
+	path string,
+	info protocol.FileInfo,
+	availability []string,
+	deviceNames map[string]string,
+) {
+	fileType := GetFileType(info)
+	fmt.Printf("  Path: %s\n", path)
+	fmt.Printf("  Size: %-15d Blocks: %-10d %s\n", info.Size, len(info.Blocks), fileType)
+
+	deviceStr := c.formatDeviceAvailability(availability, deviceNames)
+	versionStr := FormatVersion(info.Version)
+	fmt.Printf("Device: %-15s Version: %s\n", deviceStr, versionStr)
+
+	flags := c.buildFlagsList(info)
+	flagStr := ""
+	if len(flags) > 0 {
+		flagStr = fmt.Sprintf(" [%s]", strings.Join(flags, ", "))
+	}
+	fmt.Printf("Access: (%o/---------)%s\n", info.Permissions, flagStr)
+	fmt.Printf("Modify: %s\n", info.ModTime().Format("2006-01-02 15:04:05"))
+
+	if info.ModifiedBy != 0 {
+		c.printModifiedBy(info.ModifiedBy, deviceNames)
+	}
+}
+
+// formatDeviceAvailability formats the device availability string
+func (c *SyncwebStatCmd) formatDeviceAvailability(availability []string, deviceNames map[string]string) string {
+	if len(availability) == 0 {
+		return "none"
+	}
+	if len(availability) <= 3 {
+		names := make([]string, 0, len(availability))
+		for _, devID := range availability {
+			if name, ok := deviceNames[devID]; ok {
+				names = append(names, name)
+			} else {
+				names = append(names, devID[:7])
+			}
+		}
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%d devices", len(availability))
+}
+
+// buildFlagsList builds a list of flags for the file
+func (c *SyncwebStatCmd) buildFlagsList(info protocol.FileInfo) []string {
+	var flags []string
+	if info.Deleted {
+		flags = append(flags, "deleted")
+	}
+	if info.LocalFlags.IsInvalid() {
+		flags = append(flags, "invalid")
+	}
+	if info.LocalFlags&protocol.FlagLocalIgnored != 0 {
+		flags = append(flags, "ignored")
+	}
+	return flags
+}
+
+// printModifiedBy prints the modified by information
+func (c *SyncwebStatCmd) printModifiedBy(modifiedBy protocol.ShortID, deviceNames map[string]string) {
+	modifiedByID := modifiedBy.String()
+	modifiedByName := deviceNames[modifiedByID]
+	if modifiedByName == "" {
+		modifiedByName = modifiedByID[:7]
+	}
+	fmt.Printf("Modified by: %s\n", modifiedByName)
 }
 
 // getDeviceAvailability returns a list of device IDs that have the file

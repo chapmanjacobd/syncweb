@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syncthing/syncthing/lib/config"
+
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
@@ -67,135 +69,183 @@ func (c *SyncwebSortCmd) Run(g *SyncwebCmd) error {
 			limitBytes, _ = utils.HumanToBytes(c.LimitSize)
 		}
 
-		var files []fileWithInfo
+		files := c.collectFiles(s)
+		files = c.applySeederFilters(files)
+		files = c.sortFiles(files)
+		c.printFiles(files, limitBytes)
 
-		cfg := s.Node.Cfg.RawCopy()
-		for _, p := range c.Paths {
-			absPath, err := filepath.Abs(p)
-			if err != nil {
-				fmt.Printf("Error: %s: %v\n", p, err)
-				continue
-			}
-
-			// Find folder
-			var folderID string
-			var relPath string
-
-			for _, f := range cfg.Folders {
-				if strings.HasPrefix(absPath, f.Path) {
-					folderID = f.ID
-					var relErr error
-					relPath, relErr = filepath.Rel(f.Path, absPath)
-					if relErr != nil {
-						fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, relErr)
-						continue
-					}
-					break
-				}
-			}
-
-			if folderID == "" {
-				continue
-			}
-
-			info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
-			if err == nil && ok {
-				// Count seeders for this file
-				seeders, err := s.CountSeeders(folderID, relPath)
-				if err != nil {
-					slog.Warn("Failed to count seeders", "path", relPath, "error", err)
-					seeders = 0
-				}
-
-				files = append(files, fileWithInfo{
-					Path:       p,
-					Size:       info.Size,
-					FolderID:   folderID,
-					RelPath:    relPath,
-					Seeders:    seeders,
-					Modified:   info.ModifiedS,
-					AccessTime: 0, // AccessTime is not available in protocol.FileInfo
-				})
-			}
-		}
-
-		// Apply seeder filters
-		if c.MinSeeders > 0 {
-			filtered := make([]fileWithInfo, 0, len(files))
-			for _, f := range files {
-				if f.Seeders >= c.MinSeeders {
-					filtered = append(filtered, f)
-				}
-			}
-			files = filtered
-		}
-
-		if c.MaxSeeders > 0 {
-			filtered := make([]fileWithInfo, 0, len(files))
-			for _, f := range files {
-				if f.Seeders <= c.MaxSeeders {
-					filtered = append(filtered, f)
-				}
-			}
-			files = filtered
-		}
-
-		// Sort files
-		sort.Slice(files, func(i, j int) bool {
-			for _, criterion := range c.Sort {
-				reverse := strings.HasPrefix(criterion, "-")
-				if reverse {
-					criterion = criterion[1:]
-				}
-
-				var less bool
-				switch criterion {
-				case "size":
-					less = files[i].Size < files[j].Size
-				case "name", "path":
-					less = files[i].Path < files[j].Path
-				case "seeds", "peers":
-					less = files[i].Seeders < files[j].Seeders
-				case "niche":
-					// Niche score: closer to ideal = better
-					nicheI := files[i].Seeders - c.Niche
-					nicheJ := files[j].Seeders - c.Niche
-					if nicheI < 0 {
-						nicheI = -nicheI
-					}
-					if nicheJ < 0 {
-						nicheJ = -nicheJ
-					}
-					less = nicheI < nicheJ
-				case "frecency":
-					// Frecency: combination of frequency (seeders) and recency
-					frecencyI := calculateFrecency(files[i], c.FrecencyWeight)
-					frecencyJ := calculateFrecency(files[j], c.FrecencyWeight)
-					less = frecencyI < frecencyJ
-				case "modified", "time":
-					less = files[i].Modified < files[j].Modified
-				default:
-					continue
-				}
-
-				if reverse {
-					return !less
-				}
-				return less
-			}
-			return false
-		})
-
-		currentSize := int64(0)
-		for _, f := range files {
-			if limitBytes > 0 && currentSize+f.Size > limitBytes {
-				break
-			}
-			fmt.Println(f.Path)
-			currentSize += f.Size
-		}
 		return nil
 	})
+}
+
+// collectFiles collects files from syncweb folders
+func (c *SyncwebSortCmd) collectFiles(s *syncweb.Syncweb) []fileWithInfo {
+	cfg := s.Node.Cfg.RawCopy()
+	files := make([]fileWithInfo, 0, len(c.Paths))
+
+	for _, p := range c.Paths {
+		files = append(files, c.collectFilesForPath(s, cfg, p)...)
+	}
+
+	return files
+}
+
+// collectFilesForPath collects files for a single path
+func (c *SyncwebSortCmd) collectFilesForPath(s *syncweb.Syncweb, cfg config.Configuration, path string) []fileWithInfo {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		fmt.Printf("Error: %s: %v\n", path, err)
+		return nil
+	}
+
+	folderID, relPath, found := c.findFolderAndPath(absPath, cfg)
+	if !found {
+		return nil
+	}
+
+	info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
+	if err != nil || !ok {
+		return nil
+	}
+
+	seeders, err := s.CountSeeders(folderID, relPath)
+	if err != nil {
+		logger := slog.Default()
+		logger.Warn("Failed to count seeders", "path", relPath, "error", err)
+		seeders = 0
+	}
+
+	return []fileWithInfo{{
+		Path:       path,
+		Size:       info.Size,
+		FolderID:   folderID,
+		RelPath:    relPath,
+		Seeders:    seeders,
+		Modified:   info.ModifiedS,
+		AccessTime: 0,
+	}}
+}
+
+// findFolderAndPath finds the folder ID and relative path for a given absolute path
+func (c *SyncwebSortCmd) findFolderAndPath(
+	absPath string,
+	cfg config.Configuration,
+) (folderID, relPath string, found bool) {
+	for _, f := range cfg.Folders {
+		if strings.HasPrefix(absPath, f.Path) {
+			folderID = f.ID
+			relPath, relErr := filepath.Rel(f.Path, absPath)
+			if relErr != nil {
+				return "", "", false
+			}
+			return folderID, relPath, true
+		}
+	}
+	return "", "", false
+}
+
+// applySeederFilters applies seeder count filters
+func (c *SyncwebSortCmd) applySeederFilters(files []fileWithInfo) []fileWithInfo {
+	if c.MinSeeders > 0 {
+		files = filterMinSeeders(files, c.MinSeeders)
+	}
+	if c.MaxSeeders > 0 {
+		files = filterMaxSeeders(files, c.MaxSeeders)
+	}
+	return files
+}
+
+// filterMinSeeders filters files with fewer than minSeeders seeders
+func filterMinSeeders(files []fileWithInfo, minSeeders int) []fileWithInfo {
+	filtered := make([]fileWithInfo, 0, len(files))
+	for _, f := range files {
+		if f.Seeders >= minSeeders {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// filterMaxSeeders filters files with more than maxSeeders seeders
+func filterMaxSeeders(files []fileWithInfo, maxSeeders int) []fileWithInfo {
+	filtered := make([]fileWithInfo, 0, len(files))
+	for _, f := range files {
+		if f.Seeders <= maxSeeders {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// sortFiles sorts files according to sort criteria
+func (c *SyncwebSortCmd) sortFiles(files []fileWithInfo) []fileWithInfo {
+	sort.Slice(files, func(i, j int) bool {
+		return c.compareFiles(files[i], files[j])
+	})
+	return files
+}
+
+// compareFiles compares two files based on sort criteria
+func (c *SyncwebSortCmd) compareFiles(a, b fileWithInfo) bool {
+	for _, criterion := range c.Sort {
+		reverse := strings.HasPrefix(criterion, "-")
+		if reverse {
+			criterion = criterion[1:]
+		}
+
+		less := c.compareByCriterion(a, b, criterion)
+
+		if reverse {
+			return !less
+		}
+		if less {
+			return true
+		}
+	}
+	return false
+}
+
+// compareByCriterion compares two files by a single criterion
+func (c *SyncwebSortCmd) compareByCriterion(a, b fileWithInfo, criterion string) bool {
+	switch criterion {
+	case "size":
+		return a.Size < b.Size
+	case "name", "path":
+		return a.Path < b.Path
+	case "seeds", "peers":
+		return a.Seeders < b.Seeders
+	case "niche":
+		nicheA := abs(a.Seeders - c.Niche)
+		nicheB := abs(b.Seeders - c.Niche)
+		return nicheA < nicheB
+	case "frecency":
+		frecencyA := calculateFrecency(a, c.FrecencyWeight)
+		frecencyB := calculateFrecency(b, c.FrecencyWeight)
+		return frecencyA < frecencyB
+	case "modified", "time":
+		return a.Modified < b.Modified
+	}
+	return false
+}
+
+// abs returns the absolute value of an integer
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// printFiles prints the sorted files
+func (c *SyncwebSortCmd) printFiles(files []fileWithInfo, limitBytes int64) {
+	currentSize := int64(0)
+	for _, f := range files {
+		if limitBytes > 0 && currentSize+f.Size > limitBytes {
+			break
+		}
+		fmt.Println(f.Path)
+		currentSize += f.Size
+	}
 }
 
 // calculateFrecency computes a score based on recency and popularity (seed count)

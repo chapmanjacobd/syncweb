@@ -46,77 +46,15 @@ type DropResult struct {
 
 func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		// Parse device IDs (support comma-separated)
-		var deviceIDs []string
-		for _, id := range c.DeviceIDs {
-			parts := strings.SplitSeq(id, ",")
-			for p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					deviceIDs = append(deviceIDs, p)
-				}
-			}
-		}
-
-		result := DropResult{
-			Devices: []string{},
-			Errors:  []string{},
-		}
+		deviceIDs := parseDropDeviceIDs(c.DeviceIDs)
 
 		// If folder IDs specified, remove devices from folders
 		if len(c.FolderIDs) > 0 {
-			for _, fldID := range c.FolderIDs {
-				if err := s.RemoveFolderDevices(fldID, deviceIDs); err != nil {
-					errMsg := fmt.Sprintf("Failed to remove devices from folder %s: %v", fldID, err)
-					result.Errors = append(result.Errors, errMsg)
-					if !g.JSON {
-						fmt.Println(errMsg)
-					}
-					continue
-				}
-
-				// Pause and resume devices to immediately drop connections
-				for _, devID := range deviceIDs {
-					if err := s.PauseDevice(devID); err != nil {
-						slog.Warn("Failed to pause device", "device", devID, "error", err)
-					}
-				}
-				for _, devID := range deviceIDs {
-					if err := s.ResumeDevice(devID); err != nil {
-						slog.Warn("Failed to resume device", "device", devID, "error", err)
-					}
-				}
-			}
-
-			if g.JSON {
-				jsonData, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(jsonData))
-			} else {
-				fmt.Printf("Removed from %d folder(s)\n", len(c.FolderIDs))
-			}
-			return nil
+			return c.removeDevicesFromFolders(s, c.FolderIDs, deviceIDs, g.JSON)
 		}
 
 		// Remove devices entirely
-		for _, devID := range deviceIDs {
-			if err := s.DeleteDevice(devID); err != nil {
-				errMsg := fmt.Sprintf("Failed to remove device %s: %v", devID, err)
-				result.Errors = append(result.Errors, errMsg)
-				if !g.JSON {
-					fmt.Println(errMsg)
-				}
-				continue
-			}
-			result.Devices = append(result.Devices, devID)
-			result.DeviceCount++
-		}
-
-		if g.JSON {
-			jsonData, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(jsonData))
-		} else {
-			fmt.Printf("Removed %d %s\n", result.DeviceCount, utils.Pluralize(result.DeviceCount, "device", "devices"))
-		}
+		result := c.removeDevices(s, deviceIDs, g.JSON)
 
 		// Exit with error if all device IDs were invalid
 		if len(deviceIDs) > 0 && result.DeviceCount == 0 {
@@ -125,4 +63,107 @@ func (c *SyncwebDropCmd) Run(g *SyncwebCmd) error {
 
 		return nil
 	})
+}
+
+// removeDevicesFromFolders removes devices from specified folders
+func (c *SyncwebDropCmd) removeDevicesFromFolders(
+	s *syncweb.Syncweb,
+	folderIDs, deviceIDs []string,
+	isJSON bool,
+) error {
+	result := DropResult{
+		Devices: []string{},
+		Errors:  []string{},
+	}
+
+	for _, fldID := range folderIDs {
+		if err := s.RemoveFolderDevices(fldID, deviceIDs); err != nil {
+			errMsg := fmt.Sprintf("Failed to remove devices from folder %s: %v", fldID, err)
+			result.Errors = append(result.Errors, errMsg)
+			if !isJSON {
+				fmt.Println(errMsg)
+			}
+			continue
+		}
+
+		// Pause and resume devices to immediately drop connections
+		c.pauseAndResumeDevices(s, deviceIDs)
+	}
+
+	if isJSON {
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf("Error marshaling result: %v\n", err)
+			return nil
+		}
+		fmt.Println(string(jsonData))
+	} else {
+		fmt.Printf("Removed from %d folder(s)\n", len(c.FolderIDs))
+	}
+
+	return nil
+}
+
+// removeDevices removes devices entirely from syncweb
+func (c *SyncwebDropCmd) removeDevices(s *syncweb.Syncweb, deviceIDs []string, isJSON bool) DropResult {
+	result := DropResult{
+		Devices: []string{},
+		Errors:  []string{},
+	}
+
+	for _, devID := range deviceIDs {
+		if err := s.DeleteDevice(devID); err != nil {
+			errMsg := fmt.Sprintf("Failed to remove device %s: %v", devID, err)
+			result.Errors = append(result.Errors, errMsg)
+			if !isJSON {
+				fmt.Println(errMsg)
+			}
+			continue
+		}
+		result.Devices = append(result.Devices, devID)
+		result.DeviceCount++
+	}
+
+	if isJSON {
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf("Error marshaling result: %v\n", err)
+			return result
+		}
+		fmt.Println(string(jsonData))
+	} else {
+		fmt.Printf("Removed %d %s\n", result.DeviceCount, utils.Pluralize(result.DeviceCount, "device", "devices"))
+	}
+
+	return result
+}
+
+// pauseAndResumeDevices pauses and resumes devices to refresh connections
+func (c *SyncwebDropCmd) pauseAndResumeDevices(s *syncweb.Syncweb, deviceIDs []string) {
+	logger := slog.Default()
+	for _, devID := range deviceIDs {
+		if err := s.PauseDevice(devID); err != nil {
+			logger.Warn("Failed to pause device", "device", devID, "error", err)
+		}
+	}
+	for _, devID := range deviceIDs {
+		if err := s.ResumeDevice(devID); err != nil {
+			logger.Warn("Failed to resume device", "device", devID, "error", err)
+		}
+	}
+}
+
+// parseDropDeviceIDs parses comma-separated device IDs
+func parseDropDeviceIDs(deviceIDs []string) []string {
+	var result []string
+	for _, id := range deviceIDs {
+		parts := strings.SplitSeq(id, ",")
+		for p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+	}
+	return result
 }

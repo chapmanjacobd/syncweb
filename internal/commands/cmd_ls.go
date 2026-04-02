@@ -69,53 +69,8 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 		}
 
 		for _, p := range c.Paths {
-			absPath, err := filepath.Abs(p)
-			if err != nil {
-				fmt.Printf("Error: %s: %v\n", p, err)
-				continue
-			}
-			absPath = filepath.Clean(absPath)
-
-			// Find which folder this path belongs to
-			var folderID string
-			var prefix string
-
-			var after string
-			var ok bool
-			if after, ok = strings.CutPrefix(p, "sync://"); !ok {
-				after, ok = strings.CutPrefix(p, "syncweb://")
-			}
-
-			if ok {
-				// Parse sync:// or syncweb:// URL
-				parts := strings.SplitN(after, "/", 2)
-				folderID = parts[0]
-				if len(parts) > 1 {
-					prefix = parts[1]
-				}
-			} else {
-				// Find folder by path
-				cfg := s.Node.Cfg.RawCopy()
-				for _, f := range cfg.Folders {
-					fPath := filepath.Clean(f.Path)
-					if absPath == fPath || strings.HasPrefix(absPath, fPath+string(filepath.Separator)) {
-						folderID = f.ID
-						rel, err := filepath.Rel(fPath, absPath)
-						if err != nil {
-							fmt.Printf("Error: Failed to compute relative path for %s: %v\n", p, err)
-							continue
-						}
-						if rel != "." {
-							prefix = rel
-						} else {
-							prefix = ""
-						}
-						break
-					}
-				}
-			}
-
-			if folderID == "" {
+			folderID, prefix, ok := c.findFolderForPath(p, s)
+			if !ok {
 				if !g.JSON {
 					fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
 				}
@@ -168,6 +123,50 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 
 		return nil
 	})
+}
+
+// findFolderForPath finds the folder ID and prefix for a given path
+func (c *SyncwebLsCmd) findFolderForPath(path string, s *syncweb.Syncweb) (folderID, prefix string, ok bool) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", false
+	}
+	absPath = filepath.Clean(absPath)
+
+	var after string
+	var hasPrefix bool
+	if after, hasPrefix = strings.CutPrefix(path, "sync://"); !hasPrefix {
+		after, hasPrefix = strings.CutPrefix(path, "syncweb://")
+	}
+
+	if hasPrefix {
+		// Parse sync:// or syncweb:// URL
+		parts := strings.SplitN(after, "/", 2)
+		folderID = parts[0]
+		if len(parts) > 1 {
+			prefix = parts[1]
+		}
+		return folderID, prefix, true
+	}
+
+	// Find folder by path
+	cfg := s.Node.Cfg.RawCopy()
+	for _, f := range cfg.Folders {
+		fPath := filepath.Clean(f.Path)
+		if absPath == fPath || strings.HasPrefix(absPath, fPath+string(filepath.Separator)) {
+			folderID = f.ID
+			rel, err := filepath.Rel(fPath, absPath)
+			if err != nil {
+				return "", "", false
+			}
+			if rel != "." {
+				prefix = rel
+			}
+			return folderID, prefix, true
+		}
+	}
+
+	return "", "", false
 }
 
 func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*fileEntry {

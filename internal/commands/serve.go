@@ -93,6 +93,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/toggle", c.AuthMiddleware(c.handleSyncwebToggle))
 	mux.HandleFunc("/api/syncweb/status", c.AuthMiddleware(c.handleSyncwebStatus))
 	mux.HandleFunc("/api/syncweb/events", c.AuthMiddleware(c.handleSyncwebEvents))
+	mux.HandleFunc("/api/config", c.AuthMiddleware(c.handleConfig))
 	mux.HandleFunc("/api/syncweb/devices", c.AuthMiddleware(c.handleSyncwebDevices))
 	mux.HandleFunc("/api/syncweb/pending", c.AuthMiddleware(c.handleSyncwebPendingDevices))
 	mux.HandleFunc("/api/syncweb/devices/add", c.AuthMiddleware(c.handleSyncwebDevicesAdd))

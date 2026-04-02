@@ -111,6 +111,7 @@ func (c *SyncwebCmd) AfterApply() error {
 }
 
 func (c *SyncwebCmd) WithSyncweb(fn func(s syncweb.Engine) error) error {
+	slog.Debug("WithSyncweb", "home", c.SyncwebHome)
 	s, err := syncweb.NewSyncweb(c.SyncwebHome, "syncweb", "")
 	if err != nil {
 		// Fallback to REST API if lock fails

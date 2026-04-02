@@ -190,11 +190,17 @@ func (s *Syncweb) SaveConfig() error {
 
 // IsConnectedTo returns true if the node is connected to the specified device
 func (s *Syncweb) IsConnectedTo(deviceID protocol.DeviceID) bool {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return false
+	}
 	return s.Node.App.Internals.IsConnectedTo(deviceID)
 }
 
 // AllGlobalFiles returns an iterator that streams all global files in a folder
 func (s *Syncweb) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], func() error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return func(yield func(FileMetadata) bool) {}, func() error { return nil }
+	}
 	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
 	return func(yield func(FileMetadata) bool) {
 		for meta := range seq {
@@ -215,6 +221,9 @@ func (s *Syncweb) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], func(
 
 // GlobalSize returns the total size of all global files in a folder
 func (s *Syncweb) GlobalSize(folderID string) (Counts, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return Counts{}, fmt.Errorf("internals not initialized")
+	}
 	c, err := s.Node.App.Internals.GlobalSize(folderID)
 	return Counts{
 		Files:       c.Files,
@@ -230,6 +239,9 @@ func (s *Syncweb) GlobalSize(folderID string) (Counts, error) {
 
 // LocalSize returns the total size of all local files in a folder
 func (s *Syncweb) LocalSize(folderID string) (Counts, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return Counts{}, fmt.Errorf("internals not initialized")
+	}
 	c, err := s.Node.App.Internals.LocalSize(folderID)
 	return Counts{
 		Files:       c.Files,
@@ -245,6 +257,9 @@ func (s *Syncweb) LocalSize(folderID string) (Counts, error) {
 
 // NeedSize returns the total size of files needed from other devices
 func (s *Syncweb) NeedSize(folderID string, deviceID protocol.DeviceID) (Counts, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return Counts{}, fmt.Errorf("internals not initialized")
+	}
 	c, err := s.Node.App.Internals.NeedSize(folderID, deviceID)
 	return Counts{
 		Files:       c.Files,
@@ -260,21 +275,33 @@ func (s *Syncweb) NeedSize(folderID string, deviceID protocol.DeviceID) (Counts,
 
 // FolderState returns the current state of a folder
 func (s *Syncweb) FolderState(folderID string) (string, time.Time, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return "unknown", time.Time{}, fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.FolderState(folderID)
 }
 
 // FolderProgressBytesCompleted returns the number of bytes completed for a folder sync
 func (s *Syncweb) FolderProgressBytesCompleted(folderID string) int64 {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return 0
+	}
 	return s.Node.App.Internals.FolderProgressBytesCompleted(folderID)
 }
 
 // GetCompletion returns the completion status for a folder on a specific device
 func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (stmodel.FolderCompletion, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return stmodel.FolderCompletion{}, fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.Completion(deviceID, folderID)
 }
 
 // BlockAvailability returns a list of devices that have the specified block
 func (s *Syncweb) BlockAvailability(folderID string, info protocol.FileInfo, block protocol.BlockInfo) ([]stmodel.Availability, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.BlockAvailability(folderID, info, block)
 }
 
@@ -428,11 +455,17 @@ func (s *Syncweb) IsRunning() bool {
 
 // ScanFolders triggers a scan on all folders
 func (s *Syncweb) ScanFolders() map[string]error {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return map[string]error{"all": fmt.Errorf("internals not initialized")}
+	}
 	return s.Node.App.Internals.ScanFolders()
 }
 
 // ScanFolderSubdirs triggers a scan on specific subdirectories of a folder
 func (s *Syncweb) ScanFolderSubdirs(folderID string, paths []string) error {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.ScanFolderSubdirs(folderID, paths)
 }
 
@@ -837,6 +870,9 @@ func (s *Syncweb) Unignore(folderID, relativePath string) error {
 
 // GetGlobalFileInfo returns information about a file across the cluster
 func (s *Syncweb) GetGlobalFileInfo(folderID, path string) (protocol.FileInfo, bool, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return protocol.FileInfo{}, false, fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.GlobalFileInfo(folderID, path)
 }
 
@@ -927,6 +963,9 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		block := r.info.Blocks[i]
 
 		// Determine which peers have this block
+		if r.s.Node == nil || r.s.Node.App == nil || r.s.Node.App.Internals == nil {
+			return int(totalRead), fmt.Errorf("internals not initialized")
+		}
 		availables, availErr := r.s.Node.App.Internals.BlockAvailability(r.folderID, r.info, block)
 		if availErr != nil {
 			return int(totalRead), availErr
@@ -995,19 +1034,25 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 
 // GetIgnores returns the ignore patterns for a folder
 func (s *Syncweb) GetIgnores(folderID string) ([]string, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, fmt.Errorf("internals not initialized")
+	}
 	lines, _, err := s.Node.App.Internals.Ignores(folderID)
 	return lines, err
 }
 
 // SetIgnores sets the ignore patterns for a folder
 func (s *Syncweb) SetIgnores(folderID string, lines []string) error {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return fmt.Errorf("internals not initialized")
+	}
 	return s.Node.App.Internals.SetIgnores(folderID, lines)
 }
 
 // AddIgnores adds unignore patterns to a folder's ignore list
 // This is used to mark files for download in receiveonly folders
 func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
-	existing, _, err := s.Node.App.Internals.Ignores(folderID)
+	existing, err := s.GetIgnores(folderID)
 	if err != nil {
 		return err
 	}
@@ -1065,13 +1110,16 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 	final = append(final, "*")
 	final = append(final, "// END Syncweb-managed")
 
-	return s.Node.App.Internals.SetIgnores(folderID, final)
+	return s.SetIgnores(folderID, final)
 }
 
 // WaitUntilIdle waits until the specified folder is idle (fully synced)
 func (s *Syncweb) WaitUntilIdle(folderID string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+			return fmt.Errorf("internals not initialized")
+		}
 		comp, err := s.Node.App.Internals.Completion(protocol.LocalDeviceID, folderID)
 		if err == nil && comp.CompletionPct >= 100 {
 			return nil
@@ -1120,6 +1168,9 @@ func (s *Syncweb) GetDeviceStats() map[string]map[string]any {
 // GetPendingFolders returns pending folder invitations from other devices
 func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 	pending := make(map[string]map[string]any)
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return pending
+	}
 	cfg := s.Node.Cfg.RawCopy()
 
 	for _, d := range cfg.Devices {
@@ -1151,6 +1202,9 @@ func (s *Syncweb) GetPendingFolders() map[string]map[string]any {
 
 // GetGlobalTree returns a list of entries at a specific prefix
 func (s *Syncweb) GetGlobalTree(folderID, prefix string, levels int, returnOnlyDirectories bool) ([]models.LsEntry, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, fmt.Errorf("internals not initialized")
+	}
 	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
 	if err != nil {
 		return nil, err
@@ -1179,6 +1233,9 @@ func (s *Syncweb) flattenTree(tree []*stmodel.TreeEntry, prefix string) []models
 
 // GetLocalChangedFiles returns locally changed files for a folder (paginated)
 func (s *Syncweb) GetLocalChangedFiles(folderID string, page, perPage int) ([]map[string]any, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, fmt.Errorf("internals not initialized")
+	}
 	files, err := s.Node.App.Internals.LocalChangedFolderFiles(folderID, page, perPage)
 	if err != nil {
 		return nil, err
@@ -1201,6 +1258,9 @@ func (s *Syncweb) GetLocalChangedFiles(folderID string, page, perPage int) ([]ma
 // GetNeedFiles returns paginated list of needed files for a folder
 // Returns three lists: remote (needed from remote), local (local changes), queued (queued for sync)
 func (s *Syncweb) GetNeedFiles(folderID string, page, perPage int) (remote, local, queued []map[string]any, err error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, nil, nil, fmt.Errorf("internals not initialized")
+	}
 	remoteFiles, localFiles, queuedFiles, err := s.Node.App.Internals.NeedFolderFiles(folderID, page, perPage)
 	if err != nil {
 		return nil, nil, nil, err
@@ -1230,6 +1290,9 @@ func (s *Syncweb) GetRemoteNeedFiles(
 	deviceID protocol.DeviceID,
 	page, perPage int,
 ) ([]map[string]any, error) {
+	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+		return nil, fmt.Errorf("internals not initialized")
+	}
 	files, err := s.Node.App.Internals.RemoteNeedFolderFiles(folderID, deviceID, page, perPage)
 	if err != nil {
 		return nil, err
@@ -1257,6 +1320,9 @@ func (s *Syncweb) CountSeeders(folderID, path string) (int, error) {
 
 	deviceSet := make(map[string]bool)
 	for _, block := range info.Blocks {
+		if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
+			return 0, fmt.Errorf("internals not initialized")
+		}
 		availables, err := s.Node.App.Internals.BlockAvailability(folderID, info, block)
 		if err != nil {
 			continue

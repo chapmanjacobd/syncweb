@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"crypto/tls"
 
+	"github.com/chapmanjacobd/syncweb/internal/utils"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/protocol"
@@ -67,11 +69,20 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	dbPath := filepath.Join(homeDir, "index-v2")
 
 	// Load or create certificate
-	cert, err := tlsutil.NewCertificate(certPath, keyPath, "syncthing", 0, false)
-	if err != nil {
-		n.nodeUnlock()
-		cancel()
-		return nil, fmt.Errorf("failed to load certificate: %w", err)
+	var cert tls.Certificate
+	var err error
+	if utils.FileExists(certPath) && utils.FileExists(keyPath) {
+		cert, err = tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load existing certificate: %w", err)
+		}
+	} else {
+		cert, err = tlsutil.NewCertificate(certPath, keyPath, "syncthing", 0, false)
+		if err != nil {
+			n.nodeUnlock()
+			cancel()
+			return nil, fmt.Errorf("failed to create new certificate: %w", err)
+		}
 	}
 
 	myID := protocol.NewDeviceID(cert.Certificate[0])

@@ -81,7 +81,8 @@ type SyncwebCmd struct {
 	models.CoreFlags    `embed:""`
 	models.SyncwebFlags `embed:""`
 
-	Context context.Context `kong:"-"`
+	//nolint:containedctx // Context field required by kong CLI framework
+	Ctx context.Context `kong:"-"`
 
 	Create    SyncwebCreateCmd    `help:"Create a syncweb folder"                                 cmd:"" aliases:"init,in,share"`
 	Join      SyncwebJoinCmd      `help:"Join syncweb folders/devices"                            cmd:"" aliases:"import,clone"`
@@ -137,7 +138,7 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s syncweb.Engine) error) error {
 	}
 
 	// Use background context if none provided
-	ctx := c.Context
+	ctx := c.Ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -198,7 +199,7 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 			select {
 			case <-ticker.C:
 				c.runOnce(g, s, logger)
-			case <-g.Context.Done():
+			case <-g.Ctx.Done():
 				logger.Info("Stopping syncweb-automatic")
 				return nil
 			}
@@ -248,7 +249,7 @@ func (c *SyncwebAutomaticCmd) autoJoinFolders(s syncweb.Engine, logger *slog.Log
 			}
 			ctx := &processPendingFolderContext{
 				logger:      logger,
-				cfg:         cfg,
+				cfg:         &cfg,
 				devID:       devID,
 				folderID:    folderID,
 				syncwebHome: syncwebHome,
@@ -261,7 +262,7 @@ func (c *SyncwebAutomaticCmd) autoJoinFolders(s syncweb.Engine, logger *slog.Log
 // processPendingFolderContext holds context for processing a pending folder
 type processPendingFolderContext struct {
 	logger      *slog.Logger
-	cfg         config.Configuration
+	cfg         *config.Configuration
 	devID       protocol.DeviceID
 	folderID    string
 	syncwebHome string
@@ -308,7 +309,7 @@ func (c *SyncwebAutomaticCmd) processPendingFolder(
 	}
 }
 
-func (c *SyncwebAutomaticCmd) folderExists(cfg config.Configuration, folderID string) bool {
+func (c *SyncwebAutomaticCmd) folderExists(cfg *config.Configuration, folderID string) bool {
 	for _, f := range cfg.Folders {
 		if f.ID == folderID {
 			return true

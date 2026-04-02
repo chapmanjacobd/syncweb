@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli webbuild webtest web-install go-deps
+.PHONY: build test clean fmt lint install all version e2e e2e-install e2e-init e2e-web e2e-cli webbuild webtest web-install go-deps dev
 
 BINARY_NAME=syncweb
 BUILD_TAGS=noassets
@@ -35,7 +35,7 @@ run:
 
 dev:
 	(sleep 2 && xdg-open http://localhost:8889) &
-	air -d
+	go build -tags "$(BUILD_TAGS)" -o ./tmp/main ./cmd/syncweb && ./tmp/main
 
 fmt:
 	gofmt -s -w -e .

@@ -15,46 +15,46 @@ func TestAddIgnores(t *testing.T) {
 	// interfaces, we'll try to use a temporary node.
 
 	home := t.TempDir()
-	s, err := syncweb.NewSyncweb(home, "test", "tcp://127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create node: %v", err)
+	s, createErr := syncweb.NewSyncweb(home, "test", "tcp://127.0.0.1:0")
+	if createErr != nil {
+		t.Fatalf("failed to create node: %v", createErr)
 	}
-	if err := s.Start(); err != nil {
-		t.Fatalf("failed to start node: %v", err)
+	if startErr := s.Start(); startErr != nil {
+		t.Fatalf("failed to start node: %v", startErr)
 	}
 	defer syncweb.StopAndCleanup(s, home)
 
 	folderID := "testfolder"
-	if err := s.AddFolder(folderID, folderID, home, 0); err != nil {
-		t.Fatalf("failed to add folder: %v", err)
+	if addFolderErr := s.AddFolder(folderID, folderID, home, 0); addFolderErr != nil {
+		t.Fatalf("failed to add folder: %v", addFolderErr)
 	}
-	if err := s.ResumeFolder(folderID); err != nil {
-		t.Fatalf("failed to resume folder: %v", err)
+	if resumeErr := s.ResumeFolder(folderID); resumeErr != nil {
+		t.Fatalf("failed to resume folder: %v", resumeErr)
 	}
-	if err := s.WaitUntilIdle(folderID, 5*time.Second); err != nil {
-		t.Logf("Warning: WaitUntilIdle timed out (expected if folder is new): %v", err)
+	if waitErr := s.WaitUntilIdle(folderID, 5*time.Second); waitErr != nil {
+		t.Logf("Warning: WaitUntilIdle timed out (expected if folder is new): %v", waitErr)
 	}
 
 	// 1. Set some initial user ignores
 	initialIgnores := []string{"pattern1", "pattern2"}
-	if err := s.SetIgnores(folderID, initialIgnores); err != nil {
-		t.Fatalf("failed to set ignores: %v", err)
+	if setErr := s.SetIgnores(folderID, initialIgnores); setErr != nil {
+		t.Fatalf("failed to set ignores: %v", setErr)
 	}
 	_ = s.ScanFolders()
 	time.Sleep(100 * time.Millisecond)
 
 	// 2. Add managed ignores
 	managed := []string{"file.txt"}
-	if err := s.AddIgnores(folderID, managed); err != nil {
-		t.Fatalf("failed to add managed ignores: %v", err)
+	if addManagedErr := s.AddIgnores(folderID, managed); addManagedErr != nil {
+		t.Fatalf("failed to add managed ignores: %v", addManagedErr)
 	}
 	_ = s.ScanFolders()
 	time.Sleep(100 * time.Millisecond)
 
 	// 3. Check final ignores
-	final, err := s.GetIgnores(folderID)
-	if err != nil {
-		t.Fatalf("failed to get final ignores: %v", err)
+	final, getErr := s.GetIgnores(folderID)
+	if getErr != nil {
+		t.Fatalf("failed to get final ignores: %v", getErr)
 	}
 
 	expected := []string{

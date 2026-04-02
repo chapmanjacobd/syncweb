@@ -44,7 +44,7 @@ func main() {
 		cancel()
 	}()
 
-	cli.Context = sigCtx
+	cli.Ctx = sigCtx
 
 	// Configure logger
 	models.SetupLogging(cli.Verbose)
@@ -57,6 +57,7 @@ func main() {
 	err = parserCtx.Run()
 	if err != nil {
 		logger.Error("Syncweb command failed", "error", err)
-		os.Exit(1)
+		cancel()
+		os.Exit(1) //nolint:gocritic // Need to exit after logging error
 	}
 }

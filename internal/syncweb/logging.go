@@ -20,7 +20,10 @@ func (h *syncthingRedirectHandler) Enabled(ctx context.Context, level slog.Level
 	return h.fileHandler.Enabled(ctx, level) || h.next.Enabled(ctx, level)
 }
 
-func (h *syncthingRedirectHandler) Handle(ctx context.Context, r slog.Record) error {
+func (h *syncthingRedirectHandler) Handle(
+	ctx context.Context,
+	r slog.Record, //nolint:gocritic // slog.Handler interface requires value receiver
+) error {
 	isSyncthing := h.isSyncthing
 	if !isSyncthing && r.PC != 0 {
 		fs := runtime.CallersFrames([]uintptr{r.PC})

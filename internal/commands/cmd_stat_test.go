@@ -26,7 +26,7 @@ func TestGetFileType(t *testing.T) {
 			if tt.name == "unknown" {
 				info.Type = 99 // Invalid type
 			}
-			result := commands.GetFileType(info)
+			result := commands.GetFileType(&info)
 			if result != tt.expected {
 				t.Errorf("GetFileType(%v) = %q, expected %q", tt.fileType, result, tt.expected)
 			}

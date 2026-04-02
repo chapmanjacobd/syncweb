@@ -13,8 +13,8 @@ import (
 	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
-func GetMountpoints() ([]models.Mountpoint, error) {
-	devices, err := GetBlockDevices()
+func GetMountpoints(ctx context.Context) ([]models.Mountpoint, error) {
+	devices, err := GetBlockDevices(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +64,8 @@ func FilterMountpoints(devices []models.BlockDevice) []models.Mountpoint {
 	return mounts
 }
 
-func GetBlockDevices() ([]models.BlockDevice, error) {
-	out, err := exec.CommandContext(context.Background(), "lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").
+func GetBlockDevices(ctx context.Context) ([]models.BlockDevice, error) {
+	out, err := exec.CommandContext(ctx, "lsblk", "--json", "-o", "NAME,MOUNTPOINTS,SIZE,TYPE,LABEL,FSTYPE").
 		Output()
 	if err != nil {
 		return nil, fmt.Errorf("lsblk failed: %w", err)
@@ -83,17 +83,17 @@ func ParseLsblkOutput(data []byte) ([]models.BlockDevice, error) {
 	return res.Blockdevices, nil
 }
 
-func Mount(device, mountpoint string) error {
-	out, err := exec.CommandContext(context.Background(), "mount", device, mountpoint).CombinedOutput()
+func Mount(ctx context.Context, device, mountpoint string) error {
+	out, err := exec.CommandContext(ctx, "mount", device, mountpoint).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mount failed: %s: %w", string(out), err)
 	}
 	return nil
 }
 
-func Unmount(mountpoint string) error {
+func Unmount(ctx context.Context, mountpoint string) error {
 	// Find the device for this mountpoint
-	devices, err := GetBlockDevices()
+	devices, err := GetBlockDevices(ctx)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func Unmount(mountpoint string) error {
 
 	if targetDevice == nil {
 		// Fallback to simple unmount if device not found in lsblk
-		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mountpoint).CombinedOutput()
+		out, umountErr := exec.CommandContext(ctx, "sudo", "umount", mountpoint).CombinedOutput()
 		if umountErr != nil {
 			return fmt.Errorf("unmount failed: %s: %w", string(out), umountErr)
 		}
@@ -131,7 +131,7 @@ func Unmount(mountpoint string) error {
 		if mp == "" || strings.HasPrefix(mp, "[") {
 			continue
 		}
-		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
+		out, umountErr := exec.CommandContext(ctx, "sudo", "umount", mp).CombinedOutput()
 		if umountErr != nil {
 			return fmt.Errorf("failed to unmount %s: %s: %w", mp, string(out), umountErr)
 		}
@@ -140,18 +140,19 @@ func Unmount(mountpoint string) error {
 	return nil
 }
 
-func AutoCleanupMounts() error {
-	devices, err := GetBlockDevices()
+func AutoCleanupMounts(ctx context.Context) error {
+	devices, err := GetBlockDevices(ctx)
 	if err != nil {
 		return err
 	}
 
 	var walk func([]models.BlockDevice)
+	//nolint:contextcheck // walk is a closure that doesn't directly use context
 	walk = func(devs []models.BlockDevice) {
 		for _, d := range devs {
 			if len(d.Mountpoints) > 1 {
 				// Potential duplicates found, unmount them safely
-				if cleanupErr := SafePrepareForRead(d.Name, devices); cleanupErr != nil {
+				if cleanupErr := SafePrepareForRead(context.Background(), d.Name, devices); cleanupErr != nil {
 					fmt.Printf("Warning: failed to cleanup mounts for %s: %v\n", d.Name, cleanupErr)
 				}
 			}
@@ -190,8 +191,8 @@ func IsUdisks2Mount(path string) bool {
 	return strings.HasPrefix(path, "/run/media/") || strings.HasPrefix(path, "/media/")
 }
 
-func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevice) error {
-	devices, err := getDevicesForSearch(optionalDevices)
+func SafePrepareForRead(ctx context.Context, deviceName string, optionalDevices []models.BlockDevice) error {
+	devices, err := getDevicesForSearch(ctx, optionalDevices)
 	if err != nil {
 		return err
 	}
@@ -219,14 +220,14 @@ func SafePrepareForRead(deviceName string, optionalDevices ...[]models.BlockDevi
 	}
 
 	// Unmount others
-	return unmountExtraMountpoints(target.Mountpoints, preferred)
+	return unmountExtraMountpoints(ctx, target.Mountpoints, preferred)
 }
 
-func getDevicesForSearch(optionalDevices [][]models.BlockDevice) ([]models.BlockDevice, error) {
+func getDevicesForSearch(ctx context.Context, optionalDevices []models.BlockDevice) ([]models.BlockDevice, error) {
 	if len(optionalDevices) > 0 {
-		return optionalDevices[0], nil
+		return optionalDevices, nil
 	}
-	return GetBlockDevices()
+	return GetBlockDevices(ctx)
 }
 
 func findDevice(deviceName string, devs []models.BlockDevice) *models.BlockDevice {
@@ -272,7 +273,7 @@ func findPreferredMountpoint(mountpoints []string) string {
 	return mountpoints[0]
 }
 
-func unmountExtraMountpoints(mountpoints []string, preferred string) error {
+func unmountExtraMountpoints(ctx context.Context, mountpoints []string, preferred string) error {
 	for _, mp := range mountpoints {
 		if mp == preferred || mp == "" || strings.HasPrefix(mp, "[") {
 			continue
@@ -280,7 +281,7 @@ func unmountExtraMountpoints(mountpoints []string, preferred string) error {
 		if mp == "/" {
 			continue // Safety
 		}
-		out, umountErr := exec.CommandContext(context.Background(), "sudo", "umount", mp).CombinedOutput()
+		out, umountErr := exec.CommandContext(ctx, "sudo", "umount", mp).CombinedOutput()
 		if umountErr != nil {
 			return fmt.Errorf("failed to unmount extra mountpoint %s: %s: %w", mp, string(out), umountErr)
 		}

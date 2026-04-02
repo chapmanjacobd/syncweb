@@ -58,6 +58,9 @@ func (c *ServeCmd) Help() string {
 	return serveExamples
 }
 
+// Run starts the Syncweb server
+//
+//nolint:revive,funlen,maintidx // Run method is long but serves as the main entry point for the serve command
 func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	models.SetupLogging(g.Verbose)
 
@@ -182,7 +185,7 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	}()
 
 	// Wait for context cancellation
-	<-g.Context.Done()
+	<-g.Ctx.Done()
 	logger.Info("Stopping Syncweb server")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -490,8 +493,8 @@ func (c *ServeCmd) isPathBlacklisted(path string) bool {
 	return false
 }
 
-func (c *ServeCmd) handleMounts(w http.ResponseWriter, _ *http.Request) {
-	devices, err := utils.GetBlockDevices()
+func (c *ServeCmd) handleMounts(w http.ResponseWriter, r *http.Request) {
+	devices, err := utils.GetBlockDevices(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -513,7 +516,7 @@ func (c *ServeCmd) handleMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := utils.Mount(req.Device, req.Mountpoint); err != nil {
+	if err := utils.Mount(r.Context(), req.Device, req.Mountpoint); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -533,7 +536,7 @@ func (c *ServeCmd) handleUnmount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := utils.Unmount(req.Mountpoint); err != nil {
+	if err := utils.Unmount(r.Context(), req.Mountpoint); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

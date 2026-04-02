@@ -1,6 +1,7 @@
 package utils_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,7 +56,7 @@ func TestSafeUnmountRemovable(t *testing.T) {
 	t.Logf("Mounted %s to %s and %s", loopDev, mp1, mp2)
 
 	// Call our Unmount function on mp1
-	if unmountErr := utils.Unmount(mp1); unmountErr != nil {
+	if unmountErr := utils.Unmount(context.Background(), mp1); unmountErr != nil {
 		t.Fatalf("Unmount failed: %v", unmountErr)
 	}
 
@@ -93,7 +94,7 @@ func TestSafePrepareForRead(t *testing.T) {
 	exec.Command("sudo", "mount", loopDev, mp2).Run()
 	defer exec.Command("sudo", "umount", "-l", loopDev).Run()
 
-	if err := utils.SafePrepareForRead(loopDev); err != nil {
+	if err := utils.SafePrepareForRead(context.Background(), loopDev, nil); err != nil {
 		t.Fatalf("SafePrepareForRead failed: %v", err)
 	}
 
@@ -134,7 +135,7 @@ func TestAutoCleanupMounts(t *testing.T) {
 	exec.Command("sudo", "mount", loopDev, mp2).Run()
 	defer exec.Command("sudo", "umount", "-l", loopDev).Run()
 
-	if err := utils.AutoCleanupMounts(); err != nil {
+	if err := utils.AutoCleanupMounts(context.Background()); err != nil {
 		t.Fatalf("AutoCleanupMounts failed: %v", err)
 	}
 
@@ -188,7 +189,7 @@ func TestSafePrepareForReadRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := utils.SafePrepareForRead(tt.device.Name, []models.BlockDevice{tt.device})
+			err := utils.SafePrepareForRead(context.Background(), tt.device.Name, []models.BlockDevice{tt.device})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SafePrepareForRead(%q) error = %v, wantErr %v", tt.device.Name, err, tt.wantErr)
 			}
@@ -399,7 +400,7 @@ func TestSafePrepareForReadBtrfs(t *testing.T) {
 		},
 	}
 
-	err := utils.SafePrepareForRead("btrfsdev", mockDevices)
+	err := utils.SafePrepareForRead(context.Background(), "btrfsdev", mockDevices)
 	if err != nil {
 		t.Errorf("SafePrepareForRead() should skip Btrfs devices, got error: %v", err)
 	}
@@ -415,7 +416,7 @@ func TestSafePrepareForReadNotFound(t *testing.T) {
 		},
 	}
 
-	err := utils.SafePrepareForRead("nonexistent", mockDevices)
+	err := utils.SafePrepareForRead(context.Background(), "nonexistent", mockDevices)
 	if err == nil {
 		t.Error("SafePrepareForRead() should return error for non-existent device")
 	}

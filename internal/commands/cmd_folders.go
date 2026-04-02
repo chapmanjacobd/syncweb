@@ -79,7 +79,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 		localDeviceID := s.MyID().String()
 
 		// Collect all folders
-		folders := c.collectFolders(s, cfg)
+		folders := c.collectFolders(s, &cfg)
 
 		// Apply filters
 		filtered := c.filterFolders(folders)
@@ -98,7 +98,7 @@ func (c *SyncwebFoldersCmd) Run(g *SyncwebCmd) error {
 			return c.outputPrint(filtered, localDeviceID)
 		}
 
-		return c.outputTable(s, filtered, localDeviceID, cfg)
+		return c.outputTable(s, filtered, localDeviceID, &cfg)
 	})
 }
 
@@ -127,13 +127,14 @@ type folderEntry struct {
 	Completed      int64    `json:"completed"`
 }
 
-func (c *SyncwebFoldersCmd) collectFolders(s syncweb.Engine, cfg config.Configuration) []folderEntry {
+func (c *SyncwebFoldersCmd) collectFolders(s syncweb.Engine, cfg *config.Configuration) []folderEntry {
 	var folders []folderEntry
 	seenIDs := make(map[string]bool)
 
 	// Get joined folders
 	if c.Joined {
-		for _, f := range cfg.Folders {
+		for i := range cfg.Folders {
+			f := &cfg.Folders[i]
 			if seenIDs[f.ID] {
 				continue
 			}
@@ -188,7 +189,7 @@ func (c *SyncwebFoldersCmd) collectFolders(s syncweb.Engine, cfg config.Configur
 	return folders
 }
 
-func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s syncweb.Engine, f config.FolderConfiguration) folderEntry {
+func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s syncweb.Engine, f *config.FolderConfiguration) folderEntry {
 	devices := make([]string, 0, len(f.Devices))
 	for _, d := range f.Devices {
 		devices = append(devices, d.DeviceID.String())
@@ -246,17 +247,17 @@ func (c *SyncwebFoldersCmd) buildJoinedFolderEntry(s syncweb.Engine, f config.Fo
 func (c *SyncwebFoldersCmd) filterFolders(folders []folderEntry) []folderEntry {
 	filtered := make([]folderEntry, 0, len(folders))
 
-	for _, f := range folders {
-		if !c.shouldIncludeFolder(f) {
+	for i := range folders {
+		if !c.shouldIncludeFolder(&folders[i]) {
 			continue
 		}
-		filtered = append(filtered, f)
+		filtered = append(filtered, folders[i])
 	}
 
 	return filtered
 }
 
-func (c *SyncwebFoldersCmd) shouldIncludeFolder(f folderEntry) bool {
+func (c *SyncwebFoldersCmd) shouldIncludeFolder(f *folderEntry) bool {
 	// Missing filter
 	if c.Missing && !c.isFolderMissing(f) {
 		return false
@@ -280,7 +281,7 @@ func (c *SyncwebFoldersCmd) shouldIncludeFolder(f folderEntry) bool {
 	return true
 }
 
-func (c *SyncwebFoldersCmd) isFolderMissing(f folderEntry) bool {
+func (c *SyncwebFoldersCmd) isFolderMissing(f *folderEntry) bool {
 	if f.Path != "" && f.Path != "(not joined)" {
 		if _, err := os.Stat(f.Path); err == nil {
 			return false // Path exists, not missing
@@ -289,7 +290,7 @@ func (c *SyncwebFoldersCmd) isFolderMissing(f folderEntry) bool {
 	return true
 }
 
-func (c *SyncwebFoldersCmd) matchesFolderType(f folderEntry) bool {
+func (c *SyncwebFoldersCmd) matchesFolderType(f *folderEntry) bool {
 	for _, t := range c.FolderTypes {
 		if strings.EqualFold(f.Type, t) {
 			return true
@@ -298,7 +299,7 @@ func (c *SyncwebFoldersCmd) matchesFolderType(f folderEntry) bool {
 	return false
 }
 
-func (c *SyncwebFoldersCmd) matchesIncludeFilter(f folderEntry) bool {
+func (c *SyncwebFoldersCmd) matchesIncludeFilter(f *folderEntry) bool {
 	for _, s := range c.Include {
 		if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
 			return true
@@ -307,7 +308,7 @@ func (c *SyncwebFoldersCmd) matchesIncludeFilter(f folderEntry) bool {
 	return false
 }
 
-func (c *SyncwebFoldersCmd) matchesExcludeFilter(f folderEntry) bool {
+func (c *SyncwebFoldersCmd) matchesExcludeFilter(f *folderEntry) bool {
 	for _, s := range c.Exclude {
 		if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
 			return true
@@ -340,7 +341,7 @@ func (c *SyncwebFoldersCmd) outputTable(
 	s syncweb.Engine,
 	filtered []folderEntry,
 	_ string,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 ) error {
 	// Print header
 	fmt.Printf(
@@ -360,8 +361,8 @@ func (c *SyncwebFoldersCmd) outputTable(
 	fmt.Println(strings.Repeat("-", 170))
 
 	// Print rows
-	for _, f := range filtered {
-		c.printFolderRow(f)
+	for i := range filtered {
+		c.printFolderRow(&filtered[i])
 	}
 	fmt.Println()
 
@@ -371,7 +372,7 @@ func (c *SyncwebFoldersCmd) outputTable(
 	return nil
 }
 
-func (c *SyncwebFoldersCmd) printFolderRow(f folderEntry) {
+func (c *SyncwebFoldersCmd) printFolderRow(f *folderEntry) {
 	local := "-"
 	if f.LocalFiles > 0 || f.LocalBytes > 0 {
 		local = fmt.Sprintf("%d files (%s)", f.LocalFiles, utils.FormatSize(f.LocalBytes))
@@ -425,7 +426,7 @@ func (c *SyncwebFoldersCmd) printFolderRow(f folderEntry) {
 		f.ID, f.Label, path, local, needed, global, f.FreeSpace, syncStatus, peers, state, errors)
 }
 
-func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg config.Configuration, s syncweb.Engine) {
+func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg *config.Configuration, s syncweb.Engine) {
 	if c.Join {
 		c.actionJoin(filtered, cfg, s)
 	}
@@ -447,7 +448,7 @@ func (c *SyncwebFoldersCmd) executeActions(filtered []folderEntry, cfg config.Co
 	}
 }
 
-func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Configuration, s syncweb.Engine) {
+func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg *config.Configuration, s syncweb.Engine) {
 	var toJoin []folderEntry
 	for _, f := range filtered {
 		if len(f.PendingDevices) > 0 {
@@ -460,12 +461,12 @@ func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Config
 		return
 	}
 
-	for _, f := range toJoin {
-		c.joinFolder(f, cfg, s)
+	for i := range toJoin {
+		c.joinFolder(&toJoin[i], cfg, s)
 	}
 }
 
-func (c *SyncwebFoldersCmd) joinFolder(f folderEntry, cfg config.Configuration, s syncweb.Engine) {
+func (c *SyncwebFoldersCmd) joinFolder(f *folderEntry, cfg *config.Configuration, s syncweb.Engine) {
 	folderID := f.ID
 	deviceIDs := f.PendingDevices
 
@@ -479,7 +480,7 @@ func (c *SyncwebFoldersCmd) joinFolder(f folderEntry, cfg config.Configuration, 
 	}
 }
 
-func (c *SyncwebFoldersCmd) folderExists(cfg config.Configuration, folderID string) bool {
+func (c *SyncwebFoldersCmd) folderExists(cfg *config.Configuration, folderID string) bool {
 	for _, ef := range cfg.Folders {
 		if ef.ID == folderID {
 			return true

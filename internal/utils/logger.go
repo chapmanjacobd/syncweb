@@ -18,6 +18,9 @@ func (h *PlainHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= h.Level.Level()
 }
 
+// Handle implements [slog.Handler]
+//
+//nolint:gocritic // slog.Handler interface requires slog.Record by value
 func (h *PlainHandler) Handle(_ context.Context, r slog.Record) error {
 	var msg strings.Builder
 	msg.WriteString(r.Message)

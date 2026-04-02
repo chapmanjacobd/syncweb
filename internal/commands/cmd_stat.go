@@ -51,7 +51,7 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 		deviceNames := buildDeviceNamesMap(cfg.Devices)
 
 		for _, p := range c.Paths {
-			c.processPath(s, p, cfg, deviceNames, g.JSON)
+			c.processPath(s, p, &cfg, deviceNames, g.JSON)
 		}
 
 		return nil
@@ -61,7 +61,8 @@ func (c *SyncwebStatCmd) Run(g *SyncwebCmd) error {
 // buildDeviceNamesMap builds a map of device ID to name
 func buildDeviceNamesMap(devices []config.DeviceConfiguration) map[string]string {
 	deviceNames := make(map[string]string)
-	for _, d := range devices {
+	for i := range devices {
+		d := &devices[i]
 		name := d.Name
 		if name == "" {
 			name = d.DeviceID.String()[:7]
@@ -75,7 +76,7 @@ func buildDeviceNamesMap(devices []config.DeviceConfiguration) map[string]string
 func (c *SyncwebStatCmd) processPath(
 	s syncweb.Engine,
 	path string,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 	deviceNames map[string]string,
 	_ bool,
 ) {
@@ -101,14 +102,14 @@ func (c *SyncwebStatCmd) processPath(
 		return
 	}
 
-	availability := getDeviceAvailability(s, folderID, info)
-	c.printStatInfo(path, info, availability, deviceNames)
+	availability := getDeviceAvailability(s, folderID, &info)
+	c.printStatInfo(path, &info, availability, deviceNames)
 }
 
 // findFolderAndPath finds the folder ID and relative path for a given absolute path
 func (c *SyncwebStatCmd) findFolderAndPath(
 	absPath string,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 ) (folderID, relPath string, found bool) {
 	for _, f := range cfg.Folders {
 		if strings.HasPrefix(absPath, f.Path) {
@@ -126,7 +127,7 @@ func (c *SyncwebStatCmd) findFolderAndPath(
 // printStatInfo prints file stat information in the appropriate format
 func (c *SyncwebStatCmd) printStatInfo(
 	path string,
-	info protocol.FileInfo,
+	info *protocol.FileInfo,
 	availability []string,
 	deviceNames map[string]string,
 ) {
@@ -140,7 +141,7 @@ func (c *SyncwebStatCmd) printStatInfo(
 }
 
 // printTerseStat prints terse format stat output
-func (c *SyncwebStatCmd) printTerseStat(info protocol.FileInfo, availability []string) {
+func (c *SyncwebStatCmd) printTerseStat(info *protocol.FileInfo, availability []string) {
 	fmt.Printf("%s|%d|%d|%o|file|%d|%d|0\n",
 		info.Name,
 		info.Size,
@@ -152,7 +153,7 @@ func (c *SyncwebStatCmd) printTerseStat(info protocol.FileInfo, availability []s
 }
 
 // printCustomStat prints custom format stat output
-func (c *SyncwebStatCmd) printCustomStat(info protocol.FileInfo) {
+func (c *SyncwebStatCmd) printCustomStat(info *protocol.FileInfo) {
 	output := c.Format
 	output = strings.ReplaceAll(output, "%n", info.Name)
 	output = strings.ReplaceAll(output, "%s", strconv.FormatInt(info.Size, 10))
@@ -165,7 +166,7 @@ func (c *SyncwebStatCmd) printCustomStat(info protocol.FileInfo) {
 // printFullStat prints full format stat output
 func (c *SyncwebStatCmd) printFullStat(
 	path string,
-	info protocol.FileInfo,
+	info *protocol.FileInfo,
 	availability []string,
 	deviceNames map[string]string,
 ) {
@@ -210,7 +211,7 @@ func (c *SyncwebStatCmd) formatDeviceAvailability(availability []string, deviceN
 }
 
 // buildFlagsList builds a list of flags for the file
-func (c *SyncwebStatCmd) buildFlagsList(info protocol.FileInfo) []string {
+func (c *SyncwebStatCmd) buildFlagsList(info *protocol.FileInfo) []string {
 	var flags []string
 	if info.Deleted {
 		flags = append(flags, "deleted")
@@ -235,7 +236,7 @@ func (c *SyncwebStatCmd) printModifiedBy(modifiedBy protocol.ShortID, deviceName
 }
 
 // getDeviceAvailability returns a list of device IDs that have the file
-func getDeviceAvailability(s syncweb.Engine, folderID string, info protocol.FileInfo) []string {
+func getDeviceAvailability(s syncweb.Engine, folderID string, info *protocol.FileInfo) []string {
 	deviceSet := make(map[string]bool)
 	for _, block := range info.Blocks {
 		availables, err := s.BlockAvailability(folderID, info, block)
@@ -259,7 +260,7 @@ func getDeviceAvailability(s syncweb.Engine, folderID string, info protocol.File
 }
 
 // GetFileType returns a human-readable file type string
-func GetFileType(info protocol.FileInfo) string {
+func GetFileType(info *protocol.FileInfo) string {
 	switch info.Type {
 	case protocol.FileInfoTypeDirectory:
 		return "directory"

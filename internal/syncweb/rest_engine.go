@@ -48,12 +48,11 @@ type RESTEngine struct {
 	folderStatsMu        sync.RWMutex
 }
 
-// RESTReadSeeker implements io.ReadSeeker by fetching content from the REST API
+// RESTReadSeeker implements [io.ReadSeeker] by fetching content from the REST API
 type RESTReadSeeker struct {
 	engine   *RESTEngine
 	folderID string
 	path     string
-	ctx      context.Context
 	offset   int64
 	size     int64
 }
@@ -91,7 +90,7 @@ func (e *RESTEngine) do(method, path string, body any) (*http.Response, error) {
 			bodyReader = bytes.NewReader(bodyBytes)
 		}
 
-		req, err := http.NewRequest(method, e.BaseURL+path, bodyReader)
+		req, err := http.NewRequestWithContext(context.Background(), method, e.BaseURL+path, bodyReader)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +220,7 @@ func (e *RESTEngine) LocalSize(folderID string) (Counts, error) {
 	return Counts{}, nil
 }
 
-func (e *RESTEngine) NeedSize(folderID string, deviceID protocol.DeviceID) (Counts, error) {
+func (e *RESTEngine) NeedSize(folderID string, _ protocol.DeviceID) (Counts, error) {
 	if f, ok := e.getCachedFolder(folderID); ok {
 		return f.NeedSize, nil
 	}
@@ -372,7 +371,7 @@ func (e *RESTEngine) GetDiscoveredDevices() map[string]time.Time {
 	return nil
 }
 
-func (e *RESTEngine) AddFolder(id, label, path string, folderType config.FolderType) error {
+func (e *RESTEngine) AddFolder(id, _, path string, _ config.FolderType) error {
 	req := map[string]any{
 		"id":   id,
 		"path": path,
@@ -489,6 +488,7 @@ func (e *RESTEngine) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], fu
 
 	return func(yield func(FileMetadata) bool) {
 		var entries []models.LsEntry
+		//nolint:contextcheck // getJSON doesn't need context for simple REST calls
 		err := e.getJSON(fmt.Sprintf("/api/syncweb/ls?folder=%s&recursive=true", folderID), &entries)
 		if err != nil {
 			return
@@ -564,14 +564,13 @@ func (e *RESTEngine) ResolveLocalPath(syncPath string) (folderID, localPath stri
 	return "", "", fmt.Errorf("folder not found: %s", folderID)
 }
 
-func (e *RESTEngine) NewReadSeeker(ctx context.Context, folderID, path string) (io.ReadSeeker, error) {
+func (e *RESTEngine) NewReadSeeker(_ context.Context, folderID, path string) (io.ReadSeeker, error) {
 	// For REST engine, we create a special HTTP-based ReadSeeker
 	// that fetches content from the server
 	return &RESTReadSeeker{
 		engine:   e,
 		folderID: folderID,
 		path:     path,
-		ctx:      ctx,
 		offset:   0,
 		size:     -1,
 	}, nil
@@ -626,10 +625,11 @@ func (e *RESTEngine) Unignore(folderID, relativePath string) error {
 
 func (e *RESTEngine) GetGlobalTree(
 	folderID, prefix string,
-	levels int,
-	returnOnlyDirectories bool,
+	_ int,
+	_ bool,
 ) ([]models.LsEntry, error) {
 	var entries []models.LsEntry
+
 	err := e.getJSON(fmt.Sprintf("/api/syncweb/ls?folder=%s&prefix=%s", folderID, url.QueryEscape(prefix)), &entries)
 	return entries, err
 }
@@ -707,9 +707,9 @@ func (e *RESTEngine) GetCompletion(deviceID protocol.DeviceID, folderID string) 
 }
 
 func (e *RESTEngine) BlockAvailability(
-	folderID string,
-	info protocol.FileInfo,
-	block protocol.BlockInfo,
+	_ string,
+	_ *protocol.FileInfo,
+	_ protocol.BlockInfo,
 ) ([]stmodel.Availability, error) {
 	return nil, nil
 }
@@ -760,7 +760,7 @@ func (e *RESTEngine) RemoveFolderDevices(folderID string, deviceIDs []string) er
 	return nil
 }
 
-// Read implements io.ReadSeeker
+// Read implements [io.ReadSeeker]
 func (r *RESTReadSeeker) Read(p []byte) (n int, err error) {
 	if r.offset >= r.size && r.size >= 0 {
 		return 0, io.EOF
@@ -768,7 +768,7 @@ func (r *RESTReadSeeker) Read(p []byte) (n int, err error) {
 
 	// Build URL with range header
 	reqURL := fmt.Sprintf("/api/raw?path=sync://%s/%s", r.folderID, url.QueryEscape(r.path))
-	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, r.engine.BaseURL+reqURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, r.engine.BaseURL+reqURL, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -818,7 +818,7 @@ func (r *RESTReadSeeker) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-// Seek implements io.ReadSeeker
+// Seek implements [io.ReadSeeker]
 func (r *RESTReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	var newOffset int64
 	switch whence {
@@ -843,7 +843,7 @@ func (r *RESTReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	return r.offset, nil
 }
 
-// Close implements io.Closer (optional)
+// Close implements [io.Closer] (optional)
 func (r *RESTReadSeeker) Close() error {
 	return nil
 }

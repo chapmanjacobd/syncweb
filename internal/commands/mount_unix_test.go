@@ -1,9 +1,11 @@
 //go:build !windows
 
+//nolint:testpackage // Need access to internal getMountpoint function for testing
 package commands
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,7 +25,7 @@ func TestGetMountpoint(t *testing.T) {
 		t.Errorf("getMountpoint returned relative path: %s", got)
 	}
 
-	if !filepath.HasPrefix(absDir, got) {
+	if !strings.HasPrefix(absDir, got) {
 		t.Errorf("getMountpoint result %s is not a prefix of %s", got, absDir)
 	}
 }

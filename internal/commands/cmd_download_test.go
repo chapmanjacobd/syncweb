@@ -1,3 +1,4 @@
+//nolint:testpackage // Need access to internal types for testing
 package commands
 
 import (

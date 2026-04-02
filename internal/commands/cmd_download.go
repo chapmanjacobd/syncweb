@@ -90,17 +90,17 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 		cfg := s.RawConfig()
 
 		// Build download plan
-		items, result := c.buildDownloadPlan(g, s, cfg)
+		items, result := c.buildDownloadPlan(g, s, &cfg)
 
 		if len(items) == 0 {
-			return c.outputEmptyResult(g, result)
+			return c.outputEmptyResult(g, &result)
 		}
 
 		// Group items by folder
 		itemsByFolder := c.groupItemsByFolder(items)
 
 		// Get space info for each folder
-		folderSpaceInfos := c.getFolderSpaceInfos(cfg, s, itemsByFolder)
+		folderSpaceInfos := c.getFolderSpaceInfos(&cfg, s, itemsByFolder)
 
 		// Group folders by mountpoint
 		mountpointGroups := groupFoldersByMountpoint(folderSpaceInfos)
@@ -110,7 +110,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 
 		// Print summary (or store in result for JSON)
 		if g.JSON {
-			c.populateSpaceStatus(result, folderSpaceInfos, mountpointUsage)
+			c.populateSpaceStatus(&result, folderSpaceInfos, mountpointUsage)
 		} else {
 			c.printSummaryAndWarnings(itemsByFolder, folderSpaceInfos, mountpointUsage, mountpointGroups)
 		}
@@ -141,7 +141,7 @@ func (c *SyncwebDownloadCmd) Run(g *SyncwebCmd) error {
 func (c *SyncwebDownloadCmd) buildDownloadPlan(
 	g *SyncwebCmd,
 	s syncweb.Engine,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 ) ([]downloadItem, DownloadResult) {
 	var items []downloadItem
 	var totalSize int64
@@ -183,6 +183,7 @@ func (c *SyncwebDownloadCmd) buildDownloadPlan(
 	return items, result
 }
 
+//nolint:revive // traverseAndAddItems needs these parameters for recursive traversal
 func (c *SyncwebDownloadCmd) traverseAndAddItems(
 	s syncweb.Engine,
 	folderID, relPath string,
@@ -248,7 +249,7 @@ func (c *SyncwebDownloadCmd) findFolderForPath(
 	return "", "", false
 }
 
-func (c *SyncwebDownloadCmd) outputEmptyResult(g *SyncwebCmd, result DownloadResult) error {
+func (c *SyncwebDownloadCmd) outputEmptyResult(g *SyncwebCmd, result *DownloadResult) error {
 	if g.JSON {
 		jsonData, marshalErr := json.MarshalIndent(result, "", "  ")
 		if marshalErr != nil {
@@ -270,7 +271,7 @@ func (c *SyncwebDownloadCmd) groupItemsByFolder(items []downloadItem) map[string
 }
 
 func (c *SyncwebDownloadCmd) getFolderSpaceInfos(
-	cfg config.Configuration,
+	cfg *config.Configuration,
 	s syncweb.Engine,
 	itemsByFolder map[string][]downloadItem,
 ) map[string]*folderSpaceInfo {
@@ -285,7 +286,7 @@ func (c *SyncwebDownloadCmd) getFolderSpaceInfos(
 }
 
 func (c *SyncwebDownloadCmd) populateSpaceStatus(
-	result DownloadResult,
+	result *DownloadResult,
 	folderSpaceInfos map[string]*folderSpaceInfo,
 	mountpointUsage map[string]*mountpointUsageInfo,
 ) {
@@ -358,7 +359,7 @@ func (c *SyncwebDownloadCmd) triggerDownloads(
 }
 
 // getFolderSpaceInfo gets disk space information for a folder
-func getFolderSpaceInfo(cfg config.Configuration, s syncweb.Engine, folderID string) *folderSpaceInfo {
+func getFolderSpaceInfo(cfg *config.Configuration, s syncweb.Engine, folderID string) *folderSpaceInfo {
 	var folderPath string
 	var minFreeCfg minDiskFreeConfig
 

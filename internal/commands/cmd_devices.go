@@ -72,7 +72,7 @@ func (c *SyncwebDevicesCmd) Run(g *SyncwebCmd) error {
 		localDeviceID := s.MyID().String()
 
 		// Collect all devices
-		devices := c.collectDevices(s, cfg, localDeviceID)
+		devices := c.collectDevices(s, &cfg, localDeviceID)
 
 		// Apply filters
 		filtered := c.filterDevices(devices)
@@ -121,7 +121,7 @@ type deviceEntry struct {
 
 func (c *SyncwebDevicesCmd) collectDevices(
 	s syncweb.Engine,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 	localDeviceID string,
 ) []deviceEntry {
 	var devices []deviceEntry
@@ -148,7 +148,7 @@ func (c *SyncwebDevicesCmd) collectDevices(
 func (c *SyncwebDevicesCmd) collectAcceptedDevices(
 	devices []deviceEntry,
 	seenIDs map[string]bool,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 	s syncweb.Engine,
 	localDeviceID string,
 ) []deviceEntry {
@@ -157,7 +157,7 @@ func (c *SyncwebDevicesCmd) collectAcceptedDevices(
 			continue
 		}
 		seenIDs[d.DeviceID.String()] = true
-		devices = append(devices, c.buildAcceptedDeviceEntry(d, s, localDeviceID))
+		devices = append(devices, c.buildAcceptedDeviceEntry(&d, s, localDeviceID))
 	}
 	return devices
 }
@@ -186,7 +186,7 @@ func (c *SyncwebDevicesCmd) collectPendingDevices(
 func (c *SyncwebDevicesCmd) collectDiscoveredDevices(
 	devices []deviceEntry,
 	seenIDs map[string]bool,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 	s syncweb.Engine,
 ) []deviceEntry {
 	discovered := s.GetDiscoveredDevices()
@@ -211,7 +211,7 @@ func (c *SyncwebDevicesCmd) collectDiscoveredDevices(
 	return devices
 }
 
-func (c *SyncwebDevicesCmd) isDeviceAccepted(id string, cfg config.Configuration) bool {
+func (c *SyncwebDevicesCmd) isDeviceAccepted(id string, cfg *config.Configuration) bool {
 	for _, d := range cfg.Devices {
 		if d.DeviceID.String() == id {
 			return true
@@ -221,7 +221,7 @@ func (c *SyncwebDevicesCmd) isDeviceAccepted(id string, cfg config.Configuration
 }
 
 func (c *SyncwebDevicesCmd) buildAcceptedDeviceEntry(
-	d config.DeviceConfiguration,
+	d *config.DeviceConfiguration,
 	s syncweb.Engine,
 	localDeviceID string,
 ) deviceEntry {
@@ -319,8 +319,8 @@ func (c *SyncwebDevicesCmd) outputTable(s syncweb.Engine, filtered []deviceEntry
 	fmt.Println(strings.Repeat("-", 150))
 
 	// Print rows
-	for _, d := range filtered {
-		c.printDeviceRow(d)
+	for i := range filtered {
+		c.printDeviceRow(&filtered[i])
 	}
 
 	// Actions
@@ -329,7 +329,7 @@ func (c *SyncwebDevicesCmd) outputTable(s syncweb.Engine, filtered []deviceEntry
 	return nil
 }
 
-func (c *SyncwebDevicesCmd) printDeviceRow(d deviceEntry) {
+func (c *SyncwebDevicesCmd) printDeviceRow(d *deviceEntry) {
 	lastSeen := formatLastSeen(d.LastSeen, d.Status)
 	duration := "-"
 	if d.Duration > 0 {

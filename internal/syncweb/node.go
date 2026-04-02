@@ -34,6 +34,9 @@ type Node struct {
 	mu       sync.RWMutex
 }
 
+// NewNode creates a new Syncthing node
+//
+//nolint:revive,funlen,maintidx // NewNode is long but needed to set up the Syncthing node
 func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	if homeDir == "" {
 		var err error

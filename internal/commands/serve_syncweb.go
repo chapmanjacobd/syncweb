@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,7 +118,7 @@ func (c *ServeCmd) setupSyncweb(g *SyncwebCmd) {
 			logger.Error("Failed to start Syncweb instance", "error", err)
 		} else {
 			logger.Info("Syncweb instance started", "myID", sw.MyID())
-			if err := utils.AutoCleanupMounts(); err != nil {
+			if err := utils.AutoCleanupMounts(context.Background()); err != nil {
 				logger.Warn("Failed to auto-cleanup mounts", "error", err)
 			}
 		}
@@ -362,7 +363,8 @@ func (c *ServeCmd) collectFolderEntries(
 	// levels=0 means just the entries at the specified prefix
 	entries, err := c.sw.GetGlobalTree(folderID, searchPrefix, levels, false)
 	if err != nil {
-		slog.Error("Failed to get global tree", "folderID", folderID, "prefix", searchPrefix, "error", err)
+		logger := slog.Default()
+		logger.Error("Failed to get global tree", "folderID", folderID, "prefix", searchPrefix, "error", err)
 		return
 	}
 
@@ -557,7 +559,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 		for meta := range seq {
 			// Check context for cancellation
 			if r.Context().Err() != nil {
-				cancel()
+				_ = cancel()
 				return
 			}
 
@@ -581,12 +583,12 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				results = append(results, entry)
 
 				if len(results) >= maxResults {
-					cancel()
+					_ = cancel()
 					goto done
 				}
 			}
 		}
-		cancel()
+		_ = cancel()
 	}
 
 done:

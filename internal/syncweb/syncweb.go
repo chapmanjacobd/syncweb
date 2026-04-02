@@ -171,7 +171,7 @@ func (s *Syncweb) GetEvents() []models.SyncEvent {
 	if v == nil {
 		return nil
 	}
-	return slices.Clone(v.([]models.SyncEvent))
+	return append([]models.SyncEvent(nil), v.([]models.SyncEvent)...) //nolint:errcheck // append doesn't return error
 }
 
 // MyID returns the local device ID
@@ -200,7 +200,7 @@ func (s *Syncweb) IsConnectedTo(deviceID protocol.DeviceID) bool {
 // AllGlobalFiles returns an iterator that streams all global files in a folder
 func (s *Syncweb) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], func() error) {
 	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
-		return func(yield func(FileMetadata) bool) {}, func() error { return nil }
+		return func(func(FileMetadata) bool) {}, func() error { return nil }
 	}
 	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
 	return func(yield func(FileMetadata) bool) {
@@ -302,13 +302,13 @@ func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (st
 // BlockAvailability returns a list of devices that have the specified block
 func (s *Syncweb) BlockAvailability(
 	folderID string,
-	info protocol.FileInfo,
+	info *protocol.FileInfo,
 	block protocol.BlockInfo,
 ) ([]stmodel.Availability, error) {
 	if s.Node == nil || s.Node.App == nil || s.Node.App.Internals == nil {
 		return nil, errors.New("internals not initialized")
 	}
-	return s.Node.App.Internals.BlockAvailability(folderID, info, block)
+	return s.Node.App.Internals.BlockAvailability(folderID, *info, block)
 }
 
 func (s *Syncweb) watchEvents() {
@@ -930,6 +930,9 @@ func (r *SyncwebReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	return r.offset, nil
 }
 
+// Read reads bytes from the remote file
+//
+//nolint:maintidx // Read is complex but needed for efficient streaming
 func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	if r.offset >= r.info.Size {
 		return 0, io.EOF
@@ -1109,7 +1112,7 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 	}
 	slices.Sort(finalManaged)
 
-	var final []string
+	final := make([]string, 0, len(userPatterns)+len(finalManaged)+3)
 	final = append(final, userPatterns...)
 	final = append(final, "// BEGIN Syncweb-managed")
 	final = append(final, finalManaged...)

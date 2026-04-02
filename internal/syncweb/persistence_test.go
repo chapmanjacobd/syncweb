@@ -1,7 +1,6 @@
 package syncweb_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -17,19 +16,19 @@ func TestNodeIDPersistence(t *testing.T) {
 
 	// First run
 	{
-		sw, err := syncweb.NewSyncweb(home, "node1", "tcp://127.0.0.1:0")
-		if err != nil {
-			t.Fatalf("Failed to create syncweb: %v", err)
+		sw, createErr := syncweb.NewSyncweb(home, "node1", "tcp://127.0.0.1:0")
+		if createErr != nil {
+			t.Fatalf("Failed to create syncweb: %v", createErr)
 		}
-		if err := sw.Start(); err != nil {
-			t.Fatalf("Failed to start syncweb: %v", err)
+		if startErr := sw.Start(); startErr != nil {
+			t.Fatalf("Failed to start syncweb: %v", startErr)
 		}
 		firstID = sw.MyID().String()
 
 		// Add a folder to test config persistence
-		err = sw.AddFolder("test-folder", "Test Folder", os.TempDir(), config.FolderTypeSendReceive)
-		if err != nil {
-			t.Fatalf("Failed to add folder: %v", err)
+		addFolderErr := sw.AddFolder("test-folder", "Test Folder", t.TempDir(), config.FolderTypeSendReceive)
+		if addFolderErr != nil {
+			t.Fatalf("Failed to add folder: %v", addFolderErr)
 		}
 
 		sw.Stop()

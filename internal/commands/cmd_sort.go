@@ -84,14 +84,14 @@ func (c *SyncwebSortCmd) collectFiles(s syncweb.Engine) []fileWithInfo {
 	files := make([]fileWithInfo, 0, len(c.Paths))
 
 	for _, p := range c.Paths {
-		files = append(files, c.collectFilesForPath(s, cfg, p)...)
+		files = append(files, c.collectFilesForPath(s, &cfg, p)...)
 	}
 
 	return files
 }
 
 // collectFilesForPath collects files for a single path
-func (c *SyncwebSortCmd) collectFilesForPath(s syncweb.Engine, cfg config.Configuration, path string) []fileWithInfo {
+func (c *SyncwebSortCmd) collectFilesForPath(s syncweb.Engine, cfg *config.Configuration, path string) []fileWithInfo {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		fmt.Printf("Error: %s: %v\n", path, err)
@@ -129,7 +129,7 @@ func (c *SyncwebSortCmd) collectFilesForPath(s syncweb.Engine, cfg config.Config
 // findFolderAndPath finds the folder ID and relative path for a given absolute path
 func (c *SyncwebSortCmd) findFolderAndPath(
 	absPath string,
-	cfg config.Configuration,
+	cfg *config.Configuration,
 ) (folderID, relPath string, found bool) {
 	for _, f := range cfg.Folders {
 		if strings.HasPrefix(absPath, f.Path) {
@@ -180,13 +180,13 @@ func filterMaxSeeders(files []fileWithInfo, maxSeeders int) []fileWithInfo {
 // sortFiles sorts files according to sort criteria
 func (c *SyncwebSortCmd) sortFiles(files []fileWithInfo) []fileWithInfo {
 	sort.Slice(files, func(i, j int) bool {
-		return c.compareFiles(files[i], files[j])
+		return c.compareFiles(&files[i], &files[j])
 	})
 	return files
 }
 
 // compareFiles compares two files based on sort criteria
-func (c *SyncwebSortCmd) compareFiles(a, b fileWithInfo) bool {
+func (c *SyncwebSortCmd) compareFiles(a, b *fileWithInfo) bool {
 	for _, criterion := range c.Sort {
 		reverse := strings.HasPrefix(criterion, "-")
 		if reverse {
@@ -206,7 +206,7 @@ func (c *SyncwebSortCmd) compareFiles(a, b fileWithInfo) bool {
 }
 
 // compareByCriterion compares two files by a single criterion
-func (c *SyncwebSortCmd) compareByCriterion(a, b fileWithInfo, criterion string) bool {
+func (c *SyncwebSortCmd) compareByCriterion(a, b *fileWithInfo, criterion string) bool {
 	switch criterion {
 	case "size":
 		return a.Size < b.Size
@@ -239,7 +239,8 @@ func abs(x int) int {
 // printFiles prints the sorted files
 func (c *SyncwebSortCmd) printFiles(files []fileWithInfo, limitBytes int64) {
 	currentSize := int64(0)
-	for _, f := range files {
+	for i := range files {
+		f := &files[i]
 		if limitBytes > 0 && currentSize+f.Size > limitBytes {
 			break
 		}
@@ -250,7 +251,7 @@ func (c *SyncwebSortCmd) printFiles(files []fileWithInfo, limitBytes int64) {
 
 // calculateFrecency computes a score based on recency and popularity (seed count)
 // Higher score = more recently modified and/or more popular (more seeders)
-func calculateFrecency(f fileWithInfo, weight int) float64 {
+func calculateFrecency(f *fileWithInfo, weight int) float64 {
 	now := time.Now().Unix()
 
 	// Recency component: more recent = higher score

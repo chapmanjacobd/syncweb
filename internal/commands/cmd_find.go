@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -118,7 +117,14 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 					folder:           f,
 					cmd:              g,
 				}
-				result, include := c.processFile(meta, ctx)
+				// Wrap meta to convert fields to methods
+				wrapped := fileMetadataWrapper{
+					name:     meta.Name,
+					fileType: meta.Type,
+					size:     meta.Size,
+					modNanos: meta.ModNanos,
+				}
+				result, include := c.processFile(wrapped, ctx)
 				if include {
 					results = append(results, result)
 				}
@@ -346,11 +352,33 @@ type processFileContext struct {
 	cmd              *SyncwebCmd
 }
 
+// processFileMeta is the interface for file metadata from Syncthing
+type processFileMeta interface {
+	Name() string
+	Type() protocol.FileInfoType
+	Size() int64
+	ModNanos() int64
+}
+
+// fileMetadataWrapper wraps db.FileMetadata to provide method access
+type fileMetadataWrapper struct {
+	name     string
+	fileType protocol.FileInfoType
+	size     int64
+	modNanos int64
+}
+
+func (w fileMetadataWrapper) Name() string              { return w.name }
+func (w fileMetadataWrapper) Type() protocol.FileInfoType { return w.fileType }
+func (w fileMetadataWrapper) Size() int64               { return w.size }
+func (w fileMetadataWrapper) ModNanos() int64           { return w.modNanos }
+
 func (c *SyncwebFindCmd) processFile(
-	meta any,
+	meta processFileMeta,
 	ctx *processFileContext,
 ) (findResult, bool) {
-	isDir := getMetaType(meta) == protocol.FileInfoTypeDirectory
+	isDir := meta.Type() == protocol.FileInfoTypeDirectory
+	name := meta.Name()
 
 	// Type filter
 	if !c.checkTypeFilter(isDir) {
@@ -358,34 +386,34 @@ func (c *SyncwebFindCmd) processFile(
 	}
 
 	// Hidden file filter
-	if !c.checkHiddenFilter(meta) {
+	if !c.Hidden && strings.HasPrefix(name, ".") {
 		return findResult{}, false
 	}
 
 	// Extension filter
-	if !c.checkExtensionFilter(meta) {
+	if !c.checkExtensionFilter(name) {
 		return findResult{}, false
 	}
 
 	// Size filter (files only)
-	if !c.checkSizeFilter(isDir, meta, ctx.sizeMin, ctx.sizeMax) {
+	if !c.checkSizeFilter(isDir, meta.Size(), ctx.sizeMin, ctx.sizeMax) {
 		return findResult{}, false
 	}
 
 	// Time filter
-	if !c.checkTimeFilter(meta, ctx.modifiedAfterTS, ctx.modifiedBeforeTS) {
+	if !c.checkTimeFilter(time.Unix(0, meta.ModNanos()), ctx.modifiedAfterTS, ctx.modifiedBeforeTS) {
 		return findResult{}, false
 	}
 
 	// Depth filter
-	if !c.checkDepthFilter(meta, ctx.depthMin, ctx.depthMax) {
+	if !c.checkDepthFilter(name, ctx.depthMin, ctx.depthMax) {
 		return findResult{}, false
 	}
 
 	// Search target
-	searchTarget := getMetaName(meta)
+	searchTarget := name
 	if !c.FullPath {
-		searchTarget = filepath.Base(getMetaName(meta))
+		searchTarget = filepath.Base(name)
 	}
 
 	if !ctx.matchFunc(searchTarget) {
@@ -397,17 +425,17 @@ func (c *SyncwebFindCmd) processFile(
 	if c.AbsolutePath {
 		// Get folder path from config
 		folderPath := ctx.folder.Path
-		path = filepath.Join(folderPath, getMetaName(meta))
+		path = filepath.Join(folderPath, name)
 	} else {
-		path = fmt.Sprintf("sync://%s/%s", ctx.folder.ID, getMetaName(meta))
+		path = fmt.Sprintf("sync://%s/%s", ctx.folder.ID, name)
 	}
 
 	if ctx.cmd.JSON {
 		return findResult{
-			Name:     filepath.Base(getMetaName(meta)),
+			Name:     filepath.Base(name),
 			Path:     path,
-			Size:     getMetaSize(meta),
-			Modified: getMetaModTime(meta),
+			Size:     meta.Size(),
+			Modified: time.Unix(0, meta.ModNanos()),
 			IsDir:    isDir,
 		}, true
 	}
@@ -426,28 +454,20 @@ func (c *SyncwebFindCmd) checkTypeFilter(isDir bool) bool {
 	return true
 }
 
-func (c *SyncwebFindCmd) checkHiddenFilter(meta any) bool {
-	if !c.Hidden && strings.HasPrefix(getMetaName(meta), ".") {
-		return false
-	}
-	return true
-}
-
-func (c *SyncwebFindCmd) checkExtensionFilter(meta any) bool {
+func (c *SyncwebFindCmd) checkExtensionFilter(name string) bool {
 	if len(c.Ext) == 0 {
 		return true
 	}
 	for _, ext := range c.Ext {
-		if strings.HasSuffix(strings.ToLower(getMetaName(meta)), strings.ToLower(ext)) {
+		if strings.HasSuffix(strings.ToLower(name), strings.ToLower(ext)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *SyncwebFindCmd) checkSizeFilter(isDir bool, meta any, sizeMin, sizeMax *int64) bool {
+func (c *SyncwebFindCmd) checkSizeFilter(isDir bool, size int64, sizeMin, sizeMax *int64) bool {
 	if !isDir && (sizeMin != nil || sizeMax != nil) {
-		size := getMetaSize(meta)
 		if sizeMin != nil && size < *sizeMin {
 			return false
 		}
@@ -458,9 +478,9 @@ func (c *SyncwebFindCmd) checkSizeFilter(isDir bool, meta any, sizeMin, sizeMax 
 	return true
 }
 
-func (c *SyncwebFindCmd) checkTimeFilter(meta any, modifiedAfterTS, modifiedBeforeTS *int64) bool {
+func (c *SyncwebFindCmd) checkTimeFilter(modified time.Time, modifiedAfterTS, modifiedBeforeTS *int64) bool {
 	if modifiedAfterTS != nil || modifiedBeforeTS != nil {
-		modifiedTS := getMetaModTime(meta).Unix()
+		modifiedTS := modified.Unix()
 		if modifiedAfterTS != nil && modifiedTS < *modifiedAfterTS {
 			return false
 		}
@@ -471,9 +491,9 @@ func (c *SyncwebFindCmd) checkTimeFilter(meta any, modifiedAfterTS, modifiedBefo
 	return true
 }
 
-func (c *SyncwebFindCmd) checkDepthFilter(meta any, depthMin, depthMax *int) bool {
+func (c *SyncwebFindCmd) checkDepthFilter(name string, depthMin, depthMax *int) bool {
 	if depthMin != nil || depthMax != nil {
-		depth := strings.Count(getMetaName(meta), "/") + strings.Count(getMetaName(meta), "\\")
+		depth := strings.Count(name, "/") + strings.Count(name, "\\")
 		if depthMin != nil && depth < *depthMin {
 			return false
 		}
@@ -482,65 +502,6 @@ func (c *SyncwebFindCmd) checkDepthFilter(meta any, depthMin, depthMax *int) boo
 		}
 	}
 	return true
-}
-
-// Helper functions to access db.FileMetadata fields using reflection
-func getMetaName(meta any) string {
-	v := reflect.ValueOf(meta)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Struct {
-		nameField := v.FieldByName("Name")
-		if nameField.IsValid() && nameField.Kind() == reflect.String {
-			return nameField.String()
-		}
-	}
-	return ""
-}
-
-func getMetaType(meta any) protocol.FileInfoType {
-	v := reflect.ValueOf(meta)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Struct {
-		typeField := v.FieldByName("Type")
-		if typeField.IsValid() {
-			if t, ok := typeField.Interface().(protocol.FileInfoType); ok {
-				return t
-			}
-		}
-	}
-	return protocol.FileInfoTypeFile
-}
-
-func getMetaSize(meta any) int64 {
-	v := reflect.ValueOf(meta)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Struct {
-		sizeField := v.FieldByName("Size")
-		if sizeField.IsValid() && sizeField.Kind() == reflect.Int64 {
-			return sizeField.Int()
-		}
-	}
-	return 0
-}
-
-func getMetaModTime(meta any) time.Time {
-	v := reflect.ValueOf(meta)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Struct {
-		modTimeField := v.FieldByName("ModNanos")
-		if modTimeField.IsValid() && modTimeField.Kind() == reflect.Int64 {
-			return time.Unix(0, modTimeField.Int())
-		}
-	}
-	return time.Time{}
 }
 
 // GlobToRegex converts a glob pattern to a regex pattern

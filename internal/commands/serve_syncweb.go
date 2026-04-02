@@ -490,22 +490,7 @@ func (c *ServeCmd) handleSyncwebToggle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	writeOK(w, map[string]bool{"offline": !c.sw.IsRunning()})
-}
-
-// handleConfig returns the Syncthing configuration
-// GET /api/config
-func (c *ServeCmd) handleConfig(w http.ResponseWriter, _ *http.Request) {
-	c.swMu.Lock()
-	defer c.swMu.Unlock()
-	if c.sw == nil {
-		writeServiceUnavailable(w)
-		return
-	}
-
-	cfg := c.sw.RawConfig()
-	writeOK(w, cfg)
 }
 
 // handleSyncwebStatus returns the current status of Syncweb

@@ -111,7 +111,6 @@ func (c *SyncwebCmd) AfterApply() error {
 }
 
 func (c *SyncwebCmd) WithSyncweb(fn func(s syncweb.Engine) error) error {
-	slog.Debug("WithSyncweb", "home", c.SyncwebHome)
 	s, err := syncweb.NewSyncweb(c.SyncwebHome, "syncweb", "")
 	if err != nil {
 		// Fallback to REST API if lock fails
@@ -127,7 +126,7 @@ func (c *SyncwebCmd) WithSyncweb(fn func(s syncweb.Engine) error) error {
 				logger := slog.Default().With("component", "cli-rest")
 				logger.Debug("Fallback to REST API", "url", baseURL)
 
-				engine := syncweb.NewRESTEngine(baseURL, token)
+				engine := syncweb.NewRESTEngine(c.SyncwebHome, baseURL, token)
 				return fn(engine)
 			}
 		}

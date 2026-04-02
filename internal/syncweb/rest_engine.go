@@ -8,9 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"iter"
+	"crypto/tls"
 
 	"github.com/araddon/dateparse"
 	"github.com/syncthing/syncthing/lib/config"
@@ -21,7 +24,9 @@ import (
 )
 
 // RESTEngine implements the Engine interface by communicating with a running Syncweb server
+// for live data, but reading configuration locally for better security and efficiency.
 type RESTEngine struct {
+	HomeDir       string
 	BaseURL       string
 	APIToken      string
 	client        *http.Client
@@ -29,11 +34,12 @@ type RESTEngine struct {
 	lastFetch     time.Time
 }
 
-func NewRESTEngine(baseURL, apiToken string) *RESTEngine {
+func NewRESTEngine(homeDir, baseURL, apiToken string) *RESTEngine {
 	if !strings.HasPrefix(baseURL, "http") {
 		baseURL = "http://" + baseURL
 	}
 	return &RESTEngine{
+		HomeDir:  homeDir,
 		BaseURL:  baseURL,
 		APIToken: apiToken,
 		client: &http.Client{
@@ -99,22 +105,35 @@ func (e *RESTEngine) IsRunning() bool {
 }
 
 func (e *RESTEngine) MyID() protocol.DeviceID {
-	var status struct {
-		MyID string `json:"myID"`
+	certPath := filepath.Join(e.HomeDir, "cert.pem")
+	keyPath := filepath.Join(e.HomeDir, "key.pem")
+	
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return protocol.EmptyDeviceID
 	}
-	_ = e.getJSON("/api/syncweb/status", &status)
-	id, _ := protocol.DeviceIDFromString(status.MyID)
-	return id
+	return protocol.NewDeviceID(cert.Certificate[0])
 }
 
 func (e *RESTEngine) RawConfig() config.Configuration {
-	var cfg config.Configuration
-	_ = e.getJSON("/api/config", &cfg)
+	cfgPath := filepath.Join(e.HomeDir, "config.xml")
+	f, err := os.Open(cfgPath)
+	if err != nil {
+		return config.Configuration{}
+	}
+	defer f.Close()
+
+	// We need an ID to read the XML, but it's only used for some defaults
+	myID := e.MyID()
+	cfg, _, err := config.ReadXML(f, myID)
+	if err != nil {
+		return config.Configuration{}
+	}
 	return cfg
 }
 
 func (e *RESTEngine) SaveConfig() error {
-	return fmt.Errorf("not implemented via REST API")
+	return fmt.Errorf("cannot save config in REST mode (server is running)")
 }
 
 func (e *RESTEngine) GetFolders() []FolderInfo {
@@ -461,7 +480,6 @@ func (e *RESTEngine) CountSeeders(folderID, path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// Note: Server stat doesn't return block availability yet
 	return 0, nil
 }
 

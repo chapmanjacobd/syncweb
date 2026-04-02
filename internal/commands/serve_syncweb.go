@@ -346,32 +346,25 @@ func (c *ServeCmd) collectFolderEntries(
 	folderID, prefix string,
 	resultsMap map[string]models.LsEntry,
 ) {
-	// Trim trailing slash from prefix for GetGlobalTree if it's not root
-	searchPrefix := prefix
-	if searchPrefix != "" && strings.HasSuffix(searchPrefix, "/") {
-		searchPrefix = strings.TrimSuffix(searchPrefix, "/")
-	}
+	seq, cancel := c.sw.Node.App.Internals.AllGlobalFiles(folderID)
+	defer func() { _ = cancel() }()
 
-	// levels=0 means just the entries at the specified prefix
-	tree, err := c.sw.GetGlobalTree(folderID, searchPrefix, 0, false)
-	if err != nil {
-		slog.Error("Failed to get global tree", "folderID", folderID, "prefix", searchPrefix, "error", err)
-		return
-	}
-
-	for _, entry := range tree {
+	for meta := range seq {
 		if r.Context().Err() != nil {
 			return
 		}
 
-		// treeEntry.Name is the full path from folder root
-		name := entry.Name
-		if name == searchPrefix {
+		name := meta.Name
+		if !strings.HasPrefix(name, prefix) || name == prefix {
 			continue
 		}
 
-		entryName := filepath.Base(name)
-		fullSyncwebPath := fmt.Sprintf("sync://%s/%s", folderID, name)
+		rel := strings.TrimPrefix(name, prefix)
+		parts := strings.Split(rel, "/")
+		entryName := parts[0]
+		isDir := len(parts) > 1
+
+		fullSyncwebPath := fmt.Sprintf("sync://%s/%s", folderID, filepath.Join(prefix, entryName))
 		if _, ok := resultsMap[fullSyncwebPath]; ok {
 			continue
 		}
@@ -379,19 +372,18 @@ func (c *ServeCmd) collectFolderEntries(
 		localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
 		isLocal := utils.FileExists(localPath)
 
-		isDir := entry.Type == "FILE_INFO_TYPE_DIRECTORY"
-		lsEntry := models.LsEntry{
+		entry := models.LsEntry{
 			Name:     entryName,
 			Path:     fullSyncwebPath,
 			IsDir:    isDir,
 			Local:    isLocal,
-			Size:     entry.Size,
-			Modified: entry.ModTime.Format(time.RFC3339),
+			Size:     meta.Size,
+			Modified: meta.ModTime().Format(time.RFC3339),
 		}
 		if !isDir {
-			lsEntry.Type = utils.DetectMimeType(entryName)
+			entry.Type = utils.DetectMimeType(entryName)
 		}
-		resultsMap[fullSyncwebPath] = lsEntry
+		resultsMap[fullSyncwebPath] = entry
 	}
 }
 
@@ -552,8 +544,6 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var results []models.LsEntry
-	const maxResults = 1000
-
 	cfg := c.sw.Node.Cfg.RawCopy()
 	for _, f := range cfg.Folders {
 		// Wait for Syncthing to index local files
@@ -573,30 +563,20 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 				localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
 				isLocal := utils.FileExists(localPath)
 
-				isDir := meta.Type == protocol.FileInfoTypeDirectory
-				entry := models.LsEntry{
+				results = append(results, models.LsEntry{
 					Name:     filepath.Base(meta.Name),
 					Path:     fullSyncwebPath,
-					IsDir:    isDir,
+					IsDir:    meta.Type == protocol.FileInfoTypeDirectory,
 					Local:    isLocal,
 					Size:     meta.Size,
+					Type:     utils.DetectMimeType(meta.Name),
 					Modified: meta.ModTime().Format(time.RFC3339),
-				}
-				if !isDir {
-					entry.Type = utils.DetectMimeType(meta.Name)
-				}
-				results = append(results, entry)
-
-				if len(results) >= maxResults {
-					_ = cancel()
-					goto done
-				}
+				})
 			}
 		}
 		_ = cancel()
 	}
 
-done:
 	writeOK(w, results)
 }
 

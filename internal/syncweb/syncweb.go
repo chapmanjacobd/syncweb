@@ -1091,12 +1091,28 @@ func (s *Syncweb) GetCompletion(deviceID protocol.DeviceID, folderID string) (ma
 }
 
 // GetGlobalTree returns folder tree structure for browsing
+// levels: -1 for all levels, 0 for root only, etc
+// returnOnlyDirectories: if true, only return directory entries
 func (s *Syncweb) GetGlobalTree(
 	folderID, prefix string,
 	levels int,
 	returnOnlyDirectories bool,
-) ([]*stmodel.TreeEntry, error) {
-	return s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
+) ([]map[string]any, error) {
+	tree, err := s.Node.App.Internals.GlobalTree(folderID, prefix, levels, returnOnlyDirectories)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]any, len(tree))
+	for i, entry := range tree {
+		result[i] = map[string]any{
+			"name":    entry.Name,
+			"modTime": entry.ModTime,
+			"size":    entry.Size,
+			"type":    entry.Type,
+		}
+	}
+	return result, nil
 }
 
 // GetLocalChangedFiles returns locally changed files for a folder (paginated)

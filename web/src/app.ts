@@ -88,6 +88,15 @@ export function renderBreadcrumbs(): void {
 
     container.innerHTML = '';
 
+    if (state.currentPath.startsWith('Search results')) {
+        const searchItem = document.createElement('div');
+        searchItem.className = 'breadcrumb-item';
+        searchItem.innerHTML = `<i data-lucide="search" style="width: 14px;"></i> ${state.currentPath}`;
+        container.appendChild(searchItem);
+        if ((window as any).lucide) (window as any).lucide.createIcons();
+        return;
+    }
+
     const rootItem = document.createElement('div');
     rootItem.className = 'breadcrumb-item';
     rootItem.innerHTML = `<i data-lucide="home" style="width: 14px;"></i> Home`;
@@ -742,14 +751,15 @@ export async function triggerDownload(path: string): Promise<void> {
 export async function toggleOffline(): Promise<void> {
     const btn = document.getElementById('offline-btn');
     const span = btn?.querySelector('span');
-    const isOffline = span?.innerText === 'Go Online';
+    const isOffline = span?.textContent === 'Go Online';
     try {
         const resp = await fetchAPI('/api/syncweb/toggle', {
             method: 'POST',
             body: JSON.stringify({ offline: !isOffline })
         });
         const data = await resp.json();
-        if (span) span.innerText = data.offline ? 'Go Online' : 'Go Offline';
+        if (span) span.textContent = data.offline ? 'Go Online' : 'Go Offline';
+
         const icon = btn!.querySelector('i');
         if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
         if ((window as any).lucide) (window as any).lucide.createIcons();
@@ -766,7 +776,7 @@ export async function loadStatus(): Promise<void> {
         const btn = document.getElementById('offline-btn');
         if (btn) {
             const span = btn.querySelector('span');
-            if (span) span.innerText = data.offline ? 'Go Online' : 'Go Offline';
+            if (span) span.textContent = data.offline ? 'Go Online' : 'Go Offline';
             const icon = btn.querySelector('i');
             if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
             if ((window as any).lucide) (window as any).lucide.createIcons();

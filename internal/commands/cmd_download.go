@@ -201,9 +201,10 @@ func (c *SyncwebDownloadCmd) buildDownloadPlan(
 }
 
 func (c *SyncwebDownloadCmd) findFolderForPath(
-	absPath, p string,
+	absPath string,
+	_ string,
 	folders []config.FolderConfiguration,
-) (folderID string, relPath string, found bool) {
+) (folderID, relPath string, found bool) {
 	for _, f := range folders {
 		if strings.HasPrefix(absPath, f.Path) {
 			folderID := f.ID
@@ -219,7 +220,10 @@ func (c *SyncwebDownloadCmd) findFolderForPath(
 
 func (c *SyncwebDownloadCmd) outputEmptyResult(g *SyncwebCmd, result DownloadResult) error {
 	if g.JSON {
-		jsonData, _ := json.MarshalIndent(result, "", "  ")
+		jsonData, marshalErr := json.MarshalIndent(result, "", "  ")
+		if marshalErr != nil {
+			return marshalErr
+		}
 		fmt.Println(string(jsonData))
 	} else {
 		fmt.Println("No files found to download")

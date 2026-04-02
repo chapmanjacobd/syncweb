@@ -53,6 +53,9 @@ lint-no-fix:
 test:
 	go test -tags "$(BUILD_TAGS)" ./...
 
+test-race:
+	go test -tags "$(BUILD_TAGS)" -race ./...
+
 cover:
 	go test -tags "$(BUILD_TAGS)" -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | awk '{n=split($$NF,a,"%%"); if (a[1] < 85) print $$0}' | sort -k3 -n

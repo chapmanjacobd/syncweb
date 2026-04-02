@@ -129,66 +129,98 @@ func (c *SyncwebDevicesCmd) collectDevices(
 
 	// Get accepted devices
 	if c.Accepted {
-		for _, d := range cfg.Devices {
-			if seenIDs[d.DeviceID.String()] {
-				continue
-			}
-			seenIDs[d.DeviceID.String()] = true
-			devices = append(devices, c.buildAcceptedDeviceEntry(d, s, localDeviceID))
-		}
+		devices = c.collectAcceptedDevices(devices, seenIDs, cfg, s, localDeviceID)
 	}
 
 	// Get pending devices
 	if c.Pending {
-		pending := s.GetPendingDevices()
-		for id := range pending {
-			if seenIDs[id] {
-				continue
-			}
-			seenIDs[id] = true
-			devices = append(devices, deviceEntry{
-				ID:      id,
-				Name:    id[:7],
-				Status:  "💬",
-				Pending: true,
-			})
-		}
+		devices = c.collectPendingDevices(devices, seenIDs, s)
 	}
 
 	// Get discovered devices
 	if c.Discovered {
-		discovered := s.GetDiscoveredDevices()
-		for id, info := range discovered {
-			if seenIDs[id] {
-				continue
-			}
-			// Only show if not already in accepted list
-			alreadyAccepted := false
-			for _, d := range cfg.Devices {
-				if d.DeviceID.String() == id {
-					alreadyAccepted = true
-					break
-				}
-			}
-			if alreadyAccepted {
-				continue
-			}
-
-			name, _ := info["name"].(string)
-			if name == "" {
-				name = id[:7]
-			}
-
-			devices = append(devices, deviceEntry{
-				ID:         id,
-				Name:       name,
-				Status:     "🗨️",
-				Discovered: true,
-			})
-		}
+		devices = c.collectDiscoveredDevices(devices, seenIDs, cfg, s)
 	}
 
 	return devices
+}
+
+func (c *SyncwebDevicesCmd) collectAcceptedDevices(
+	devices []deviceEntry,
+	seenIDs map[string]bool,
+	cfg config.Configuration,
+	s *syncweb.Syncweb,
+	localDeviceID string,
+) []deviceEntry {
+	for _, d := range cfg.Devices {
+		if seenIDs[d.DeviceID.String()] {
+			continue
+		}
+		seenIDs[d.DeviceID.String()] = true
+		devices = append(devices, c.buildAcceptedDeviceEntry(d, s, localDeviceID))
+	}
+	return devices
+}
+
+func (c *SyncwebDevicesCmd) collectPendingDevices(
+	devices []deviceEntry,
+	seenIDs map[string]bool,
+	s *syncweb.Syncweb,
+) []deviceEntry {
+	pending := s.GetPendingDevices()
+	for id := range pending {
+		if seenIDs[id] {
+			continue
+		}
+		seenIDs[id] = true
+		devices = append(devices, deviceEntry{
+			ID:      id,
+			Name:    id[:7],
+			Status:  "💬",
+			Pending: true,
+		})
+	}
+	return devices
+}
+
+func (c *SyncwebDevicesCmd) collectDiscoveredDevices(
+	devices []deviceEntry,
+	seenIDs map[string]bool,
+	cfg config.Configuration,
+	s *syncweb.Syncweb,
+) []deviceEntry {
+	discovered := s.GetDiscoveredDevices()
+	for id, info := range discovered {
+		if seenIDs[id] {
+			continue
+		}
+		// Only show if not already in accepted list
+		if c.isDeviceAccepted(id, cfg) {
+			continue
+		}
+
+		name, _ := info["name"].(string)
+		if name == "" {
+			name = id[:7]
+		}
+
+		devices = append(devices, deviceEntry{
+			ID:         id,
+			Name:       name,
+			Status:     "🗨️",
+			Discovered: true,
+		})
+	}
+	return devices
+}
+
+func (c *SyncwebDevicesCmd) isDeviceAccepted(id string, cfg config.Configuration) bool {
+	for _, d := range cfg.Devices {
+		if d.DeviceID.String() == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *SyncwebDevicesCmd) buildAcceptedDeviceEntry(
@@ -324,45 +356,57 @@ func (c *SyncwebDevicesCmd) printDeviceRow(d deviceEntry) {
 
 func (c *SyncwebDevicesCmd) executeActions(s *syncweb.Syncweb, filtered []deviceEntry, localDeviceID string) {
 	if c.Accept {
-		var toAccept []string
-		for _, d := range filtered {
-			if d.Pending {
-				toAccept = append(toAccept, d.ID)
-			}
-		}
-		if len(toAccept) > 0 {
-			for _, id := range toAccept {
-				if err := s.AddDevice(id, "", c.Introducer); err != nil {
-					fmt.Printf("Error accepting %s: %v\n", id, err)
-				}
-			}
-			fmt.Printf("Accepted %d %s\n", len(toAccept), utils.Pluralize(len(toAccept), "device", "devices"))
-		}
+		c.actionAccept(s, filtered)
 	}
 
 	if c.Pause {
-		count := 0
-		for _, d := range filtered {
-			if !d.Paused && d.ID != localDeviceID {
-				if err := s.PauseDevice(d.ID); err == nil {
-					count++
-				}
-			}
-		}
-		fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "device", "devices"))
+		c.actionPause(s, filtered, localDeviceID)
 	}
 
 	if c.Resume {
-		count := 0
-		for _, d := range filtered {
-			if d.Paused {
-				if err := s.ResumeDevice(d.ID); err == nil {
-					count++
-				}
+		c.actionResume(s, filtered)
+	}
+}
+
+func (c *SyncwebDevicesCmd) actionAccept(s *syncweb.Syncweb, filtered []deviceEntry) {
+	var toAccept []string
+	for _, d := range filtered {
+		if d.Pending {
+			toAccept = append(toAccept, d.ID)
+		}
+	}
+	if len(toAccept) > 0 {
+		for _, id := range toAccept {
+			if err := s.AddDevice(id, "", c.Introducer); err != nil {
+				fmt.Printf("Error accepting %s: %v\n", id, err)
 			}
 		}
-		fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "device", "devices"))
+		fmt.Printf("Accepted %d %s\n", len(toAccept), utils.Pluralize(len(toAccept), "device", "devices"))
 	}
+}
+
+func (c *SyncwebDevicesCmd) actionPause(s *syncweb.Syncweb, filtered []deviceEntry, localDeviceID string) {
+	count := 0
+	for _, d := range filtered {
+		if !d.Paused && d.ID != localDeviceID {
+			if err := s.PauseDevice(d.ID); err == nil {
+				count++
+			}
+		}
+	}
+	fmt.Printf("Paused %d %s\n", count, utils.Pluralize(count, "device", "devices"))
+}
+
+func (c *SyncwebDevicesCmd) actionResume(s *syncweb.Syncweb, filtered []deviceEntry) {
+	count := 0
+	for _, d := range filtered {
+		if d.Paused {
+			if err := s.ResumeDevice(d.ID); err == nil {
+				count++
+			}
+		}
+	}
+	fmt.Printf("Resumed %d %s\n", count, utils.Pluralize(count, "device", "devices"))
 }
 
 func formatBandwidth(sendKbps, recvKbps int) string {

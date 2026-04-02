@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -248,62 +247,73 @@ func (c *SyncwebFoldersCmd) filterFolders(folders []folderEntry) []folderEntry {
 	filtered := make([]folderEntry, 0, len(folders))
 
 	for _, f := range folders {
-		// Missing filter
-		if c.Missing {
-			// Check if folder path is missing
-			if f.Path != "" && f.Path != "(not joined)" {
-				if _, err := os.Stat(f.Path); err == nil {
-					continue // Path exists, not missing
-				}
-			}
+		if !c.shouldIncludeFolder(f) {
+			continue
 		}
-
-		// Type filter
-		if len(c.FolderTypes) > 0 {
-			matched := false
-			for _, t := range c.FolderTypes {
-				if strings.EqualFold(f.Type, t) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		// Include filter
-		if len(c.Include) > 0 {
-			matched := false
-			for _, s := range c.Include {
-				if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		// Exclude filter
-		if len(c.Exclude) > 0 {
-			excluded := false
-			for _, s := range c.Exclude {
-				if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
-					excluded = true
-					break
-				}
-			}
-			if excluded {
-				continue
-			}
-		}
-
 		filtered = append(filtered, f)
 	}
 
 	return filtered
+}
+
+func (c *SyncwebFoldersCmd) shouldIncludeFolder(f folderEntry) bool {
+	// Missing filter
+	if c.Missing && !c.isFolderMissing(f) {
+		return false
+	}
+
+	// Type filter
+	if len(c.FolderTypes) > 0 && !c.matchesFolderType(f) {
+		return false
+	}
+
+	// Include filter
+	if len(c.Include) > 0 && !c.matchesIncludeFilter(f) {
+		return false
+	}
+
+	// Exclude filter
+	if len(c.Exclude) > 0 && c.matchesExcludeFilter(f) {
+		return false
+	}
+
+	return true
+}
+
+func (c *SyncwebFoldersCmd) isFolderMissing(f folderEntry) bool {
+	if f.Path != "" && f.Path != "(not joined)" {
+		if _, err := os.Stat(f.Path); err == nil {
+			return false // Path exists, not missing
+		}
+	}
+	return true
+}
+
+func (c *SyncwebFoldersCmd) matchesFolderType(f folderEntry) bool {
+	for _, t := range c.FolderTypes {
+		if strings.EqualFold(f.Type, t) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *SyncwebFoldersCmd) matchesIncludeFilter(f folderEntry) bool {
+	for _, s := range c.Include {
+		if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *SyncwebFoldersCmd) matchesExcludeFilter(f folderEntry) bool {
+	for _, s := range c.Exclude {
+		if strings.Contains(f.Label, s) || strings.Contains(f.ID, s) || strings.Contains(f.Path, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *SyncwebFoldersCmd) outputJSON(filtered []folderEntry) error {
@@ -451,72 +461,86 @@ func (c *SyncwebFoldersCmd) actionJoin(filtered []folderEntry, cfg config.Config
 	}
 
 	for _, f := range toJoin {
-		folderID := f.ID
-		deviceIDs := f.PendingDevices
+		c.joinFolder(f, cfg, s)
+	}
+}
 
-		// Check if folder exists
-		exists := false
-		for _, ef := range cfg.Folders {
-			if ef.ID == folderID {
-				exists = true
-				break
-			}
-		}
+func (c *SyncwebFoldersCmd) joinFolder(f folderEntry, cfg config.Configuration, s *syncweb.Syncweb) {
+	folderID := f.ID
+	deviceIDs := f.PendingDevices
 
-		if exists {
-			// Just add devices
-			if addErr := s.AddFolderDevices(folderID, deviceIDs); addErr != nil {
-				fmt.Printf("Error adding devices to %s: %v\n", folderID, addErr)
-			} else {
-				// Pause/resume to unstuck
-				for _, devID := range deviceIDs {
-					if pauseErr := s.PauseDevice(devID); pauseErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: Failed to pause device %s: %v\n", devID, pauseErr)
-					}
-				}
-				for _, devID := range deviceIDs {
-					if resumeErr := s.ResumeDevice(devID); resumeErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: Failed to resume device %s: %v\n", devID, resumeErr)
-					}
-				}
-				fmt.Printf("Joined folder %s with %d devices\n", folderID, len(deviceIDs))
-			}
-		} else {
-			// Create folder
-			dest := filepath.Join(os.Getenv("HOME"), "Syncweb", folderID)
-			if mkdirErr := os.MkdirAll(dest, 0o755); mkdirErr != nil {
-				fmt.Printf("Error creating directory for %s: %v\n", folderID, mkdirErr)
-				continue
-			}
+	// Check if folder exists
+	exists := c.folderExists(cfg, folderID)
 
-			if addErr := s.AddFolder(
-				folderID,
-				folderID,
-				dest,
-				config.FolderTypeReceiveOnly,
-			); addErr != nil {
-				fmt.Printf("Error creating folder %s: %v\n", folderID, addErr)
-				continue
-			}
+	if exists {
+		c.addDevicesToFolder(folderID, deviceIDs, s)
+	} else {
+		c.createAndJoinFolder(folderID, deviceIDs, s)
+	}
+}
 
-			if err := s.SetIgnores(folderID, []string{}); err != nil {
-				fmt.Printf("Error setting ignores for %s: %v\n", folderID, err)
-				continue
-			}
-
-			if err := s.ResumeFolder(folderID); err != nil {
-				fmt.Printf("Error resuming folder %s: %v\n", folderID, err)
-				continue
-			}
-
-			if err := s.AddFolderDevices(folderID, deviceIDs); err != nil {
-				fmt.Printf("Error sharing folder with devices: %v\n", err)
-				continue
-			}
-
-			fmt.Printf("Created and joined folder %s\n", folderID)
+func (c *SyncwebFoldersCmd) folderExists(cfg config.Configuration, folderID string) bool {
+	for _, ef := range cfg.Folders {
+		if ef.ID == folderID {
+			return true
 		}
 	}
+	return false
+}
+
+func (c *SyncwebFoldersCmd) addDevicesToFolder(folderID string, deviceIDs []string, s *syncweb.Syncweb) {
+	if addErr := s.AddFolderDevices(folderID, deviceIDs); addErr != nil {
+		fmt.Printf("Error adding devices to %s: %v\n", folderID, addErr)
+		return
+	}
+
+	// Pause/resume to unstuck
+	for _, devID := range deviceIDs {
+		if pauseErr := s.PauseDevice(devID); pauseErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to pause device %s: %v\n", devID, pauseErr)
+		}
+	}
+	for _, devID := range deviceIDs {
+		if resumeErr := s.ResumeDevice(devID); resumeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to resume device %s: %v\n", devID, resumeErr)
+		}
+	}
+	fmt.Printf("Joined folder %s with %d devices\n", folderID, len(deviceIDs))
+}
+
+func (c *SyncwebFoldersCmd) createAndJoinFolder(folderID string, deviceIDs []string, s *syncweb.Syncweb) {
+	dest := filepath.Join(os.Getenv("HOME"), "Syncweb", folderID)
+	if mkdirErr := os.MkdirAll(dest, 0o755); mkdirErr != nil {
+		fmt.Printf("Error creating directory for %s: %v\n", folderID, mkdirErr)
+		return
+	}
+
+	if addErr := s.AddFolder(
+		folderID,
+		folderID,
+		dest,
+		config.FolderTypeReceiveOnly,
+	); addErr != nil {
+		fmt.Printf("Error creating folder %s: %v\n", folderID, addErr)
+		return
+	}
+
+	if err := s.SetIgnores(folderID, []string{}); err != nil {
+		fmt.Printf("Error setting ignores for %s: %v\n", folderID, err)
+		return
+	}
+
+	if err := s.ResumeFolder(folderID); err != nil {
+		fmt.Printf("Error resuming folder %s: %v\n", folderID, err)
+		return
+	}
+
+	if err := s.AddFolderDevices(folderID, deviceIDs); err != nil {
+		fmt.Printf("Error sharing folder with devices: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Created and joined folder %s\n", folderID)
 }
 
 func (c *SyncwebFoldersCmd) actionPause(s *syncweb.Syncweb, filtered []folderEntry) {

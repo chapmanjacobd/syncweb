@@ -50,14 +50,14 @@ jobs:
           go mod download
           make web-install
 
-      - name: Run tests
+      - name: Run tests (with race detector)
         run: |
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             # Windows often has issues with parallel tests and file locking
-            go test -tags noassets ./... -parallel 1
+            go test -tags noassets -race ./... -parallel 1
             make build
           else
-            make test build
+            make test-race build
           fi
 
       - name: Run web tests

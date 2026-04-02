@@ -12,6 +12,7 @@ import (
 
 	"github.com/sevlyar/go-daemon"
 	"github.com/syncthing/syncthing/lib/config"
+	"github.com/syncthing/syncthing/lib/protocol"
 
 	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
@@ -185,20 +186,33 @@ func (c *SyncwebAutomaticCmd) autoJoinFolders(s *syncweb.Syncweb, logger *slog.L
 	for _, dev := range cfg.Devices {
 		pending, _ := s.Node.App.Internals.PendingFolders(dev.DeviceID)
 		for folderID := range pending {
-			c.processPendingFolder(s, logger, cfg, dev, folderID, syncwebHome)
+			ctx := &processPendingFolderContext{
+				logger:      logger,
+				cfg:         cfg,
+				devID:       dev.DeviceID,
+				folderID:    folderID,
+				syncwebHome: syncwebHome,
+			}
+			c.processPendingFolder(s, ctx)
 		}
 	}
 }
 
+// processPendingFolderContext holds context for processing a pending folder
+type processPendingFolderContext struct {
+	logger      *slog.Logger
+	cfg         config.Configuration
+	devID       protocol.DeviceID
+	folderID    string
+	syncwebHome string
+}
+
 func (c *SyncwebAutomaticCmd) processPendingFolder(
 	s *syncweb.Syncweb,
-	logger *slog.Logger,
-	cfg config.Configuration,
-	dev config.DeviceConfiguration,
-	folderID, syncwebHome string,
+	ctx *processPendingFolderContext,
 ) {
 	// Apply filters
-	if !matchesFilters(folderID, c.FoldersInclude, c.FoldersExclude) {
+	if !matchesFilters(ctx.folderID, c.FoldersInclude, c.FoldersExclude) {
 		return
 	}
 
@@ -206,28 +220,28 @@ func (c *SyncwebAutomaticCmd) processPendingFolder(
 	// because the folder type is not available until the folder is joined.
 
 	// Check if folder already exists
-	exists := c.folderExists(cfg, folderID)
+	exists := c.folderExists(ctx.cfg, ctx.folderID)
 
 	if !exists && !c.JoinNewFolders {
 		return
 	}
 
-	logger.Info("Auto-joining folder", "id", folderID, "from", dev.DeviceID)
-	path := filepath.Join(syncwebHome, folderID)
+	ctx.logger.Info("Auto-joining folder", "id", ctx.folderID, "from", ctx.devID)
+	path := filepath.Join(ctx.syncwebHome, ctx.folderID)
 
 	if !exists {
-		if err := c.createFolder(s, logger, folderID, path); err != nil {
+		if err := c.createFolder(s, ctx.logger, ctx.folderID, path); err != nil {
 			return
 		}
 	}
 
-	if err := s.AddFolderDevice(folderID, dev.DeviceID.String()); err != nil {
-		logger.Error(
+	if err := s.AddFolderDevice(ctx.folderID, ctx.devID.String()); err != nil {
+		ctx.logger.Error(
 			"Failed to share folder with device",
 			"folder",
-			folderID,
+			ctx.folderID,
 			"device",
-			dev.DeviceID,
+			ctx.devID,
 			"error",
 			err,
 		)

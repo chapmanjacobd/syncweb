@@ -68,82 +68,104 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 		}
 
 		for _, p := range c.Paths {
-			folderID, prefix, ok := c.findFolderForPath(p, s)
-			if !ok {
-				if !g.JSON {
-					fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
-				}
-				continue
+			ctx := &lsPrintHeaderContext{
+				allEntries:    &allEntries,
+				headerPrinted: &headerPrinted,
+				printHeader:   printHeader,
 			}
-
-			// Wait for Syncthing to index local files
-			time.Sleep(1 * time.Second)
-
-			// Get files from Syncthing
-			files := c.getFiles(s, folderID, prefix)
-
-			if len(files) == 0 {
-				if err := c.handleEmptyFiles(
-					s,
-					folderID,
-					prefix,
-					g,
-					&allEntries,
-					&headerPrinted,
-					printHeader,
-				); err != nil {
-					return err
-				}
-				continue
-			}
-
-			if g.JSON {
-				allEntries = append(allEntries, files...)
-			} else {
-				if !headerPrinted {
-					printHeader()
-				}
-				// Print files
-				c.printDirectory(files, 0, printHeader)
+			if err := c.processPath(p, s, g, ctx); err != nil {
+				return err
 			}
 		}
 
 		if g.JSON {
-			data, err := json.MarshalIndent(allEntries, "", "  ")
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(data))
+			return c.outputJSON(allEntries)
 		}
 
 		return nil
 	})
 }
 
-func (c *SyncwebLsCmd) handleEmptyFiles(
+func (c *SyncwebLsCmd) processPath(
+	p string,
+	s *syncweb.Syncweb,
+	g *SyncwebCmd,
+	ctx *lsPrintHeaderContext,
+) error {
+	folderID, prefix, ok := c.findFolderForPath(p, s)
+	if !ok {
+		if !g.JSON {
+			fmt.Printf("Error: %s is not inside of a Syncweb folder\n", p)
+		}
+		return nil
+	}
+
+	// Wait for Syncthing to index local files
+	time.Sleep(1 * time.Second)
+
+	// Get files from Syncthing
+	files := c.getFiles(s, folderID, prefix)
+
+	if len(files) == 0 {
+		c.handleEmptyFilesWithContext(
+			s,
+			folderID,
+			prefix,
+			g,
+			ctx,
+		)
+		return nil
+	}
+
+	if g.JSON {
+		*ctx.allEntries = append(*ctx.allEntries, files...)
+	} else {
+		if !*ctx.headerPrinted {
+			ctx.printHeader()
+		}
+		// Print files
+		c.printDirectory(files, 0, ctx.printHeader)
+	}
+
+	return nil
+}
+
+func (c *SyncwebLsCmd) outputJSON(allEntries []*fileEntry) error {
+	data, err := json.MarshalIndent(allEntries, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// lsPrintHeaderContext holds context for printing header
+type lsPrintHeaderContext struct {
+	allEntries    *[]*fileEntry
+	headerPrinted *bool
+	printHeader   func()
+}
+
+func (c *SyncwebLsCmd) handleEmptyFilesWithContext(
 	s *syncweb.Syncweb,
 	folderID, prefix string,
 	g *SyncwebCmd,
-	allEntries *[]*fileEntry,
-	headerPrinted *bool,
-	printHeader func(),
-) error {
+	ctx *lsPrintHeaderContext,
+) {
 	// Might be a file, not a directory
 	if prefix != "" {
 		fileInfo, ok := c.getFile(s, folderID, prefix)
 		if ok {
 			if g.JSON {
-				*allEntries = append(*allEntries, &fileInfo)
+				*ctx.allEntries = append(*ctx.allEntries, &fileInfo)
 			} else {
-				if !*headerPrinted {
-					printHeader()
+				if !*ctx.headerPrinted {
+					ctx.printHeader()
 				}
-				c.printEntry(&fileInfo, printHeader)
+				c.printEntry(&fileInfo, ctx.printHeader)
 			}
-			return nil
 		}
 	}
-	return nil
 }
 
 // findFolderForPath finds the folder ID and prefix for a given path

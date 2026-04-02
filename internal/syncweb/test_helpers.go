@@ -22,6 +22,9 @@ func CleanupTestHomeDir(homeDir string) error {
 		if strings.HasPrefix(name, ".syncthing.tmp.") ||
 			strings.HasPrefix(name, "index-v") ||
 			strings.HasPrefix(name, ".syncthing") ||
+			name == "syncweb.lock" ||
+			name == "syncweb.pid" ||
+			name == "syncweb.log" ||
 			strings.HasSuffix(name, ".xml") ||
 			strings.HasSuffix(name, ".pem") {
 

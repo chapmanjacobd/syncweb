@@ -21,7 +21,7 @@ func TestAddIgnores(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatalf("failed to start node: %v", err)
 	}
-	defer s.Stop()
+	defer syncweb.StopAndCleanup(s, home)
 
 	folderID := "testfolder"
 	if err := s.AddFolder(folderID, folderID, home, 0); err != nil {

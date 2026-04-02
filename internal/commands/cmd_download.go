@@ -451,38 +451,6 @@ func calculateMinDiskFree(totalSpace int64, cfg minDiskFreeConfig) int64 {
 	return int64(value) * multiplier
 }
 
-// getMountpoint returns the mountpoint for a path
-func getMountpoint(path string) string {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return filepath.Dir(path)
-	}
-
-	var stat syscall.Stat_t
-	if err := syscall.Stat(absPath, &stat); err != nil {
-		return filepath.Dir(absPath)
-	}
-
-	dev := stat.Dev
-	parent := absPath
-	for {
-		nextParent := filepath.Dir(parent)
-		if nextParent == parent {
-			return parent
-		}
-
-		var nextStat syscall.Stat_t
-		if err := syscall.Stat(nextParent, &nextStat); err != nil {
-			return parent
-		}
-
-		if nextStat.Dev != dev {
-			return parent
-		}
-		parent = nextParent
-	}
-}
-
 // groupFoldersByMountpoint groups folders by their mountpoint
 func groupFoldersByMountpoint(folderSpaceInfos map[string]*folderSpaceInfo) map[string][]string {
 	groups := make(map[string][]string)

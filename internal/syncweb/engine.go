@@ -101,7 +101,11 @@ type Engine interface {
 	GetCompletion(deviceID protocol.DeviceID, folderID string) (stmodel.FolderCompletion, error)
 
 	// Internal/Low-level (needed by some CLI commands)
-	BlockAvailability(folderID string, info protocol.FileInfo, block protocol.BlockInfo) ([]stmodel.Availability, error)
+	BlockAvailability(
+		folderID string,
+		info *protocol.FileInfo,
+		block protocol.BlockInfo,
+	) ([]stmodel.Availability, error)
 	CountSeeders(folderID, path string) (int, error)
 
 	// Syncweb-specific high-level operations

@@ -508,6 +508,18 @@ linters:
       - text: "unused-receiver"
         linters:
           - revive
+      # Exclude unused-parameter for interface methods (parameters may be unused by design)
+      - text: "unused-parameter"
+        linters:
+          - revive
+      # Exclude unused interface parameters (parameters are named for documentation, implementations may not use them)
+      - path: internal/syncweb/engine\.go
+        linters:
+          - unused
+      # Exclude interfacebloat for Engine interface (large interface needed for REST API compatibility)
+      - path: internal/syncweb/engine\.go
+        linters:
+          - interfacebloat
       # Exclude gochecknoglobals for web package
       - path: web/
         linters:

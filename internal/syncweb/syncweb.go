@@ -703,18 +703,7 @@ func (s *Syncweb) GetFolderPath(folderID string) (string, bool) {
 
 // Unignore removes a file from the ignore list by adding an unignore (!) pattern
 func (s *Syncweb) Unignore(folderID, relativePath string) error {
-	lines, _, err := s.Node.App.Internals.Ignores(folderID)
-	if err != nil {
-		return err
-	}
-
-	pattern := "!" + relativePath
-	if slices.Contains(lines, pattern) {
-		return nil // Already unignored
-	}
-
-	lines = append(lines, pattern)
-	return s.Node.App.Internals.SetIgnores(folderID, lines)
+	return s.AddIgnores(folderID, []string{relativePath})
 }
 
 // GetGlobalFileInfo returns information about a file across the cluster

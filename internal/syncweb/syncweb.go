@@ -887,16 +887,36 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 		return err
 	}
 
-	// Keep existing patterns that are not Syncweb-managed
-	var preserved []string
+	var userPatterns []string
+	var managedPatterns []string
+	inBlock := false
+
 	for _, p := range existing {
-		if !strings.HasPrefix(p, "// Syncweb-managed") {
-			preserved = append(preserved, p)
+		if p == "// BEGIN Syncweb-managed" {
+			inBlock = true
+			continue
+		}
+		if p == "// END Syncweb-managed" {
+			inBlock = false
+			continue
+		}
+		// Remove legacy headers or extra markers
+		if strings.HasPrefix(p, "// Syncweb-managed") {
+			continue
+		}
+
+		if inBlock {
+			if p != "*" {
+				managedPatterns = append(managedPatterns, p)
+			}
+		} else {
+			if p != "*" { // Strip any wildcard to avoid duplicating it; the block will provide one
+				userPatterns = append(userPatterns, p)
+			}
 		}
 	}
 
-	// Build new unignore patterns
-	var newPatterns []string
+	// Add new unignore patterns
 	for _, p := range unignores {
 		if strings.HasPrefix(p, "//") {
 			continue
@@ -904,33 +924,27 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 		if !strings.HasPrefix(p, "!/") {
 			p = "!/" + p
 		}
-		newPatterns = append(newPatterns, p)
+		managedPatterns = append(managedPatterns, p)
 	}
 
-	// Combine: Syncweb header + unignores (sorted) + ignores (sorted) + wildcard
+	// Deduplicate and sort managed patterns
 	combined := make(map[string]bool)
-	for _, p := range preserved {
-		combined[p] = true
-	}
-	for _, p := range newPatterns {
+	for _, p := range managedPatterns {
 		combined[p] = true
 	}
 
-	var unignoreList, ignoreList []string
+	var finalManaged []string
 	for p := range combined {
-		if strings.HasPrefix(p, "!") {
-			unignoreList = append(unignoreList, p)
-		} else if p != "*" {
-			ignoreList = append(ignoreList, p)
-		}
+		finalManaged = append(finalManaged, p)
 	}
+	slices.Sort(finalManaged)
 
-	slices.Sort(unignoreList)
-	slices.Sort(ignoreList)
-
-	final := append([]string{"// Syncweb-managed"}, unignoreList...)
-	final = append(final, ignoreList...)
+	var final []string
+	final = append(final, userPatterns...)
+	final = append(final, "// BEGIN Syncweb-managed")
+	final = append(final, finalManaged...)
 	final = append(final, "*")
+	final = append(final, "// END Syncweb-managed")
 
 	return s.Node.App.Internals.SetIgnores(folderID, final)
 }

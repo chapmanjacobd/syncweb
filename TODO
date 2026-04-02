@@ -1,0 +1,16 @@
+
+  2. Complex Streaming Logic (SyncwebReadSeeker.Read)
+  The implementation of on-demand file streaming directly from the cluster (in internal/syncweb/syncweb.go) involves highly complex manual calculations for offsets and
+  blocks. While it includes overflow checks, the logic for handling "partial block needs" at the very beginning or end of a read is a high-risk area for off-by-one errors and makes the code difficult to maintain or debug.
+
+  3. Basic Peer Scoring (Measurements.Score)
+  The logic used to score and select peers for file transfers (in internal/syncweb/syncweb.go) is quite rudimentary. It only accounts for latency (average time) and error
+  rates, completely ignoring bandwidth or concurrency capabilities. In heterogeneous networks, this could lead to sub-optimal peer selection and poor performance.
+
+  5. Performance: Linear Scans for Files
+  The API endpoints handling directory listing and finding files (handleSyncwebLs and handleSyncwebFind / collectFolderEntries in internal/commands/serve_syncweb.go) perform
+  linear scans over global file lists. This lack of indexed search means these operations will become a severe performance bottleneck and scale poorly as the number of files
+  grows into the hundreds of thousands or millions.
+
+  6. Reinvented Cache Logic (eventsCache)
+  In GetEvents, the invalidation logic for the event buffer uses manual sequencing (eventsSeq) to implement a cache. This custom implementation is robust but adds unnecessary complexity; it could likely be simplified or replaced entirely with a more standard, less error-prone caching pattern or library.

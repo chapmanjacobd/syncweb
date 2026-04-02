@@ -1,8 +1,6 @@
 package syncweb_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/syncthing/syncthing/lib/config"
@@ -59,8 +57,7 @@ func TestSecurity_PathValidation(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test"
 	sw.AddFolder(folderID, "test", syncDir, config.FolderTypeSendReceive)
 

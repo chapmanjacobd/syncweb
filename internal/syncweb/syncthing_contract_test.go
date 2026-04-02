@@ -327,8 +327,7 @@ func TestSyncthingContract_AppInternals(t *testing.T) {
 
 	// CONTRACT: Internals methods should not panic on valid folder
 	// Create a test folder first
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -365,6 +364,7 @@ func TestSyncthingContract_AppInternals(t *testing.T) {
 
 func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 	homeDir := t.TempDir()
+	syncDir := t.TempDir()
 	sw, err := syncweb.NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +374,6 @@ func TestSyncthingContract_AppInternalsIgnores(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
 	os.MkdirAll(syncDir, 0o700)
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
@@ -427,8 +426,7 @@ func TestSyncthingContract_AppInternalsFolderState(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -465,8 +463,7 @@ func TestSyncthingContract_AppInternalsAllGlobalFiles(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -581,8 +578,7 @@ func TestSyncthingContract_InternalsGlobalFileInfo(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -636,8 +632,7 @@ func TestSyncthingContract_BlockAvailability(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -689,8 +684,7 @@ func TestSyncthingContract_DownloadBlock(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -754,8 +748,7 @@ func TestSyncthingContract_Completion(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -809,8 +802,7 @@ func TestSyncthingContract_CompletionWithRemoteDevice(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -898,8 +890,7 @@ func TestSyncthingContract_GlobalTree(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -968,8 +959,7 @@ func TestSyncthingContract_GlobalTreeEmptyFolder(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -1006,8 +996,7 @@ func TestSyncthingContract_LocalChangedFolderFiles(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -1061,8 +1050,7 @@ func TestSyncthingContract_NeedFolderFiles(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -1118,8 +1106,7 @@ func TestSyncthingContract_NeedFolderFilesWithMultipleFiles(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {
@@ -1173,8 +1160,7 @@ func TestSyncthingContract_RemoteNeedFolderFiles(t *testing.T) {
 	}
 	defer syncweb.StopAndCleanup(sw, homeDir)
 
-	syncDir := filepath.Join(homeDir, "sync")
-	os.MkdirAll(syncDir, 0o700)
+	syncDir := t.TempDir()
 	folderID := "test-folder"
 	addFolderErr := sw.AddFolder(folderID, "Test Folder", syncDir, config.FolderTypeSendReceive)
 	if addFolderErr != nil {

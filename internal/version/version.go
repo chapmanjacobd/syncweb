@@ -35,11 +35,7 @@ func FullInfo() string {
 	if GitDirty != "" {
 		v += GitDirty
 	}
-	if GitHash != "unknown" && GitHash != "" {
-		v += "\ncommit:   " + GitHash
-	}
-	if BuildTime != "unknown" && BuildTime != "" {
-		v += "\nbuilt:    " + BuildTime
-	}
+	v += "\ncommit:   " + GitHash
+	v += "\nbuilt:    " + BuildTime
 	return v
 }

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
@@ -113,10 +114,8 @@ type Syncweb struct {
 	Measurements   *Measurements
 	pendingDevices sync.Map // map[protocol.DeviceID]time.Time
 	events         []models.SyncEvent
-	eventsMu       sync.RWMutex
-	eventsCache    []models.SyncEvent
-	eventsSeq      uint64
-	cacheSeq       uint64
+	eventsMu       sync.Mutex
+	eventsCache    atomic.Value // Stores []models.SyncEvent
 	eventSub       events.Subscription
 	eventSubMu     sync.Mutex
 }
@@ -132,6 +131,7 @@ func NewSyncweb(homeDir, name, listenAddr string) (*Syncweb, error) {
 		Measurements: NewMeasurements(),
 		events:       make([]models.SyncEvent, 0),
 	}
+	s.eventsCache.Store(s.events)
 
 	go s.watchEvents()
 
@@ -153,32 +153,17 @@ func (s *Syncweb) addEvent(evType, message string, data any) {
 	if len(s.events) > EventBufferLimit {
 		s.events = s.events[1:]
 	}
-	s.eventsSeq++
+
+	// Update the snapshot for readers
+	s.eventsCache.Store(slices.Clone(s.events))
 }
 
 func (s *Syncweb) GetEvents() []models.SyncEvent {
-	s.eventsMu.RLock()
-	if s.eventsCache != nil && s.cacheSeq == s.eventsSeq {
-		res := s.eventsCache
-		s.eventsMu.RUnlock()
-		return res
+	v := s.eventsCache.Load()
+	if v == nil {
+		return nil
 	}
-	s.eventsMu.RUnlock()
-
-	s.eventsMu.Lock()
-	defer s.eventsMu.Unlock()
-
-	// Re-check after acquiring write lock
-	if s.eventsCache != nil && s.cacheSeq == s.eventsSeq {
-		return s.eventsCache
-	}
-
-	// Return a copy to avoid data races
-	res := make([]models.SyncEvent, len(s.events))
-	copy(res, s.events)
-	s.eventsCache = res
-	s.cacheSeq = s.eventsSeq
-	return res
+	return slices.Clone(v.([]models.SyncEvent))
 }
 
 func (s *Syncweb) watchEvents() {

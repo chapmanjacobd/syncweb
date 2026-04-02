@@ -152,7 +152,6 @@ func (c *SyncwebDownloadCmd) buildDownloadPlan(
 		Warnings:    []string{},
 		SpaceStatus: make(map[string]string),
 	}
-
 	for _, p := range c.Paths {
 		absPath, err := filepath.Abs(p)
 		if err != nil {
@@ -175,29 +174,60 @@ func (c *SyncwebDownloadCmd) buildDownloadPlan(
 			continue
 		}
 
-		info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
-		if err != nil || !ok {
-			warnMsg := fmt.Sprintf("Warning: %s not found in cluster", p)
-			result.Warnings = append(result.Warnings, warnMsg)
-			if !g.JSON {
-				fmt.Println(warnMsg)
-			}
-			continue
-		}
-
-		items = append(items, downloadItem{folderID, relPath, info.Size})
-		result.Items = append(result.Items, DownloadItemInfo{
-			Path:     relPath,
-			FolderID: folderID,
-			Size:     info.Size,
-		})
-		totalSize += info.Size
+		c.traverseAndAddItems(s, folderID, relPath, 0, &items, &result, &totalSize)
 	}
 
 	result.TotalFiles = len(items)
 	result.TotalSize = totalSize
 
 	return items, result
+}
+
+func (c *SyncwebDownloadCmd) traverseAndAddItems(
+	s *syncweb.Syncweb,
+	folderID, relPath string,
+	currentDepth int,
+	items *[]downloadItem,
+	result *DownloadResult,
+	totalSize *int64,
+) {
+	info, ok, err := s.GetGlobalFileInfo(folderID, relPath)
+	if err != nil || !ok {
+		warnMsg := fmt.Sprintf("Warning: %s not found in cluster", relPath)
+		result.Warnings = append(result.Warnings, warnMsg)
+		return
+	}
+
+	if info.Type == protocol.FileInfoTypeFile {
+		*items = append(*items, downloadItem{folderID, relPath, info.Size})
+		result.Items = append(result.Items, DownloadItemInfo{
+			Path:     relPath,
+			FolderID: folderID,
+			Size:     info.Size,
+		})
+		*totalSize += info.Size
+	} else if info.Type == protocol.FileInfoTypeDirectory {
+		// If it's a directory, we always unignore the directory itself
+		*items = append(*items, downloadItem{folderID, relPath, 0})
+
+		// Then traverse children if depth allows
+		if c.Depth == 0 || currentDepth < c.Depth {
+			// Get children using GetGlobalTree (levels=1 for immediate children)
+			tree, err := s.GetGlobalTree(folderID, relPath, 1, false)
+			if err != nil {
+				errMsg := fmt.Sprintf("Error traversing %s: %v", relPath, err)
+				result.Errors = append(result.Errors, errMsg)
+				return
+			}
+
+			for _, entry := range tree {
+				if entry.Name == relPath {
+					continue
+				}
+				c.traverseAndAddItems(s, folderID, entry.Name, currentDepth+1, items, result, totalSize)
+			}
+		}
+	}
 }
 
 func (c *SyncwebDownloadCmd) findFolderForPath(
@@ -423,9 +453,34 @@ func calculateMinDiskFree(totalSpace int64, cfg minDiskFreeConfig) int64 {
 
 // getMountpoint returns the mountpoint for a path
 func getMountpoint(path string) string {
-	// Simplified: just return the directory for now
-	// A full implementation would check /proc/mounts or use stat.st_dev
-	return filepath.Dir(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Dir(path)
+	}
+
+	var stat syscall.Stat_t
+	if err := syscall.Stat(absPath, &stat); err != nil {
+		return filepath.Dir(absPath)
+	}
+
+	dev := stat.Dev
+	parent := absPath
+	for {
+		nextParent := filepath.Dir(parent)
+		if nextParent == parent {
+			return parent
+		}
+
+		var nextStat syscall.Stat_t
+		if err := syscall.Stat(nextParent, &nextStat); err != nil {
+			return parent
+		}
+
+		if nextStat.Dev != dev {
+			return parent
+		}
+		parent = nextParent
+	}
 }
 
 // groupFoldersByMountpoint groups folders by their mountpoint

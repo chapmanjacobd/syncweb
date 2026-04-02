@@ -324,7 +324,7 @@ func (c *SyncwebStartCmd) Run(g *SyncwebCmd) error {
 		LogFilePerm: 0o640,
 		WorkDir:     home,
 		Umask:       0o27,
-		Args:        []string{"syncweb", "serve", "--home", home},
+		Args:        []string{os.Args[0], "serve", "--home", home},
 	}
 
 	d, err := cntxt.Reborn()

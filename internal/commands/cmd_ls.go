@@ -101,7 +101,7 @@ func (c *SyncwebLsCmd) processPath(
 	}
 
 	// Wait for Syncthing to index local files
-	time.Sleep(1 * time.Second)
+	_ = s.WaitUntilIdle(folderID, 5*time.Second)
 
 	// Get files from Syncthing
 	files := c.getFiles(s, folderID, prefix)

@@ -16,6 +16,7 @@ import (
 	"github.com/syncthing/syncthing/lib/svcutil"
 	"github.com/syncthing/syncthing/lib/syncthing"
 	"github.com/syncthing/syncthing/lib/tlsutil"
+	"golang.org/x/sys/unix"
 )
 
 type Node struct {
@@ -23,11 +24,12 @@ type Node struct {
 	Cfg      config.Wrapper
 	EvLogger events.Logger
 	//nolint:containedctx // Context is used to manage Node lifecycle
-	Ctx     context.Context
-	Cancel  context.CancelFunc
-	db      io.Closer
-	running bool
-	mu      sync.RWMutex
+	Ctx      context.Context
+	Cancel   context.CancelFunc
+	db       io.Closer
+	lockFile *os.File
+	running  bool
+	mu       sync.RWMutex
 }
 
 func NewNode(homeDir, _, listenAddr string) (*Node, error) {
@@ -41,6 +43,18 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 
 	if err := os.MkdirAll(homeDir, 0o700); err != nil {
 		return nil, err
+	}
+
+	// Lock the home directory to prevent multiple instances
+	lockFilePath := filepath.Join(homeDir, "syncweb.lock")
+	lockFile, err := os.OpenFile(lockFilePath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file: %w", err)
+	}
+
+	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = lockFile.Close()
+		return nil, fmt.Errorf("failed to lock home directory: %w (another instance might be running)", err)
 	}
 
 	setupLogging(homeDir)
@@ -60,6 +74,8 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	// Load or create certificate
 	cert, err := tlsutil.NewCertificate(certPath, keyPath, "syncthing", 0, false)
 	if err != nil {
+		_ = unix.Flock(int(lockFile.Fd()), unix.LOCK_UN)
+		_ = lockFile.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to load certificate: %w", err)
 	}
@@ -88,6 +104,8 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 		cfg = config.Wrap(cfgPath, newCfg, myID, evLogger)
 		go func() { _ = cfg.Serve(ctx) }()
 		if saveErr := cfg.Save(); saveErr != nil {
+			_ = unix.Flock(int(lockFile.Fd()), unix.LOCK_UN)
+			_ = lockFile.Close()
 			cancel()
 			return nil, fmt.Errorf("failed to save config: %w", saveErr)
 		}
@@ -96,6 +114,8 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 		var loadErr error
 		cfg, _, loadErr = config.Load(cfgPath, myID, evLogger)
 		if loadErr != nil {
+			_ = unix.Flock(int(lockFile.Fd()), unix.LOCK_UN)
+			_ = lockFile.Close()
 			cancel()
 			return nil, fmt.Errorf("failed to load config: %w", loadErr)
 		}
@@ -106,6 +126,8 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	dbDeleteRetentionInterval := time.Duration(4320) * time.Hour
 	sdb, err := syncthing.OpenDatabase(dbPath, dbDeleteRetentionInterval)
 	if err != nil {
+		_ = unix.Flock(int(lockFile.Fd()), unix.LOCK_UN)
+		_ = lockFile.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -118,6 +140,8 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, appOpts)
 	if err != nil {
 		_ = sdb.Close()
+		_ = unix.Flock(int(lockFile.Fd()), unix.LOCK_UN)
+		_ = lockFile.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create Syncthing app: %w", err)
 	}
@@ -129,6 +153,7 @@ func NewNode(homeDir, _, listenAddr string) (*Node, error) {
 		Ctx:      ctx,
 		Cancel:   cancel,
 		db:       sdb,
+		lockFile: lockFile,
 	}, nil
 }
 
@@ -159,15 +184,21 @@ func (n *Node) Serve() error {
 func (n *Node) Stop() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if !n.running {
-		return
+	if n.running {
+		n.App.Stop(svcutil.ExitSuccess)
+		n.App.Wait()
+		n.running = false
 	}
-	n.App.Stop(svcutil.ExitSuccess)
+
 	n.Cancel()
-	n.App.Wait()
-	n.running = false
 	if n.db != nil {
 		_ = n.db.Close()
+		n.db = nil
+	}
+	if n.lockFile != nil {
+		_ = unix.Flock(int(n.lockFile.Fd()), unix.LOCK_UN)
+		_ = n.lockFile.Close()
+		n.lockFile = nil
 	}
 }
 

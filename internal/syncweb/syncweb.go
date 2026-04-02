@@ -896,19 +896,13 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 			inBlock = false
 			continue
 		}
-		// Remove legacy headers or extra markers
-		if strings.HasPrefix(p, "// Syncweb-managed") {
-			continue
-		}
 
 		if inBlock {
 			if p != "*" {
 				managedPatterns = append(managedPatterns, p)
 			}
 		} else {
-			if p != "*" { // Strip any wildcard to avoid duplicating it; the block will provide one
-				userPatterns = append(userPatterns, p)
-			}
+			userPatterns = append(userPatterns, p)
 		}
 	}
 
@@ -943,6 +937,19 @@ func (s *Syncweb) AddIgnores(folderID string, unignores []string) error {
 	final = append(final, "// END Syncweb-managed")
 
 	return s.Node.App.Internals.SetIgnores(folderID, final)
+}
+
+// WaitUntilIdle waits until the specified folder is idle (fully synced)
+func (s *Syncweb) WaitUntilIdle(folderID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		comp, err := s.Node.App.Internals.Completion(protocol.LocalDeviceID, folderID)
+		if err == nil && comp.CompletionPct >= 100 {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for folder %s to become idle", folderID)
 }
 
 // GetFolderStats returns statistics for all folders

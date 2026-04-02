@@ -257,7 +257,7 @@ func (c *SyncwebDownloadCmd) outputEmptyResult(g *SyncwebCmd, result *DownloadRe
 		}
 		fmt.Println(string(jsonData))
 	} else {
-		fmt.Println("No files found to download")
+		fmt.Println("No files available to download")
 	}
 	return nil
 }

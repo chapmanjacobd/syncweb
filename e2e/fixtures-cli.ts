@@ -73,13 +73,22 @@ export const test = base.extend<{
 
       // Trigger scan after file creation to ensure Syncthing indexes it
       cli.run(['scan'], { silent: true });
-      
-      // Wait for scan to complete (scans are asynchronous)
-      try {
-        const { execSync } = require('child_process');
-        execSync('sleep 2');
-      } catch (e) {
-        // Ignore sleep errors
+
+      // Wait for scan to complete and files to be indexed
+      // Use multiple short sleeps with ls checks instead of one long sleep
+      for (let i = 0; i < 10; i++) {
+        try {
+          const { execSync } = require('child_process');
+          execSync('sleep 0.5');
+          
+          // Try to list the file to verify it's indexed
+          const result = cli.run(['ls', name], { silent: true, cwd: syncFolder });
+          if (result.exitCode === 0 && result.stdout.includes(name)) {
+            break; // File is indexed, we can stop waiting
+          }
+        } catch (e) {
+          // Ignore errors and continue waiting
+        }
       }
 
       return name;
@@ -95,13 +104,21 @@ export const test = base.extend<{
 
       // Trigger scan after directory creation
       cli.run(['scan'], { silent: true });
-      
-      // Wait for scan to complete
-      try {
-        const { execSync } = require('child_process');
-        execSync('sleep 2');
-      } catch (e) {
-        // Ignore sleep errors
+
+      // Wait for scan to complete and directory to be indexed
+      for (let i = 0; i < 10; i++) {
+        try {
+          const { execSync } = require('child_process');
+          execSync('sleep 0.5');
+          
+          // Try to list the directory to verify it's indexed
+          const result = cli.run(['ls'], { silent: true, cwd: syncFolder });
+          if (result.exitCode === 0 && result.stdout.includes(name)) {
+            break; // Directory is indexed, we can stop waiting
+          }
+        } catch (e) {
+          // Ignore errors and continue waiting
+        }
       }
 
       return name;

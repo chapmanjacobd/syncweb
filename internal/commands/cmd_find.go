@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -483,31 +484,61 @@ func (c *SyncwebFindCmd) checkDepthFilter(meta any, depthMin, depthMax *int) boo
 	return true
 }
 
-// Helper functions to access db.FileMetadata fields
+// Helper functions to access db.FileMetadata fields using reflection
 func getMetaName(meta any) string {
-	if m, ok := meta.(interface{ Name() string }); ok {
-		return m.Name()
+	v := reflect.ValueOf(meta)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		nameField := v.FieldByName("Name")
+		if nameField.IsValid() && nameField.Kind() == reflect.String {
+			return nameField.String()
+		}
 	}
 	return ""
 }
 
 func getMetaType(meta any) protocol.FileInfoType {
-	if m, ok := meta.(interface{ Type() protocol.FileInfoType }); ok {
-		return m.Type()
+	v := reflect.ValueOf(meta)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		typeField := v.FieldByName("Type")
+		if typeField.IsValid() {
+			if t, ok := typeField.Interface().(protocol.FileInfoType); ok {
+				return t
+			}
+		}
 	}
 	return protocol.FileInfoTypeFile
 }
 
 func getMetaSize(meta any) int64 {
-	if m, ok := meta.(interface{ Size() int64 }); ok {
-		return m.Size()
+	v := reflect.ValueOf(meta)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		sizeField := v.FieldByName("Size")
+		if sizeField.IsValid() && sizeField.Kind() == reflect.Int64 {
+			return sizeField.Int()
+		}
 	}
 	return 0
 }
 
 func getMetaModTime(meta any) time.Time {
-	if m, ok := meta.(interface{ ModTime() time.Time }); ok {
-		return m.ModTime()
+	v := reflect.ValueOf(meta)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		modTimeField := v.FieldByName("ModNanos")
+		if modTimeField.IsValid() && modTimeField.Kind() == reflect.Int64 {
+			return time.Unix(0, modTimeField.Int())
+		}
 	}
 	return time.Time{}
 }

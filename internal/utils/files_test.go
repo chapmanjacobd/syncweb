@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/utils"
 )
 
@@ -269,8 +268,7 @@ func TestRename(t *testing.T) {
 		t.Fatalf("Failed to create source file: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = utils.Rename(flags, src, dst)
+	err = utils.Rename(false, src, dst)
 	if err != nil {
 		t.Fatalf("Rename failed: %v", err)
 	}
@@ -294,8 +292,7 @@ func TestRename_Simulate(t *testing.T) {
 		t.Fatalf("Failed to create source file: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = utils.Rename(flags, src, dst)
+	err = utils.Rename(true, src, dst)
 	if err != nil {
 		t.Fatalf("Rename in simulate mode failed: %v", err)
 	}
@@ -318,8 +315,7 @@ func TestUnlink(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = utils.Unlink(flags, testFile)
+	err = utils.Unlink(false, testFile)
 	if err != nil {
 		t.Fatalf("Unlink failed: %v", err)
 	}
@@ -339,8 +335,7 @@ func TestUnlink_Simulate(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = utils.Unlink(flags, testFile)
+	err = utils.Unlink(true, testFile)
 	if err != nil {
 		t.Fatalf("Unlink in simulate mode failed: %v", err)
 	}
@@ -367,8 +362,7 @@ func TestRmtree(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: false}}
-	err = utils.Rmtree(flags, testDir)
+	err = utils.Rmtree(false, testDir)
 	if err != nil {
 		t.Fatalf("Rmtree failed: %v", err)
 	}
@@ -388,8 +382,7 @@ func TestRmtree_Simulate(t *testing.T) {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
-	flags := models.GlobalFlags{CoreFlags: models.CoreFlags{Simulate: true}}
-	err = utils.Rmtree(flags, testDir)
+	err = utils.Rmtree(true, testDir)
 	if err != nil {
 		t.Fatalf("Rmtree in simulate mode failed: %v", err)
 	}

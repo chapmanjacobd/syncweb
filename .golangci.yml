@@ -212,6 +212,10 @@ linters:
           # Whether to skip (*x).method() calls where x is a pointer receiver.
           # Default: true
           skipRecvDeref: false
+        hugeParam:
+          # Whether to print the size of huge params.
+          # Default: false
+          sizeThreshold: 80
 
     godoclint:
       # List of rules to enable in addition to the default set.
@@ -462,6 +466,14 @@ linters:
           - revive
       - path: _test\.go
         text: "exported"
+        linters:
+          - revive
+      - path: _test\.go
+        text: "function-length"
+        linters:
+          - revive
+      - path: _test\.go
+        text: "cognitive-complexity"
         linters:
           - revive
       - path: _test\.go

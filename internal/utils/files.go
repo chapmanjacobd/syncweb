@@ -13,8 +13,6 @@ import (
 	"sync"
 
 	"github.com/gabriel-vasile/mimetype"
-
-	"github.com/chapmanjacobd/syncweb/internal/models"
 )
 
 // Constants for chunk size interpolation
@@ -260,9 +258,9 @@ func DetectMimeType(path string) string {
 }
 
 // Rename renames a file, respecting simulation mode
-func Rename(flags models.GlobalFlags, src, dst string) error {
+func Rename(simulate bool, src, dst string) error {
 	logger := slog.Default().With("src", src, "dst", dst)
-	if flags.Simulate {
+	if simulate {
 		fmt.Printf("rename %s %s\n", src, dst)
 		return nil
 	}
@@ -271,9 +269,9 @@ func Rename(flags models.GlobalFlags, src, dst string) error {
 }
 
 // Unlink deletes a file, respecting simulation mode
-func Unlink(flags models.GlobalFlags, path string) error {
+func Unlink(simulate bool, path string) error {
 	logger := slog.Default().With("path", path)
-	if flags.Simulate {
+	if simulate {
 		fmt.Printf("unlink %s\n", path)
 		return nil
 	}
@@ -282,9 +280,9 @@ func Unlink(flags models.GlobalFlags, path string) error {
 }
 
 // Rmtree deletes a directory tree, respecting simulation mode
-func Rmtree(flags models.GlobalFlags, path string) error {
+func Rmtree(simulate bool, path string) error {
 	logger := slog.Default().With("path", path)
-	if flags.Simulate {
+	if simulate {
 		fmt.Printf("rmtree %s\n", path)
 		return nil
 	}

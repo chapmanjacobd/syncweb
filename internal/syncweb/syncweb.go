@@ -1,6 +1,7 @@
 package syncweb
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -779,8 +780,8 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	}
 
 	wantedSize := int64(len(p))
-	// Check for overflow before addition
-	if r.offset > r.info.Size-wantedSize {
+	// Cap wantedSize to remaining file size
+	if r.offset+wantedSize > r.info.Size {
 		wantedSize = r.info.Size - r.offset
 	}
 
@@ -788,19 +789,27 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	// Calculate which blocks we need
 	blockSize := int64(r.info.BlockSize())
 	startBlock := r.offset / blockSize
-	// Check for overflow in endBlock calculation
-	endOffset := r.offset + wantedSize - 1
-	if endOffset < r.offset { // Overflow check
-		endOffset = r.info.Size - 1
+	endBlock := (r.offset + wantedSize - 1) / blockSize
+
+	// Sanity check for block indices
+	if startBlock >= int64(len(r.info.Blocks)) {
+		return 0, io.EOF
 	}
-	endBlock := endOffset / blockSize
+	if endBlock >= int64(len(r.info.Blocks)) {
+		endBlock = int64(len(r.info.Blocks)) - 1
+	}
 
 	logger := slog.Default().With("folderID", r.folderID, "file", r.info.Name)
 	var totalRead int64
+
 	for i := startBlock; i <= endBlock; i++ {
+		// Check context before each block to stop early if needed
+		if err := r.ctx.Err(); err != nil {
+			return int(totalRead), err
+		}
+
 		block := r.info.Blocks[i]
 
 		// Determine which peers have this block
@@ -816,13 +825,7 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		slices.SortFunc(availables, func(a, b stmodel.Availability) int {
 			scoreA := r.s.Measurements.Score(a.ID)
 			scoreB := r.s.Measurements.Score(b.ID)
-			if scoreA < scoreB {
-				return -1
-			}
-			if scoreA > scoreB {
-				return 1
-			}
-			return 0
+			return cmp.Compare(scoreA, scoreB)
 		})
 
 		var data []byte
@@ -850,13 +853,18 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 		}
 
 		// Calculate how much of this block we actually need
-		blockOffset := r.offset + totalRead - block.Offset
-		dataStart := max(blockOffset, 0)
+		// offsetWithinBlock is where we start reading from THIS block
+		offsetWithinBlock := (r.offset + totalRead) - block.Offset
+		dataStart := max(offsetWithinBlock, 0)
 
 		dataEnd := int64(len(data))
-		remainingNeeded := wantedSize - totalRead
-		if dataEnd-dataStart > remainingNeeded {
-			dataEnd = dataStart + remainingNeeded
+		remainingInRequest := wantedSize - totalRead
+		if dataEnd-dataStart > remainingInRequest {
+			dataEnd = dataStart + remainingInRequest
+		}
+
+		if dataStart >= dataEnd {
+			continue // Should not happen if logic is correct
 		}
 
 		copied := copy(p[totalRead:], data[dataStart:dataEnd])
@@ -864,7 +872,7 @@ func (r *SyncwebReadSeeker) Read(p []byte) (n int, err error) {
 	}
 
 	r.offset += totalRead
-	// Safe conversion to int for 32-bit systems
+	// Safe conversion to int for return
 	if totalRead > math.MaxInt {
 		return math.MaxInt, nil
 	}

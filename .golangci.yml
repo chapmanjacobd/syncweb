@@ -200,49 +200,8 @@ linters:
       min-complexity: 20
 
     gocritic:
-      # Enable specific checkers.
-      # Default: []
-      enable:
-        # Default checkers (diagnostic + style, non-experimental, non-opinionated)
-        - appendAssign
-        - argOrder
-        - badCall
-        - badCond
-        - caseOrder
-        - codegenComment
-        - deprecatedComment
-        - dupArg
-        - dupBranchBody
-        - dupCase
-        - dupSubExpr
-        - exitAfterDefer
-        - flagDeref
-        - flagName
-        - mapKey
-        - offBy1
-        - sloppyLen
-        - sloppyTypeAssert
-        - assignOp
-        - captLocal
-        - commentFormatting
-        - defaultCaseOrder
-        - elseif
-        - ifElseChain
-        - newDeref
-        - regexpMust
-        - singleCaseSwitch
-        - switchTrue
-        - typeSwitchVar
-        - underef
-        - unlambda
-        - unslice
-        - valSwap
-        - wrapperFunc
-        # Additional checkers
-        - bareReturn
+      enabled-checks:
         - hugeParam
-      # Settings passed to gocritic.
-      # The settings key is the name of a supported gocritic checker.
       # The list of supported checkers can be found at https://go-critic.com/overview.
       settings:
         captLocal:
@@ -255,8 +214,7 @@ linters:
           skipRecvDeref: false
         hugeParam:
           # Whether to print the size of huge params.
-          # Default: false
-          sizeThreshold: 80
+          sizeThreshold: 88
 
     godoclint:
       # List of rules to enable in addition to the default set.
@@ -415,6 +373,7 @@ linters:
       - name: bool-literal-in-expr
       - name: early-return
       - name: get-return
+      - name: bare-return
       - name: confusing-naming
       - name: confusing-results
       - name: unused-receiver

@@ -152,83 +152,111 @@ func (c *SyncwebAutomaticCmd) Run(g *SyncwebCmd) error {
 		for {
 			// 1. Auto-accept devices
 			if c.Devices {
-				pending := s.GetPendingDevices()
-				for id := range pending {
-					// Apply include/exclude filters
-					if !matchesFilters(id, c.DevicesInclude, c.DevicesExclude) {
-						continue
-					}
-
-					logger.Info("Auto-accepting device", "id", id)
-					if err := s.AddDevice(id, "", false); err != nil {
-						logger.Error("Failed to auto-accept device", "id", id, "error", err)
-					}
-				}
+				c.autoAcceptDevices(s, logger)
 			}
 
 			// 2. Auto-join folders
 			if c.Folders {
-				cfg := s.Node.Cfg.RawCopy()
-				for _, dev := range cfg.Devices {
-					pending, _ := s.Node.App.Internals.PendingFolders(dev.DeviceID)
-					for folderID := range pending {
-						// Apply filters
-						if !matchesFilters(folderID, c.FoldersInclude, c.FoldersExclude) {
-							continue
-						}
-
-						// Note: Folder type filtering is not applied to pending folders
-						// because the folder type is not available until the folder is joined.
-
-						// Check if folder already exists
-						exists := false
-						for _, f := range cfg.Folders {
-							if f.ID == folderID {
-								exists = true
-								break
-							}
-						}
-
-						if !exists && !c.JoinNewFolders {
-							continue
-						}
-
-						logger.Info("Auto-joining folder", "id", folderID, "from", dev.DeviceID)
-						path := filepath.Join(g.SyncwebHome, folderID)
-
-						if !exists {
-							if err := s.AddFolder(folderID, folderID, path, config.FolderTypeReceiveOnly); err != nil {
-								logger.Error("Failed to create folder", "id", folderID, "error", err)
-								continue
-							}
-							if err := s.SetIgnores(folderID, []string{}); err != nil {
-								logger.Error("Failed to set ignores", "id", folderID, "error", err)
-								continue
-							}
-							if err := s.ResumeFolder(folderID); err != nil {
-								logger.Error("Failed to resume folder", "id", folderID, "error", err)
-								continue
-							}
-						}
-
-						if err := s.AddFolderDevice(folderID, dev.DeviceID.String()); err != nil {
-							logger.Error(
-								"Failed to share folder with device",
-								"folder",
-								folderID,
-								"device",
-								dev.DeviceID,
-								"error",
-								err,
-							)
-						}
-					}
-				}
+				c.autoJoinFolders(s, logger, g.SyncwebHome)
 			}
 
 			<-ticker.C
 		}
 	})
+}
+
+func (c *SyncwebAutomaticCmd) autoAcceptDevices(s *syncweb.Syncweb, logger *slog.Logger) {
+	pending := s.GetPendingDevices()
+	for id := range pending {
+		// Apply include/exclude filters
+		if !matchesFilters(id, c.DevicesInclude, c.DevicesExclude) {
+			continue
+		}
+
+		logger.Info("Auto-accepting device", "id", id)
+		if err := s.AddDevice(id, "", false); err != nil {
+			logger.Error("Failed to auto-accept device", "id", id, "error", err)
+		}
+	}
+}
+
+func (c *SyncwebAutomaticCmd) autoJoinFolders(s *syncweb.Syncweb, logger *slog.Logger, syncwebHome string) {
+	cfg := s.Node.Cfg.RawCopy()
+	for _, dev := range cfg.Devices {
+		pending, _ := s.Node.App.Internals.PendingFolders(dev.DeviceID)
+		for folderID := range pending {
+			c.processPendingFolder(s, logger, cfg, dev, folderID, syncwebHome)
+		}
+	}
+}
+
+func (c *SyncwebAutomaticCmd) processPendingFolder(
+	s *syncweb.Syncweb,
+	logger *slog.Logger,
+	cfg config.Configuration,
+	dev config.DeviceConfiguration,
+	folderID, syncwebHome string,
+) {
+	// Apply filters
+	if !matchesFilters(folderID, c.FoldersInclude, c.FoldersExclude) {
+		return
+	}
+
+	// Note: Folder type filtering is not applied to pending folders
+	// because the folder type is not available until the folder is joined.
+
+	// Check if folder already exists
+	exists := c.folderExists(cfg, folderID)
+
+	if !exists && !c.JoinNewFolders {
+		return
+	}
+
+	logger.Info("Auto-joining folder", "id", folderID, "from", dev.DeviceID)
+	path := filepath.Join(syncwebHome, folderID)
+
+	if !exists {
+		if err := c.createFolder(s, logger, folderID, path); err != nil {
+			return
+		}
+	}
+
+	if err := s.AddFolderDevice(folderID, dev.DeviceID.String()); err != nil {
+		logger.Error(
+			"Failed to share folder with device",
+			"folder",
+			folderID,
+			"device",
+			dev.DeviceID,
+			"error",
+			err,
+		)
+	}
+}
+
+func (c *SyncwebAutomaticCmd) folderExists(cfg config.Configuration, folderID string) bool {
+	for _, f := range cfg.Folders {
+		if f.ID == folderID {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *SyncwebAutomaticCmd) createFolder(s *syncweb.Syncweb, logger *slog.Logger, folderID, path string) error {
+	if err := s.AddFolder(folderID, folderID, path, config.FolderTypeReceiveOnly); err != nil {
+		logger.Error("Failed to create folder", "id", folderID, "error", err)
+		return err
+	}
+	if err := s.SetIgnores(folderID, []string{}); err != nil {
+		logger.Error("Failed to set ignores", "id", folderID, "error", err)
+		return err
+	}
+	if err := s.ResumeFolder(folderID); err != nil {
+		logger.Error("Failed to resume folder", "id", folderID, "error", err)
+		return err
+	}
+	return nil
 }
 
 // matchesFilters checks if a string matches include/exclude filters

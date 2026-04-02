@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -84,20 +83,16 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 			files := c.getFiles(s, folderID, prefix)
 
 			if len(files) == 0 {
-				// Might be a file, not a directory
-				if prefix != "" {
-					fileInfo, ok := c.getFile(s, folderID, prefix)
-					if ok {
-						if g.JSON {
-							allEntries = append(allEntries, &fileInfo)
-						} else {
-							if !headerPrinted {
-								printHeader()
-							}
-							c.printEntry(&fileInfo, printHeader)
-						}
-						continue
-					}
+				if err := c.handleEmptyFiles(
+					s,
+					folderID,
+					prefix,
+					g,
+					&allEntries,
+					&headerPrinted,
+					printHeader,
+				); err != nil {
+					return err
 				}
 				continue
 			}
@@ -123,6 +118,32 @@ func (c *SyncwebLsCmd) Run(g *SyncwebCmd) error {
 
 		return nil
 	})
+}
+
+func (c *SyncwebLsCmd) handleEmptyFiles(
+	s *syncweb.Syncweb,
+	folderID, prefix string,
+	g *SyncwebCmd,
+	allEntries *[]*fileEntry,
+	headerPrinted *bool,
+	printHeader func(),
+) error {
+	// Might be a file, not a directory
+	if prefix != "" {
+		fileInfo, ok := c.getFile(s, folderID, prefix)
+		if ok {
+			if g.JSON {
+				*allEntries = append(*allEntries, &fileInfo)
+			} else {
+				if !*headerPrinted {
+					printHeader()
+				}
+				c.printEntry(&fileInfo, printHeader)
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 // findFolderForPath finds the folder ID and prefix for a given path
@@ -170,7 +191,6 @@ func (c *SyncwebLsCmd) findFolderForPath(path string, s *syncweb.Syncweb) (folde
 }
 
 func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*fileEntry {
-	logger := slog.Default().With("folderID", folderID, "prefix", prefix)
 	seq, cancel := s.Node.App.Internals.AllGlobalFiles(folderID)
 	defer func() { _ = cancel() }()
 
@@ -179,87 +199,7 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 	var rootItems []*fileEntry
 
 	for meta := range seq {
-		name := meta.Name
-
-		// Filter by prefix
-		if prefix != "" {
-			if name == prefix {
-				continue
-			}
-			if !strings.HasPrefix(name, prefix+"/") {
-				continue
-			}
-			// Remove prefix
-			name = strings.TrimPrefix(name, prefix+"/")
-		}
-
-		// Split into parts
-		parts := strings.Split(name, "/")
-		if len(parts) == 0 {
-			continue
-		}
-
-		// Check depth
-		if c.Depth > 0 && len(parts) > c.Depth {
-			logger.Debug("ls: skipping (depth)", "name", name, "parts", len(parts), "depth", c.Depth)
-			continue
-		}
-
-		logger.Debug("ls: processing", "name", name, "parts", len(parts), "depth", c.Depth)
-
-		// Build tree
-		currentMap := tree
-		var currentPath string
-
-		for i, part := range parts {
-			isLast := i == len(parts)-1
-			isDir := !isLast
-
-			entryPath := part
-			if currentPath != "" {
-				entryPath = currentPath + "/" + part
-			}
-
-			if _, exists := currentMap[part]; !exists {
-				entry := &fileEntry{
-					Name:     part,
-					Path:     entryPath,
-					IsDir:    isDir,
-					Size:     0,
-					ModTime:  time.Time{},
-					Children: make(map[string]*fileEntry),
-				}
-
-				if isLast {
-					entry.Size = meta.Size
-					entry.ModTime = meta.ModTime()
-				}
-
-				currentMap[part] = entry
-				if currentPath == "" {
-					rootItems = append(rootItems, entry)
-				}
-				logger.Debug("ls: created entry", "path", entryPath, "isDir", isDir)
-			} else if !isLast {
-				// Entry already exists, but might need to update IsDir
-				if !currentMap[part].IsDir {
-					logger.Debug("ls: updated to directory", "part", part)
-				}
-				currentMap[part].IsDir = true
-			}
-
-			currentMap = currentMap[part].Children
-			if currentPath == "" {
-				currentPath = part
-			} else {
-				currentPath = currentPath + "/" + part
-			}
-		}
-	}
-
-	logger.Debug("ls: rootItems", "count", len(rootItems))
-	for _, item := range rootItems {
-		logger.Debug("ls: rootItem", "name", item.Name, "isDir", item.IsDir, "children", len(item.Children))
+		c.processFile(meta, prefix, tree, &rootItems)
 	}
 
 	// Calculate folder sizes if needed
@@ -268,6 +208,81 @@ func (c *SyncwebLsCmd) getFiles(s *syncweb.Syncweb, folderID, prefix string) []*
 	}
 
 	return rootItems
+}
+
+func (c *SyncwebLsCmd) processFile(meta any, prefix string, tree map[string]*fileEntry, rootItems *[]*fileEntry) {
+	// Access meta fields using helper functions
+	name := getMetaName(meta)
+	_ = getMetaType(meta)
+	sizeVal := getMetaSize(meta)
+	modTimeVal := getMetaModTime(meta)
+
+	// Filter by prefix
+	if prefix != "" {
+		if name == prefix || !strings.HasPrefix(name, prefix+"/") {
+			return
+		}
+		name = strings.TrimPrefix(name, prefix+"/")
+	}
+
+	// Split into parts
+	parts := strings.Split(name, "/")
+	if len(parts) == 0 {
+		return
+	}
+
+	// Check depth
+	if c.Depth > 0 && len(parts) > c.Depth {
+		return
+	}
+
+	// Build tree
+	currentMap := tree
+	var currentPath string
+	var isNewRootItem bool
+
+	for i, part := range parts {
+		isLast := i == len(parts)-1
+
+		entryPath := part
+		if currentPath != "" {
+			entryPath = currentPath + "/" + part
+		}
+
+		if _, exists := currentMap[part]; !exists {
+			entry := &fileEntry{
+				Name:     part,
+				Path:     entryPath,
+				IsDir:    !isLast,
+				Size:     0,
+				ModTime:  time.Time{},
+				Children: make(map[string]*fileEntry),
+			}
+
+			if isLast {
+				entry.Size = sizeVal
+				entry.ModTime = modTimeVal
+			}
+
+			currentMap[part] = entry
+			isNewRootItem = (currentPath == "")
+		} else if !isLast {
+			currentMap[part].IsDir = true
+		}
+
+		currentMap = currentMap[part].Children
+		if currentPath == "" {
+			currentPath = part
+		} else {
+			currentPath = currentPath + "/" + part
+		}
+	}
+
+	if isNewRootItem {
+		if entry, ok := currentMap[parts[0]]; ok {
+			*rootItems = append(*rootItems, entry)
+		}
+	}
 }
 
 func (c *SyncwebLsCmd) getFile(s *syncweb.Syncweb, folderID, path string) (fileEntry, bool) {

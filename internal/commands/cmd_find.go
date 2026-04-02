@@ -69,189 +69,30 @@ func (c *SyncwebFindCmd) Help() string {
 	return findExamples
 }
 
-//nolint:maintidx // CLI command with many flags is inherently complex
 func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 	return g.WithSyncweb(func(s *syncweb.Syncweb) error {
-		type findResult struct {
-			Name     string    `json:"name"`
-			Path     string    `json:"path"`
-			Size     int64     `json:"size"`
-			Modified time.Time `json:"modified"`
-			IsDir    bool      `json:"is_dir"`
-		}
 		results := []findResult{}
 
 		// Build search pattern based on mode
-		var matchFunc func(string) bool
-
-		if c.Exact {
-			// Exact match mode
-			pattern := c.Pattern
-			if c.IgnoreCase || (!c.CaseSensitive && pattern == strings.ToLower(pattern)) {
-				matchFunc = func(target string) bool {
-					return strings.EqualFold(target, pattern)
-				}
-			} else {
-				matchFunc = func(target string) bool {
-					return target == pattern
-				}
-			}
-		} else if c.Glob {
-			// Glob match mode
-			pattern := GlobToRegex(c.Pattern)
-			if c.IgnoreCase || (!c.CaseSensitive && c.Pattern == strings.ToLower(c.Pattern)) {
-				pattern = "(?i)" + pattern
-			}
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return fmt.Errorf("invalid glob pattern: %w", err)
-			}
-			matchFunc = func(target string) bool {
-				return re.MatchString(target)
-			}
-		} else if c.FixedStrings {
-			// Literal string match mode
-			pattern := regexp.QuoteMeta(c.Pattern)
-			if c.IgnoreCase || (!c.CaseSensitive && pattern == strings.ToLower(pattern)) {
-				pattern = "(?i)" + pattern
-			}
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return fmt.Errorf("invalid pattern: %w", err)
-			}
-			matchFunc = func(target string) bool {
-				return re.MatchString(target)
-			}
-		} else {
-			// Regex mode (default)
-			pattern := c.Pattern
-			if !c.CaseSensitive && (c.IgnoreCase || pattern == strings.ToLower(pattern)) {
-				pattern = "(?i)" + pattern
-			}
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return fmt.Errorf("invalid regex: %w", err)
-			}
-			matchFunc = func(target string) bool {
-				return re.MatchString(target)
-			}
+		matchFunc, err := c.buildMatchFunc()
+		if err != nil {
+			return err
 		}
 
 		// Parse size constraints
-		var sizeMin, sizeMax *int64
-		if len(c.Size) > 0 {
-			sizeRange, err := utils.ParseRange(strings.Join(c.Size, ","), utils.HumanToBytes)
-			if err != nil {
-				return fmt.Errorf("invalid size constraint: %w", err)
-			}
-			sizeMin = sizeRange.Min
-			sizeMax = sizeRange.Max
+		sizeMin, sizeMax, err := c.parseSizeConstraints()
+		if err != nil {
+			return err
 		}
 
 		// Parse time constraints
-		var modifiedAfterTS, modifiedBeforeTS *int64
-		now := time.Now().Unix()
-
-		if c.ModifiedWithin != "" {
-			// Modified within duration (e.g., 1d, 2h, 30m)
-			seconds, err := utils.HumanToSeconds(c.ModifiedWithin)
-			if err != nil {
-				return fmt.Errorf("invalid modified-within duration: %w", err)
-			}
-			ts := now - seconds
-			modifiedAfterTS = &ts
-		}
-
-		if c.ModifiedBefore != "" {
-			// Try parsing as duration first
-			seconds, err := utils.HumanToSeconds(c.ModifiedBefore)
-			if err == nil {
-				ts := now - seconds
-				modifiedBeforeTS = &ts
-			} else {
-				// Try parsing as date
-				ts := utils.ParseDateOrRelative(c.ModifiedBefore)
-				if ts <= 0 {
-					return fmt.Errorf("invalid modified-before: %s", c.ModifiedBefore)
-				}
-				modifiedBeforeTS = &ts
-			}
-		}
-
-		if len(c.TimeModified) > 0 {
-			// Handle alternative time-modified syntax
-			for _, tm := range c.TimeModified {
-				// Check if it starts with + (older than) or - (newer than)
-				if newerThan, ok := strings.CutPrefix(tm, "-"); ok {
-					// Newer than (e.g., -3 days)
-					duration := newerThan
-					seconds, err := utils.HumanToSeconds(duration)
-					if err != nil {
-						return fmt.Errorf("invalid time-modified duration: %s", tm)
-					}
-					ts := now - seconds
-					modifiedAfterTS = &ts
-				} else if olderThan, ok2 := strings.CutPrefix(tm, "+"); ok2 {
-					// Older than (e.g., +3 days)
-					duration := olderThan
-					seconds, err := utils.HumanToSeconds(duration)
-					if err != nil {
-						return fmt.Errorf("invalid time-modified duration: %s", tm)
-					}
-					ts := now - seconds
-					modifiedBeforeTS = &ts
-				} else {
-					// Try parsing as date or duration
-					seconds, parseErr := utils.HumanToSeconds(tm)
-					if parseErr == nil {
-						ts := now - seconds
-						modifiedAfterTS = &ts
-					} else {
-						ts := utils.ParseDateOrRelative(tm)
-						if ts <= 0 {
-							return fmt.Errorf("invalid time-modified: %s", tm)
-						}
-						modifiedAfterTS = &ts
-					}
-				}
-			}
+		modifiedAfterTS, modifiedBeforeTS, err := c.parseTimeConstraints()
+		if err != nil {
+			return err
 		}
 
 		// Parse depth constraints
-		var depthMin, depthMax *int
-		if c.MinDepth > 0 {
-			depthMin = &c.MinDepth
-		}
-		if c.MaxDepth > 0 {
-			depthMax = &c.MaxDepth
-		}
-		if len(c.Depth) > 0 {
-			for _, d := range c.Depth {
-				// Try parsing as plain int first
-				var val int
-				_, scanErr := fmt.Sscanf(d, "%d", &val)
-				if scanErr == nil {
-					depthMin = &val
-					depthMax = &val
-				} else {
-					// Try range parsing
-					depthRange, rangeErr := utils.ParseRange(d, func(s string) (int64, error) {
-						v, parseErr := strconv.ParseInt(s, 10, 64)
-						return v, parseErr
-					})
-					if rangeErr == nil {
-						if depthRange.Min != nil {
-							v := int(*depthRange.Min)
-							depthMin = &v
-						}
-						if depthRange.Max != nil {
-							v := int(*depthRange.Max)
-							depthMax = &v
-						}
-					}
-				}
-			}
-		}
+		depthMin, depthMax := c.parseDepthConstraints()
 
 		cfg := s.Node.Cfg.RawCopy()
 		for _, f := range cfg.Folders {
@@ -265,95 +106,20 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 
 			seq, cancel := s.Node.App.Internals.AllGlobalFiles(f.ID)
 			for meta := range seq {
-				isDir := meta.Type == protocol.FileInfoTypeDirectory
-
-				// Type filter
-				if c.Type == "f" && isDir {
-					continue
-				}
-				if c.Type == "d" && !isDir {
-					continue
-				}
-
-				// Hidden file filter
-				if !c.Hidden && strings.HasPrefix(meta.Name, ".") {
-					continue
-				}
-
-				// Extension filter
-				if len(c.Ext) > 0 {
-					matched := false
-					for _, ext := range c.Ext {
-						if strings.HasSuffix(strings.ToLower(meta.Name), strings.ToLower(ext)) {
-							matched = true
-							break
-						}
-					}
-					if !matched {
-						continue
-					}
-				}
-
-				// Size filter (files only)
-				if !isDir && (sizeMin != nil || sizeMax != nil) {
-					if sizeMin != nil && meta.Size < *sizeMin {
-						continue
-					}
-					if sizeMax != nil && meta.Size > *sizeMax {
-						continue
-					}
-				}
-
-				// Time filter
-				if modifiedAfterTS != nil || modifiedBeforeTS != nil {
-					modifiedTS := meta.ModTime().Unix()
-					if modifiedAfterTS != nil && modifiedTS < *modifiedAfterTS {
-						continue
-					}
-					if modifiedBeforeTS != nil && modifiedTS > *modifiedBeforeTS {
-						continue
-					}
-				}
-
-				// Depth filter
-				if depthMin != nil || depthMax != nil {
-					depth := strings.Count(meta.Name, "/") + strings.Count(meta.Name, "\\")
-					if depthMin != nil && depth < *depthMin {
-						continue
-					}
-					if depthMax != nil && depth > *depthMax {
-						continue
-					}
-				}
-
-				// Search target
-				searchTarget := meta.Name
-				if !c.FullPath {
-					searchTarget = filepath.Base(meta.Name)
-				}
-
-				if matchFunc(searchTarget) {
-					// Build output path
-					var path string
-					if c.AbsolutePath {
-						// Get folder path from config
-						folderPath := f.Path
-						path = filepath.Join(folderPath, meta.Name)
-					} else {
-						path = fmt.Sprintf("sync://%s/%s", f.ID, meta.Name)
-					}
-
-					if g.JSON {
-						results = append(results, findResult{
-							Name:     filepath.Base(meta.Name),
-							Path:     path,
-							Size:     meta.Size,
-							Modified: meta.ModTime(),
-							IsDir:    isDir,
-						})
-					} else {
-						fmt.Println(path)
-					}
+				result, include := c.processFile(
+					meta,
+					matchFunc,
+					sizeMin,
+					sizeMax,
+					modifiedAfterTS,
+					modifiedBeforeTS,
+					depthMin,
+					depthMax,
+					f,
+					g,
+				)
+				if include {
+					results = append(results, result)
 				}
 			}
 			cancel() //nolint:errcheck // cancel function never returns an error
@@ -369,6 +135,324 @@ func (c *SyncwebFindCmd) Run(g *SyncwebCmd) error {
 
 		return nil
 	})
+}
+
+func (c *SyncwebFindCmd) buildMatchFunc() (func(string) bool, error) {
+	if c.Exact {
+		// Exact match mode
+		pattern := c.Pattern
+		if c.IgnoreCase || (!c.CaseSensitive && pattern == strings.ToLower(pattern)) {
+			return func(target string) bool {
+				return strings.EqualFold(target, pattern)
+			}, nil
+		}
+		return func(target string) bool {
+			return target == pattern
+		}, nil
+	}
+
+	if c.Glob {
+		// Glob match mode
+		pattern := GlobToRegex(c.Pattern)
+		if c.IgnoreCase || (!c.CaseSensitive && c.Pattern == strings.ToLower(c.Pattern)) {
+			pattern = "(?i)" + pattern
+		}
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid glob pattern: %w", err)
+		}
+		return func(target string) bool {
+			return re.MatchString(target)
+		}, nil
+	}
+
+	if c.FixedStrings {
+		// Literal string match mode
+		pattern := regexp.QuoteMeta(c.Pattern)
+		if c.IgnoreCase || (!c.CaseSensitive && pattern == strings.ToLower(pattern)) {
+			pattern = "(?i)" + pattern
+		}
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pattern: %w", err)
+		}
+		return func(target string) bool {
+			return re.MatchString(target)
+		}, nil
+	}
+
+	// Regex mode (default)
+	pattern := c.Pattern
+	if !c.CaseSensitive && (c.IgnoreCase || pattern == strings.ToLower(pattern)) {
+		pattern = "(?i)" + pattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex: %w", err)
+	}
+	return func(target string) bool {
+		return re.MatchString(target)
+	}, nil
+}
+
+func (c *SyncwebFindCmd) parseSizeConstraints() (sizeMin *int64, sizeMax *int64, err error) {
+	if len(c.Size) > 0 {
+		sizeRange, parseErr := utils.ParseRange(strings.Join(c.Size, ","), utils.HumanToBytes)
+		if parseErr != nil {
+			return nil, nil, fmt.Errorf("invalid size constraint: %w", parseErr)
+		}
+		sizeMin = sizeRange.Min
+		sizeMax = sizeRange.Max
+	}
+	return sizeMin, sizeMax, nil
+}
+
+func (c *SyncwebFindCmd) parseTimeConstraints() (modifiedAfter *int64, modifiedBefore *int64, err error) {
+	now := time.Now().Unix()
+
+	if c.ModifiedWithin != "" {
+		// Modified within duration (e.g., 1d, 2h, 30m)
+		seconds, err := utils.HumanToSeconds(c.ModifiedWithin)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid modified-within duration: %w", err)
+		}
+		ts := now - seconds
+		modifiedAfter = &ts
+	}
+
+	if c.ModifiedBefore != "" {
+		// Try parsing as duration first
+		seconds, parseErr := utils.HumanToSeconds(c.ModifiedBefore)
+		if parseErr == nil {
+			ts := now - seconds
+			modifiedBefore = &ts
+		} else {
+			// Try parsing as date
+			ts := utils.ParseDateOrRelative(c.ModifiedBefore)
+			if ts <= 0 {
+				return nil, nil, fmt.Errorf("invalid modified-before: %s", c.ModifiedBefore)
+			}
+			modifiedBefore = &ts
+		}
+	}
+
+	if len(c.TimeModified) > 0 {
+		// Handle alternative time-modified syntax
+		for _, tm := range c.TimeModified {
+			// Check if it starts with + (older than) or - (newer than)
+			if newerThan, ok := strings.CutPrefix(tm, "-"); ok {
+				// Newer than (e.g., -3 days)
+				duration := newerThan
+				seconds, parseErr := utils.HumanToSeconds(duration)
+				if parseErr != nil {
+					return nil, nil, fmt.Errorf("invalid time-modified duration: %s", tm)
+				}
+				ts := now - seconds
+				modifiedAfter = &ts
+			} else if olderThan, ok2 := strings.CutPrefix(tm, "+"); ok2 {
+				// Older than (e.g., +3 days)
+				duration := olderThan
+				seconds, parseErr := utils.HumanToSeconds(duration)
+				if parseErr != nil {
+					return nil, nil, fmt.Errorf("invalid time-modified duration: %s", tm)
+				}
+				ts := now - seconds
+				modifiedBefore = &ts
+			} else {
+				// Try parsing as date or duration
+				seconds, parseErr := utils.HumanToSeconds(tm)
+				if parseErr == nil {
+					ts := now - seconds
+					modifiedAfter = &ts
+				} else {
+					ts := utils.ParseDateOrRelative(tm)
+					if ts <= 0 {
+						return nil, nil, fmt.Errorf("invalid time-modified: %s", tm)
+					}
+					modifiedAfter = &ts
+				}
+			}
+		}
+	}
+
+	return modifiedAfter, modifiedBefore, nil
+}
+
+func (c *SyncwebFindCmd) parseDepthConstraints() (depthMin *int, depthMax *int) {
+	if c.MinDepth > 0 {
+		depthMin = &c.MinDepth
+	}
+	if c.MaxDepth > 0 {
+		depthMax = &c.MaxDepth
+	}
+	if len(c.Depth) > 0 {
+		for _, d := range c.Depth {
+			// Try parsing as plain int first
+			var val int
+			_, scanErr := fmt.Sscanf(d, "%d", &val)
+			if scanErr == nil {
+				depthMin = &val
+				depthMax = &val
+			} else {
+				// Try range parsing
+				depthRange, rangeErr := utils.ParseRange(d, func(s string) (int64, error) {
+					v, parseErr := strconv.ParseInt(s, 10, 64)
+					return v, parseErr
+				})
+				if rangeErr == nil {
+					if depthRange.Min != nil {
+						v := int(*depthRange.Min)
+						depthMin = &v
+					}
+					if depthRange.Max != nil {
+						v := int(*depthRange.Max)
+						depthMax = &v
+					}
+				}
+			}
+		}
+	}
+	return depthMin, depthMax
+}
+
+type findResult struct {
+	Name     string    `json:"name"`
+	Path     string    `json:"path"`
+	Size     int64     `json:"size"`
+	Modified time.Time `json:"modified"`
+	IsDir    bool      `json:"is_dir"`
+}
+
+func (c *SyncwebFindCmd) processFile(
+	meta any,
+	matchFunc func(string) bool,
+	sizeMin, sizeMax, modifiedAfterTS, modifiedBeforeTS *int64,
+	depthMin, depthMax *int,
+	f config.FolderConfiguration,
+	g *SyncwebCmd,
+) (findResult, bool) {
+	isDir := getMetaType(meta) == protocol.FileInfoTypeDirectory
+
+	// Type filter
+	if c.Type == "f" && isDir {
+		return findResult{}, false
+	}
+	if c.Type == "d" && !isDir {
+		return findResult{}, false
+	}
+
+	// Hidden file filter
+	if !c.Hidden && strings.HasPrefix(getMetaName(meta), ".") {
+		return findResult{}, false
+	}
+
+	// Extension filter
+	if len(c.Ext) > 0 {
+		matched := false
+		for _, ext := range c.Ext {
+			if strings.HasSuffix(strings.ToLower(getMetaName(meta)), strings.ToLower(ext)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return findResult{}, false
+		}
+	}
+
+	// Size filter (files only)
+	if !isDir && (sizeMin != nil || sizeMax != nil) {
+		if sizeMin != nil && getMetaSize(meta) < *sizeMin {
+			return findResult{}, false
+		}
+		if sizeMax != nil && getMetaSize(meta) > *sizeMax {
+			return findResult{}, false
+		}
+	}
+
+	// Time filter
+	if modifiedAfterTS != nil || modifiedBeforeTS != nil {
+		modifiedTS := getMetaModTime(meta).Unix()
+		if modifiedAfterTS != nil && modifiedTS < *modifiedAfterTS {
+			return findResult{}, false
+		}
+		if modifiedBeforeTS != nil && modifiedTS > *modifiedBeforeTS {
+			return findResult{}, false
+		}
+	}
+
+	// Depth filter
+	if depthMin != nil || depthMax != nil {
+		depth := strings.Count(getMetaName(meta), "/") + strings.Count(getMetaName(meta), "\\")
+		if depthMin != nil && depth < *depthMin {
+			return findResult{}, false
+		}
+		if depthMax != nil && depth > *depthMax {
+			return findResult{}, false
+		}
+	}
+
+	// Search target
+	searchTarget := getMetaName(meta)
+	if !c.FullPath {
+		searchTarget = filepath.Base(getMetaName(meta))
+	}
+
+	if !matchFunc(searchTarget) {
+		return findResult{}, false
+	}
+
+	// Build output path
+	var path string
+	if c.AbsolutePath {
+		// Get folder path from config
+		folderPath := f.Path
+		path = filepath.Join(folderPath, getMetaName(meta))
+	} else {
+		path = fmt.Sprintf("sync://%s/%s", f.ID, getMetaName(meta))
+	}
+
+	if g.JSON {
+		return findResult{
+			Name:     filepath.Base(getMetaName(meta)),
+			Path:     path,
+			Size:     getMetaSize(meta),
+			Modified: getMetaModTime(meta),
+			IsDir:    isDir,
+		}, true
+	}
+
+	fmt.Println(path)
+	return findResult{}, false
+}
+
+// Helper functions to access db.FileMetadata fields
+func getMetaName(meta any) string {
+	if m, ok := meta.(interface{ Name() string }); ok {
+		return m.Name()
+	}
+	return ""
+}
+
+func getMetaType(meta any) protocol.FileInfoType {
+	if m, ok := meta.(interface{ Type() protocol.FileInfoType }); ok {
+		return m.Type()
+	}
+	return protocol.FileInfoTypeFile
+}
+
+func getMetaSize(meta any) int64 {
+	if m, ok := meta.(interface{ Size() int64 }); ok {
+		return m.Size()
+	}
+	return 0
+}
+
+func getMetaModTime(meta any) time.Time {
+	if m, ok := meta.(interface{ ModTime() time.Time }); ok {
+		return m.ModTime()
+	}
+	return time.Time{}
 }
 
 // GlobToRegex converts a glob pattern to a regex pattern

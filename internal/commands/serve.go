@@ -105,6 +105,23 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 	mux.HandleFunc("/api/syncweb/need", c.AuthMiddleware(c.handleSyncwebNeed))
 	mux.HandleFunc("/api/syncweb/remote-need", c.AuthMiddleware(c.handleSyncwebRemoteNeed))
 
+	// Folder management endpoints
+	mux.HandleFunc("/api/syncweb/folders/pause", c.AuthMiddleware(c.handleSyncwebFolderPause))
+	mux.HandleFunc("/api/syncweb/folders/resume", c.AuthMiddleware(c.handleSyncwebFolderResume))
+	mux.HandleFunc("/api/syncweb/folders/scan-subdirs", c.AuthMiddleware(c.handleSyncwebFolderScanSubdirs))
+	mux.HandleFunc("/api/syncweb/folders/remove-devices", c.AuthMiddleware(c.handleSyncwebFolderRemoveDevices))
+
+	// Device management endpoints
+	mux.HandleFunc("/api/syncweb/devices/pause", c.AuthMiddleware(c.handleSyncwebDevicePause))
+	mux.HandleFunc("/api/syncweb/devices/resume", c.AuthMiddleware(c.handleSyncwebDeviceResume))
+	mux.HandleFunc("/api/syncweb/devices/set-addresses", c.AuthMiddleware(c.handleSyncwebDeviceSetAddresses))
+
+	// Ignores management endpoints
+	mux.HandleFunc("/api/syncweb/ignores/add", c.AuthMiddleware(c.handleSyncwebIgnoresAdd))
+
+	// Status and health endpoints
+	mux.HandleFunc("/api/syncweb/idle", c.AuthMiddleware(c.handleSyncwebIdle))
+
 	mux.HandleFunc("/api/mounts", c.AuthMiddleware(c.handleMounts))
 	mux.HandleFunc("/api/mount", c.AuthMiddleware(c.handleMount))
 	mux.HandleFunc("/api/unmount", c.AuthMiddleware(c.handleUnmount))

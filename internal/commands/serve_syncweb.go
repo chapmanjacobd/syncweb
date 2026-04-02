@@ -1013,3 +1013,257 @@ func (c *ServeCmd) handleSyncwebRemoteNeed(w http.ResponseWriter, r *http.Reques
 
 	writeOK(w, map[string]any{"files": files, "page": page, "per_page": perPage})
 }
+
+// handleSyncwebFolderPause pauses a folder
+// POST /api/syncweb/folders/pause
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebFolderPause(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.PauseFolder(req.ID); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Folder pause request accepted")
+}
+
+// handleSyncwebFolderResume resumes a folder
+// POST /api/syncweb/folders/resume
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebFolderResume(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.ResumeFolder(req.ID); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Folder resume request accepted")
+}
+
+// handleSyncwebFolderScanSubdirs scans specific subdirectories of a folder
+// POST /api/syncweb/folders/scan-subdirs
+// Body: {"folder_id": "...", "paths": ["path1", "path2"]}
+func (c *ServeCmd) handleSyncwebFolderScanSubdirs(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		FolderID string   `json:"folder_id"`
+		Paths    []string `json:"paths"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.ScanFolderSubdirs(req.FolderID, req.Paths); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Folder scan request accepted")
+}
+
+// handleSyncwebFolderRemoveDevices removes devices from a folder
+// POST /api/syncweb/folders/remove-devices
+// Body: {"folder_id": "...", "device_ids": ["id1", "id2"]}
+func (c *ServeCmd) handleSyncwebFolderRemoveDevices(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		FolderID  string   `json:"folder_id"`
+		DeviceIDs []string `json:"device_ids"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.RemoveFolderDevices(req.FolderID, req.DeviceIDs); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Folder devices removal request accepted")
+}
+
+// handleSyncwebDevicePause pauses a device
+// POST /api/syncweb/devices/pause
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebDevicePause(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.PauseDevice(req.ID); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Device pause request accepted")
+}
+
+// handleSyncwebDeviceResume resumes a device
+// POST /api/syncweb/devices/resume
+// Body: {"id": "..."}
+func (c *ServeCmd) handleSyncwebDeviceResume(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.ResumeDevice(req.ID); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Device resume request accepted")
+}
+
+// handleSyncwebDeviceSetAddresses sets addresses for a device
+// POST /api/syncweb/devices/set-addresses
+// Body: {"id": "...", "addresses": ["addr1", "addr2"]}
+func (c *ServeCmd) handleSyncwebDeviceSetAddresses(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		ID        string   `json:"id"`
+		Addresses []string `json:"addresses"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.SetDeviceAddresses(req.ID, req.Addresses); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Device addresses update request accepted")
+}
+
+// handleSyncwebIgnoresAdd adds patterns to ignore list (unignore)
+// POST /api/syncweb/ignores/add
+// Body: {"folder_id": "...", "patterns": ["pattern1", "pattern2"]}
+func (c *ServeCmd) handleSyncwebIgnoresAdd(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	var req struct {
+		FolderID string   `json:"folder_id"`
+		Patterns []string `json:"patterns"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if err := c.sw.AddIgnores(req.FolderID, req.Patterns); err != nil {
+		writeInternalServerError(w, err.Error())
+		return
+	}
+
+	writeAccepted(w, "Ignore patterns add request accepted")
+}
+
+// handleSyncwebIdle checks if a folder is idle (not syncing)
+// GET /api/syncweb/idle?folder_id=...&timeout=10s
+func (c *ServeCmd) handleSyncwebIdle(w http.ResponseWriter, r *http.Request) {
+	c.swMu.Lock()
+	defer c.swMu.Unlock()
+	if c.sw == nil || !c.sw.IsRunning() {
+		writeServiceUnavailable(w)
+		return
+	}
+
+	folderID := r.URL.Query().Get("folder_id")
+	timeoutStr := r.URL.Query().Get("timeout")
+
+	if folderID == "" {
+		writeBadRequest(w, "Missing folder_id parameter")
+		return
+	}
+
+	timeout := 10 * time.Second
+	if timeoutStr != "" {
+		if parsed, err := time.ParseDuration(timeoutStr); err == nil {
+			timeout = min(parsed, 30*time.Second) // Cap at 30 seconds
+		}
+	}
+
+	err := c.sw.WaitUntilIdle(folderID, timeout)
+	if err != nil {
+		writeOK(w, map[string]any{"idle": false, "error": err.Error()})
+		return
+	}
+
+	writeOK(w, map[string]any{"idle": true})
+}

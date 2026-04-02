@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"iter"
 	"crypto/tls"
@@ -32,6 +33,27 @@ type RESTEngine struct {
 	client        *http.Client
 	cachedFolders []FolderInfo
 	lastFetch     time.Time
+	maxRetries    int
+	retryDelay    time.Duration
+
+	// Caches for frequently accessed data
+	devicesCache     []DeviceInfo
+	devicesCacheTime time.Time
+	devicesMu        sync.RWMutex
+
+	folderStatsCache     map[string]map[string]any
+	folderStatsCacheTime time.Time
+	folderStatsMu        sync.RWMutex
+}
+
+// RESTReadSeeker implements io.ReadSeeker by fetching content from the REST API
+type RESTReadSeeker struct {
+	engine   *RESTEngine
+	folderID string
+	path     string
+	ctx      context.Context
+	offset   int64
+	size     int64
 }
 
 func NewRESTEngine(homeDir, baseURL, apiToken string) *RESTEngine {
@@ -39,9 +61,11 @@ func NewRESTEngine(homeDir, baseURL, apiToken string) *RESTEngine {
 		baseURL = "http://" + baseURL
 	}
 	return &RESTEngine{
-		HomeDir:  homeDir,
-		BaseURL:  baseURL,
-		APIToken: apiToken,
+		HomeDir:    homeDir,
+		BaseURL:    baseURL,
+		APIToken:   apiToken,
+		maxRetries: 3,
+		retryDelay: 100 * time.Millisecond,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -49,26 +73,51 @@ func NewRESTEngine(homeDir, baseURL, apiToken string) *RESTEngine {
 }
 
 func (e *RESTEngine) do(method, path string, body any) (*http.Response, error) {
-	var bodyReader io.Reader
+	var bodyBytes []byte
 	if body != nil {
 		jsonData, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		bodyReader = bytes.NewBuffer(jsonData)
+		bodyBytes = jsonData
 	}
 
-	req, err := http.NewRequest(method, e.BaseURL+path, bodyReader)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt <= e.maxRetries; attempt++ {
+		var bodyReader io.Reader
+		if bodyBytes != nil {
+			bodyReader = bytes.NewReader(bodyBytes)
+		}
+
+		req, err := http.NewRequest(method, e.BaseURL+path, bodyReader)
+		if err != nil {
+			return nil, err
+		}
+
+		if e.APIToken != "" {
+			req.Header.Set("X-Syncweb-Token", e.APIToken)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := e.client.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		// Wait before retrying (exponential backoff)
+		if attempt < e.maxRetries {
+			select {
+			case <-time.After(e.retryDelay * time.Duration(1<<uint(attempt))):
+				// Continue to next retry
+			case <-time.After(e.client.Timeout):
+				return nil, lastErr
+			}
+		}
 	}
 
-	if e.APIToken != "" {
-		req.Header.Set("X-Syncweb-Token", e.APIToken)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	return e.client.Do(req)
+	return nil, fmt.Errorf("request failed after %d retries: %w", e.maxRetries, lastErr)
 }
 
 func (e *RESTEngine) getJSON(path string, target any) error {
@@ -192,14 +241,61 @@ func (e *RESTEngine) FolderProgressBytesCompleted(folderID string) int64 {
 }
 
 func (e *RESTEngine) GetDevices() []DeviceInfo {
+	e.devicesMu.RLock()
+	if time.Since(e.devicesCacheTime) < 5*time.Second && e.devicesCache != nil {
+		cache := make([]DeviceInfo, len(e.devicesCache))
+		copy(cache, e.devicesCache)
+		e.devicesMu.RUnlock()
+		return cache
+	}
+	e.devicesMu.RUnlock()
+
+	e.devicesMu.Lock()
+	defer e.devicesMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if time.Since(e.devicesCacheTime) < 5*time.Second && e.devicesCache != nil {
+		cache := make([]DeviceInfo, len(e.devicesCache))
+		copy(cache, e.devicesCache)
+		return cache
+	}
+
 	var devices []DeviceInfo
 	_ = e.getJSON("/api/syncweb/devices", &devices)
+	e.devicesCache = devices
+	e.devicesCacheTime = time.Now()
 	return devices
 }
 
 func (e *RESTEngine) GetFolderStats() map[string]map[string]any {
+	e.folderStatsMu.RLock()
+	if time.Since(e.folderStatsCacheTime) < 5*time.Second && e.folderStatsCache != nil {
+		// Return a copy to prevent mutation
+		result := make(map[string]map[string]any, len(e.folderStatsCache))
+		for k, v := range e.folderStatsCache {
+			result[k] = v
+		}
+		e.folderStatsMu.RUnlock()
+		return result
+	}
+	e.folderStatsMu.RUnlock()
+
+	e.folderStatsMu.Lock()
+	defer e.folderStatsMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if time.Since(e.folderStatsCacheTime) < 5*time.Second && e.folderStatsCache != nil {
+		result := make(map[string]map[string]any, len(e.folderStatsCache))
+		for k, v := range e.folderStatsCache {
+			result[k] = v
+		}
+		return result
+	}
+
 	var stats map[string]map[string]any
 	_ = e.getJSON("/api/syncweb/status", &stats)
+	e.folderStatsCache = stats
+	e.folderStatsCacheTime = time.Now()
 	return stats
 }
 
@@ -232,11 +328,23 @@ func (e *RESTEngine) DeleteDevice(id string) error {
 }
 
 func (e *RESTEngine) PauseDevice(id string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{"id": id}
+	resp, err := e.do("POST", "/api/syncweb/devices/pause", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) ResumeDevice(id string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{"id": id}
+	resp, err := e.do("POST", "/api/syncweb/devices/resume", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) IsConnectedTo(deviceID protocol.DeviceID) bool {
@@ -250,7 +358,16 @@ func (e *RESTEngine) IsConnectedTo(deviceID protocol.DeviceID) bool {
 }
 
 func (e *RESTEngine) SetDeviceAddresses(deviceID string, addresses []string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{
+		"id":        deviceID,
+		"addresses": addresses,
+	}
+	resp, err := e.do("POST", "/api/syncweb/devices/set-addresses", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) GetDiscoveredDevices() map[string]time.Time {
@@ -281,11 +398,23 @@ func (e *RESTEngine) DeleteFolder(id string) error {
 }
 
 func (e *RESTEngine) PauseFolder(id string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{"id": id}
+	resp, err := e.do("POST", "/api/syncweb/folders/pause", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) ResumeFolder(id string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{"id": id}
+	resp, err := e.do("POST", "/api/syncweb/folders/resume", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) GetFolderPath(folderID string) (string, bool) {
@@ -308,10 +437,40 @@ func (e *RESTEngine) ScanFolders() map[string]error {
 }
 
 func (e *RESTEngine) ScanFolderSubdirs(folderID string, paths []string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{
+		"folder_id": folderID,
+		"paths":     paths,
+	}
+	resp, err := e.do("POST", "/api/syncweb/folders/scan-subdirs", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) WaitUntilIdle(folderID string, timeout time.Duration) error {
+	reqURL := fmt.Sprintf("/api/syncweb/idle?folder_id=%s&timeout=%s", url.QueryEscape(folderID), timeout.String())
+	resp, err := e.do("GET", reqURL, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Idle  bool   `json:"idle"`
+		Error string `json:"error,omitempty"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return err
+	}
+
+	if !res.Idle {
+		if res.Error != "" {
+			return fmt.Errorf("folder not idle: %s", res.Error)
+		}
+		return fmt.Errorf("folder not idle")
+	}
 	return nil
 }
 
@@ -367,11 +526,57 @@ func (e *RESTEngine) AllGlobalFiles(folderID string) (iter.Seq[FileMetadata], fu
 }
 
 func (e *RESTEngine) ResolveLocalPath(syncPath string) (folderID, localPath string, err error) {
-	return "", "", fmt.Errorf("not implemented via REST API")
+	// For REST engine, we can't directly resolve local paths because
+	// the server may be on a different machine. We return an error
+	// indicating this limitation.
+	// 
+	// However, we can attempt to get folder info and construct a path
+	// if the folder is known locally (same machine scenario).
+	var trimmed string
+	if after, ok := strings.CutPrefix(syncPath, "sync://"); ok {
+		trimmed = after
+	} else if after2, ok2 := strings.CutPrefix(syncPath, "syncweb://"); ok2 {
+		trimmed = after2
+	} else {
+		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
+	}
+
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("invalid sync path: %s", syncPath)
+	}
+
+	folderID = parts[0]
+	relativePath := filepath.Clean(parts[1])
+
+	if strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
+		return "", "", fmt.Errorf("invalid relative path: %s", relativePath)
+	}
+
+	// Try to get folder path from cached folders
+	folders := e.GetFolders()
+	for _, f := range folders {
+		if f.ID == folderID {
+			// Folder found - but we can't return local path in REST mode
+			// because the server may be remote
+			return folderID, f.Path, nil
+		}
+	}
+
+	return "", "", fmt.Errorf("folder not found: %s", folderID)
 }
 
 func (e *RESTEngine) NewReadSeeker(ctx context.Context, folderID, path string) (io.ReadSeeker, error) {
-	return nil, fmt.Errorf("not implemented via REST API")
+	// For REST engine, we create a special HTTP-based ReadSeeker
+	// that fetches content from the server
+	return &RESTReadSeeker{
+		engine:   e,
+		folderID: folderID,
+		path:     path,
+		ctx:      ctx,
+		offset:   0,
+		size:     -1,
+	}, nil
 }
 
 func (e *RESTEngine) GetIgnores(folderID string) ([]string, error) {
@@ -396,7 +601,16 @@ func (e *RESTEngine) SetIgnores(folderID string, lines []string) error {
 }
 
 func (e *RESTEngine) AddIgnores(folderID string, unignores []string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{
+		"folder_id": folderID,
+		"patterns":  unignores,
+	}
+	resp, err := e.do("POST", "/api/syncweb/ignores/add", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (e *RESTEngine) Unignore(folderID, relativePath string) error {
@@ -506,5 +720,102 @@ func (e *RESTEngine) AddFolderDevices(folderID string, deviceIDs []string) error
 }
 
 func (e *RESTEngine) RemoveFolderDevices(folderID string, deviceIDs []string) error {
-	return fmt.Errorf("not implemented via REST API")
+	req := map[string]any{
+		"folder_id":  folderID,
+		"device_ids": deviceIDs,
+	}
+	resp, err := e.do("POST", "/api/syncweb/folders/remove-devices", req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+// Read implements io.ReadSeeker
+func (r *RESTReadSeeker) Read(p []byte) (n int, err error) {
+	if r.offset >= r.size && r.size >= 0 {
+		return 0, io.EOF
+	}
+
+	// Build URL with range header
+	reqURL := fmt.Sprintf("/api/raw?path=sync://%s/%s", r.folderID, url.QueryEscape(r.path))
+	req, err := http.NewRequestWithContext(r.ctx, "GET", r.engine.BaseURL+reqURL, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	if r.engine.APIToken != "" {
+		req.Header.Set("X-Syncweb-Token", r.engine.APIToken)
+	}
+
+	// Set Range header for partial content
+	if r.offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", r.offset))
+	}
+
+	resp, err := r.engine.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return 0, fmt.Errorf("file not found: %s", r.path)
+	}
+
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		return 0, io.EOF
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return 0, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	// Parse Content-Range header if present
+	if r.size < 0 {
+		if contentRange := resp.Header.Get("Content-Range"); contentRange != "" {
+			// Parse "bytes 0-123/456" format
+			parts := strings.Split(contentRange, "/")
+			if len(parts) == 2 && parts[1] != "*" {
+				if size, parseErr := fmt.Sscanf(parts[1], "%d", &r.size); size != 1 || parseErr != nil {
+					r.size = -1
+				}
+			}
+		}
+	}
+
+	n, err = resp.Body.Read(p)
+	r.offset += int64(n)
+	return n, err
+}
+
+// Seek implements io.ReadSeeker
+func (r *RESTReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = r.offset + offset
+	case io.SeekEnd:
+		if r.size < 0 {
+			return 0, fmt.Errorf("cannot seek from end: size unknown")
+		}
+		newOffset = r.size + offset
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
+	}
+
+	if newOffset < 0 {
+		return 0, fmt.Errorf("negative offset: %d", newOffset)
+	}
+
+	r.offset = newOffset
+	return r.offset, nil
+}
+
+// Close implements io.Closer (optional)
+func (r *RESTReadSeeker) Close() error {
+	return nil
 }

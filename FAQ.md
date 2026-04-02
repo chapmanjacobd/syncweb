@@ -179,3 +179,102 @@ make test
 3. Make your changes
 4. Run tests: `make test`
 5. Submit a pull request
+
+## REST API
+
+### What is the REST Engine?
+
+The REST Engine allows CLI commands to communicate with a running Syncweb server via HTTP REST API. This is useful when:
+
+- You have `syncweb serve` already running
+- You want to manage Syncweb remotely
+- Multiple CLI instances need to coordinate through a central server
+
+### How does the fallback mechanism work?
+
+When you run a CLI command (e.g., `syncweb ls`), it first tries to acquire a lock on the Syncweb home directory. If the lock fails (because `syncweb serve` is running), it automatically falls back to the REST API.
+
+The CLI reads the server address and API token from:
+- `<home>/syncweb.addr` - Server address (e.g., `http://127.0.0.1:8889`)
+- `<home>/syncweb.token` - API token for authentication
+
+### What operations are supported via REST API?
+
+The REST Engine supports all major operations:
+
+**Folder Management:**
+- List, add, delete folders
+- Pause/resume folders
+- Scan folder subdirectories
+- Join/leave folder devices
+- Get folder stats and completion
+
+**Device Management:**
+- List, add, delete devices
+- Pause/resume devices
+- Set device addresses
+
+**File Operations:**
+- Browse files (ls, find, stat)
+- Download files
+- Manage ignore patterns
+
+**Monitoring:**
+- Get events
+- Check idle status
+- Get pending devices/folders
+
+### How do I use the REST API directly?
+
+You can call the REST API directly using curl or any HTTP client:
+
+```bash
+# List folders
+curl -H "X-Syncweb-Token: YOUR_TOKEN" \
+  http://localhost:8889/api/syncweb/folders
+
+# Pause a folder
+curl -X POST -H "X-Syncweb-Token: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "folder-id"}' \
+  http://localhost:8889/api/syncweb/folders/pause
+
+# Get events
+curl -H "X-Syncweb-Token: YOUR_TOKEN" \
+  http://localhost:8889/api/syncweb/events
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/syncweb/status` | GET | Get server status |
+| `/api/syncweb/folders` | GET | List all folders |
+| `/api/syncweb/folders/add` | POST | Add a new folder |
+| `/api/syncweb/folders/delete` | POST | Delete a folder |
+| `/api/syncweb/folders/pause` | POST | Pause a folder |
+| `/api/syncweb/folders/resume` | POST | Resume a folder |
+| `/api/syncweb/folders/join` | POST | Join a folder with a device |
+| `/api/syncweb/folders/remove-devices` | POST | Remove devices from folder |
+| `/api/syncweb/folders/scan-subdirs` | POST | Scan specific subdirectories |
+| `/api/syncweb/devices` | GET | List all devices |
+| `/api/syncweb/devices/add` | POST | Add a new device |
+| `/api/syncweb/devices/delete` | POST | Delete a device |
+| `/api/syncweb/devices/pause` | POST | Pause a device |
+| `/api/syncweb/devices/resume` | POST | Resume a device |
+| `/api/syncweb/devices/set-addresses` | POST | Set device addresses |
+| `/api/syncweb/ls` | GET | List files in folder |
+| `/api/syncweb/find` | GET | Search for files |
+| `/api/syncweb/stat` | GET | Get file metadata |
+| `/api/syncweb/download` | POST | Trigger file download |
+| `/api/syncweb/ignores` | GET/POST | Get/set ignore patterns |
+| `/api/syncweb/ignores/add` | POST | Add ignore patterns |
+| `/api/syncweb/events` | GET | Get recent events |
+| `/api/syncweb/pending` | GET | Get pending devices |
+| `/api/syncweb/pending-folders` | GET | Get pending folders |
+| `/api/syncweb/completion` | GET | Get folder completion |
+| `/api/syncweb/idle` | GET | Check if folder is idle |
+| `/api/syncweb/need` | GET | Get needed files |
+| `/api/syncweb/remote-need` | GET | Get remote device needed files |
+| `/api/syncweb/local-changed` | GET | Get locally changed files |
+| `/api/syncweb/tree` | GET | Get folder tree structure |

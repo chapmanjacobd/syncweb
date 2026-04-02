@@ -244,7 +244,8 @@ test.describe('file-operations', () => {
     const initialPath = await filesPage.getCurrentPath();
 
     // Try to navigate to parent (only works if not at root)
-    if (initialPath !== '/' && initialPath !== 'Select a folder') {
+    // Note: getCurrentPath() may return breadcrumb text like " Home" at root level
+    if (!initialPath.includes('/') && !initialPath.includes('Home')) {
       await filesPage.navigateToParent();
       await filesPage.waitForFilesToLoad();
 

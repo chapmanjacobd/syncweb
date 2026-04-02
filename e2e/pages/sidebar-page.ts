@@ -12,7 +12,6 @@ export class SidebarPage extends BasePage {
   readonly deviceList: Locator;
   readonly mountList: Locator;
   readonly activityList: Locator;
-  readonly offlineBtn: Locator;
   readonly logoutBtn: Locator;
   readonly addFolderBtn: Locator;
   readonly addDeviceBtn: Locator;
@@ -24,7 +23,6 @@ export class SidebarPage extends BasePage {
     this.deviceList = page.locator('#device-list');
     this.mountList = page.locator('#mount-list');
     this.activityList = page.locator('#activity-list');
-    this.offlineBtn = page.locator('#offline-btn');
     this.logoutBtn = page.locator('button[onclick="logout()"]');
     this.addFolderBtn = page.locator('button[onclick="addFolder()"]');
     this.addDeviceBtn = page.locator('button[onclick="addDevice()"]');
@@ -145,22 +143,6 @@ export class SidebarPage extends BasePage {
   async clickAddDevice(): Promise<void> {
     await this.addDeviceBtn.click();
     await this.page.waitForTimeout(300);
-  }
-
-  /**
-   * Toggle offline mode
-   */
-  async toggleOffline(): Promise<void> {
-    await this.offlineBtn.click();
-    await this.page.waitForTimeout(500);
-  }
-
-  /**
-   * Get offline button text
-   */
-  async getOfflineButtonText(): Promise<string> {
-    const span = this.offlineBtn.locator('span');
-    return await span.textContent() || '';
   }
 
   /**

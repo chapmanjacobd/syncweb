@@ -12,6 +12,8 @@ export class BasePage {
   readonly sidebar: Locator;
   readonly toast: Locator;
   readonly currentPath: Locator;
+  readonly currentFolderTitle: Locator;
+  readonly breadcrumbs: Locator;
   readonly sortSelect: Locator;
   readonly searchInput: Locator;
   readonly searchButton: Locator;
@@ -39,9 +41,11 @@ export class BasePage {
 
     // Common locators
     this.menuBtn = page.locator('#menu-btn');
-    this.sidebar = page.locator('aside');
+    this.sidebar = page.locator('aside.sidebar-left');
     this.toast = page.locator('#toast');
     this.currentPath = page.locator('#current-path');
+    this.currentFolderTitle = page.locator('#current-folder-title');
+    this.breadcrumbs = page.locator('#breadcrumbs');
     this.sortSelect = page.locator('#sort-select');
     this.searchInput = page.locator('#search-input');
     this.searchButton = page.locator('button[onclick="searchFiles()"]');

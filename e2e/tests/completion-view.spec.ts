@@ -219,8 +219,8 @@ test.describe('completion-view', () => {
     // Files tab should be active
     await expect(filesPage.filesTab).toHaveClass(/active/);
 
-    // Files list should be visible
-    await expect(filesPage.fileList).toBeVisible();
+    // Files list should be attached (may be empty)
+    await expect(filesPage.fileList).toBeAttached();
   });
 
   test('completion card error state detection', async ({ completionPage, filesPage, server }) => {

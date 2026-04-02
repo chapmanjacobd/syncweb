@@ -7,8 +7,6 @@ import {
     goUp,
     moveFile,
     triggerDownload,
-    toggleOffline,
-    loadStatus,
     searchFiles,
     loadDevices,
     addDevice,
@@ -32,7 +30,7 @@ global.fetch = mockFetch as any;
 global.prompt = vi.fn();
 
 describe('Syncweb UI', () => {
-    let folderList: HTMLUListElement, fileList: HTMLUListElement, pathHeader: HTMLElement, offlineBtn: HTMLButtonElement, toast: HTMLElement;
+    let folderList: HTMLUListElement, fileList: HTMLUListElement, pathHeader: HTMLElement, toast: HTMLElement;
 
     beforeEach(() => {
         // Reset DOM
@@ -45,7 +43,6 @@ describe('Syncweb UI', () => {
                 <h2 id="current-folder-title"></h2>
                 <table><tbody id="file-list-body"></tbody></table>
                 <div id="files-pagination"></div>
-                <button id="offline-btn"><i></i><span>Go Offline</span></button>
                 <input id="search-input" value="">
                 <div id="toast" style="display: none;"></div>
                 <div id="add-folder-ui" style="display: none;">
@@ -60,7 +57,6 @@ describe('Syncweb UI', () => {
         folderList = document.getElementById('folder-list') as HTMLUListElement;
         fileList = document.getElementById('file-list-body') as any;
         pathHeader = document.getElementById('breadcrumbs') as HTMLElement;
-        offlineBtn = document.getElementById('offline-btn') as HTMLButtonElement;
         toast = document.getElementById('toast') as HTMLElement;
 
         // Reset state
@@ -181,33 +177,6 @@ describe('Syncweb UI', () => {
                 method: 'POST',
                 body: JSON.stringify({ path: 'path' })
             }));
-        });
-    });
-
-    describe('System Status', () => {
-        it('toggleOffline calls API and updates button', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ offline: true })
-            });
-
-            await toggleOffline();
-
-            expect(mockFetch).toHaveBeenCalledWith('/api/syncweb/toggle', expect.any(Object));
-            const span = offlineBtn.querySelector('span');
-            expect(span?.textContent).toContain('Go Online');
-        });
-
-        it('loadStatus updates button state', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ offline: true })
-            });
-
-            await loadStatus();
-
-            const span = offlineBtn.querySelector('span');
-            expect(span?.textContent).toContain('Go Online');
         });
     });
 

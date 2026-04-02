@@ -37,17 +37,6 @@ test.describe('Sidebar', () => {
     await sidebarPage.expectVisible(sidebarPage.activityList);
   });
 
-  test('offline button is present', async ({ filesPage, sidebarPage, server }) => {
-    await filesPage.goto(server.getBaseUrl());
-
-    // Offline button should be visible
-    await sidebarPage.expectVisible(sidebarPage.offlineBtn);
-
-    // Should say "Go Offline" initially
-    const btnText = await sidebarPage.getOfflineButtonText();
-    expect(btnText).toContain('Offline');
-  });
-
   test('add folder button opens modal', async ({ filesPage, sidebarPage, server }) => {
     await filesPage.goto(server.getBaseUrl());
 

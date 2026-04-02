@@ -581,12 +581,14 @@ export function renderFiles(isSearch: boolean = false): void {
 
     paginatedFiles.forEach(f => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-path', f.path);
         if (state.selectedItems.includes(f.path)) tr.classList.add('selected');
-        
+        if (f.is_dir) tr.classList.add('is-dir');
+
         const displayName = isSearch ? f.path : f.name;
         const icon = f.is_dir ? 'folder' : 'file';
         const sourceIcon = !f.local && !f.is_dir ? '<i data-lucide="cloud" style="width: 14px; margin-left: 0.5rem; color: var(--accent-color);"></i>' : '';
-        
+
         const checkboxCell = document.createElement('td');
         checkboxCell.className = 'checkbox-cell';
         const checkbox = document.createElement('input');
@@ -597,12 +599,13 @@ export function renderFiles(isSearch: boolean = false): void {
             toggleSelection(f.path);
         };
         checkboxCell.appendChild(checkbox);
-        
+
         const iconCell = document.createElement('td');
         iconCell.className = 'icon-cell';
         iconCell.innerHTML = `<i data-lucide="${icon}" style="width: 18px;"></i>`;
-        
+
         const nameCell = document.createElement('td');
+        nameCell.className = 'name';
         nameCell.innerHTML = `<span style="display: flex; align-items: center; gap: 0.25rem;">${displayName} ${sourceIcon}</span>`;
         nameCell.style.cursor = 'pointer';
         nameCell.onclick = () => {
@@ -627,10 +630,12 @@ export function renderFiles(isSearch: boolean = false): void {
         };
 
         const sizeCell = document.createElement('td');
+        sizeCell.className = 'size';
         sizeCell.textContent = f.is_dir ? '--' : formatSize(f.size);
         sizeCell.style.color = 'var(--secondary-text)';
-        
+
         const dateCell = document.createElement('td');
+        dateCell.className = 'date';
         dateCell.textContent = f.modified ? new Date(f.modified).toLocaleDateString() : '--';
         dateCell.style.color = 'var(--secondary-text)';
 
@@ -745,42 +750,6 @@ export async function triggerDownload(path: string): Promise<void> {
             body: JSON.stringify({ path })
         });
         if (resp.ok) showToast("Download triggered");
-    } catch (e) {}
-}
-
-export async function toggleOffline(): Promise<void> {
-    const btn = document.getElementById('offline-btn');
-    const span = btn?.querySelector('span');
-    const isOffline = span?.textContent === 'Go Online';
-    try {
-        const resp = await fetchAPI('/api/syncweb/toggle', {
-            method: 'POST',
-            body: JSON.stringify({ offline: !isOffline })
-        });
-        const data = await resp.json();
-        if (span) span.textContent = data.offline ? 'Go Online' : 'Go Offline';
-
-        const icon = btn!.querySelector('i');
-        if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
-        if ((window as any).lucide) (window as any).lucide.createIcons();
-        showToast(data.offline ? "Backend Stopped" : "Backend Started");
-    } catch (e) {
-        showToast("Toggle failed", true);
-    }
-}
-
-export async function loadStatus(): Promise<void> {
-    try {
-        const resp = await fetchAPI('/api/syncweb/status');
-        const data = await resp.json();
-        const btn = document.getElementById('offline-btn');
-        if (btn) {
-            const span = btn.querySelector('span');
-            if (span) span.textContent = data.offline ? 'Go Online' : 'Go Offline';
-            const icon = btn.querySelector('i');
-            if (icon) icon.setAttribute('data-lucide', data.offline ? 'power-off' : 'power');
-            if ((window as any).lucide) (window as any).lucide.createIcons();
-        }
     } catch (e) {}
 }
 
@@ -979,12 +948,11 @@ export function renderEvents(): void {
 }
 
 export function refresh(): void { 
-    loadFolders(); 
-    loadDevices(); 
-    loadMounts(); 
-    loadFiles(); 
-    loadStatus(); 
-    loadEvents(); 
+    loadFolders();
+    loadDevices();
+    loadMounts();
+    loadFiles();
+    loadEvents();
 }
 
 // ============== Sync Monitor View Functions ==============
@@ -1008,6 +976,9 @@ export function switchView(viewName: string): void {
 
     // Load data for the selected view
     switch (viewName) {
+        case 'files':
+            renderFiles();
+            break;
         case 'completion':
             populateFolderDeviceSelects();
             loadCompletion();
@@ -1482,7 +1453,6 @@ if (typeof window !== 'undefined' && window.document) {
     (window as any).bulkDelete = bulkDelete;
     (window as any).bulkMove = bulkMove;
     (window as any).bulkCopy = bulkCopy;
-    (window as any).toggleOffline = toggleOffline;
     (window as any).logout = logout;
     (window as any).toggleActivity = toggleActivity;
     (window as any).setSort = setSort;
@@ -1497,12 +1467,21 @@ if (typeof window !== 'undefined' && window.document) {
     loadFolders();
     loadDevices();
     loadMounts();
-    loadStatus();
     loadEvents();
     setInterval(loadEvents, 10000); // Refresh events every 10s
 
     // Add search listener for "Enter" key
     document.getElementById('search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') searchFiles();
+    });
+
+    // Add Escape key listener to close modal
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('add-folder-ui');
+            if (modal && modal.style.display !== 'none') {
+                modal.style.display = 'none';
+            }
+        }
     });
 }

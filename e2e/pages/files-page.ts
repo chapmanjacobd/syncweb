@@ -13,9 +13,9 @@ export class FilesPage extends BasePage {
 
   constructor(page: any) {
     super(page);
-    this.fileList = page.locator('#file-list');
-    this.fileItems = this.fileList.locator('.file-item');
-    this.parentDirItem = this.fileList.locator('.file-item:has-text("..")');
+    this.fileList = page.locator('#file-list-body');
+    this.fileItems = this.fileList.locator('tr');
+    this.parentDirItem = this.fileList.locator('tr:has-text("..")');
   }
 
   /**
@@ -32,21 +32,25 @@ export class FilesPage extends BasePage {
   async waitForFilesToLoad(timeout: number = 10000): Promise<void> {
     // Wait for the file list element to be attached to the DOM
     await this.fileList.waitFor({ state: 'attached', timeout });
-    // Don't wait for files or visibility - empty state is valid
+    // Wait for the view to be active (not hidden by CSS)
+    const filesView = this.page.locator('#view-files');
+    if (await filesView.count() > 0) {
+      await filesView.waitFor({ state: 'attached', timeout });
+    }
   }
 
   /**
    * Get file item by path
    */
   getFileItem(path: string): Locator {
-    return this.fileList.locator(`.file-item[data-path="${path}"]`);
+    return this.fileList.locator(`tr[data-path="${path}"]`);
   }
 
   /**
    * Get file item by name
    */
   getFileItemByName(name: string): Locator {
-    return this.fileList.locator(`.file-item:has-text("${name}")`);
+    return this.fileList.locator(`tr:has-text("${name}")`);
   }
 
   /**
@@ -60,21 +64,21 @@ export class FilesPage extends BasePage {
    * Get folder items only
    */
   getFolderItems(): Locator {
-    return this.fileList.locator('.file-item.is-dir');
+    return this.fileList.locator('tr.is-dir');
   }
 
   /**
    * Get file items only (not folders)
    */
   getFileOnlyItems(): Locator {
-    return this.fileList.locator('.file-item:not(.is-dir)');
+    return this.fileList.locator('tr:not(.is-dir)');
   }
 
   /**
    * Get selected items
    */
   getSelectedItems(): Locator {
-    return this.fileList.locator('.file-item.selected');
+    return this.fileList.locator('tr.selected');
   }
 
   /**
@@ -88,7 +92,7 @@ export class FilesPage extends BasePage {
    * Get file icon
    */
   getFileIcon(path: string): Locator {
-    return this.getFileItem(path).locator('.icon');
+    return this.getFileItem(path).locator('.icon-cell');
   }
 
   /**
@@ -96,7 +100,7 @@ export class FilesPage extends BasePage {
    */
   async getFileSize(path: string): Promise<string> {
     const item = this.getFileItem(path);
-    return await item.locator('.secondary-info').textContent() || '';
+    return await item.locator('td.size').textContent() || '';
   }
 
   /**
@@ -227,7 +231,7 @@ export class FilesPage extends BasePage {
    */
   async search(query: string): Promise<void> {
     await this.searchInput.fill(query);
-    await this.searchButton.click();
+    await this.searchInput.press('Enter');
     await this.waitForFilesToLoad();
   }
 
@@ -236,7 +240,7 @@ export class FilesPage extends BasePage {
    */
   async clearSearch(): Promise<void> {
     await this.searchInput.clear();
-    await this.searchButton.click();
+    await this.searchInput.press('Enter');
     await this.waitForFilesToLoad();
   }
 
@@ -267,7 +271,11 @@ export class FilesPage extends BasePage {
    * Get current path
    */
   async getCurrentPath(): Promise<string> {
-    return await this.currentPath.textContent() || '';
+    // Try breadcrumbs first, then folder title
+    if (await this.breadcrumbs.isVisible()) {
+      return await this.breadcrumbs.textContent() || '';
+    }
+    return await this.currentFolderTitle.textContent() || '';
   }
 
   /**

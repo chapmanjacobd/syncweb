@@ -381,7 +381,7 @@ func (c *ServeCmd) collectFolderEntries(
 			continue
 		}
 
-		localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
+		_, localPath, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
 		entry.Local = utils.FileExists(localPath)
 
 		if !entry.IsDir {
@@ -428,7 +428,7 @@ func (c *ServeCmd) handleSyncwebDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	localPath, folderID, err := c.sw.ResolveLocalPath(req.Path)
+	folderID, localPath, err := c.sw.ResolveLocalPath(req.Path)
 	if err != nil {
 		writeBadRequest(w, err.Error())
 		return
@@ -565,7 +565,7 @@ func (c *ServeCmd) handleSyncwebFind(w http.ResponseWriter, r *http.Request) {
 
 			if re.MatchString(meta.Name) || re.MatchString(filepath.Base(meta.Name)) {
 				fullSyncwebPath := fmt.Sprintf("sync://%s/%s", f.ID, meta.Name)
-				localPath, _, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
+				_, localPath, _ := c.sw.ResolveLocalPath(fullSyncwebPath)
 				isLocal := utils.FileExists(localPath)
 
 				isDir := meta.Type == protocol.FileInfoTypeDirectory
@@ -617,7 +617,7 @@ func (c *ServeCmd) handleSyncwebStat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	localPath, folderID, err := c.sw.ResolveLocalPath(path)
+	folderID, localPath, err := c.sw.ResolveLocalPath(path)
 	if err != nil {
 		writeBadRequest(w, err.Error())
 		return

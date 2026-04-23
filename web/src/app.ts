@@ -26,11 +26,17 @@ export const state: State = {
     isActivityOpen: true
 };
 
-// Initialize token from localStorage or URL if in browser
-if (typeof window !== 'undefined' && window.localStorage && window.location) {
-    const urlParams = new URLSearchParams(window.location.search);
-    state.token = urlParams.get('token') || localStorage.getItem('syncweb_token') || '';
-    if (state.token) localStorage.setItem('syncweb_token', state.token);
+function escapeHTML(value: unknown): string {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+if (typeof window !== 'undefined') {
+    state.token = '';
 }
 
 export async function fetchAPI(url: string, options: RequestInit = {}): Promise<Response> {
@@ -44,9 +50,6 @@ export async function fetchAPI(url: string, options: RequestInit = {}): Promise<
         const newToken = prompt("Unauthorized. Enter API Token:") || '';
         if (newToken) {
             state.token = newToken;
-            if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem('syncweb_token', newToken);
-            }
             return fetchAPI(url, options);
         }
     }
@@ -55,9 +58,6 @@ export async function fetchAPI(url: string, options: RequestInit = {}): Promise<
 
 export function logout(): void {
     state.token = '';
-    if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.removeItem('syncweb_token');
-    }
     location.reload();
 }
 
@@ -91,7 +91,7 @@ export function renderBreadcrumbs(): void {
     if (state.currentPath.startsWith('Search results')) {
         const searchItem = document.createElement('div');
         searchItem.className = 'breadcrumb-item';
-        searchItem.innerHTML = `<i data-lucide="search" style="width: 14px;"></i> ${state.currentPath}`;
+        searchItem.innerHTML = `<i data-lucide="search" style="width: 14px;"></i> ${escapeHTML(state.currentPath)}`;
         container.appendChild(searchItem);
         if ((window as any).lucide) (window as any).lucide.createIcons();
         return;
@@ -190,7 +190,7 @@ export function renderPendingFolders(): void {
         const li = document.createElement('li');
         li.className = 'folder-item';
         li.style.color = 'var(--accent-color)';
-        li.innerHTML = `<span class="icon"><i data-lucide="inbox"></i></span> ${folderId} <span class="secondary-info">${deviceIds.length} peer(s)</span>`;
+        li.innerHTML = `<span class="icon"><i data-lucide="inbox"></i></span> ${escapeHTML(folderId)} <span class="secondary-info">${deviceIds.length} peer(s)</span>`;
         li.title = `Click to join folder: ${folderId}`;
         li.onclick = () => joinFolder(folderId, deviceIds[0]);
         list.appendChild(li);
@@ -223,7 +223,7 @@ export function renderDevices(): void {
         const li = document.createElement('li');
         li.className = 'folder-item';
         li.style.color = 'var(--accent-color)';
-        li.innerHTML = `<span class="icon"><i data-lucide="bell"></i></span> Pending: ${id.substring(0, 7)}...`;
+        li.innerHTML = `<span class="icon"><i data-lucide="bell"></i></span> Pending: ${escapeHTML(id.substring(0, 7))}...`;
         li.title = `Click to accept device: ${id}`;
         li.onclick = () => addDevice(id);
         list.appendChild(li);
@@ -233,7 +233,7 @@ export function renderDevices(): void {
         const li = document.createElement('li');
         li.className = 'folder-item';
         const statusIcon = d.paused ? 'pause-circle' : 'monitor';
-        li.innerHTML = `<span class="icon"><i data-lucide="${statusIcon}"></i></span> ${d.name || d.id.substring(0, 7) + '...'}`;
+        li.innerHTML = `<span class="icon"><i data-lucide="${statusIcon}"></i></span> ${escapeHTML(d.name || d.id.substring(0, 7) + '...')}`;
         li.title = d.id;
         li.oncontextmenu = (e) => {
             e.preventDefault();
@@ -299,7 +299,7 @@ export function renderFolders(): void {
     state.folders.forEach(f => {
         const li = document.createElement('li');
         li.className = 'folder-item' + (state.currentFolder === f.id ? ' active' : '');
-        li.innerHTML = `<span class="icon"><i data-lucide="folder"></i></span> ${f.id}`;
+        li.innerHTML = `<span class="icon"><i data-lucide="folder"></i></span> ${escapeHTML(f.id)}`;
         li.onclick = () => selectFolder(f.id);
         li.oncontextmenu = (e) => {
             e.preventDefault();
@@ -315,8 +315,8 @@ export function renderFolders(): void {
 export async function addFolder(): Promise<void> {
     document.getElementById('add-folder-ui')!.style.display = 'block';
     document.getElementById('path-preview')!.innerHTML = '';
-    document.getElementById('new-folder-id')!.nodeValue = '';
-    document.getElementById('new-folder-path')!.nodeValue = '';
+    (document.getElementById('new-folder-id') as HTMLInputElement).value = '';
+    (document.getElementById('new-folder-path') as HTMLInputElement).value = '';
 }
 
 export async function joinFolder(folderId: string, deviceId: string = ''): Promise<void> {
@@ -351,7 +351,7 @@ export async function previewLocalPath(): Promise<void> {
             let html = '<strong>Contents:</strong><div style="margin-top: 0.5rem;">';
             files.slice(0, 5).forEach((f: any) => {
                 const icon = f.is_dir ? 'folder' : 'file-text';
-                html += `<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;"><i data-lucide="${icon}" style="width: 14px; height: 14px;"></i> ${f.name}</div>`;
+                html += `<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;"><i data-lucide="${icon}" style="width: 14px; height: 14px;"></i> ${escapeHTML(f.name)}</div>`;
             });
             if (files.length > 5) html += `<div style="font-size: 0.8rem; margin-top: 0.2rem; color: var(--secondary-text);">... and ${files.length - 5} more</div>`;
             html += '</div>';
@@ -432,7 +432,7 @@ export function renderMounts(): void {
                     if (mp && !mp.startsWith('[')) {
                         const li = document.createElement('li');
                         li.className = 'folder-item';
-                        li.innerHTML = `<span class="icon"><i data-lucide="hard-drive"></i></span> ${mp} <span class="secondary-info">${d.size}</span>`;
+                        li.innerHTML = `<span class="icon"><i data-lucide="hard-drive"></i></span> ${escapeHTML(mp)} <span class="secondary-info">${escapeHTML(d.size)}</span>`;
                         li.title = `${d.name} - ${d.label || 'no label'}`;
                         li.oncontextmenu = (e) => {
                             e.preventDefault();
@@ -446,7 +446,7 @@ export function renderMounts(): void {
             } else if (d.fstype && d.type === 'part') {
                 const li = document.createElement('li');
                 li.className = 'folder-item';
-                li.innerHTML = `<span class="icon"><i data-lucide="plug-zap"></i></span> ${d.name} <span class="secondary-info">[Unmounted]</span>`;
+                li.innerHTML = `<span class="icon"><i data-lucide="plug-zap"></i></span> ${escapeHTML(d.name)} <span class="secondary-info">[Unmounted]</span>`;
                 li.style.opacity = '0.6';
                 li.onclick = () => {
                     const mp = prompt("Enter mountpoint path:", `/mnt/${d.label || d.name}`) || '';
@@ -606,7 +606,7 @@ export function renderFiles(isSearch: boolean = false): void {
 
         const nameCell = document.createElement('td');
         nameCell.className = 'name';
-        nameCell.innerHTML = `<span style="display: flex; align-items: center; gap: 0.25rem;">${displayName} ${sourceIcon}</span>`;
+        nameCell.innerHTML = `<span style="display: flex; align-items: center; gap: 0.25rem;">${escapeHTML(displayName)} ${sourceIcon}</span>`;
         nameCell.style.cursor = 'pointer';
         nameCell.onclick = () => {
             if (!state.currentFolder && f.is_dir) {
@@ -939,7 +939,7 @@ export function renderEvents(): void {
             <span class="activity-time">${time}</span>
             <div class="activity-message" style="display: flex; gap: 0.5rem; align-items: flex-start;">
                 <i data-lucide="${icon}" style="width: 14px; height: 14px; margin-top: 2px; color: ${color}; flex-shrink: 0;"></i>
-                <span>${ev.message}</span>
+                <span>${escapeHTML(ev.message)}</span>
             </div>
         `;
         list.appendChild(item);
@@ -1097,9 +1097,9 @@ export async function loadCompletion(): Promise<void> {
             const cardEl = document.createElement('div');
             cardEl.className = 'completion-card';
             cardEl.innerHTML = `
-                <h4><i data-lucide="folder" style="width: 16px;"></i> ${card.folderId}</h4>
+                <h4><i data-lucide="folder" style="width: 16px;"></i> ${escapeHTML(card.folderId)}</h4>
                 <div style="font-size: 0.85rem; color: var(--secondary-text); margin-bottom: 0.5rem;">
-                    <i data-lucide="laptop" style="width: 12px; display: inline;"></i> ${deviceName}
+                    <i data-lucide="laptop" style="width: 12px; display: inline;"></i> ${escapeHTML(deviceName)}
                 </div>
                 <div class="completion-pct">${pct.toFixed(1)}%</div>
                 <div class="progress-bar">
@@ -1260,11 +1260,11 @@ export function renderLocalChangedTable(): void {
     state.localChangedData.files.forEach(f => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${escapeHTML(f.name)}</td>
             <td>${formatSize(f.size)}</td>
             <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
-            <td>${f.type || 'FILE'}</td>
-            <td>${f.permission || '-'}</td>
+            <td>${escapeHTML(f.type || 'FILE')}</td>
+            <td>${escapeHTML(f.permission || '-')}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -1342,10 +1342,10 @@ export function renderNeedTable(): void {
         const badgeText = statusType === 'syncing' ? 'From Remote' : statusType === 'queued' ? 'Queued' : 'Local';
 
         tr.innerHTML = `
-            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${escapeHTML(f.name)}</td>
             <td>${formatSize(f.size)}</td>
             <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
-            <td>${f.type || 'FILE'}</td>
+            <td>${escapeHTML(f.type || 'FILE')}</td>
             <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
         `;
         tbody.appendChild(tr);
@@ -1401,11 +1401,11 @@ export function renderRemoteNeedTable(): void {
     state.remoteNeedData.files.forEach(f => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${f.name}</td>
+            <td><i data-lucide="${f.type === 'DIRECTORY' ? 'folder' : 'file'}" style="width: 16px; display: inline; margin-right: 0.5rem;"></i> ${escapeHTML(f.name)}</td>
             <td>${formatSize(f.size)}</td>
             <td>${f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
-            <td>${f.type || 'FILE'}</td>
-            <td>${f.permission || '-'}</td>
+            <td>${escapeHTML(f.type || 'FILE')}</td>
+            <td>${escapeHTML(f.permission || '-')}</td>
         `;
         tbody.appendChild(tr);
     });

@@ -155,7 +155,6 @@ func (c *ServeCmd) Run(g *SyncwebCmd) error {
 
 	logger := slog.Default().With("addr", listenAddr)
 	logger.Info("Syncweb server starting")
-	logger.Debug("API token", "token", c.APIToken)
 
 	// Save address and token for CLI discovery
 	addrFile := filepath.Join(g.SyncwebHome, "syncweb.addr")
@@ -252,9 +251,6 @@ func validateHostHeader(r *http.Request, isLocal bool) error {
 func validateToken(r *http.Request, apiToken string, isLocal bool) error {
 	token := r.Header.Get("X-Syncweb-Token")
 	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-	if token == "" {
 		cookie, err := r.Cookie("syncweb_token")
 		if err == nil {
 			token = cookie.Value
@@ -299,12 +295,12 @@ func (c *ServeCmd) handleFileMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	src, _, err := c.resolveSyncwebPath(req.Src)
+	_, src, err := c.resolveSyncwebPath(req.Src)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	dst, _, err := c.resolveSyncwebPath(req.Dst)
+	_, dst, err := c.resolveSyncwebPath(req.Dst)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -331,12 +327,12 @@ func (c *ServeCmd) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	src, _, err := c.resolveSyncwebPath(req.Src)
+	_, src, err := c.resolveSyncwebPath(req.Src)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	dst, _, err := c.resolveSyncwebPath(req.Dst)
+	_, dst, err := c.resolveSyncwebPath(req.Dst)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -375,7 +371,7 @@ func (c *ServeCmd) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, _, err := c.resolveSyncwebPath(req.Path)
+	_, path, err := c.resolveSyncwebPath(req.Path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -401,7 +397,7 @@ func (c *ServeCmd) handleRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	localPath, folderID, err := c.resolveSyncwebPath(path)
+	folderID, localPath, err := c.resolveSyncwebPath(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

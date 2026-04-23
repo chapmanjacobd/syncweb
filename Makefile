@@ -35,7 +35,7 @@ run:
 
 dev:
 	(sleep 2 && xdg-open http://localhost:8889) &
-	go build -tags "$(BUILD_TAGS)" -o ./tmp/main ./cmd/syncweb && ./tmp/main
+	go run -tags "$(BUILD_TAGS)" ./cmd/syncweb serve -v --public-dir web/dist
 
 fmt:
 	gofmt -s -w -e .

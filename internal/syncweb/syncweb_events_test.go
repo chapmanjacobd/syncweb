@@ -3,6 +3,7 @@ package syncweb_test
 import (
 	"testing"
 
+	"github.com/chapmanjacobd/syncweb/internal/models"
 	"github.com/chapmanjacobd/syncweb/internal/syncweb"
 )
 
@@ -15,14 +16,21 @@ func TestGetEvents(t *testing.T) {
 		t.Errorf("expected nil events before initialization, got %v", events)
 	}
 
-	// Test after initialization - just verify GetEvents doesn't panic
-	events = s.GetEvents()
+	homeDir := t.TempDir()
+	initialized, err := syncweb.NewSyncweb(homeDir, "test-node", "tcp://127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syncweb.StopAndCleanup(initialized, homeDir)
+
+	events = initialized.GetEvents()
 	if events == nil {
 		t.Errorf("expected non-nil events after initialization, got nil")
 	}
 
-	// Verify it returns a copy by checking length
-	events2 := s.GetEvents()
-	// We can't verify the internal state, but we can ensure it doesn't panic
-	_ = events2
+	events = append(events, models.SyncEvent{Type: "mutated"})
+	events2 := initialized.GetEvents()
+	if len(events2) != 0 {
+		t.Errorf("expected GetEvents to return an independent copy, got %d events", len(events2))
+	}
 }

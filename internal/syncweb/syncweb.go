@@ -171,7 +171,7 @@ func (s *Syncweb) GetEvents() []models.SyncEvent {
 	if v == nil {
 		return nil
 	}
-	return append([]models.SyncEvent(nil), v.([]models.SyncEvent)...) //nolint:errcheck // append doesn't return error
+	return slices.Clone(v.([]models.SyncEvent))
 }
 
 // MyID returns the local device ID
@@ -851,7 +851,7 @@ func (s *Syncweb) ResolveLocalPath(syncPath string) (folderID, localPath string,
 			if relErr != nil || strings.HasPrefix(rel, "..") {
 				return "", "", fmt.Errorf("traversal detected: %s", relativePath)
 			}
-			return localPath, folderID, nil
+			return folderID, localPath, nil
 		}
 	}
 

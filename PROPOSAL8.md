@@ -73,3 +73,78 @@ syncweb moderation hide <record>
 - A network can hide or quarantine a record without corrupting its content hash.
 - Moderation decisions are signed, scoped, auditable, and optionally expiring.
 - Private access revocation does not claim to erase already downloaded content.
+
+## Grounded UX example
+
+Trust output should state facts and local policy decisions separately:
+
+```console
+$ syncweb trust show cat_7f3a...
+Integrity:    valid signature, content hash verified
+Publisher:    node5abc... (trusted by network "research")
+License:      CC-BY-4.0 (publisher attestation)
+Provenance:   derived from b3:901e...
+Moderation:   warning from research-index: incomplete attribution
+
+$ syncweb report cat_7f3a... --reason spam
+Submitted report rep_12d... to research-index
+
+$ syncweb moderation hide cat_7f3a... --scope local --for 30d
+Hidden from local search until 2026-08-16
+The content was not deleted from local storage or other peers.
+```
+
+Warnings should include who made the decision, its scope, and an audit link.
+`--show-hidden` should require an explicit flag and retain warnings rather than
+making records disappear in a way users cannot diagnose.
+
+## Code patterns and library candidates
+
+Evaluate trust as composable policy, not a score embedded in content:
+
+```rust
+struct TrustContext<'a> {
+    subject: &'a Verified<CatalogRecord>,
+    attestations: &'a [Verified<Attestation>],
+    moderation: &'a [Verified<ModerationRecord>],
+    policy: &'a TrustPolicy,
+}
+
+enum DiscoveryDecision {
+    Show,
+    Warn(Vec<Reason>),
+    Hide(Vec<Reason>),
+    Quarantine(Vec<Reason>),
+}
+```
+
+- Reuse the canonical signed-record envelope and Ed25519 identity from manifests.
+  Domain-separate signatures by record type and schema version.
+- Express initial policy as typed TOML structs with `serde`, not a general
+  scripting language. The engine should return a decision trace for
+  `trust show` and PROPOSAL9's `deployment explain`.
+- Store moderation records append-only in SQLite and derive the active view by
+  scope, expiry, and latest signed action.
+- Use SPDX license identifiers and optionally the `spdx` crate for syntax and
+  compatibility checks. Display unknown license text without treating it as
+  validated.
+- Rate-limit report submission at the catalog API with `tower` middleware and
+  keep reports distinct from moderator actions.
+
+## Pros and cons
+
+**Pros**
+
+- High usefulness for any shared catalog: integrity alone cannot answer whether
+  content is appropriately licensed, attributable, or acceptable in a network.
+- Scoped, signed decisions avoid imposing a single global authority.
+- Explainable decisions align with the project's broader policy model.
+
+**Cons**
+
+- High social and operational complexity even if the code is moderate:
+  communities need moderators, appeals, retention rules, and abuse handling.
+- Conflicting attestations and moderation decisions cannot always be resolved
+  technically and may confuse users.
+- License identifiers and signatures prove what was asserted, not that the
+  assertion is legally or factually correct.

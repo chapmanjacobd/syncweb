@@ -69,3 +69,79 @@ syncweb gateway run
 - A gateway can serve content from a mirror without changing its content ID.
 - Revoking a private link prevents new authorized fetches; cached content policy is
   clearly documented rather than implying remote deletion.
+
+## Grounded UX example
+
+Links should make mutability and authority visible:
+
+```console
+$ syncweb link create climate-hourly --alias alice/climate-hourly
+Mutable:   syncweb://name/alice/climate-hourly
+Pinned:    syncweb://collection/col_91c@b3:19ac...
+HTTPS:     https://gw.example/s/alice/climate-hourly
+
+$ syncweb link resolve syncweb://name/alice/climate-hourly
+Alias signed by: node5abcd...
+Sequence: 12
+Manifest: b3:19ac...
+Providers: 2 fresh, 1 stale
+
+$ curl -L -H 'Range: bytes=0-1048575' \
+    https://gw.example/content/b3:8e7a...
+```
+
+Opening a mutable URL should display the resolved immutable version and offer
+"copy pinned link." If all providers are offline, resolution should still return
+a verified manifest when cached and clearly distinguish `known but unavailable`
+from `name not found`.
+
+## Code patterns and library candidates
+
+Use one parser and resolver pipeline for CLI, gateway, and future GUI callers:
+
+```rust
+enum SyncwebRef {
+    Content(ContentId),
+    Collection { id: CollectionId, version: ManifestHash },
+    Name { publisher: PublisherId, alias: Alias },
+}
+
+#[async_trait::async_trait]
+trait Resolver {
+    async fn resolve(&self, reference: &SyncwebRef)
+        -> Result<ResolvedReference>;
+}
+```
+
+- Use the `url` crate for syntax, percent-decoding, and round trips, but enforce
+  scheme-specific segment counts and lengths in `SyncwebRef::from_str`.
+- Use `axum`, `tower-http`, and `http-body-util` for the gateway. Support
+  conditional requests and single byte ranges first; reject malformed or
+  abusive multi-range requests explicitly.
+- Stream through Iroh's verified blob reader and do not advertise bytes as
+  successful before the requested range is verified.
+- Store signed name records with a monotonic sequence number. Accepting a lower
+  sequence than the locally observed head must produce a rollback warning or
+  error.
+- Put capability material in a URL fragment where feasible so ordinary HTTP
+  access logs and resolver requests do not receive it; scrub secrets from all
+  diagnostics.
+
+## Pros and cons
+
+**Pros**
+
+- High usefulness: stable aliases are shareable by humans, while pinned links
+  preserve reproducibility and HTTPS broadens client compatibility.
+- Resolver/provider separation allows mirrors without weakening content
+  verification.
+- A shared typed parser reduces inconsistent security behavior across surfaces.
+
+**Cons**
+
+- High complexity once mutable names, rollback protection, revocation,
+  capability secrecy, HTTP caching, and range semantics are combined.
+- Running a public gateway adds bandwidth, abuse, logging, and operational
+  responsibilities absent from a local-only peer.
+- Revocation cannot retract previously downloaded content, which may surprise
+  users unless the UX is explicit.

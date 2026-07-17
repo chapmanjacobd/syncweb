@@ -85,3 +85,90 @@ Existing `syncweb package` commands map to collection commands internally.
 - A collection can be versioned without copying unchanged blobs.
 - Package install/upgrade behavior remains available through the generalized model.
 - A consumer can inspect a manifest without fetching all entry content.
+
+## Grounded UX example
+
+A researcher can publish the same immutable CSV in a release package and in a
+virtual reading list without storing it twice:
+
+```console
+$ syncweb collection init ./climate --name climate-hourly --type dataset
+Created col_climate with 47 local entries
+
+$ syncweb collection add col_reading-list \
+    syncweb://content/b3:8e7a... --as data/hourly.csv --role primary
+Added existing content (no blob copied)
+
+$ syncweb collection publish col_climate
+Published climate-hourly@1.0.0 (manifest b3:19ac...)
+
+$ syncweb collection diff col_climate 1.0.0 1.1.0
+A  docs/methodology.md       18 KiB
+M  data/hourly.csv           b3:8e7a... -> b3:3d11...
+=  45 unchanged entries      reused
+Transfer required: 84 MiB of 2.3 GiB
+```
+
+`collection inspect --metadata-only` should fetch and verify only the manifest.
+Materialization should reject `../`, absolute paths, duplicate normalized paths,
+and platform-reserved names before any bytes are written.
+
+## Code patterns and library candidates
+
+Separate immutable manifests from mutable local drafting state:
+
+```rust
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CollectionManifestV1 {
+    schema: SchemaVersion,
+    collection_id: CollectionId,
+    version: VersionId,
+    parent: Option<ManifestHash>,
+    entries: Vec<CollectionEntry>,
+    publisher: PublicKey,
+    signature: Signature,
+}
+
+struct CollectionHead {
+    collection_id: CollectionId,
+    manifest: ManifestHash,
+    sequence: u64,
+    signature: Signature,
+}
+```
+
+- Sort entries by normalized logical path before encoding, reject duplicates,
+  and use a versioned canonical representation. `serde` is useful for the Rust
+  model, while deterministic DAG-CBOR (`ciborium` with additional canonical
+  validation) or a carefully specified binary encoding is preferable for IDs
+  and signatures.
+- Use `semver` only for the package profile. General collections should use an
+  opaque monotonically ordered version or manifest hash rather than forcing all
+  users into semantic versioning.
+- Put manifests in `iroh-blobs`; publish their hashes and mutable heads through
+  `iroh-docs`. This follows the conversion plan's blob/document split and keeps
+  large entry lists out of mutable records.
+- Use `camino::Utf8PathBuf` or a dedicated `LogicalPath` newtype and validate at
+  parse time. Never pass a manifest path directly to `PathBuf::join`.
+- Implement `PackageManifest` conversion as an adapter and retain fixtures for
+  old package manifests to prevent a flag-day migration.
+
+## Pros and cons
+
+**Pros**
+
+- Very high usefulness: one manifest abstraction supports folders, datasets,
+  packages, media, and virtual collections while retaining blob deduplication.
+- Establishes stable content and version semantics required by nearly every
+  other proposal.
+- Metadata-only inspection and immutable history improve auditability and
+  offline distribution.
+
+**Cons**
+
+- High foundational complexity: canonical encoding, signatures, path safety,
+  schema evolution, and migration mistakes are difficult to reverse.
+- Generalization can obscure package-specific behavior unless profiles and
+  adapters remain explicit.
+- Very large manifests may eventually require paging or tree-shaped manifests,
+  adding another compatibility concern.

@@ -88,3 +88,78 @@ folder or network, but a broad network policy must not silently expose a file.
 - Private folders do not appear in public or community indexes.
 - Search results remain useful when the original publisher is offline but a
   listed provider has the content.
+
+## Grounded UX example
+
+Alice publishes a public climate collection while keeping the raw participant
+file private:
+
+```console
+$ syncweb catalog publish ./climate-hourly
+Published collection climate-hourly@1.2.0
+Catalog: local, research-index
+Indexed: 46 entries
+Skipped by policy: raw/participants.csv
+Record: cat_7f3a...
+
+$ syncweb search 'hourly temperature' --catalog research-index
+ID          TITLE                    SIZE     PROVIDERS  TRUST
+clm_91c...  Climate hourly 1.2.0     2.3 GiB  2 (fresh)  signed
+
+$ syncweb search 'hourly temperature' --json |
+    jq -r '.[0].collection_id' |
+    xargs syncweb queue add
+Queued 46 entries (2.3 GiB); metadata and signatures verified
+```
+
+The default table should communicate whether a result is merely indexed,
+cryptographically valid, and currently fetchable. `syncweb search --explain
+clm_91c...` should show which indexer returned the record, when its provider
+leases were refreshed, and why local policy did or did not hide it.
+
+## Code patterns and library candidates
+
+Keep indexing behind a trait so local SQLite search can ship before an HTTP or
+federated implementation:
+
+```rust
+#[async_trait::async_trait]
+trait Catalog {
+    async fn upsert(&self, record: Verified<CatalogRecord>) -> Result<()>;
+    async fn tombstone(&self, record: Verified<CatalogTombstone>) -> Result<()>;
+    async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchHit>>;
+}
+```
+
+- Use `rusqlite` with bundled migrations for the first local index. SQLite FTS5
+  can cover title, aliases, description, and tags without another service.
+- Use `serde` plus one explicitly canonical encoding shared with PROPOSAL2.
+  Sign the canonical bytes with the existing Iroh Ed25519 identity; do not sign
+  a reserialized in-memory object.
+- Use `axum` and `tower` for the optional catalog API, with request-size limits,
+  pagination, timeouts, and authorization middleware.
+- Model verification as `Verified<T>` so untrusted gossip or HTTP input cannot
+  accidentally enter the searchable store through the same method as checked
+  records.
+- Store provider leases separately from descriptive records. Availability
+  changes frequently and should not require republishing otherwise stable
+  metadata.
+
+## Pros and cons
+
+**Pros**
+
+- Very high usefulness: discovery removes the need to exchange raw tickets and
+  enables the search/browse/queue loop expected from a sharing application.
+- SQLite FTS5 provides a valuable local-first slice with modest operational
+  complexity and no required server.
+- Signed records keep search infrastructure outside the trusted transfer path.
+
+**Cons**
+
+- Medium initial complexity for canonical signing, expiry, tombstones, policy
+  filtering, migrations, and useful ranking; federation raises this to high.
+- Public indexing creates privacy and moderation obligations even though content
+  transfer remains peer-to-peer.
+- Search quality can consume substantial product effort without improving core
+  synchronization correctness.

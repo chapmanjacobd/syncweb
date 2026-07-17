@@ -4221,6 +4221,119 @@ threads = 0
 17. **Logging**: Structured tracing with configurable levels and log rotation
 18. **Schedules**: Global + per-folder bandwidth scheduling works
 
+
+```console
+$ syncweb init --network home ~/Documents
+Created folder documents
+Local files: 1,284; imported: 1,284; verified: 1,284
+Private by default.
+
+$ syncweb network invite home laptop
+Invitation: syncweb://network/...
+
+$ syncweb folders
+NAME       MODE         LOCAL     REMOTE  STATE
+documents  SendReceive  1,284     1,284   up to date
+
+$ syncweb stat documents/report.pdf
+Content: b3:8e7a...
+Local: yes (verified)
+Known providers: 2 (last checked 14s ago)
+Policy: private from network "home"
+```
+
+Errors should name the layer that failed. For example, `manifest verified; no
+provider reachable`, `capability rejected by peer`, and `materialization blocked:
+path escapes target` are more actionable than `sync failed`.
+
+## Grounded implementation patterns and libraries
+
+The code examples in this plan describe intended boundaries; exact Iroh APIs
+must be confirmed against the pinned crate versions during Phase 1.
+
+### Workspace and service boundaries
+
+Prefer a library-first workspace so the CLI does not become the application
+boundary:
+
+```text
+core/       typed IDs, manifests, policy, errors
+store/      blobs, docs, SQLite/config persistence
+net/        Iroh endpoint, gossip, discovery, provider resolution
+service/    folder, queue, catalog, package use cases
+cli/        clap parsing and human/JSON rendering
+```
+
+Commands call typed services and render returned values. Core code must not print
+progress or parse CLI strings. This also allows integration tests to use services
+directly and keeps a future daemon or GUI from duplicating behavior.
+
+```rust
+struct AppServices<C, S, N> {
+    catalog: C,
+    store: S,
+    network: N,
+}
+
+impl<C: Catalog, S: ContentStore, N: Network> AppServices<C, S, N> {
+    async fn download(&self, request: DownloadRequest)
+        -> Result<DownloadHandle, AppError>;
+}
+```
+
+### Persistence and crash consistency
+
+Use SQLite for small mutable control-plane state and Iroh blobs/docs for
+content-addressed and replicated state. A user-visible operation that spans both
+cannot rely on one atomic transaction, so model it as a resumable workflow:
+
+```rust
+enum PublishStep {
+    Drafted,
+    BlobsPinned,
+    ManifestStored,
+    HeadUpdated,
+    CatalogAnnounced,
+}
+```
+
+Persist completion of each idempotent step. On restart, resume forward or perform
+an explicit compensating action, such as unpinning blobs that never became
+reachable from a published manifest. Never mark a transfer or publication
+complete before verification and durable state updates finish.
+
+### Security boundaries
+
+- Parse tickets, URLs, manifests, and gossip records into untrusted types; only
+  verification produces `Verified<T>`.
+- Domain-separate signed bytes by protocol, record type, and schema version.
+- Validate normalized logical paths before joining them to an output directory,
+  and materialize through temporary files plus atomic rename.
+- Bound record sizes, collection entry counts, extraction output, queue length,
+  concurrent peers, and HTTP request bodies.
+- Resolve policy at publication, indexing, replication, fetch, and
+  materialization time. Cached decisions may explain prior actions but cannot
+  authorize new ones.
+- Redact capability tokens and shared secrets from URLs in logs and error
+  reports.
+
+### Validation gates by phase
+
+| Phase | Smallest meaningful gate |
+|---|---|
+| Foundation | restart preserves identity; corrupted config fails explicitly |
+| Folder core | two local nodes reconcile one file and reject an unauthorized writer |
+| File operations | interrupted import resumes without exposing a partial file |
+| Networks | invitation grants only the intended network/folder capabilities |
+| Public/package | manifest signature and every materialized blob are verified |
+| Backup/partial fetch | restore is byte-identical; provider loss triggers fallback |
+| Polish/interop | CLI JSON remains compatible; optional BEP failure cannot corrupt Iroh state |
+
+Performance targets should be treated as benchmark hypotheses until fixtures,
+hardware, file-size distribution, concurrency, and warm/cold cache conditions are
+specified. Correctness gates must not be relaxed to reach a throughput target.
+
+
 ---
 
 ## Appendix: Iroh 1.0.2 API Reference
@@ -4371,8 +4484,8 @@ endpoint.close().await;
 
 ---
 
-*Document version: 3.1*
-*Amended: 2026-07-16*
+*Document version: 3.2*
+*Amended: 2026-07-17*
 *Target: iroh 1.0.2, iroh-blobs 0.103.0, iroh-docs 0.101.0, iroh-gossip 0.101.0, distributed-topic-tracker 0.3.5*
 *Added: Networks concept (multi-folder + multi-device groups under gossip topics)*
 *Added: find command design (regex/glob/exact search with depth/size/time filters)*

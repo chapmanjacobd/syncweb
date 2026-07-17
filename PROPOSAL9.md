@@ -102,3 +102,81 @@ syncweb deployment explain <file>
 - A file-level restriction wins over automatic folder or network behavior.
 - Public promotion requires an explicit operation and produces an audit event.
 - Users can explain why a file is public, private, indexed, or replicated.
+
+## Grounded UX example
+
+Before publishing a mixed folder, the user can inspect effective policy:
+
+```console
+$ syncweb deployment explain \
+    research-data/raw/participants.csv
+SETTING       EFFECTIVE       SOURCE                         GUARD
+visibility    private         file override                  restrictive
+indexing      none            file override                  restrictive
+replication   disabled        file override                  restrictive
+gateway       enabled         folder: research-data          blocked by visibility
+
+$ syncweb catalog publish research-data --dry-run
+Would publish: 46 entries
+Would skip:     raw/participants.csv (private at file scope)
+
+$ syncweb deployment set file:summary.csv --profile PublicArchive
+Promotion private -> public requires confirmation.
+Type the logical path to continue: summary.csv
+Promoted summary.csv; audit event audit_410...
+```
+
+Noninteractive promotion should require an explicit flag such as
+`--confirm-public summary.csv`, not a generic `--yes`. Configuration errors that
+would broaden access must fail closed and name the field and source scopes.
+
+## Code patterns and library candidates
+
+Represent every field as a resolved value with provenance:
+
+```rust
+struct Resolved<T> {
+    value: T,
+    source: PolicyScope,
+    explicit: bool,
+}
+
+struct EffectivePolicy {
+    visibility: Resolved<Visibility>,
+    indexing: Resolved<Indexing>,
+    replication: Resolved<Replication>,
+    gateway: Resolved<GatewayAccess>,
+}
+```
+
+- Implement `resolve(defaults, network, folder, file)` as a pure function over
+  typed `PolicyPatch` values. Table-driven unit tests should enumerate every
+  parent/child combination for security-sensitive fields.
+- Use restrictive lattices where the domain supports one, for example
+  `Public > Community > Private` with child inheritance computed by `min` unless
+  an audited promotion is explicitly supplied.
+- Parse TOML with `serde` and `toml`, retain source paths for diagnostics, and
+  reject unknown security-related fields rather than silently ignoring typos.
+- Return a `DecisionTrace` consumed by CLI, catalog, ingestion, gateway, and
+  replication code. Individual subsystems must not reimplement inheritance.
+- Write promotion events before publishing side effects, then bind the resulting
+  audit ID to the catalog or gateway operation.
+
+## Pros and cons
+
+**Pros**
+
+- Very high usefulness and safety: mixed private/community/public data is a core
+  stated use case, and one explainable engine prevents policy drift.
+- Pure resolution logic is comparatively easy to test exhaustively.
+- Field-level provenance makes surprising behavior diagnosable for users and
+  downstream subsystems.
+
+**Cons**
+
+- Medium foundational complexity that becomes high as each proposal adds policy
+  fields and exceptions.
+- Not every setting forms a simple restrictive ordering; overusing monotonic
+  rules can prevent legitimate configurations or produce hidden interactions.
+- File-level persistence can become large and unwieldy for collections with
+  millions of entries, requiring sparse overrides and careful indexing.

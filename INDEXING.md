@@ -29,6 +29,10 @@ Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running
 *   **Action:** Trusted authors in a Web of Trust (WoT)—whether humans or automated bots—can manually append metadata, tags, or derivatives to a file's record.
 *   **Execution:** These metadata entries are synced via `iroh-docs` and indexed by the local indexing service. You only index metadata written by authors you trust.
 *   **Overlap Note:** Core `syncweb stat` shows raw file sizes and hashes. `syncweb indexing meta` surfaces community-curated metadata (like transcriptions or content tags).
+    • Signed Mutable Pointers & Manifests (Mechanical): These answer the question, "Who said what, and when?" They provide cryptographic proof that a specific identity published a pointer to a specific hash, and that they did so with a valid monotonic sequence number (preventing rollbacks). They are entirely unopinionated about whether the content is good.
+    • syncweb trust (Contextual): This answers the question, "How do we feel about what they said?" It is the policy layer that evaluates whether a publisher is trusted by you or your community, whether the content has been flagged by a moderator, or if valid license attestations exist.
+    • Self-Revocation (Mechanical): If a publisher wants to take down their own content, they publish a new Signed Mutable Pointer with an incremented sequence number pointing to a tombstone or empty manifest. The core resolver handles this automatically.
+    • Takedowns/Filtering (Contextual): If a publisher distributes malware and refuses to take it down, the community moderator publishes a signed ModerationRecord against the publisher's identity or content hash. The syncweb trust layer intercepts the discovery and hides the content, even though the publisher's pointer remains mathematically valid.
 
 ### 4. Stable Links, Resolvers, and Mirrors
 A direct blob ticket is useful for immediate transfer, but it is not a durable public reference. It lacks a stable name and provides no standard way to resolve a newer version or alternate mirror. The indexing service manages stable references, resolution, and mirrors.
@@ -44,7 +48,13 @@ To keep the core engine lightweight (relying only on basic `PeerStats` and `Fold
 *   **Federated Filter Lists:** Users can subscribe to federated, community-maintained filter lists (similar to uBlock Origin filter lists or PeerBlock). These are distributed as standard `iroh-docs` namespaces and automatically update the local indexing service's blocklist.
 *   **Overlap Note:** The core engine simply respects the filtering decisions provided by the indexing hooks, remaining ignorant of complex rule evaluation or federated list syncing.
 
-### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`)
+### 6. Trust, Governance, and Moderation
+Content hashes prove integrity, but they do not prove accuracy, authorship, legality, or quality. Public and community catalogs require mechanisms for spam, abuse, takedown, and conflicting claims without relying on a single global authority.
+*   **Action:** Users can attach signed attestations for publisher metadata, licenses, and provenance. Moderators can issue signed `ModerationRecord`s to hide, warn, quarantine, or restore content within a specific scope. Users can also optionally establish a web of trust by delegating trust to other publishers.
+*   **Execution:** Trust policies are evaluated locally (scoped by network, folder, or file). Moderation hides or de-prioritizes records in an index; it does not rewrite or delete immutable content on other nodes. The indexing service evaluates these records to return a discovery decision (Show, Warn, Hide, Quarantine).
+*   **Overlap Note:** Core `syncweb` ensures cryptographic integrity of content hashes. The indexing service evaluates contextual trust, licenses, provenance, and community moderation policies.
+
+### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`, `syncweb report`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
 *   `syncweb indexing publish <folder> --catalog <name>` - Publish to a catalog.
 *   `syncweb indexing search "query"` - Search across known catalogs (FTS).
@@ -56,3 +66,9 @@ To keep the core engine lightweight (relying only on basic `PeerStats` and `Fold
 *   `syncweb link resolve <url>` - Resolve a link to its manifest, sequence, and providers.
 *   `syncweb link revoke <link>` - Revoke a private link.
 *   `syncweb mirror add <collection> <provider>` - Register an alternate mirror provider.
+*   `syncweb trust show <content-or-publisher>` - Show trust, license, provenance, and moderation state.
+*   `syncweb trust delegate <publisher>` - Cryptographically delegate trust to another publisher (Web of Trust).
+*   `syncweb attest <content> --license <license>` - Sign an attestation for content.
+*   `syncweb report <record> --reason <reason>` - Submit a moderation report.
+*   `syncweb moderation ls` - List moderation records and decisions.
+*   `syncweb moderation hide <record>` - Hide a record based on local or community policy.

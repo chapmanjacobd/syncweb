@@ -24,13 +24,15 @@ Introduce a signed `CatalogRecord`:
 
 ```text
 CatalogRecord {
-  record_id
-  content_id or collection_id
+  record_id (Message-ID equivalent)
+  content_id or collection_id (NZB payload pointer)
+  topic_hierarchy (e.g., sci.climate.data)
   name, aliases, description, tags
   media_type, size, language, duration
   publisher, license, provenance
   version_head, created_at, expires_at
   providers[]
+  path_headers[] (loop prevention for federation)
   signature
 }
 ```
@@ -45,6 +47,13 @@ An **indexer** stores and searches records. An indexer may be:
 - hosted by a community;
 - federated with other trusted indexers; or
 - populated from public gossip/DHT announcements.
+
+### Federation and USENET Parallels
+When indexers federate, they draw inspiration from USENET (NNTP) architecture:
+- **Index vs. Payload (NZB)**: `CatalogRecord` acts as a lightweight pointer (like an `.nzb` file), allowing instant discovery without heavy data-plane transfers until explicitly queued.
+- **Hierarchical Routing (Newsgroups)**: The `topic_hierarchy` (e.g., `sci.climate.data`) allows indexers to only mirror specific sub-trees they care about.
+- **Flooding & Loop Prevention**: Federated records use `path_headers` (recording nodes that have seen the record) and `record_id` (Message-ID) to prevent infinite loops during gossip flooding.
+- **Retention & Cancellations**: Like USENET's retention policies, indexers strictly drop records past `expires_at`. `CatalogTombstone`s function exactly like USENET "Cancel" control messages, propagating instantly to delete indexed content.
 
 Search results must include the record signature and content or manifest hash.
 Search is therefore an aid to discovery, not a substitute for content verification.

@@ -2848,18 +2848,32 @@ syncweb config show filter
 
 ---
 
-## Public Read-Only Folders Design (Iroh-Native Feature)
+## Scoped Policy Modes (Integrates Public Read-Only Folders)
 
 ### Concept
-Iroh-blobs supports **public tickets** - anyone with the ticket can fetch blobs without authentication. This enables:
-- Public datasets shared via single URL
-- No device pairing needed for readers
-- Verified content (BLAKE3)
-- Efficient range requests, streaming
-- **Content pinning** - prevent garbage collection of publicly shared blobs
+Rather than using broad abstract profiles (like "Community" or "PublicArchive"), policy is defined through explicit, grounded configuration levers (e.g., `visibility`, `searchable`, `pinning`). A single installation may contain private credentials, a team folder, a public dataset, and one publicly shared file.
+This design configures deployment policy at network, folder, and file granularity. Inherited exposure is explicit and safe.
+
+Policies are resolved in this order:
+`application defaults -> network policy -> folder policy -> file policy`
+
+An explicit value at a more-specific scope overrides an inherited value. Security-sensitive settings are monotonic: a child may restrict publication, indexing, replication, or access, but cannot silently broaden a parent policy.
+
+### Explicit Policy Levers (Iroh-Native Options)
+- **`access`**: 
+  - `"capability"`: Strict access control. Requires an iroh-docs `DocTicket` or `NamespaceSecret` to discover and fetch.
+  - `"public_ticket"`: Generates an iroh-blobs `BlobTicket`. Anyone with this ticket can fetch the blob without authentication.
+- **`encryption`**: 
+  - `"plaintext"`: Standard BLAKE3 hashing. Data is stored locally in plaintext and served over encrypted QUIC tunnels.
+  - `"encrypted"`: Local payloads are encrypted before being hashed into the blob store (e.g. for untrusted mirrors).
+- **`searchable`**: `true` (announces signed metadata to the DHT/gossip topic for discovery by peers/indexers) or `false`.
+- **`pinning`**: `true` (prevents garbage collection of publicly shared blobs) or `false`.
+- **`replication`**: `"disabled"` (do not replicate further), `"enabled"` (standard).
+
+Iroh-blobs natively supports public tickets for unauthenticated reads. This is exposed by setting `access = "public_ticket"`.
 
 ### Content Pinning (GC Prevention)
-iroh-blobs has garbage collection that removes unreferenced blobs. For public folders, we must **pin** blobs to prevent GC from deleting them:
+iroh-blobs has garbage collection that removes unreferenced blobs. For public folders, we must **pin** blobs to prevent GC from deleting them (`pinning = true`):
 
 ```rust
 impl SyncwebFolder {
@@ -2885,14 +2899,30 @@ impl SyncwebFolder {
 }
 ```
 
-**CLI:**
-```bash
-# Publish automatically pins content
-syncweb publish audio/
-# Output: iroh-blob://<ticket>               (direct iroh access)
+### Configuration Example
 
-# Stop sharing (unpin + remove ticket)
-syncweb unpublish audio/
+```toml
+[policy]
+access = "capability"
+encryption = "plaintext"
+searchable = false
+pinning = false
+
+[networks.research.policy]
+searchable = true
+catalogs = ["research-index"]
+
+[folders.research-data.policy]
+access = "public_ticket"
+pinning = true
+public_alias = "climate-hourly"
+pin_duration = "365d"
+
+[folders.research-data.files."raw/credentials.json".policy]
+access = "capability"
+encryption = "encrypted"
+searchable = false
+replication = "disabled"
 ```
 
 ### Public Folder Implementation
@@ -2946,9 +2976,15 @@ async fn subscribe_public(&self, ticket: BlobTicket) -> Result<NamespaceId> {
 ### CLI Commands
 
 ```bash
-# Publish a folder publicly (pins content + creates ticket)
-syncweb publish audio/
+# Show policy for a file, folder, or network
+syncweb policy show [file-or-folder-or-network]
+
+# Generate a public ticket for a folder (pins content)
+syncweb policy set audio/ --access public_ticket --pinning true
 # Output: iroh-blob://<ticket>  (shareable URL)
+
+# Explain why a file has its effective policy settings
+syncweb policy explain audio/raw/participants.csv
 
 # Subscribe to public folder (no auth, read-only)
 syncweb subscribe iroh-blob://<ticket>
@@ -2960,12 +2996,33 @@ syncweb public list
 # Get version info for public folder
 syncweb public info <ticket>
 
-# Stop sharing a folder
-syncweb unpublish audio/
+# Revert access to capability-only
+syncweb policy set audio/ --access capability --pinning false
 ```
 
+Noninteractive promotion to public should require an explicit flag such as `--confirm-public summary.csv`. Configuration errors that would broaden access must fail closed and name the field and source scopes.
+
+### Code Implementation Patterns
+```rust
+struct Resolved<T> {
+    value: T,
+    source: PolicyScope,
+    explicit: bool,
+}
+
+struct EffectivePolicy {
+    access: Resolved<AccessMode>,
+    encryption: Resolved<EncryptionMode>,
+    indexing: Resolved<Indexing>,
+    replication: Resolved<Replication>,
+    gateway: Resolved<GatewayAccess>,
+}
+```
+
+Implement `resolve(defaults, network, folder, file)` as a pure function over typed `PolicyPatch` values. Table-driven unit tests should enumerate every parent/child combination for security-sensitive fields. Use restrictive lattices where the domain supports one, for example access `"public_ticket"` > `"capability"` with child inheritance computed by `min` unless an audited promotion is explicitly supplied. Write promotion events before publishing side effects, then bind the resulting audit ID to the catalog or gateway operation.
+
 ### Use Cases
-- **Public datasets** - Share large datasets via single URL
+- **Public datasets** - Share large datasets via single URL (`access="public_ticket"`)
 - **Software distribution** - Verified binary distribution with range requests
 - **Data packages** - Versioned datasets with update tracking
 - **Read-only mirrors** - One-way sync for backups/archives
@@ -3649,8 +3706,7 @@ syncweb package publish ./my-dataset
 | `version` | `version` | Show versions |
 | `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |
-| **NEW** | `publish` | Create public blob ticket (pins content) |
-| **NEW** | `unpublish` | Stop sharing, unpin content |
+| **NEW** | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
 | **NEW** | `subscribe` | Join public folder via ticket |
 | **NEW** | `public list` | List announced public folders |
 | **NEW** | `package init` | Initialize folder as data package |

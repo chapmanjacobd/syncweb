@@ -1,4 +1,4 @@
-# iroh-syncthing Conversion Plan
+# syncweb Conversion Plan
 
 Split from the original [CONVERSION_PLAN.md](../CONVERSION_PLAN.md) into focused topic files.
 

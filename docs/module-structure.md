@@ -3,7 +3,7 @@
 ## Module Structure
 
 ```
-iroh-syncthing/
+syncweb/
 +-- Cargo.toml
 +-- src/
 |   +-- main.rs                 # CLI entry point

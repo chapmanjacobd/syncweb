@@ -66,7 +66,7 @@
 - [ ] `DeletedTracker` - track deleted-but-previously-seen files (from iroh-willow)
 - [ ] `AreaOfInterest` with limits (max_size, max_count) (from iroh-willow)
 - [ ] `Network` struct + `NetworkManager` - create, join, leave, invite, kick
-- [ ] Network gossip topics (`iroh-syncthing/net/<id>`)
+- [ ] Network gossip topics (`syncweb/net/<id>`)
 - [ ] `syncweb automatic` with filter engine
 - [ ] `syncweb subscribe` with SubscribeParams
 - [ ] `syncweb network create`, `syncweb network ls`, `syncweb network join`

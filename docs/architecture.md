@@ -5,7 +5,7 @@
 A **Network** is a named group of folders + devices under a common gossip topic.
 Replaces Syncthing's implicit cluster config with an explicit, shareable abstraction.
 
-- **Network Gossip Topic**: `iroh-syncthing/net/<network_id>` (derived from network name)
+- **Network Gossip Topic**: `syncweb/net/<network_id>` (derived from network name)
 - **Membership**: All devices in the network subscribe to this topic
 - **Folders**: All folders in the network share the topic for discovery and auto-join
 

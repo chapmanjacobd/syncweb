@@ -7,7 +7,7 @@
 The `automatic` daemon uses a Rust-native filter engine instead of shell scripts:
 
 ```toml
-# ~/.config/iroh-syncthing/filters.toml
+# ~/.config/syncweb/filters.toml
 [general]
 sort_mode = "niche"  # niche, frecency, peers, size, random
 limit_size = "10GB"
@@ -167,7 +167,7 @@ Time-based sync rules for bandwidth management. Global settings with per-folder 
 ### Configuration
 
 ```toml
-# ~/.config/iroh-syncthing/schedules.toml (or inline in config.toml)
+# ~/.config/syncweb/schedules.toml (or inline in config.toml)
 
 [schedule]
 # Global active hours (empty = always active)
@@ -242,7 +242,7 @@ Suggested global configuration files for different use cases. These are not a "t
 ### Profiles
 
 ```toml
-# ~/.config/iroh-syncthing/config-laptop.toml
+# ~/.config/syncweb/config-laptop.toml
 # Optimized for battery life and mobile networks
 
 [bandwidth]
@@ -264,7 +264,7 @@ max_cache_size = 5000  # Smaller cache for limited RAM
 ```
 
 ```toml
-# ~/.config/iroh-syncthing/config-server.toml
+# ~/.config/syncweb/config-server.toml
 # Optimized for throughput and availability
 
 [bandwidth]
@@ -282,7 +282,7 @@ max_cache_size = 50000  # Large cache for plenty of RAM
 ```
 
 ```toml
-# ~/.config/iroh-syncthing/config-phone.toml
+# ~/.config/syncweb/config-phone.toml
 # Optimized for storage and battery
 
 [bandwidth]
@@ -296,7 +296,7 @@ threads = 1  # Single-threaded for battery
 blob_cache_size_gb = 2  # Limited storage
 ```
 
-Users copy the relevant file to `~/.config/iroh-syncthing/config.toml` and customize as needed.
+Users copy the relevant file to `~/.config/syncweb/config.toml` and customize as needed.
 
 ---
 

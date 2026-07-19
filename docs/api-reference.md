@@ -178,7 +178,7 @@ use iroh_gossip::{net::Gossip, proto::TopicId};
 // Setup (done as part of docs setup above)
 
 // Subscribe to topic
-let topic = TopicId::from_bytes(*b"iroh-syncthing/public-folders");
+let topic = TopicId::from_bytes(*b"syncweb/public-folders");
 let mut events = gossip.subscribe(topic).await?;
 
 // Publish
@@ -205,7 +205,7 @@ let tracker = Node::new(gossip.clone(), endpoint.clone()).await?;
 // 4. Spawn background actors for bubble detection and merge
 
 // Subscribe to a gossip topic with DHT-based auto-discovery
-let topic = TopicId::from_bytes(*b"iroh-syncthing/folder-abc123");
+let topic = TopicId::from_bytes(*b"syncweb/folder-abc123");
 let mut events = tracker.subscribe(topic).await?;
 
 // Announce presence on a topic via DHT

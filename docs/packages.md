@@ -94,7 +94,7 @@ async fn publish_folder(&self, folder_id: &NamespaceId) -> Result<BlobTicket> {
     let ticket = BlobTicket::new(addr, root_hash, BlobFormat::HashSeq);
 
     // 4. Announce on public gossip topic
-    let topic = TopicId::from_bytes(blake3::hash(b"iroh-syncthing/public-folders"));
+    let topic = TopicId::from_bytes(blake3::hash(b"syncweb/public-folders"));
     self.node.gossip().publish(topic, PublicFolderAnnouncement {
         namespace_id: *folder_id,
         label: folder.local_path.file_name().unwrap().to_string_lossy().to_string(),
@@ -182,7 +182,7 @@ Implement `resolve(defaults, network, folder, file)` as a pure function over typ
 ## Living Folders (Mutable Heads)
 
 ### 1. The Living Folder Model
-Rather than requiring users to manually manage "versions" (e.g., `v0.1.0`, `v0.2.0`) and trigger explicit upgrade commands, `iroh-syncthing` treats all shared collections as **Living Folders**. 
+Rather than requiring users to manually manage "versions" (e.g., `v0.1.0`, `v0.2.0`) and trigger explicit upgrade commands, `syncweb` treats all shared collections as **Living Folders**. 
 This provides the seamless background-sync experience of traditional Syncthing or Dropbox.
 
 ### 2. Signed Mutable Pointers
@@ -210,13 +210,13 @@ Useful for long-running edits where the publisher doesn't want to sync broken st
 
 ### 4. Discovery via Ephemeral Gossip
 There is no persistent global catalog. A folder is only discoverable if a node is actively seeding it.
-* **Topic:** Publishers broadcast a `FolderAnnouncement` over the `iroh-syncthing/discovery` gossip topic.
+* **Topic:** Publishers broadcast a `FolderAnnouncement` over the `syncweb/discovery` gossip topic.
 * **Announcement:** Contains the folder's descriptive metadata (JSON) and the current Mutable Head pointer.
 * **Search:** Clients can listen to the gossip topic to populate a local, ephemeral search index of available public folders.
 
 ## Why not APT/Debian packaging?
 
-| dapt (APT-based) | iroh-syncthing (iroh-based) |
+| dapt (APT-based) | syncweb (iroh-based) |
 |-------------------|----------------------------|
 | `.deb` packages | iroh-blobs content-addressed blobs |
 | APT `Packages` indices | iroh-docs entries |
@@ -398,7 +398,7 @@ impl SyncwebFolder {
         };
 
         // Announce on package gossip topic
-        let topic = TopicId::from_bytes(*b"iroh-syncthing/packages");
+        let topic = TopicId::from_bytes(*b"syncweb/packages");
         let manifest = self.load_manifest().await?;
         self.node.gossip().publish(topic, PackageAnnouncement {
             name: manifest.name.clone(),
@@ -420,7 +420,7 @@ enum BumpType { Major, Minor, Patch }
 ### 3. Package Discovery Catalog
 
 Gossip-based package registry replaces dapt's APT `Packages` index and `Release` file.
-Every publisher announces on `iroh-syncthing/packages`; consumers subscribe to discover available packages.
+Every publisher announces on `syncweb/packages`; consumers subscribe to discover available packages.
 
 ```rust
 /// Announcement broadcast on the packages gossip topic
@@ -655,7 +655,7 @@ layout. Content-addressed blob storage means identical files between versions sh
 storage — no duplication.
 
 ```text
-~/.local/share/iroh-syncthing/packages/
+~/.local/share/syncweb/packages/
   climate-hourly/
     0.1.0/
       data/observations.csv
@@ -787,13 +787,13 @@ When upgrading, only changed files (or changed byte ranges within files) are tra
 Example: Large CSV file (10 GB) with 500 MB of new rows appended
 
 dapt (rsync):      Transfers 500 MB delta via --compare-dest
-iroh-syncthing:    Transfers 500 MB delta via Bao tree range requests
+syncweb:    Transfers 500 MB delta via Bao tree range requests
                    (more granular: works at sub-file level, not just whole-file)
 
 Example: 1000-file dataset with 10 files changed
 
 dapt (rsync):      Transfers 10 changed files + metadata
-iroh-syncthing:    Transfers 10 changed files + only changed byte ranges
+syncweb:    Transfers 10 changed files + only changed byte ranges
                    within partially-modified files
 ```
 

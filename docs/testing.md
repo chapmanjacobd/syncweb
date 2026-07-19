@@ -41,8 +41,8 @@
 - [ ] Init: folder creation with URL output + network membership
 
 ### Interop Tests (Phase 7: with `--bep` flag)
-- [ ] Syncthing node -> iroh-syncthing folder join
-- [ ] iroh-syncthing -> Syncthing folder join
+- [ ] Syncthing node -> syncweb folder join
+- [ ] syncweb -> Syncthing folder join
 - [ ] Bidirectional sync
 - [ ] Relay-only connection
 
@@ -104,7 +104,7 @@
 3. **Public folders**: `publish`/`subscribe` work end-to-end
 4. **Data versioning**: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)
 5. **Networks**: `network create/join/invite/kick` work across devices
-6. **Syncthing relay**: Two iroh-syncthing nodes can communicate via Syncthing relay when direct QUIC fails
+6. **Syncthing relay**: Two syncweb nodes can communicate via Syncthing relay when direct QUIC fails
 7. **UX**: Single binary, no daemon, config file optional
 8. **Reliability**: No data loss, verified transfers, BLAKE3 integrity on all transfers
 9. **Conflict resolution**: Automatic LWW for text, keep-both for binary, older version renamed

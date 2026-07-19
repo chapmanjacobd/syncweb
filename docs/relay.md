@@ -6,14 +6,14 @@ iroh uses QUIC with UDP hole punching (QNT). This works in ~90% of network confi
 
 ### Design
 
-The goal is **not** to translate between BEP and iroh protocols. Instead, we **piggyback on Syncthing's relay network** as a transport layer when iroh's direct/relay connectivity fails. Both endpoints remain iroh-syncthing nodes.
+The goal is **not** to translate between BEP and iroh protocols. Instead, we **piggyback on Syncthing's relay network** as a transport layer when iroh's direct/relay connectivity fails. Both endpoints remain syncweb nodes.
 
 ```text
-iroh-syncthing Node A (behind CGNAT-A, UDP blocked)
+syncweb Node A (behind CGNAT-A, UDP blocked)
     ↓ TCP + TLS (BEP session mode, as a transport tunnel)
 Syncthing Relay (tcp://relay.syncthing.net)
     ↓ TCP (session mode, plain relay between devices)
-iroh-syncthing Node B (behind CGNAT-B, UDP blocked)
+syncweb Node B (behind CGNAT-B, UDP blocked)
 ```
 
 The key insight: Syncthing relays are **protocol-agnostic**. They relay raw bytes between two devices that share a session key. We can tunnel iroh QUIC traffic through a Syncthing relay session by wrapping QUIC datagrams in the relay's byte-stream protocol.
@@ -125,11 +125,11 @@ syncweb network test-relay
 
 ### What This Enables
 
-- Two iroh-syncthing nodes behind different CGNATs can communicate
+- Two syncweb nodes behind different CGNATs can communicate
 - Automatic fallback: iroh tries direct first, falls back to relay only when needed
 - No dependency on iroh's relay infrastructure for the data path
 - Leverages Syncthing's mature, well-tested relay network
-- Both nodes remain fully iroh-syncthing — no protocol translation needed
+- Both nodes remain fully syncweb — no protocol translation needed
 
 ### Device Identity Compatibility
 

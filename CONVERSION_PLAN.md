@@ -1,4 +1,4 @@
-# syncweb-py to iroh-syncthing Conversion Plan
+# syncweb-py to syncweb Conversion Plan
 
 This document has been split into focused topic files under [`docs/`](docs/).
 

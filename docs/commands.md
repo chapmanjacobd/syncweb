@@ -370,7 +370,7 @@ syncweb config
 # Shows: data_dir, default_path, relay, discovery, networks, etc.
 
 # Modify config
-syncweb config set data_dir ~/.iroh-syncthing
+syncweb config set data_dir ~/.syncweb
 syncweb config set default_path ~/Syncweb
 syncweb config set default_sync_mode SendReceive
 
@@ -384,7 +384,7 @@ syncweb config show filter
 
 ## CLI Command Mapping
 
-| syncweb-py | iroh-syncthing | Notes |
+| syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
 | `create` | `create` | Create folder + doc + blob store |
 | `join` | `join` | Import doc via ticket/capability |
@@ -540,9 +540,9 @@ syncweb pending
 ## Configuration
 
 ```toml
-# ~/.config/iroh-syncthing/config.toml
+# ~/.config/syncweb/config.toml
 [node]
-data_dir = "~/.local/share/iroh-syncthing"
+data_dir = "~/.local/share/syncweb"
 node_name = "my-device"
 
 [relay]
@@ -582,7 +582,7 @@ per_peer_download = 0
 [public]
 # Public folder settings
 announce_enabled = true
-gossip_topic = "iroh-syncthing/public-folders"
+gossip_topic = "syncweb/public-folders"
 # Content pinning (prevent GC for shared blobs)
 pin_shared_content = true
 
@@ -624,13 +624,13 @@ default_network = ""
 [networks.my-work]
 label = "Work Documents"
 # Topic is derived from network name; manual override for existing topics
-# topic = "iroh-syncthing/net/work-a1b2c3"
+# topic = "syncweb/net/work-a1b2c3"
 members = []       # Auto-populated; manual pinning for invite-only networks
 folders = []       # Folders in this network (auto-populated)
 
 [filter]
 # Automatic daemon filter settings
-config_path = "~/.config/iroh-syncthing/filters.toml"
+config_path = "~/.config/syncweb/filters.toml"
 
 [advanced]
 # Blob store settings

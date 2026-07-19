@@ -1,10 +1,10 @@
 # Overview
 
-# syncweb-py to iroh-syncthing Conversion Plan
+# syncweb-py to syncweb Conversion Plan
 
 ## Executive Summary
 
-Convert syncweb-py (Python + Syncthing) to iroh-syncthing (Rust + Iroh 1.0+).
+Convert syncweb-py (Python + Syncthing) to syncweb (Rust + Iroh 1.0+).
 Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-Bao verified blob sync (iroh-blobs) + document sync (iroh-docs) + gossip (iroh-gossip) + DHT-based peer discovery (distributed-topic-tracker).**
 
 ### Key Advantages of Iroh 1.0+
@@ -24,7 +24,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 
 ## Architecture Mapping
 
-| syncweb-py / Syncthing | iroh-syncthing / Iroh 1.0+ |
+| syncweb-py / Syncthing | syncweb / Iroh 1.0+ |
 |------------------------|----------------------------|
 | Syncthing daemon (separate process) | IrohNode (embedded library) |
 | Device ID (Ed25519, 56-char base32) | NodeId (Ed25519, 52-char base32) |
@@ -50,7 +50,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 
 ```
 +------------------------------------------------------------------------------+
-|                              iroh-syncthing CLI                               |
+|                              syncweb CLI                               |
 +------------------------------------------------------------------------------+
 |  Commands: create, join, accept, drop, ls, find, download, sort, stat,       |
 |            devices, folders, automatic, version, repl, publish, subscribe,   |
@@ -112,7 +112,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 ### 3. Ignore Patterns
 **Decision**: No ignore patterns needed (lazy fetch is inherent)
 - In syncweb-py, .stignore was used for selective sync
-- In iroh-syncthing, blobs are fetched on demand
+- In syncweb, blobs are fetched on demand
 - `ls`/`find` show metadata without fetching blobs
 - `download` triggers specific blob fetches
 - Simpler and more efficient than ignore patterns
@@ -159,7 +159,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 **Decision**: Piggyback on Syncthing's relay network for CGNAT traversal, not protocol translation
 - When iroh's QUIC hole punching fails (both peers behind strict CGNATs), tunnel through Syncthing relays
 - Syncthing relays are protocol-agnostic — they relay raw bytes between devices
-- Both endpoints remain iroh-syncthing nodes — no BEP protocol translation needed
+- Both endpoints remain syncweb nodes — no BEP protocol translation needed
 - Automatic fallback: iroh direct → iroh relay → Syncthing relay
 - Leverages Syncthing's mature, well-tested relay infrastructure
 - Ed25519 key compatibility enables DeviceId ↔ NodeId conversion (zero-cost)
@@ -167,7 +167,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 ### 9. Networks
 **Decision**: Named multi-folder + multi-device groups under gossip topics
 - Networks provide an explicit grouping abstraction (replaces Syncthing's implicit cluster)
-- Each network has a gossip topic `iroh-syncthing/net/<id>` for discovery
+- Each network has a gossip topic `syncweb/net/<id>` for discovery
 - Single-device users can ignore networks entirely
 - Optional shared secret for invite-only networks
 - Folder membership in a network enables auto-join

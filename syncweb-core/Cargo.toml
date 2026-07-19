@@ -1,0 +1,37 @@
+[package]
+name = "syncweb-core"
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+tracing-test.workspace = true
+rayon.workspace = true
+blake3.workspace = true
+fs2.workspace = true
+rand.workspace = true
+hex.workspace = true
+base32.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+hkdf.workspace = true
+uuid.workspace = true
+opaque-debug.workspace = true
+clap.workspace = true
+
+# Iroh stack
+iroh.workspace = true
+iroh-blobs.workspace = true
+iroh-docs.workspace = true
+iroh-gossip.workspace = true
+distributed-topic-tracker.workspace = true

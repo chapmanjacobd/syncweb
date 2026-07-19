@@ -14,7 +14,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 - **BLAKE3 verified streaming** - No hash tree sync needed, verified on-the-fly
 - **QUIC transport** - Built-in NAT traversal, relays, connection migration
 - **No separate daemon** - Library-first, embeddable
-- **Version tracking** - Native support for data package versioning (apt-like updates)
+- **Version tracking & Collections** - Generalized collection manifests with immutable versions and mutable heads, supporting data packages, datasets, media libraries, and virtual collections.
 - **Content pinning** - Prevent garbage collection of publicly shared blobs
 - **Partial folder fetch** - Fetch only well-seeded portions of poorly-available folders
 
@@ -40,6 +40,7 @@ Key architectural shift: **Syncthing's block-exchange protocol to Iroh's BLAKE3-
 | Public folders | **Public blob tickets** (iroh-blobs tickets) |
 | BEP relays | **iroh-relay** + BEP identity (Phase 2) + BEP bridge (Phase 7) |
 | .stignore selective sync | **Native lazy fetch** (blobs fetched on demand) |
+| Package manifests | **Collection manifests** (generalized datasets + versions) |
 
 ---
 
@@ -795,9 +796,42 @@ enum Capability {
 struct CapabilityMap(HashMap<NodeId, Capability>);
 ```
 
-### 4. Living Folders (Mutable Heads)
+### 4. Collections and Generalized Manifests
 
-Instead of explicit versioned packages, we use Signed Mutable Pointers (`syncweb://name/...`) that resolve to the latest `ManifestHash`. When a publisher updates a folder, the pointer advances, and all subscribers automatically sync the changes in the background, exactly like traditional Syncthing or Dropbox.
+Generalizes file sharing into a reusable collection model, replacing rigid package manifests. Preserves immutable content identity while supporting mutable version heads. Represents folders, datasets, media libraries, archives, and knowledge bases.
+Permits virtual collections assembled from content-addressed entries without duplicating blobs.
+
+```rust
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CollectionManifestV1 {
+    schema: SchemaVersion,
+    collection_id: CollectionId,
+    version: VersionId,
+    parent: Option<ManifestHash>,
+    entries: Vec<CollectionEntry>,
+    publisher: PublicKey,
+    signature: Signature,
+}
+
+struct CollectionHead {
+    collection_id: CollectionId,
+    manifest: ManifestHash,
+    sequence: u64,
+    signature: Signature,
+}
+
+struct CollectionEntry {
+    content_id: Hash,
+    logical_path: String,
+    name: String,
+    size: u64,
+    media_type: Option<String>,
+    role: String, // primary, preview, transcript, metadata, etc.
+    relationships: Vec<String>,
+}
+```
+
+Packages are simply a profile of Collections, adding dependency and atomic-install semantics.
 
 ### 5. Backup/Snapshot System (Content-Addressed)
 
@@ -2064,7 +2098,8 @@ iroh-syncthing/
 |   |
 |   +-- package/
 |   |   +-- mod.rs
-|   |   +-- manifest.rs       # PackageManifest, PackageFileEntry, PackageDependency
+|   |   +-- manifest.rs       # CollectionManifest, CollectionEntry, CollectionHead
+|   |   +-- profile.rs        # Package dependency adapter for Collections
 |   |   +-- publish.rs        # Publish workflow (pin + announce on gossip)
 |   |   +-- catalog.rs        # Gossip-based package discovery + search
 |   |   +-- install.rs        # Install/upgrade/remove + atomic symlink swap
@@ -2758,12 +2793,12 @@ syncweb config show filter
 - [ ] Blob ticket generation
 - [ ] Content pinning (prevent GC for shared blobs)
 - [ ] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
-- [ ] `PackageManifest` struct + iroh-docs storage
-- [ ] `PackageState` local tracking (installed packages, versions)
-- [ ] `syncweb package init` — initialize folder as data package
-- [ ] `syncweb package add` — scan + hash files, update manifest
-- [ ] `syncweb package bump` — create new version with changelog
-- [ ] `syncweb package publish` — blob ticket + gossip announcement
+- [ ] `CollectionManifest` struct + iroh-docs storage
+- [ ] `CollectionState` local tracking (installed collections, versions)
+- [ ] `syncweb collection init` (with package profile) — initialize folder as data package
+- [ ] `syncweb collection add` — scan + hash files, update manifest
+- [ ] `syncweb collection versions` — create new version with changelog
+- [ ] `syncweb collection publish` — blob ticket + gossip announcement
 - [ ] `syncweb package search` — discover packages via gossip
 - [ ] `syncweb package info` — detailed package metadata
 - [ ] `syncweb package install` — fetch + verify + stage + atomic swap
@@ -3035,71 +3070,50 @@ There is no persistent global catalog. A folder is only discoverable if a node i
 | Platform: Debian/Ubuntu only | Platform: any OS with Rust |
 | Central repository server | P2P — any peer can serve |
 
-### 1. Package Manifest
+### 1. Collection & Package Manifests
 
-The package manifest replaces dapt's `product.toml` + `.dapt-release.txt` + APT `Packages` index.
-Stored as an iroh-docs entry at `/.iroh-package/manifest.json` within the folder namespace.
+The package manifest is generalized into a `CollectionManifest`, which replaces dapt's `product.toml` + `.dapt-release.txt` + APT `Packages` index, but also supports virtual collections and datasets.
+Stored in `iroh-blobs`, with their hashes and mutable heads published through `iroh-docs`.
 
 ```rust
-/// Data package manifest — stored as iroh-docs entry
+/// Generalized Collection Manifest
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct PackageManifest {
-    /// Package name (e.g., "climate-hourly")
-    name: String,
-    /// Semantic version (e.g., "1.2.0")
-    version: String,
-    /// Monotonic sequence number for ordering
-    seq: u64,
-    /// Package maintainer
-    maintainer: String,
-    /// Human-readable description
-    description: String,
-    /// Searchable tags
-    tags: Vec<String>,
-    /// Package dependencies
-    dependencies: Vec<PackageDependency>,
-    /// File listing with BLAKE3 hashes (replaces APT checksums)
-    files: Vec<PackageFileEntry>,
-    /// BLAKE3 hash of this manifest (content-addressed version ID)
-    manifest_hash: Hash,
-    /// When this version was created
-    created_at: Timestamp,
-    /// Changelog for this version
-    changelog: String,
-    /// Parent version hash (for lineage tracking)
-    parent_hash: Option<Hash>,
+struct CollectionManifestV1 {
+    schema: SchemaVersion,
+    collection_id: CollectionId,
+    version: VersionId,
+    parent: Option<ManifestHash>,
+    entries: Vec<CollectionEntry>,
+    publisher: PublicKey,
+    signature: Signature,
 }
 
-/// A file within a data package
+/// A file within a collection
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct PackageFileEntry {
-    /// Relative path within the package
-    path: PathBuf,
-    /// BLAKE3 hash of the file content
-    hash: Hash,
-    /// File size in bytes
+struct CollectionEntry {
+    content_id: Hash,
+    logical_path: String,
+    name: String,
     size: u64,
-    /// MIME type (optional)
-    mime_type: Option<String>,
+    media_type: Option<String>,
+    role: String,
+    relationships: Vec<String>,
 }
 
-/// Package dependency
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct PackageDependency {
-    /// Package name
-    name: String,
-    /// Version requirement (semver range)
-    version_req: String,
+/// A mutable head pointing to the latest version
+struct CollectionHead {
+    collection_id: CollectionId,
+    manifest: ManifestHash,
+    sequence: u64,
+    signature: Signature,
 }
 ```
 
-**Manifest storage**: The manifest is stored as a doc entry at path `/.iroh-package/manifest.json`.
-The file contents are a JSON-serialized `PackageManifest`. The manifest's own BLAKE3 hash
-(`manifest_hash`) serves as the version identifier — content-addressed, tamper-proof, verifiable.
+**Manifest storage**: Manifests are stored in `iroh-blobs`. Their hashes and mutable heads (`CollectionHead`) are published through `iroh-docs`. The manifest's own BLAKE3 hash serves as the version identifier — content-addressed, tamper-proof, verifiable.
 
-**Lineage tracking**: The `parent_hash` field creates a linked list of versions. Each version
-points to its predecessor, forming a lineage chain. This replaces dapt's `.dapt-release.txt`
-`released_at` field and APT's version comparison semantics.
+**Lineage tracking**: The `parent` field creates a linked list of versions. Each version points to its predecessor, forming a lineage chain.
+
+**Package Profile**: Packages are just collections with dependencies. An adapter layer converts traditional package workflows into the generalized model.
 
 ### 2. Publishing Workflow
 
@@ -3107,23 +3121,21 @@ Full data package lifecycle, replacing dapt's `init-repo` → `new-product` → 
 
 ```bash
 # 1. Initialize a folder as a data package
-syncweb package init ./my-dataset \
-    --name climate-hourly \
-    --maintainer "me@example.com" \
-    --description "Hourly climate observations"
-# Creates .iroh-package/manifest.json with initial version 0.1.0
+# 1. Initialize a folder as a collection (e.g. dataset)
+syncweb collection init ./climate --name climate-hourly --type dataset
+# Creates local drafting state
 
-# 2. Add files to the package (scans directory, hashes, updates manifest)
-syncweb package add ./my-dataset --include "*.csv" --include "*.json"
-# OR add specific files:
-syncweb package add ./my-dataset data/observations.csv data/metadata.json
+# 2. Add files to the collection
+syncweb collection add col_climate ./data/observations.csv
+# OR add from existing content hash (virtual collections):
+# syncweb collection add col_reading-list syncweb://content/b3:8e7a... --as data/hourly.csv
 
-# 3. Bump version with changelog
-syncweb package bump ./my-dataset minor -m "Added Q2 2026 data"
-# Creates version 0.2.0, records parent_hash pointing to 0.1.0
+# 3. Publish (creates immutable version + updates mutable head)
+syncweb collection publish col_climate
+# Output: Published climate-hourly@1.0.0 (manifest b3:19ac...)
 
-# 4. Publish (pins blobs + creates ticket + announces on gossip)
-syncweb package publish ./my-dataset
+# 4. Diff versions
+syncweb collection diff col_climate 1.0.0 1.1.0
 # Output: syncweb://package/<node-ticket>/<namespace-id>?v=0.2.0
 ```
 

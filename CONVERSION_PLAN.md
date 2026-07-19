@@ -795,53 +795,9 @@ enum Capability {
 struct CapabilityMap(HashMap<NodeId, Capability>);
 ```
 
-### 4. Data Versioning (apt-like for data packages)
+### 4. Living Folders (Mutable Heads)
 
-```rust
-/// Version tracking for data packages
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct DataVersion {
-    /// Semantic version (e.g., "1.2.3")
-    version: String,
-    /// Monotonic sequence number for ordering
-    seq: u64,
-    /// BLAKE3 hash of the version manifest
-    manifest_hash: Hash,
-    /// Changelog entry
-    changelog: Option<String>,
-    /// Timestamp of this version
-    timestamp: Timestamp,
-    /// Parent version (for delta tracking)
-    parent_version: Option<String>,
-}
-
-/// Version manifest stored as a doc entry
-#[derive(Serialize, Deserialize)]
-struct VersionManifest {
-    /// Package name
-    name: String,
-    /// Current version
-    current: DataVersion,
-    /// Available versions (latest N)
-    history: Vec<DataVersion>,
-    /// File listing for this version
-    files: Vec<FileEntry>,
-}
-
-impl SyncwebFolder {
-    /// Create a new version of this data package
-    async fn bump_version(&mut self, changelog: &str) -> Result<DataVersion>;
-
-    /// Check if a newer version is available
-    async fn check_update(&self) -> Result<Option<DataVersion>>;
-
-    /// Update to a specific version
-    async fn update_to(&mut self, version: &str) -> Result<()>;
-
-    /// Get version history
-    async fn version_history(&self) -> Result<Vec<DataVersion>>;
-}
-```
+Instead of explicit versioned packages, we use Signed Mutable Pointers (`syncweb://name/...`) that resolve to the latest `ManifestHash`. When a publisher updates a folder, the pointer advances, and all subscribers automatically sync the changes in the background, exactly like traditional Syncthing or Dropbox.
 
 ### 5. Backup/Snapshot System (Content-Addressed)
 
@@ -2795,7 +2751,7 @@ syncweb config show filter
 - [ ] `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
 - [ ] `syncweb create --network <name>`, `syncweb join --network <name>`
 
-### Phase 5: Public Folders + Data Packages
+### Phase 5: Public Folders + Living Folders
 **Goal**: Public sharing + data package versioning
 
 - [ ] `SyncMode::PublicReadOnly`
@@ -3029,13 +2985,42 @@ Implement `resolve(defaults, network, folder, file)` as a pure function over typ
 
 ---
 
-## Data Package Management (non-apt alternative)
+## Living Folders (Mutable Heads)
 
-A complete data package lifecycle using iroh primitives instead of APT/Debian packaging.
-Inspired by [dapt](https://github.com/user/dapt) but replaces `.deb` + APT entirely with
-iroh-docs manifests, iroh-blobs content addressing, gossip-based discovery, and atomic upgrades.
+### 1. The Living Folder Model
+Rather than requiring users to manually manage "versions" (e.g., `v0.1.0`, `v0.2.0`) and trigger explicit upgrade commands, `iroh-syncthing` treats all shared collections as **Living Folders**. 
+This provides the seamless background-sync experience of traditional Syncthing or Dropbox.
 
-### Why not APT/Debian packaging?
+### 2. Signed Mutable Pointers
+To achieve living folders over immutable BLAKE3 blobs, we use **Signed Mutable Pointers** (conceptually from PROPOSALS 2 & 4).
+* **The Pointer:** A cryptographic signed record containing a monotonically increasing sequence number and a `ManifestHash`.
+* **The URI:** Users share a mutable link: `syncweb://name/<publisher_pubkey>/<folder_alias>`
+* **Resolution:** When a client resolves this URI, they fetch the latest signed pointer from the publisher or the DHT, extract the `ManifestHash`, and sync the underlying blobs.
+
+### 3. Sync & Publish Modes
+Folders can operate in one of two modes depending on how frequently the publisher wants to push changes:
+
+**Auto-publish (Default / "Syncthing" mode):**
+When the publisher adds, modifies, or deletes files in their local folder:
+1. The local iroh-docs namespace automatically updates.
+2. A new `ManifestHash` is generated.
+3. The publisher automatically signs a new pointer with `sequence + 1` pointing to the new `ManifestHash`.
+4. Subscribers following the `syncweb://name/...` pointer detect the new sequence number via Gossip/DHT and begin syncing the delta automatically.
+
+**Manual publish ("Git-style" explicit mode):**
+Useful for long-running edits where the publisher doesn't want to sync broken state to subscribers.
+1. `publish_mode = "manual"` is set on the folder policy.
+2. Local filesystem changes are indexed locally (staging), generating new immutable blobs, but the **Signed Mutable Pointer is NOT updated**.
+3. Subscribers continue to see and sync the previous stable version.
+4. When ready, the publisher explicitly runs `syncweb publish <folder>`. This atomically advances the mutable pointer, pushing the batch of changes to subscribers all at once.
+
+### 4. Discovery via Ephemeral Gossip
+There is no persistent global catalog. A folder is only discoverable if a node is actively seeding it.
+* **Topic:** Publishers broadcast a `FolderAnnouncement` over the `iroh-syncthing/discovery` gossip topic.
+* **Announcement:** Contains the folder's descriptive metadata (JSON) and the current Mutable Head pointer.
+* **Search:** Clients can listen to the gossip topic to populate a local, ephemeral search index of available public folders.
+
+## Why not APT/Debian packaging?
 
 | dapt (APT-based) | iroh-syncthing (iroh-based) |
 |-------------------|----------------------------|
@@ -4138,7 +4123,7 @@ threads = 0
 - **UX**: `syncweb devices` shows all devices, `syncweb accept` adds device to folder
 - **Note**: No concept of "user" in the protocol - just devices with capabilities
 
-### 21. Data Package Management (non-apt alternative)
+### 21. Living Folders
 **Decision**: iroh-docs manifests + iroh-blobs content addressing (replaces APT/Debian packaging)
 - dapt packages datasets as `.deb` files and uses APT for version management
 - This approach replaces that entirely with iroh primitives:

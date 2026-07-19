@@ -16,11 +16,13 @@ and conflicting claims.
 - Make publisher identity, license, and provenance visible.
 - Support local and community moderation without requiring one global authority.
 - Provide clear behavior for removal and revocation.
+- Optionally support a web of trust for decentralized identity verification.
 
 ## Design
 
 Add signed attestations for publisher metadata, licenses, provenance, and curation.
 Trust policies are local or network-scoped; avoid a universal reputation score.
+Support an optional web of trust where users can cryptographically delegate trust or endorse other publishers.
 
 An indexer or network may maintain moderation records:
 
@@ -52,6 +54,7 @@ More-specific restrictions override broader publication defaults.
 
 ```text
 syncweb trust show <content-or-publisher>
+syncweb trust delegate <publisher>
 syncweb attest <content> --license <license>
 syncweb report <record> --reason <reason>
 syncweb moderation ls
@@ -61,7 +64,7 @@ syncweb moderation hide <record>
 ## Implementation steps
 
 1. Add license, publisher, and provenance fields to manifests.
-2. Define signed attestations and trust-policy evaluation.
+2. Define signed attestations and trust-policy evaluation, including optional web of trust endorsements.
 3. Add catalog moderation records and audit history.
 4. Add revocation/tombstone behavior to resolvers and indexers.
 5. Document the distinction between hiding, revoking access, and deleting local
@@ -73,6 +76,7 @@ syncweb moderation hide <record>
 - A network can hide or quarantine a record without corrupting its content hash.
 - Moderation decisions are signed, scoped, auditable, and optionally expiring.
 - Private access revocation does not claim to erase already downloaded content.
+- Users can optionally establish and verify a web of trust by signing other identities.
 
 ## Grounded UX example
 

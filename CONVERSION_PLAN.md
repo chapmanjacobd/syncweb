@@ -4537,3 +4537,4 @@ endpoint.close().await;
 *Added: BEP Phase 7 full protocol translation (moved from Phase 7+ deprioritized — still complex, but identity is cheap)*
 *Added: Standard CS patterns (cache eviction, parallel traversal, bitmask presence, consistent hashing)*
 *Added: Data Package Management (non-apt alternative to dapt) — full lifecycle with iroh-docs manifests, iroh-blobs content addressing, gossip-based discovery, atomic upgrades, multi-version coexistence*
+*Added: Opt-In Indexing Service (syncweb indexing) for Catalogs, Resilience, and WoT Metadata (merged Proposals 1, 5, 7, 11)*

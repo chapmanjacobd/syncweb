@@ -11,6 +11,7 @@ use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
 use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
+#[non_exhaustive]
 pub enum RelayMode {
     Default,
     Custom { map: iroh::RelayMap, insecure: bool },
@@ -30,15 +31,26 @@ pub struct IrohNode {
 
 impl IrohNode {
     /// Creates a node and starts accepting the blobs, docs, and gossip protocols.
-    pub async fn new(
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
+    pub async fn new(identity: IdentityManager, data_dir: PathBuf, relay_mode: RelayMode) -> Result<Self> {
+        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new()).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
+    pub async fn new_with_address_lookup(
         identity: IdentityManager,
         data_dir: PathBuf,
         relay_mode: RelayMode,
+        address_lookup: MemoryLookup,
     ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir).await?;
         let docs_dir = data_dir.join("docs");
         tokio::fs::create_dir_all(&docs_dir).await?;
-        let address_lookup = MemoryLookup::new();
 
         let builder = match relay_mode {
             RelayMode::Default => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
@@ -59,19 +71,15 @@ impl IrohNode {
             .await
             .context("failed to bind Iroh endpoint")?;
 
-        let blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
+        let fs_blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
             .await
             .context("failed to open blob store")?;
-        let blobs = BlobsProtocol::new(blob_store.as_ref(), None);
+        let blobs = BlobsProtocol::new(fs_blob_store.as_ref(), None);
 
         let gossip = Arc::new(Gossip::builder().spawn(endpoint.clone()));
 
         let docs = Docs::persistent(docs_dir)
-            .spawn(
-                endpoint.clone(),
-                blobs.store().clone(),
-                gossip.as_ref().clone(),
-            )
+            .spawn(endpoint.clone(), blobs.store().clone(), gossip.as_ref().clone())
             .await
             .context("failed to open docs store")?;
 
@@ -84,7 +92,7 @@ impl IrohNode {
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
         let docs_engine = DocsEngine::new(&docs);
         let gossip_service = GossipService::new(&gossip);
-        let topic_tracker = TopicTracker::new(&gossip, &endpoint).await?;
+        let topic_tracker = TopicTracker::new(&gossip, &endpoint);
 
         Ok(Self {
             endpoint,
@@ -99,47 +107,62 @@ impl IrohNode {
         })
     }
 
-    pub fn endpoint(&self) -> &iroh::Endpoint {
+    #[must_use]
+    pub const fn endpoint(&self) -> &iroh::Endpoint {
         &self.endpoint
     }
 
-    pub fn blobs(&self) -> &BlobsProtocol {
+    #[must_use]
+    pub const fn blobs(&self) -> &BlobsProtocol {
         &self.blobs
     }
 
-    pub fn docs(&self) -> &Docs {
+    #[must_use]
+    pub const fn docs(&self) -> &Docs {
         &self.docs
     }
 
+    #[must_use]
     pub fn gossip(&self) -> &Gossip {
         &self.gossip
     }
 
-    pub fn blob_store(&self) -> &BlobStore {
+    #[must_use]
+    pub const fn blob_store(&self) -> &BlobStore {
         &self.blob_store
     }
 
-    pub fn docs_engine(&self) -> &DocsEngine {
+    #[must_use]
+    pub const fn docs_engine(&self) -> &DocsEngine {
         &self.docs_engine
     }
 
-    pub fn gossip_service(&self) -> &GossipService {
+    #[must_use]
+    pub const fn gossip_service(&self) -> &GossipService {
         &self.gossip_service
     }
 
-    pub fn topic_tracker(&self) -> &TopicTracker {
+    #[must_use]
+    pub const fn topic_tracker(&self) -> &TopicTracker {
         &self.topic_tracker
     }
 
+    #[must_use]
     pub fn is_running(&self) -> bool {
         !self.router.is_shutdown()
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the router fails to shutdown properly.
     pub async fn stop(&self) -> Result<()> {
         self.router.shutdown().await?;
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if stopping the node fails.
     pub async fn shutdown(self) -> Result<()> {
         self.stop().await
     }

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
@@ -29,27 +30,41 @@ async fn test_node(
     directory: &TestDirectory,
     name: &str,
     relay_map: Option<iroh::RelayMap>,
+    address_lookup: Option<MemoryLookup>,
 ) -> IrohNode {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
     let relay_mode = match relay_map {
-        Some(map) => RelayMode::Custom {
-            map,
-            insecure: true,
-        },
+        Some(map) => RelayMode::Custom { map, insecure: true },
         None => RelayMode::Default,
     };
-    IrohNode::new(identity, root.join("data"), relay_mode)
-        .await
-        .expect("start node")
+    match address_lookup {
+        Some(lookup) => IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup)
+            .await
+            .expect("start node"),
+        None => IrohNode::new(identity, root.join("data"), relay_mode)
+            .await
+            .expect("start node"),
+    }
 }
 
 #[tokio::test]
 async fn test_subscribe_publish() {
     let directory = TestDirectory::new();
-    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
-    let first = test_node(&directory, "first", Some(relay_map.clone())).await;
-    let second = test_node(&directory, "second", Some(relay_map)).await;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+    let memory_lookup = MemoryLookup::new();
+    let first = test_node(
+        &directory,
+        "first",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await;
+    let second = test_node(&directory, "second", Some(relay_map), Some(memory_lookup.clone())).await;
+
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(first.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(second.endpoint().id()).with_relay_url(relay_url));
+
     let topic = iroh_gossip::TopicId::from_bytes(rand::random());
 
     let first_topic = first
@@ -57,15 +72,14 @@ async fn test_subscribe_publish() {
         .subscribe(topic, vec![])
         .await
         .expect("subscribe first node");
-    let (first_sender, _first_receiver) =
-        syncweb_core::node::gossip_service::GossipService::split(first_topic);
+    let (first_sender, _first_receiver) = syncweb_core::node::gossip_service::GossipService::split(first_topic);
 
     let mut second_topic = second
         .gossip_service()
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .expect("subscribe second node");
-    tokio::time::timeout(Duration::from_secs(60), second_topic.joined())
+    tokio::time::timeout(Duration::from_secs(30), second_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -79,7 +93,7 @@ async fn test_subscribe_publish() {
         }
     });
 
-    let received = tokio::time::timeout(Duration::from_secs(60), async {
+    let received = tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = second_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -100,10 +114,28 @@ async fn test_subscribe_publish() {
 #[tokio::test]
 async fn test_multiple_subscribers() {
     let directory = TestDirectory::new();
-    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
-    let first = test_node(&directory, "first", Some(relay_map.clone())).await;
-    let second = test_node(&directory, "second", Some(relay_map.clone())).await;
-    let third = test_node(&directory, "third", Some(relay_map)).await;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+    let memory_lookup = MemoryLookup::new();
+    let first = test_node(
+        &directory,
+        "first",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await;
+    let second = test_node(
+        &directory,
+        "second",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await;
+    let third = test_node(&directory, "third", Some(relay_map), Some(memory_lookup.clone())).await;
+
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(first.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(second.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(third.endpoint().id()).with_relay_url(relay_url));
+
     let topic = iroh_gossip::TopicId::from_bytes(rand::random());
 
     let first_topic = first
@@ -111,14 +143,13 @@ async fn test_multiple_subscribers() {
         .subscribe(topic, vec![])
         .await
         .expect("subscribe first node");
-    let (first_sender, _first_receiver) =
-        syncweb_core::node::gossip_service::GossipService::split(first_topic);
+    let (first_sender, _first_receiver) = syncweb_core::node::gossip_service::GossipService::split(first_topic);
     let mut second_topic = second
         .gossip_service()
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .expect("subscribe second node");
-    tokio::time::timeout(Duration::from_secs(60), second_topic.joined())
+    tokio::time::timeout(Duration::from_secs(30), second_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -127,7 +158,7 @@ async fn test_multiple_subscribers() {
         .subscribe(topic, vec![second.endpoint().id()])
         .await
         .expect("subscribe third node");
-    tokio::time::timeout(Duration::from_secs(60), third_topic.joined())
+    tokio::time::timeout(Duration::from_secs(30), third_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -141,7 +172,7 @@ async fn test_multiple_subscribers() {
         }
     });
 
-    let second_received = tokio::time::timeout(Duration::from_secs(60), async {
+    let second_received = tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = second_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -152,7 +183,7 @@ async fn test_multiple_subscribers() {
     .await
     .expect("second gossip receive timed out")
     .expect("second gossip stream closed");
-    let third_received = tokio::time::timeout(Duration::from_secs(60), async {
+    let third_received = tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = third_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);

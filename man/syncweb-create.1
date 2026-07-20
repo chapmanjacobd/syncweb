@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH create 1  "create " 
+.SH NAME
+create \- Create a synchronized folder
+.SH SYNOPSIS
+\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+.SH DESCRIPTION
+Create a synchronized folder
+.SH OPTIONS
+.TP
+\fB\-\-mode\fR \fI<MODE>\fR [default: sendreceive]
+
+.TP
+\fB\-\-relay\-fallback\fR
+Enable Syncthing relay fallback for this folder
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+

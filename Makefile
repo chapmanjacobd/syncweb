@@ -39,7 +39,7 @@ completions: build
 
 manpage: build
 	mkdir -p man
-	./target/debug/syncweb manpage
+	./target/debug/syncweb manpages
 
 install-completions:
 	install -d $(DESTDIR)/usr/share/bash-completion/completions

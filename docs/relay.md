@@ -6,7 +6,7 @@ iroh uses QUIC with UDP hole punching (QNT). This works in ~90% of network confi
 
 ### Design
 
-The goal is **not** to translate between BEP and iroh protocols. Instead, we **piggyback on Syncthing's relay network** as a transport layer when iroh's direct/relay connectivity fails. Both endpoints remain syncweb nodes.
+The goal is not to translate between BEP and iroh protocols. Instead, we piggyback on Syncthing's relay network as a transport layer when iroh's direct/relay connectivity fails. Both endpoints remain syncweb nodes.
 
 ```text
 syncweb Node A (behind CGNAT-A, UDP blocked)
@@ -16,12 +16,12 @@ Syncthing Relay (tcp://relay.syncthing.net)
 syncweb Node B (behind CGNAT-B, UDP blocked)
 ```
 
-The key insight: Syncthing relays are **protocol-agnostic**. They relay raw bytes between two devices that share a session key. We can tunnel iroh QUIC traffic through a Syncthing relay session by wrapping QUIC datagrams in the relay's byte-stream protocol.
+The key insight: Syncthing relays are protocol-agnostic. They relay raw bytes between two devices that share a session key. We can tunnel iroh QUIC traffic through a Syncthing relay session by wrapping QUIC datagrams in the relay's byte-stream protocol.
 
 ### Implementation
 
 ```rust
-/// Syncthing relay transport — fallback when iroh's QUIC hole punching fails
+/// Syncthing relay transport -- fallback when iroh's QUIC hole punching fails
 struct SyncthingRelayTransport {
     /// TCP connection to Syncthing relay
     tcp_stream: TcpStream,
@@ -37,11 +37,11 @@ impl SyncthingRelayTransport {
     async fn connect(relay_url: &str, peer_device_id: &DeviceId) -> Result<Self>;
 
     /// Tunnel iroh QUIC datagrams through the relay session
-    /// The relay just forwards bytes — we encapsulate QUIC packets inside
+    /// The relay just forwards bytes -- we encapsulate QUIC packets inside
     fn tunnel_quic(&self, quic_socket: &QuicSocket) -> Result<()>;
 }
 
-/// Transport fallback manager — tries iroh first, falls back to Syncthing relay
+/// Transport fallback manager -- tries iroh first, falls back to Syncthing relay
 struct TransportFallback {
     /// Primary: iroh QUIC (direct + iroh relay)
     iroh_endpoint: Endpoint,
@@ -79,8 +79,8 @@ impl TransportFallback {
 
 The relay protocol has two modes:
 
-1. **Protocol mode** (TLS): Join relay, wait for session invitations
-2. **Session mode** (plain): Relay bytes between two devices
+1. Protocol mode (TLS): Join relay, wait for session invitations
+2. Session mode (plain): Relay bytes between two devices
 
 We use protocol mode to register with the relay and receive session invitations, then session mode to tunnel QUIC traffic:
 
@@ -143,7 +143,7 @@ update it.
 - Automatic fallback: iroh tries direct first, falls back to relay only when needed
 - No dependency on iroh's relay infrastructure for the data path
 - Leverages Syncthing's mature, well-tested relay network
-- Both nodes remain fully syncweb — no protocol translation needed
+- Both nodes remain fully syncweb -- no protocol translation needed
 
 ### Device Identity Compatibility
 

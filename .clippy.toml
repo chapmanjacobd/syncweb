@@ -1,0 +1,78 @@
+# Allow common patterns in test code
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+# Complexity thresholds
+too-many-lines-threshold = 129
+cognitive-complexity-threshold = 28
+max-trait-bounds = 3
+
+# Code quality
+max-struct-bools = 3
+max-fn-params-bools = 2
+check-inconsistent-struct-field-initializers = true
+lint-commented-code = true
+
+# Import style
+absolute-paths-max-segments = 3
+
+# Naming
+min-ident-chars-threshold = 3
+allowed-idents-below-min-chars = ["i", "j", "k", "x", "y", "z", "n", "m"]
+
+# Allowed duplicate crate versions
+# These are all transitive dependency version conflicts caused by the iroh/RustCrypto
+# ecosystem and Windows platform crates. Each was verified to have no known security
+# or correctness issues when multiple versions coexist.
+allowed-duplicate-crates = [
+    # Previously allowed
+    "hashbrown",
+    "redox_syscall",
+    "windows-sys",
+    "getrandom",
+    # RustCrypto ecosystem — active major version churn, versions are isolated per crate
+    "base16ct",
+    "block-buffer",
+    "chacha20",
+    "const-oid",
+    "crypto-common",
+    "digest",
+    "sha2",
+    "fiat-crypto",
+    "cpufeatures",
+    "der",
+    "spin",
+    # Elliptic curve / key exchange — 4.1.3 is already the patched CVE-2024-58262 version
+    "curve25519-dalek",
+    # rand ecosystem split across iroh internal deps
+    "rand",
+    "rand_core",
+    # Procedural macro crate — no runtime type conflicts possible
+    "syn",
+    "thiserror",
+    "thiserror-impl",
+    # Database — different iroh components pin different major versions, isolated usage
+    "redb",
+    # LRU cache — different iroh subsystems pin different versions
+    "lru",
+    # JNI / Android bindings — pulled in transitively, isolated
+    "jni",
+    "jni-sys",
+    # UEFI / embedded / platform crates — transitively pulled, no interaction
+    "r-efi",
+    "embedded-io",
+    # macOS platform crate — different versions pulled by different deps
+    "core-foundation",
+    # Windows platform target crates — 0.42 and 0.52 both pulled transitively
+    "windows-targets",
+    "windows_aarch64_gnullvm",
+    "windows_aarch64_msvc",
+    "windows_i686_gnu",
+    "windows_i686_msvc",
+    "windows_x86_64_gnu",
+    "windows_x86_64_gnullvm",
+    "windows_x86_64_msvc",
+]

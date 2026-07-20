@@ -1,0 +1,59 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH syncweb 1  "syncweb " 
+.SH NAME
+syncweb \- Delay\-tolerant web surfing
+.SH SYNOPSIS
+\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Delay\-tolerant web surfing
+.SH OPTIONS
+.TP
+\fB\-\-verbose\fR
+Enable verbose structured logging
+.TP
+\fB\-\-data\-dir\fR \fI<DATA_DIR>\fR [default: .syncweb]
+Directory used for persistent node identity and data
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+syncweb\-version(1)
+Show syncweb version information
+.TP
+syncweb\-repl(1)
+Start an interactive command shell
+.TP
+syncweb\-create(1)
+Create a synchronized folder
+.TP
+syncweb\-join(1)
+Join a folder from an Iroh document ticket
+.TP
+syncweb\-accept(1)
+Accept a locally available folder
+.TP
+syncweb\-drop(1)
+Remove a local folder replica
+.TP
+syncweb\-folders(1)
+List managed folders
+.TP
+syncweb\-devices(1)
+Show this device\*(Aqs Iroh and Syncthing identities
+.TP
+syncweb\-config(1)
+Show or update local configuration
+.TP
+syncweb\-network(1)
+Network connectivity utilities
+.TP
+syncweb\-completions(1)
+Generate shell completions
+.TP
+syncweb\-manpages(1)
+Generate manpages
+.TP
+syncweb\-help(1)
+Print this message or the help of the given subcommand(s)

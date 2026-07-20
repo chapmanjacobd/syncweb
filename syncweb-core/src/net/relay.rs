@@ -14,24 +14,52 @@ use crate::node::identity::DeviceId;
 
 const MAX_FRAME_SIZE: usize = 1024 * 1024;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct JoinRelayRequest {
     pub device_id: DeviceId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl JoinRelayRequest {
+    #[must_use]
+    pub const fn new(device_id: DeviceId) -> Self {
+        Self { device_id }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct SessionInvitation {
     pub session_key: [u8; 32],
     pub server_socket: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl SessionInvitation {
+    #[must_use]
+    pub const fn new(session_key: [u8; 32], server_socket: bool) -> Self {
+        Self {
+            session_key,
+            server_socket,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct JoinSessionRequest {
     pub session_key: [u8; 32],
     pub device_id: DeviceId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl JoinSessionRequest {
+    #[must_use]
+    pub const fn new(session_key: [u8; 32], device_id: DeviceId) -> Self {
+        Self { session_key, device_id }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum RelayMessage {
     JoinRelayRequest(JoinRelayRequest),
     SessionInvitation(SessionInvitation),
@@ -42,6 +70,7 @@ pub enum RelayMessage {
 }
 
 impl RelayMessage {
+    #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(66);
         match self {
@@ -66,33 +95,32 @@ impl RelayMessage {
         bytes
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the bytes cannot be decoded into a relay message.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
-        let (tag, body) = bytes
-            .split_first()
-            .context("relay message is missing a type tag")?;
+        let (tag, body) = bytes.split_first().context("relay message is missing a type tag")?;
         match (*tag, body) {
-            (1, device_id) if device_id.len() == 32 => {
-                Ok(Self::JoinRelayRequest(JoinRelayRequest {
-                    device_id: device_id_from_bytes(device_id)?,
-                }))
-            }
+            (1, device_id) if device_id.len() == 32 => Ok(Self::JoinRelayRequest(JoinRelayRequest {
+                device_id: device_id_from_bytes(device_id)?,
+            })),
             (2, [session_key @ .., server_socket]) if session_key.len() == 32 => {
                 if *server_socket > 1 {
                     bail!("invalid session invitation socket flag");
                 }
                 Ok(Self::SessionInvitation(SessionInvitation {
-                    session_key: session_key
-                        .try_into()
-                        .expect("length checked before session key conversion"),
+                    session_key: session_key.try_into().unwrap_or([0; 32]),
                     server_socket: *server_socket == 1,
                 }))
             }
-            (3, body) if body.len() == 64 => Ok(Self::JoinSessionRequest(JoinSessionRequest {
-                session_key: body[..32]
-                    .try_into()
-                    .expect("length checked before session key conversion"),
-                device_id: device_id_from_bytes(&body[32..])?,
-            })),
+            (3, body_bytes) if body_bytes.len() == 64 => {
+                let session_key = body_bytes.get(..32).context("invalid body length")?;
+                let device_id = body_bytes.get(32..).context("invalid body length")?;
+                Ok(Self::JoinSessionRequest(JoinSessionRequest {
+                    session_key: session_key.try_into().unwrap_or([0; 32]),
+                    device_id: device_id_from_bytes(device_id)?,
+                }))
+            }
             (4, []) => Ok(Self::ResponseSuccess),
             (5, []) => Ok(Self::ResponseNotFound),
             (6, []) => Ok(Self::RelayFull),
@@ -102,13 +130,12 @@ impl RelayMessage {
 }
 
 fn device_id_from_bytes(bytes: &[u8]) -> Result<DeviceId> {
-    let bytes: [u8; 32] = bytes
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("relay device ID must be 32 bytes"))?;
-    Ok(DeviceId::from_node_id(PublicKey::from_bytes(&bytes)?))
+    let arr: [u8; 32] = bytes.try_into().context("relay device ID must be 32 bytes")?;
+    Ok(DeviceId::from_node_id(PublicKey::from_bytes(&arr)?))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct RelayConfig {
     #[serde(default)]
     pub relay_urls: Vec<String>,
@@ -128,7 +155,7 @@ impl Default for RelayConfig {
     }
 }
 
-fn default_auto_fallback() -> bool {
+const fn default_auto_fallback() -> bool {
     true
 }
 
@@ -165,12 +192,15 @@ pub struct SyncthingRelayTransport {
 }
 
 impl SyncthingRelayTransport {
+    /// # Errors
+    ///
+    /// Returns an error if the connection to the relay fails.
     pub async fn connect(
-        relay_url: impl Into<String>,
+        relay_url_in: impl Into<String>,
         device_id: DeviceId,
         timeout_duration: Duration,
     ) -> Result<Self> {
-        let relay_url = relay_url.into();
+        let relay_url = relay_url_in.into();
         let address = relay_address(&relay_url)?;
         let stream = timeout(timeout_duration, TcpStream::connect(&address))
             .await
@@ -182,25 +212,35 @@ impl SyncthingRelayTransport {
             session_key: [0; 32],
         };
         transport
-            .send_message(&RelayMessage::JoinRelayRequest(JoinRelayRequest {
-                device_id,
-            }))
+            .send_message(&RelayMessage::JoinRelayRequest(JoinRelayRequest { device_id }))
             .await?;
         Ok(transport)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the relay message fails to send.
     pub async fn send_message(&self, message: &RelayMessage) -> Result<()> {
         self.write_frame(&message.encode()).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if receiving a relay message fails.
     pub async fn recv_message(&self) -> Result<RelayMessage> {
         RelayMessage::decode(&self.read_frame().await?)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the packet fails to send.
     pub async fn send_packet(&self, packet: &[u8]) -> Result<()> {
         self.write_frame(packet).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if receiving the packet fails.
     pub async fn recv_packet(&self) -> Result<Vec<u8>> {
         self.read_frame().await
     }
@@ -209,21 +249,24 @@ impl SyncthingRelayTransport {
         if payload.len() > MAX_FRAME_SIZE {
             bail!("relay frame exceeds {MAX_FRAME_SIZE} byte limit");
         }
+        let len = u32::try_from(payload.len()).context("payload length exceeds u32::MAX")?;
         let mut stream = self.stream.lock().await;
-        stream.write_u32(payload.len() as u32).await?;
+        stream.write_u32(len).await?;
         stream.write_all(payload).await?;
         stream.flush().await?;
+        drop(stream);
         Ok(())
     }
 
     async fn read_frame(&self) -> Result<Vec<u8>> {
         let mut stream = self.stream.lock().await;
-        let length = stream.read_u32().await? as usize;
+        let length = usize::try_from(stream.read_u32().await?).context("length exceeds usize::MAX")?;
         if length > MAX_FRAME_SIZE {
             bail!("relay frame exceeds {MAX_FRAME_SIZE} byte limit");
         }
         let mut payload = vec![0; length];
         stream.read_exact(&mut payload).await?;
+        drop(stream);
         Ok(payload)
     }
 }
@@ -234,22 +277,26 @@ pub struct TransportFallback {
 }
 
 impl TransportFallback {
-    pub fn new(config: RelayConfig) -> Self {
+    #[must_use]
+    pub const fn new(config: RelayConfig) -> Self {
         Self { config }
     }
 
-    pub fn config(&self) -> &RelayConfig {
+    #[must_use]
+    pub const fn config(&self) -> &RelayConfig {
         &self.config
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if connecting to the device via relay fails.
     pub async fn connect_relay(&self, device_id: DeviceId) -> Result<SyncthingRelayTransport> {
         if !self.config.auto_fallback {
             bail!("Syncthing relay fallback is disabled");
         }
         let mut failures = Vec::new();
         for relay_url in &self.config.relay_urls {
-            match SyncthingRelayTransport::connect(relay_url, device_id, self.config.timeout).await
-            {
+            match SyncthingRelayTransport::connect(relay_url, device_id, self.config.timeout).await {
                 Ok(transport) => return Ok(transport),
                 Err(error) => failures.push(format!("{relay_url}: {error:#}")),
             }

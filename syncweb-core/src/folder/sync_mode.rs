@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SyncMode {
     #[default]
     SendReceive,
@@ -14,15 +15,18 @@ pub enum SyncMode {
 }
 
 impl SyncMode {
-    pub fn can_write(self) -> bool {
+    #[must_use]
+    pub const fn can_write(self) -> bool {
         matches!(self, Self::SendReceive | Self::SendOnly)
     }
 
-    pub fn can_receive(self) -> bool {
+    #[must_use]
+    pub const fn can_receive(self) -> bool {
         !matches!(self, Self::SendOnly)
     }
 
-    pub fn is_public(self) -> bool {
+    #[must_use]
+    pub const fn is_public(self) -> bool {
         matches!(self, Self::PublicReadOnly)
     }
 }

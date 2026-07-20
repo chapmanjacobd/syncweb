@@ -11,34 +11,44 @@ use serde::{Deserialize, Serialize};
 use crate::net::RelayConfig;
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct Config {
     #[serde(default)]
     pub bep: BepConfig,
 }
 
 impl Config {
+    /// # Errors
+    ///
+    /// Returns an error if the config file cannot be read or parsed.
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
-        if !path.exists() {
+        let path_ref = path.as_ref();
+        if !path_ref.exists() {
             return Ok(Self::default());
         }
 
-        let contents = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read config {}", path.display()))?;
-        toml::from_str(&contents)
-            .with_context(|| format!("failed to parse config {}", path.display()))
+        let contents = std::fs::read_to_string(path_ref)
+            .with_context(|| format!("failed to read config {}", path_ref.display()))?;
+        toml::from_str(&contents).with_context(|| format!("failed to parse config {}", path_ref.display()))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the config cannot be serialized or written to disk.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
+        let path_ref = path.as_ref();
         let contents = toml::to_string_pretty(self).context("failed to serialize config")?;
-        atomic_write(path, contents.as_bytes())
+        atomic_write(path_ref, contents.as_bytes())
     }
 
+    #[must_use]
     pub fn relay_config(&self) -> RelayConfig {
         self.bep.relay_config()
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the key is unknown or the value cannot be parsed.
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
         match key {
             "bep.enabled" => self.bep.enabled = parse_bool(key, value)?,
@@ -59,6 +69,7 @@ impl Config {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct BepConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -82,6 +93,7 @@ impl Default for BepConfig {
 }
 
 impl BepConfig {
+    #[must_use]
     pub fn relay_config(&self) -> RelayConfig {
         RelayConfig {
             relay_urls: self.relay_urls.clone(),
@@ -91,24 +103,21 @@ impl BepConfig {
     }
 }
 
-fn default_relay_timeout() -> u64 {
+const fn default_relay_timeout() -> u64 {
     10
 }
 
-fn default_auto_fallback() -> bool {
+const fn default_auto_fallback() -> bool {
     true
 }
 
 fn parse_bool(key: &str, value: &str) -> Result<bool> {
-    value
-        .parse()
-        .with_context(|| format!("{key} must be true or false"))
+    value.parse().with_context(|| format!("{key} must be true or false"))
 }
 
 fn parse_string_list(key: &str, value: &str) -> Result<Vec<String>> {
-    let parsed: toml::Value = toml::from_str(&format!("value = {value}")).with_context(|| {
-        format!("{key} must be a TOML string array, for example [\"tcp://relay:22270\"]")
-    })?;
+    let parsed: toml::Value = toml::from_str(&format!("value = {value}"))
+        .with_context(|| format!("{key} must be a TOML string array, for example [\"tcp://relay:22270\"]"))?;
     parsed
         .get("value")
         .and_then(toml::Value::as_array)
@@ -116,17 +125,10 @@ fn parse_string_list(key: &str, value: &str) -> Result<Vec<String>> {
         .map(|values| {
             values
                 .iter()
-                .map(|value| {
-                    value
-                        .as_str()
-                        .expect("string array was validated")
-                        .to_owned()
-                })
+                .map(|v| v.as_str().unwrap_or_default().to_owned())
                 .collect()
         })
-        .with_context(|| {
-            format!("{key} must be a TOML string array, for example [\"tcp://relay:22270\"]")
-        })
+        .with_context(|| format!("{key} must be a TOML string array, for example [\"tcp://relay:22270\"]"))
 }
 
 fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
@@ -146,16 +148,12 @@ fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options.open(&temporary_path).with_context(|| {
-            format!(
-                "failed to create temporary config {}",
-                temporary_path.display()
-            )
-        })?;
+        let mut file = options
+            .open(&temporary_path)
+            .with_context(|| format!("failed to create temporary config {}", temporary_path.display()))?;
         file.write_all(contents)?;
         file.sync_all()?;
-        std::fs::rename(&temporary_path, path)
-            .with_context(|| format!("failed to persist config {}", path.display()))
+        std::fs::rename(&temporary_path, path).with_context(|| format!("failed to persist config {}", path.display()))
     })();
 
     if result.is_err() {

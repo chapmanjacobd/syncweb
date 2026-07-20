@@ -251,7 +251,7 @@ endpoint.close().await;
 *Added: sort command design (niche, frecency, peers, folder-aggregate sorting)*
 *Added: init/config command design (folder creation + URL output, config management)*
 *Added: BEP Phase 2 minimal identity (DeviceId conversion, --bep flag annotation)*
-*Added: BEP Phase 7 full protocol translation (moved from Phase 7+ deprioritized — still complex, but identity is cheap)*
+*Added: BEP Phase 7 full protocol translation (moved from Phase 7+ deprioritized -- still complex, but identity is cheap)*
 *Added: Standard CS patterns (cache eviction, parallel traversal, bitmask presence, consistent hashing)*
-*Added: Data Package Management (non-apt alternative to dapt) — full lifecycle with iroh-docs manifests, iroh-blobs content addressing, gossip-based discovery, atomic upgrades, multi-version coexistence*
+*Added: Data Package Management (non-apt alternative to dapt) -- full lifecycle with iroh-docs manifests, iroh-blobs content addressing, gossip-based discovery, atomic upgrades, multi-version coexistence*
 *Added: Opt-In Indexing Service (syncweb indexing) for Catalogs, Resilience, and WoT Metadata (merged Proposals 1, 5, 7, 11)*

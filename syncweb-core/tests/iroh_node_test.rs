@@ -62,11 +62,7 @@ async fn test_protocol_registration() {
     let client = test_node(&directory, "client").await;
     let server_address = server.endpoint().addr();
 
-    for alpn in [
-        iroh_blobs::protocol::ALPN,
-        iroh_docs::ALPN,
-        iroh_gossip::ALPN,
-    ] {
+    for alpn in [iroh_blobs::protocol::ALPN, iroh_docs::ALPN, iroh_gossip::ALPN] {
         let connection = tokio::time::timeout(
             Duration::from_secs(5),
             client.endpoint().connect(server_address.clone(), alpn),
@@ -74,7 +70,7 @@ async fn test_protocol_registration() {
         .await
         .expect("protocol connection timed out")
         .expect("registered protocol should connect");
-        connection.close(0u32.into(), b"test complete");
+        connection.close(0_u32.into(), b"test complete");
     }
 
     client.stop().await.expect("stop client");
@@ -100,9 +96,7 @@ async fn test_two_nodes_connect() {
 
     let connection = tokio::time::timeout(
         Duration::from_secs(5),
-        first
-            .endpoint()
-            .connect(second.endpoint().addr(), iroh_gossip::ALPN),
+        first.endpoint().connect(second.endpoint().addr(), iroh_gossip::ALPN),
     )
     .await
     .expect("direct connection timed out")

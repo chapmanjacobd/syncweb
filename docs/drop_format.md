@@ -2,18 +2,18 @@
 
 ## Motivation
 The current [data package management design](./packages.md#1-collection--package-manifests) heavily relies on the Iroh P2P network (gossip and direct peer connections) to fetch manifests and blobs. While powerful, there are many scenarios where users need an offline or traditional file-transfer mechanism:
-* **Air-gapped environments**: Transferring packages via USB drives.
-* **Direct messaging/Email**: Sending a package as an attachment.
-* **Traditional HTTP hosting**: Hosting a static package file on a standard web server without running an Iroh node.
+* Air-gapped environments: Transferring packages via USB drives.
+* Direct messaging/Email: Sending a package as an attachment.
+* Traditional HTTP hosting: Hosting a static package file on a standard web server without running an Iroh node.
 
-The **Syncweb Drop Format** provides a single-file, self-contained bundle of a data package that can be easily "dropped" into another node.
+The Syncweb Drop Format provides a single-file, self-contained bundle of a data package that can be easily "dropped" into another node.
 
 ## Format Specification
-The drop format is essentially a **Zstandard-compressed Content Addressable aRchive (CAR)**, matching Iroh's native CAR export conventions.
+The drop format is essentially a Zstandard-compressed Content Addressable aRchive (CAR), matching Iroh's native CAR export conventions.
 
-* **Extension**: `.car.zst`
-* **MIME Type**: `application/vnd.syncweb.package+zstd`
-* **Underlying Structure**: 
+* Extension: `.car.zst`
+* MIME Type: `application/vnd.syncweb.package+zstd`
+* Underlying Structure: 
   1. A root CID pointing to the JSON `PackageManifest`.
   2. All the file blobs referenced in the manifest's `files` array.
   3. The whole stream is compressed using `zstd` (which provides excellent compression ratios and decompression speeds).
@@ -51,12 +51,12 @@ syncweb package drop import my-dataset.car.zst
 ## Implementation Details
 
 ### Export Pipeline (`drop_export`)
-1. **Resolve Manifest**: Fetch the `PackageManifest` from the local iroh-docs for the given package/version.
-2. **Filter & Collect Hashes**: Hook into the existing `FilterEngine` to allow granular filtering of files. Extract the `manifest_hash` and iterate over `manifest.files`, evaluating each file against the `FilterEngine`. Only collect blob hashes for accepted files to create a partial drop.
-3. **Generate CAR Stream**: Use `iroh_blobs::export::export_car` (or similar) with the list of hashes. The root of the CAR should be the manifest blob.
-4. **Compress**: Pipe the CAR stream through `zstd` encoder. Handle export stream errors explicitly for better UX.
-5. **Write**: Write the compressed stream to the destination file.
-6. **Multi-Export**: If multiple packages are specified, iterate through each package sequentially, executing the pipeline and saving each package as an individual `.car.zst` file in the destination directory to maintain isolated drops.
+1. Resolve Manifest: Fetch the `PackageManifest` from the local iroh-docs for the given package/version.
+2. Filter & Collect Hashes: Hook into the existing `FilterEngine` to allow granular filtering of files. Extract the `manifest_hash` and iterate over `manifest.files`, evaluating each file against the `FilterEngine`. Only collect blob hashes for accepted files to create a partial drop.
+3. Generate CAR Stream: Use `iroh_blobs::export::export_car` (or similar) with the list of hashes. The root of the CAR should be the manifest blob.
+4. Compress: Pipe the CAR stream through `zstd` encoder. Handle export stream errors explicitly for better UX.
+5. Write: Write the compressed stream to the destination file.
+6. Multi-Export: If multiple packages are specified, iterate through each package sequentially, executing the pipeline and saving each package as an individual `.car.zst` file in the destination directory to maintain isolated drops.
 
 ```rust
 pub async fn export_drop(folder: &SyncwebFolder, out_path: &Path, filter_engine: Option<&FilterEngine>) -> Result<()> {
@@ -86,13 +86,13 @@ pub async fn export_drop(folder: &SyncwebFolder, out_path: &Path, filter_engine:
 ```
 
 ### Import Pipeline (`drop_import`)
-1. **Decompress**: Open the `.car.zst` file and stream it through a `zstd` decoder. Map decoding and stream errors explicitly to user-friendly messages (e.g. "unexpected end of file").
-2. **Granular Filtering (Optional)**: Wrap the decompressed stream with a filtering decoder based on the `FilterEngine` or local blocklists. This allows skipping massive media files or rejecting blobs from known malicious authors directly from the stream without buffering into memory.
-3. **Ingest CAR**: Stream the decompressed (and potentially filtered) CAR directly into `iroh_blobs::import::import_car`. Iroh will automatically verify the BLAKE3 hashes and store the blobs.
-4. **Extract Manifest**: The root CID of the CAR points to the `PackageManifest`. Read this blob, parse the JSON.
-5. **Dependency Check**: Validate the `PackageManifest` dependencies. Prevent installation of the package if its required dependencies are not already present in the local node at the time of import.
-6. **Update Docs**: Insert the `PackageManifest` into the local iroh-docs namespace (`/.iroh-package/manifest.json`), updating the package state.
-7. **Atomic Swap (Optional)**: If the package is meant to be instantly materialized on disk, trigger the parallel export/checkout to the local filesystem.
+1. Decompress: Open the `.car.zst` file and stream it through a `zstd` decoder. Map decoding and stream errors explicitly to user-friendly messages (e.g. "unexpected end of file").
+2. Granular Filtering (Optional): Wrap the decompressed stream with a filtering decoder based on the `FilterEngine` or local blocklists. This allows skipping massive media files or rejecting blobs from known malicious authors directly from the stream without buffering into memory.
+3. Ingest CAR: Stream the decompressed (and potentially filtered) CAR directly into `iroh_blobs::import::import_car`. Iroh will automatically verify the BLAKE3 hashes and store the blobs.
+4. Extract Manifest: The root CID of the CAR points to the `PackageManifest`. Read this blob, parse the JSON.
+5. Dependency Check: Validate the `PackageManifest` dependencies. Prevent installation of the package if its required dependencies are not already present in the local node at the time of import.
+6. Update Docs: Insert the `PackageManifest` into the local iroh-docs namespace (`/.iroh-package/manifest.json`), updating the package state.
+7. Atomic Swap (Optional): If the package is meant to be instantly materialized on disk, trigger the parallel export/checkout to the local filesystem.
 
 ```rust
 pub async fn import_drop(node: &IrohNode, in_path: &Path, target_dir: &Path, filter_engine: Option<&FilterEngine>) -> Result<()> {
@@ -127,10 +127,10 @@ pub async fn import_drop(node: &IrohNode, in_path: &Path, target_dir: &Path, fil
 ```
 
 ## Security & Integrity
-* **Tamper-Proof**: Because the imported blobs are verified against their content hashes upon CAR ingestion, a malicious actor cannot alter a file in the `.car.zst` archive without changing its hash. 
-* **Manifest Validation**: The manifest hash acts as the absolute source of truth. If the manifest dictates a file should have hash `X`, and the `.car.zst` provides a tampered file with hash `Y`, the package validation will fail.
-* **Manifest Signatures**: The `PackageManifest` includes an Ed25519 signature from the package maintainer. During the import pipeline, the node verifies this signature against the maintainer's public key. *Note: Since modifying the manifest alters its hash, the signature must be generated over a deterministic, unsigned representation of the manifest.* If someone provides a modified manifest or swaps out blobs and updates the manifest hash, the signature verification will fail, preventing the installation of tampered drops.
-* **Anti-DOS / Allocation Limits**: When parsing drop files from untrusted sources, it is important to prevent out-of-memory attacks. `iroh-blobs` CAR import handles varint length parsing securely (e.g., enforcing `MAX_ALLOC` limits per block). Because we pipe `async-compression` directly into `iroh-blobs`, we get these stream safety guarantees automatically without loading the entire archive into memory.
+* Tamper-Proof: Because the imported blobs are verified against their content hashes upon CAR ingestion, a malicious actor cannot alter a file in the `.car.zst` archive without changing its hash. 
+* Manifest Validation: The manifest hash acts as the absolute source of truth. If the manifest dictates a file should have hash `X`, and the `.car.zst` provides a tampered file with hash `Y`, the package validation will fail.
+* Manifest Signatures: The `PackageManifest` includes an Ed25519 signature from the package maintainer. During the import pipeline, the node verifies this signature against the maintainer's public key. *Note: Since modifying the manifest alters its hash, the signature must be generated over a deterministic, unsigned representation of the manifest.* If someone provides a modified manifest or swaps out blobs and updates the manifest hash, the signature verification will fail, preventing the installation of tampered drops.
+* Anti-DOS / Allocation Limits: When parsing drop files from untrusted sources, it is important to prevent out-of-memory attacks. `iroh-blobs` CAR import handles varint length parsing securely (e.g., enforcing `MAX_ALLOC` limits per block). Because we pipe `async-compression` directly into `iroh-blobs`, we get these stream safety guarantees automatically without loading the entire archive into memory.
 # Syncweb Drop Format Implementation Plan
 
 ## Overview

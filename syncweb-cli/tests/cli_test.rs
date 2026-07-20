@@ -73,11 +73,7 @@ fn config_command_persists_bep_settings() {
 fn devices_command_displays_iroh_and_syncthing_ids() {
     let directory = std::env::temp_dir().join(format!("syncweb-cli-{}", uuid::Uuid::new_v4()));
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().expect("UTF-8 path"),
-            "devices",
-        ])
+        .args(["--data-dir", directory.to_str().expect("UTF-8 path"), "devices"])
         .output()
         .expect("run syncweb devices");
     std::fs::remove_dir_all(directory).expect("remove test directory");

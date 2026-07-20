@@ -3,13 +3,8 @@ use std::io::{self, BufRead, Write};
 use tracing_subscriber::{EnvFilter, fmt};
 
 pub fn init_tracing(verbose: bool) -> Result<()> {
-    let default_filter = if verbose {
-        "syncweb=debug"
-    } else {
-        "syncweb=info"
-    };
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let default_filter = if verbose { "syncweb=debug" } else { "syncweb=info" };
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     fmt()
         .json()
         .with_writer(std::io::stdout)
@@ -30,8 +25,8 @@ pub fn run_repl() -> Result<()> {
     writeln!(stdout, "Type 'help' for help or 'exit' to quit.")?;
     stdout.flush()?;
 
-    for line in stdin.lock().lines() {
-        let line = line?;
+    for line_result in stdin.lock().lines() {
+        let line = line_result?;
         match line.trim() {
             "" => {}
             "exit" | "quit" => break,

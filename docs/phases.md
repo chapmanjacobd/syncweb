@@ -1,7 +1,7 @@
 # Implementation Phases
 
 ### Phase 1: Foundation
-**Goal**: IrohNode + basic identity + storage + logging
+Goal: IrohNode + basic identity + storage + logging
 
 - [x] `Cargo.toml` with correct iroh 1.0.2 dependencies + distributed-topic-tracker 0.3.5
 - [x] `IrohNode` - Endpoint + Router + protocol setup
@@ -15,7 +15,7 @@
 - [x] `syncweb version`, `syncweb repl` commands
 
 ### Phase 2: Folder Core + Syncthing Relay Piggyback
-**Goal**: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traversal
+Goal: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traversal
 
 - [x] `SyncwebFolder` - NamespaceId, entries, blob refs
 - [x] `FolderManager` - create, join, list, accept, drop
@@ -32,7 +32,7 @@
 - [x] Config: `[bep]` section for relay URLs, timeout, auto_fallback
 
 ### Phase 3: File Operations + Search/Sort/Stat
-**Goal**: ls, find, sort, stat, download, selective sync, init/config
+Goal: ls, find, sort, stat, download, selective sync, init/config
 
 - [ ] `FsWatcher` - notify-rs
 - [ ] `Scanner` - walk dir, BLAKE3 hash
@@ -54,7 +54,7 @@
 - [ ] Streaming output (default) vs `--sort` collected output
 
 ### Phase 4: Advanced Sync + Networks
-**Goal**: Sync engine, automatic daemon, networks abstraction
+Goal: Sync engine, automatic daemon, networks abstraction
 
 - [ ] `SyncEngine` - orchestration
 - [ ] Progress tracking, transfer stats
@@ -74,7 +74,7 @@
 - [ ] `syncweb create --network <name>`, `syncweb join --network <name>`
 
 ### Phase 5: Public Folders + Living Folders
-**Goal**: Public sharing + data package versioning
+Goal: Public sharing + data package versioning
 
 - [ ] `SyncMode::PublicReadOnly`
 - [ ] Blob ticket generation
@@ -82,24 +82,24 @@
 - [ ] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
 - [ ] `CollectionManifest` struct + iroh-docs storage
 - [ ] `CollectionState` local tracking (installed collections, versions)
-- [ ] `syncweb collection init` (with package profile) — initialize folder as data package
-- [ ] `syncweb collection add` — scan + hash files, update manifest
-- [ ] `syncweb collection versions` — create new version with changelog
-- [ ] `syncweb collection publish` — blob ticket + gossip announcement
-- [ ] `syncweb package search` — discover packages via gossip
-- [ ] `syncweb package info` — detailed package metadata
-- [ ] `syncweb package install` — fetch + verify + stage + atomic swap
-- [ ] `syncweb package upgrade` — update to latest version
-- [ ] `syncweb package remove` — clean up installed package
-- [ ] `syncweb package verify` — integrity check against manifest
-- [ ] `syncweb package list` — list locally installed packages
-- [ ] `syncweb package versions` — list installed versions
-- [ ] `syncweb package switch` — change active version
+- [ ] `syncweb collection init` (with package profile) -- initialize folder as data package
+- [ ] `syncweb collection add` -- scan + hash files, update manifest
+- [ ] `syncweb collection versions` -- create new version with changelog
+- [ ] `syncweb collection publish` -- blob ticket + gossip announcement
+- [ ] `syncweb package search` -- discover packages via gossip
+- [ ] `syncweb package info` -- detailed package metadata
+- [ ] `syncweb package install` -- fetch + verify + stage + atomic swap
+- [ ] `syncweb package upgrade` -- update to latest version
+- [ ] `syncweb package remove` -- clean up installed package
+- [ ] `syncweb package verify` -- integrity check against manifest
+- [ ] `syncweb package list` -- list locally installed packages
+- [ ] `syncweb package versions` -- list installed versions
+- [ ] `syncweb package switch` -- change active version
 - [ ] Multi-version coexistence (versioned dirs + `current` symlink)
 - [ ] Atomic upgrade (stage → verify → symlink swap → cleanup)
 
 ### Phase 6: Backup/Snapshot + Partial Fetch
-**Goal**: Content-addressed snapshots + robustness fetch
+Goal: Content-addressed snapshots + robustness fetch
 
 - [ ] `syncweb backup` - create content-addressed snapshot
 - [ ] `syncweb restore` - restore from snapshot
@@ -110,7 +110,7 @@
 - [ ] `syncweb health` - show seeding status per blob
 
 ### Phase 7: Polish + Integrations
-**Goal**: Full CLI parity + UX + advanced features
+Goal: Full CLI parity + UX + advanced features
 
 - [ ] All commands implemented
 - [ ] Rich output (tables, progress bars)
@@ -118,8 +118,8 @@
 - [ ] Shell completions
 - [ ] Integration tests
 - [ ] Documentation
-- [ ] `syncweb watch` — file watcher for real-time sync (lowest priority)
-- [ ] `syncweb stats` — bandwidth accounting per folder/peer
-- [ ] `syncweb verify` — integrity verification (re-check all local blobs)
+- [ ] `syncweb watch` -- file watcher for real-time sync (lowest priority)
+- [ ] `syncweb stats` -- bandwidth accounting per folder/peer
+- [ ] `syncweb verify` -- integrity verification (re-check all local blobs)
 - [ ] Sync schedules (global + per-folder overrides)
 - [ ] Platform settings files (suggested configs for laptop/server/phone)

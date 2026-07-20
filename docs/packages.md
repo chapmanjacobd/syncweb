@@ -12,20 +12,20 @@ Policies are resolved in this order:
 An explicit value at a more-specific scope overrides an inherited value. Security-sensitive settings are monotonic: a child may restrict publication, indexing, replication, or access, but cannot silently broaden a parent policy.
 
 ### Explicit Policy Levers (Iroh-Native Options)
-- **`access`**: 
+- `access`: 
   - `"capability"`: Strict access control. Requires an iroh-docs `DocTicket` or `NamespaceSecret` to discover and fetch.
   - `"public_ticket"`: Generates an iroh-blobs `BlobTicket`. Anyone with this ticket can fetch the blob without authentication.
-- **`encryption`**: 
+- `encryption`: 
   - `"plaintext"`: Standard BLAKE3 hashing. Data is stored locally in plaintext and served over encrypted QUIC tunnels.
   - `"encrypted"`: Local payloads are encrypted before being hashed into the blob store (e.g. for untrusted mirrors).
-- **`searchable`**: `true` (announces signed metadata to the DHT/gossip topic for discovery by peers/indexers) or `false`.
-- **`pinning`**: `true` (prevents garbage collection of publicly shared blobs) or `false`.
-- **`replication`**: `"disabled"` (do not replicate further), `"enabled"` (standard).
+- `searchable`: `true` (announces signed metadata to the DHT/gossip topic for discovery by peers/indexers) or `false`.
+- `pinning`: `true` (prevents garbage collection of publicly shared blobs) or `false`.
+- `replication`: `"disabled"` (do not replicate further), `"enabled"` (standard).
 
 Iroh-blobs natively supports public tickets for unauthenticated reads. This is exposed by setting `access = "public_ticket"`.
 
 ### Content Pinning (GC Prevention)
-iroh-blobs has garbage collection that removes unreferenced blobs. For public folders, we must **pin** blobs to prevent GC from deleting them (`pinning = true`):
+iroh-blobs has garbage collection that removes unreferenced blobs. For public folders, we must pin blobs to prevent GC from deleting them (`pinning = true`):
 
 ```rust
 impl SyncwebFolder {
@@ -174,45 +174,45 @@ struct EffectivePolicy {
 Implement `resolve(defaults, network, folder, file)` as a pure function over typed `PolicyPatch` values. Table-driven unit tests should enumerate every parent/child combination for security-sensitive fields. Use restrictive lattices where the domain supports one, for example access `"public_ticket"` > `"capability"` with child inheritance computed by `min` unless an audited promotion is explicitly supplied. Write promotion events before publishing side effects, then bind the resulting audit ID to the catalog or gateway operation.
 
 ### Use Cases
-- **Public datasets** - Share large datasets via single URL (`access="public_ticket"`)
-- **Software distribution** - Verified binary distribution with range requests
-- **Data packages** - Versioned datasets with update tracking
-- **Read-only mirrors** - One-way sync for backups/archives
+- Public datasets - Share large datasets via single URL (`access="public_ticket"`)
+- Software distribution - Verified binary distribution with range requests
+- Data packages - Versioned datasets with update tracking
+- Read-only mirrors - One-way sync for backups/archives
 
 ## Living Folders (Mutable Heads)
 
 ### 1. The Living Folder Model
-Rather than requiring users to manually manage "versions" (e.g., `v0.1.0`, `v0.2.0`) and trigger explicit upgrade commands, `syncweb` treats all shared collections as **Living Folders**. 
+Rather than requiring users to manually manage "versions" (e.g., `v0.1.0`, `v0.2.0`) and trigger explicit upgrade commands, `syncweb` treats all shared collections as Living Folders. 
 This provides the seamless background-sync experience of traditional Syncthing or Dropbox.
 
 ### 2. Signed Mutable Pointers
-To achieve living folders over immutable BLAKE3 blobs, we use **Signed Mutable Pointers** (conceptually from PROPOSALS 2 & 4).
-* **The Pointer:** A cryptographic signed record containing a monotonically increasing sequence number and a `ManifestHash`.
-* **The URI:** Users share a mutable link: `syncweb://name/<publisher_pubkey>/<folder_alias>`
-* **Resolution:** When a client resolves this URI, they fetch the latest signed pointer from the publisher or the DHT, extract the `ManifestHash`, and sync the underlying blobs.
+To achieve living folders over immutable BLAKE3 blobs, we use Signed Mutable Pointers (conceptually from PROPOSALS 2 & 4).
+* The Pointer: A cryptographic signed record containing a monotonically increasing sequence number and a `ManifestHash`.
+* The URI: Users share a mutable link: `syncweb://name/<publisher_pubkey>/<folder_alias>`
+* Resolution: When a client resolves this URI, they fetch the latest signed pointer from the publisher or the DHT, extract the `ManifestHash`, and sync the underlying blobs.
 
 ### 3. Sync & Publish Modes
 Folders can operate in one of two modes depending on how frequently the publisher wants to push changes:
 
-**Auto-publish (Default / "Syncthing" mode):**
+Auto-publish (Default / "Syncthing" mode):
 When the publisher adds, modifies, or deletes files in their local folder:
 1. The local iroh-docs namespace automatically updates.
 2. A new `ManifestHash` is generated.
 3. The publisher automatically signs a new pointer with `sequence + 1` pointing to the new `ManifestHash`.
 4. Subscribers following the `syncweb://name/...` pointer detect the new sequence number via Gossip/DHT and begin syncing the delta automatically.
 
-**Manual publish ("Git-style" explicit mode):**
+Manual publish ("Git-style" explicit mode):
 Useful for long-running edits where the publisher doesn't want to sync broken state to subscribers.
 1. `publish_mode = "manual"` is set on the folder policy.
-2. Local filesystem changes are indexed locally (staging), generating new immutable blobs, but the **Signed Mutable Pointer is NOT updated**.
+2. Local filesystem changes are indexed locally (staging), generating new immutable blobs, but the Signed Mutable Pointer is NOT updated.
 3. Subscribers continue to see and sync the previous stable version.
 4. When ready, the publisher explicitly runs `syncweb publish <folder>`. This atomically advances the mutable pointer, pushing the batch of changes to subscribers all at once.
 
 ### 4. Discovery via Ephemeral Gossip
 There is no persistent global catalog. A folder is only discoverable if a node is actively seeding it.
-* **Topic:** Publishers broadcast a `FolderAnnouncement` over the `syncweb/discovery` gossip topic.
-* **Announcement:** Contains the folder's descriptive metadata (JSON) and the current Mutable Head pointer.
-* **Search:** Clients can listen to the gossip topic to populate a local, ephemeral search index of available public folders.
+* Topic: Publishers broadcast a `FolderAnnouncement` over the `syncweb/discovery` gossip topic.
+* Announcement: Contains the folder's descriptive metadata (JSON) and the current Mutable Head pointer.
+* Search: Clients can listen to the gossip topic to populate a local, ephemeral search index of available public folders.
 
 ## Why not APT/Debian packaging?
 
@@ -225,9 +225,9 @@ There is no persistent global catalog. A folder is only discoverable if a node i
 | HTTP repository mirrors | Gossip announcements + P2P blob transfer |
 | rsync `--compare-dest` delta sync | Bao tree range requests (more granular) |
 | `postinst`/`postrm` scripts | Native lazy fetch + atomic symlink swap |
-| `dpkg-deb --build` | No build step — files are the package |
+| `dpkg-deb --build` | No build step -- files are the package |
 | Platform: Debian/Ubuntu only | Platform: any OS with Rust |
-| Central repository server | P2P — any peer can serve |
+| Central repository server | P2P -- any peer can serve |
 
 ### 1. Collection & Package Manifests
 
@@ -268,11 +268,11 @@ struct CollectionHead {
 }
 ```
 
-**Manifest storage**: Manifests are stored in `iroh-blobs`. Their hashes and mutable heads (`CollectionHead`) are published through `iroh-docs`. The manifest's own BLAKE3 hash serves as the version identifier — content-addressed, tamper-proof, verifiable.
+Manifest storage: Manifests are stored in `iroh-blobs`. Their hashes and mutable heads (`CollectionHead`) are published through `iroh-docs`. The manifest's own BLAKE3 hash serves as the version identifier -- content-addressed, tamper-proof, verifiable.
 
-**Lineage tracking**: The `parent` field creates a linked list of versions. Each version points to its predecessor, forming a lineage chain.
+Lineage tracking: The `parent` field creates a linked list of versions. Each version points to its predecessor, forming a lineage chain.
 
-**Package Profile**: Packages are just collections with dependencies. An adapter layer converts traditional package workflows into the generalized model.
+Package Profile: Packages are just collections with dependencies. An adapter layer converts traditional package workflows into the generalized model.
 
 ### 2. Publishing Workflow
 
@@ -298,7 +298,7 @@ syncweb collection diff col_climate 1.0.0 1.1.0
 # Output: syncweb://package/<node-ticket>/<namespace-id>?v=0.2.0
 ```
 
-**Implementation**:
+Implementation:
 
 ```rust
 impl SyncwebFolder {
@@ -470,7 +470,7 @@ impl PackageTicket {
 }
 ```
 
-**CLI:**
+CLI:
 
 ```bash
 # Search available packages (queries gossip + local cache)
@@ -544,7 +544,7 @@ impl PackageState {
 }
 ```
 
-**CLI:**
+CLI:
 
 ```bash
 # Install a package from a ticket
@@ -555,7 +555,7 @@ syncweb package install syncweb://package/<node-id>?v=1.2.0 /path/to/install
 # Verifying manifest hash... OK
 # Installing to /path/to/install/1.2.0/
 # Linking current → 1.2.0
-# Done — climate-hourly 1.2.0 installed
+# Done -- climate-hourly 1.2.0 installed
 
 # Upgrade to latest version
 syncweb package upgrade climate-hourly
@@ -628,21 +628,21 @@ struct VerifyFailure {
 }
 ```
 
-**CLI:**
+CLI:
 
 ```bash
 # Verify installed package integrity
 syncweb package verify climate-hourly
-# Output: OK — 47 files verified, all hashes match
+# Output: OK -- 47 files verified, all hashes match
 
 # Verify with verbose output
 syncweb package verify climate-hourly --verbose
 # Output:
-# climate-hourly 1.2.0 — verifying 47 files...
+# climate-hourly 1.2.0 -- verifying 47 files...
 #   data/observations.csv   OK (sha3: a1b2c3...)
 #   data/metadata.json      OK (sha3: d4e5f6...)
 #   ...
-# OK — 47 files verified, all hashes match
+# OK -- 47 files verified, all hashes match
 
 # Verify all installed packages
 syncweb package verify --all
@@ -652,7 +652,7 @@ syncweb package verify --all
 
 Optional side-by-side version directories. Replaces dapt's `/var/lib/dapt/store/<product>/<version>/`
 layout. Content-addressed blob storage means identical files between versions share underlying
-storage — no duplication.
+storage -- no duplication.
 
 ```text
 ~/.local/share/syncweb/packages/
@@ -684,7 +684,7 @@ impl PackageState {
 }
 ```
 
-**CLI:**
+CLI:
 
 ```bash
 # List installed versions
@@ -698,7 +698,7 @@ syncweb package versions climate-hourly
 # Switch active version
 syncweb package switch climate-hourly 1.0.0
 # Symlink swap: current → 1.0.0/
-# Instant — no data movement needed
+# Instant -- no data movement needed
 ```
 
 ### 7. Atomic Upgrades
@@ -706,16 +706,16 @@ syncweb package switch climate-hourly 1.0.0
 Same principle as dapt's `mv -Tf` symlink swap, but with content-addressed storage providing
 additional safety guarantees.
 
-**Upgrade sequence:**
+Upgrade sequence:
 
-1. **Fetch**: Download new version's blobs from publisher (or peers)
-2. **Stage**: Write files to temporary directory (`/tmp/syncweb-stage-<hash>/`)
-3. **Verify**: Check every file's BLAKE3 hash against the new manifest
-4. **Swap**: Atomic `rename()` of staging dir to `<name>/<new-version>/`
-5. **Link**: Atomic `rename()` of `current` symlink to new version dir
-6. **Cleanup**: Delete old version directory (if not kept for coexistence)
+1. Fetch: Download new version's blobs from publisher (or peers)
+2. Stage: Write files to temporary directory (`/tmp/syncweb-stage-<hash>/`)
+3. Verify: Check every file's BLAKE3 hash against the new manifest
+4. Swap: Atomic `rename()` of staging dir to `<name>/<new-version>/`
+5. Link: Atomic `rename()` of `current` symlink to new version dir
+6. Cleanup: Delete old version directory (if not kept for coexistence)
 
-If any step fails, the old version remains active. Rollback is instant — just re-swap the symlink.
+If any step fails, the old version remains active. Rollback is instant -- just re-swap the symlink.
 
 ```rust
 impl SyncwebFolder {
@@ -797,7 +797,7 @@ syncweb:    Transfers 10 changed files + only changed byte ranges
                    within partially-modified files
 ```
 
-**Implementation**: Transparent — iroh-blobs handles delta sync automatically. When a blob is
+Implementation: Transparent -- iroh-blobs handles delta sync automatically. When a blob is
 re-added with the same path but different content, iroh-blobs stores only the new content.
 The Bao tree structure enables range requests, so even within a single large file, only the
 changed byte ranges need to be transferred.
@@ -819,7 +819,7 @@ syncweb://package/<node-id>/<namespace-id>              # latest version
 syncweb://package/<node-id>/<namespace-id>?hash=<hash>  # specific manifest hash
 ```
 
-**CLI:**
+CLI:
 
 ```bash
 # Install from ticket
@@ -831,10 +831,10 @@ syncweb package publish ./my-dataset
 ```
 
 ### Use Cases
-- **Research datasets** - Versioned, reproducible data packages with full lineage
-- **ML training data** - Versioned datasets with delta sync for large files
-- **Software releases** - Binary packages with integrity verification
-- **Configuration packages** - Shared configs with version rollback
-- **Media libraries** - Large file collections with incremental updates
+- Research datasets - Versioned, reproducible data packages with full lineage
+- ML training data - Versioned datasets with delta sync for large files
+- Software releases - Binary packages with integrity verification
+- Configuration packages - Shared configs with version rollback
+- Media libraries - Large file collections with incremental updates
 
 ---

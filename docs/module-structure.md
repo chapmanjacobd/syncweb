@@ -286,7 +286,7 @@ impl ParallelExporter {
 
 ### CLI Integration
 
-Parallel scanning is **default on**. Streaming output is default unless `--sort` is used (which requires collecting all results).
+Parallel scanning is default on. Streaming output is default unless `--sort` is used (which requires collecting all results).
 
 ```bash
 # Parallel scan (default, auto-detect CPU count)

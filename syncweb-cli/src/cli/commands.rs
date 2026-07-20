@@ -30,6 +30,16 @@ pub enum Command {
         #[command(subcommand)]
         command: NetworkCommand,
     },
+    #[command(about = "Generate shell completions")]
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    #[command(about = "Generate manpages")]
+    Manpages {
+        #[arg(default_value = "man")]
+        dir: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]

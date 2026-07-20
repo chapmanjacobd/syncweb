@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::{
@@ -14,6 +14,7 @@ use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
 use super::SyncMode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum Capability {
     Admin,
     Write,
@@ -21,7 +22,8 @@ pub enum Capability {
 }
 
 impl Capability {
-    pub fn can_write(self) -> bool {
+    #[must_use]
+    pub const fn can_write(self) -> bool {
         matches!(self, Self::Admin | Self::Write)
     }
 }
@@ -38,6 +40,7 @@ pub struct SyncwebFolder {
 }
 
 impl SyncwebFolder {
+    #[must_use]
     pub fn new(
         doc: Doc,
         author: AuthorId,
@@ -45,9 +48,10 @@ impl SyncwebFolder {
         docs_engine: DocsEngine,
         sync_mode: SyncMode,
     ) -> Self {
+        let namespace_id = doc.id();
         Self {
-            namespace_id: doc.id(),
             doc,
+            namespace_id,
             author,
             blob_store,
             docs_engine,
@@ -56,19 +60,23 @@ impl SyncwebFolder {
         }
     }
 
-    pub fn namespace_id(&self) -> NamespaceId {
+    #[must_use]
+    pub const fn namespace_id(&self) -> NamespaceId {
         self.namespace_id
     }
 
-    pub fn author(&self) -> AuthorId {
+    #[must_use]
+    pub const fn author(&self) -> AuthorId {
         self.author
     }
 
-    pub fn mode(&self) -> SyncMode {
+    #[must_use]
+    pub const fn mode(&self) -> SyncMode {
         self.sync_mode
     }
 
-    pub fn doc(&self) -> &Doc {
+    #[must_use]
+    pub const fn doc(&self) -> &Doc {
         &self.doc
     }
 
@@ -81,28 +89,28 @@ impl SyncwebFolder {
     }
 
     pub async fn can_write_as(&self, node_id: PublicKey) -> bool {
-        self.sync_mode.can_write()
-            && self
-                .capability(node_id)
-                .await
-                .is_some_and(Capability::can_write)
+        self.sync_mode.can_write() && self.capability(node_id).await.is_some_and(Capability::can_write)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the blob fails to be stored or set.
     pub async fn set_blob(&self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Result<Hash> {
         if !self.sync_mode.can_write() {
-            bail!(
-                "folder mode {} does not permit local writes",
-                self.sync_mode
-            );
+            bail!("folder mode {} does not permit local writes", self.sync_mode);
         }
-        let value = value.as_ref();
-        let hash = self.blob_store.add_bytes(value).await?;
+        let value_bytes = value.as_ref();
+        let hash = self.blob_store.add_bytes(value_bytes).await?;
+        let len = u64::try_from(value_bytes.len()).context("blob size exceeds u64::MAX")?;
         self.docs_engine
-            .set_blob(&self.doc, self.author, key, hash, value.len() as u64)
+            .set_blob(&self.doc, self.author, key, hash, len)
             .await?;
         Ok(hash)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the folder ticket cannot be created.
     pub async fn ticket(&self, endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
         let mode = if writable && self.sync_mode.can_write() {
             ShareMode::Write

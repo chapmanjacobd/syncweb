@@ -237,7 +237,7 @@ syncweb schedule folder media --active "01:00-05:00"
 
 ## Platform Settings Files
 
-Suggested global configuration files for different use cases. These are not a "template" subcommand — just example configs users can copy.
+Suggested global configuration files for different use cases. These are not a "template" subcommand -- just example configs users can copy.
 
 ### Profiles
 
@@ -419,6 +419,6 @@ syncweb watch --debounce 500ms ./documents          # Custom debounce
 syncweb watch --exclude ".git/" --exclude "node_modules/" ./documents
 ```
 
-**Priority**: Lowest — implement after all core features are stable.
+Priority: Lowest -- implement after all core features are stable.
 
 ---

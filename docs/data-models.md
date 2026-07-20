@@ -116,7 +116,7 @@ impl SyncwebFolder {
 | `sendonly` | `SyncMode::SendOnly` | Namespace key local only, share read cap |
 | `receiveonly` | `SyncMode::ReceiveOnly` | Import doc with read cap only |
 | `receiveencrypted` | `SyncMode::ReceiveEncrypted` | Encrypted blob store, no namespace key |
-| **NEW** `public_readonly` | `SyncMode::PublicReadOnly` | **Public blob ticket, no auth needed** |
+| NEW `public_readonly` | `SyncMode::PublicReadOnly` | Public blob ticket, no auth needed |
 
 ### 3. Capability System (replaces device + folder config)
 
@@ -255,7 +255,7 @@ struct SnapshotDiff {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Create a snapshot
 syncweb backup documents/ --description "before major edit"
@@ -279,11 +279,11 @@ syncweb snapshots diff documents/ a1b2c3d4 e5f6g7h8
 syncweb snapshots delete documents/ e5f6g7h8
 ```
 
-**Benefits:**
-- **Instant snapshots**: No data copying, just reference existing blobs
-- **Space efficient**: Multiple snapshots share unchanged blobs (deduplication)
-- **Portable**: Snapshots can be shared via tickets (like public folders)
-- **Verified**: BLAKE3 ensures snapshot integrity
+Benefits:
+- Instant snapshots: No data copying, just reference existing blobs
+- Space efficient: Multiple snapshots share unchanged blobs (deduplication)
+- Portable: Snapshots can be shared via tickets (like public folders)
+- Verified: BLAKE3 ensures snapshot integrity
 
 ### 6. Syncweb URL Format (unified scheme)
 
@@ -306,13 +306,13 @@ sync://<folder-id>/sub/path#<device-id>
 syncweb://node/<node-id>                        # Direct connection
 ```
 
-**Parsing priority:**
+Parsing priority:
 1. `syncweb://blob/` - Public blob access
 2. `syncweb://node/` - Direct node connection  
 3. `syncweb://<ticket>` - Doc ticket (folder access)
 4. `sync://` - Legacy format (auto-convert to iroh)
 
-Note: The `?r` suffix is cryptographically enforced — read tickets don't contain the `NamespaceSecret` needed for writes. Removing `?r` doesn't upgrade access, it changes the ticket type.
+Note: The `?r` suffix is cryptographically enforced -- read tickets don't contain the `NamespaceSecret` needed for writes. Removing `?r` doesn't upgrade access, it changes the ticket type.
 
 ### 7. Device Identity
 
@@ -330,7 +330,7 @@ impl DeviceId {
 
 ### 8. Partial Folder Fetch (Improve Network Robustness)
 
-When syncing a folder, some blobs may have many seeders while others are poorly replicated. `FetchFilter` supports `min_peers`/`max_peers` to preferentially download the **least-seeded blobs**, and `min_count`/`max_count` to limit how many blobs are fetched:
+When syncing a folder, some blobs may have many seeders while others are poorly replicated. `FetchFilter` supports `min_peers`/`max_peers` to preferentially download the least-seeded blobs, and `min_count`/`max_count` to limit how many blobs are fetched:
 
 ```rust
 /// Fetch strategy for a folder
@@ -371,7 +371,7 @@ impl SyncwebFolder {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Fetch everything (default)
 syncweb download audio/
@@ -396,8 +396,8 @@ syncweb health audio/
 #   i9j0k1l2  1 peer   15.1 MiB  audio/track03.flac
 ```
 
-**Benefits:**
-- **Network health**: Poorly-seeded blobs get copied to more peers
-- **Resilience**: Rare content becomes more available over time
-- **No central coordination**: Each node independently decides what to seed
-- **Efficient**: Uses existing peer tracker data, no extra protocol needed
+Benefits:
+- Network health: Poorly-seeded blobs get copied to more peers
+- Resilience: Rare content becomes more available over time
+- No central coordination: Each node independently decides what to seed
+- Efficient: Uses existing peer tracker data, no extra protocol needed

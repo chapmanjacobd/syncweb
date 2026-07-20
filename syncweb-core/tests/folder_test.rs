@@ -55,17 +55,8 @@ async fn create_join_list_and_drop_folder() {
     assert_eq!(joined.namespace_id(), folder.namespace_id());
     assert_eq!(second_manager.list().await.expect("list folders").len(), 1);
 
-    second_manager
-        .drop(joined.namespace_id())
-        .await
-        .expect("drop folder");
-    assert!(
-        second_manager
-            .list()
-            .await
-            .expect("list folders")
-            .is_empty()
-    );
+    second_manager.drop(joined.namespace_id()).await.expect("drop folder");
+    assert!(second_manager.list().await.expect("list folders").is_empty());
 
     first.stop().await.expect("stop first node");
     second.stop().await.expect("stop second node");
@@ -86,9 +77,7 @@ async fn modes_enforce_local_writes_and_capabilities() {
         .create(SyncMode::SendReceive)
         .await
         .expect("create writable folder");
-    writable
-        .grant(node.endpoint().id(), Capability::Write)
-        .await;
+    writable.grant(node.endpoint().id(), Capability::Write).await;
     assert!(writable.can_write_as(node.endpoint().id()).await);
     let hash = writable.set_blob("file", "data").await.expect("store blob");
     let entry = node

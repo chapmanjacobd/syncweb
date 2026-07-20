@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH join 1  "join " 
+.SH NAME
+join \- Join a folder from an Iroh document ticket
+.SH SYNOPSIS
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+.SH DESCRIPTION
+Join a folder from an Iroh document ticket
+.SH OPTIONS
+.TP
+\fB\-\-mode\fR \fI<MODE>\fR [default: receiveonly]
+
+.TP
+\fB\-\-relay\-fallback\fR
+Enable Syncthing relay fallback for this folder
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fITICKET\fR>
+
+.TP
+[\fIPATH\fR] [default: .]
+

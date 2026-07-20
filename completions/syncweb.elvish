@@ -1,0 +1,210 @@
+
+use builtin;
+use str;
+
+set edit:completion:arg-completer[syncweb] = {|@words|
+    fn spaces {|n|
+        builtin:repeat $n ' ' | str:join ''
+    }
+    fn cand {|text desc|
+        edit:complex-candidate $text &display=$text' '(spaces (- 14 (wcswidth $text)))$desc
+    }
+    var command = 'syncweb'
+    for word $words[1..-1] {
+        if (str:has-prefix $word '-') {
+            break
+        }
+        set command = $command';'$word
+    }
+    var completions = [
+        &'syncweb'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand version 'Show syncweb version information'
+            cand repl 'Start an interactive command shell'
+            cand create 'Create a synchronized folder'
+            cand join 'Join a folder from an Iroh document ticket'
+            cand accept 'Accept a locally available folder'
+            cand drop 'Remove a local folder replica'
+            cand folders 'List managed folders'
+            cand devices 'Show this device''s Iroh and Syncthing identities'
+            cand config 'Show or update local configuration'
+            cand network 'Network connectivity utilities'
+            cand completions 'Generate shell completions'
+            cand manpages 'Generate manpages'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;version'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;repl'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;create'= {
+            cand --mode 'mode'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;join'= {
+            cand --mode 'mode'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;accept'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;drop'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;folders'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;devices'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;config'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand set 'Set a configuration value'
+            cand show 'Show configuration, optionally limited to a section'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;config;set'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;config;show'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;config;help'= {
+            cand set 'Set a configuration value'
+            cand show 'Show configuration, optionally limited to a section'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;config;help;set'= {
+        }
+        &'syncweb;config;help;show'= {
+        }
+        &'syncweb;config;help;help'= {
+        }
+        &'syncweb;network'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand test-relay 'Test a Syncthing relay TCP connection'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;network;test-relay'= {
+            cand --relay-url 'relay-url'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;help'= {
+            cand test-relay 'Test a Syncthing relay TCP connection'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;network;help;test-relay'= {
+        }
+        &'syncweb;network;help;help'= {
+        }
+        &'syncweb;completions'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;manpages'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;help'= {
+            cand version 'Show syncweb version information'
+            cand repl 'Start an interactive command shell'
+            cand create 'Create a synchronized folder'
+            cand join 'Join a folder from an Iroh document ticket'
+            cand accept 'Accept a locally available folder'
+            cand drop 'Remove a local folder replica'
+            cand folders 'List managed folders'
+            cand devices 'Show this device''s Iroh and Syncthing identities'
+            cand config 'Show or update local configuration'
+            cand network 'Network connectivity utilities'
+            cand completions 'Generate shell completions'
+            cand manpages 'Generate manpages'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;help;version'= {
+        }
+        &'syncweb;help;repl'= {
+        }
+        &'syncweb;help;create'= {
+        }
+        &'syncweb;help;join'= {
+        }
+        &'syncweb;help;accept'= {
+        }
+        &'syncweb;help;drop'= {
+        }
+        &'syncweb;help;folders'= {
+        }
+        &'syncweb;help;devices'= {
+        }
+        &'syncweb;help;config'= {
+            cand set 'Set a configuration value'
+            cand show 'Show configuration, optionally limited to a section'
+        }
+        &'syncweb;help;config;set'= {
+        }
+        &'syncweb;help;config;show'= {
+        }
+        &'syncweb;help;network'= {
+            cand test-relay 'Test a Syncthing relay TCP connection'
+        }
+        &'syncweb;help;network;test-relay'= {
+        }
+        &'syncweb;help;completions'= {
+        }
+        &'syncweb;help;manpages'= {
+        }
+        &'syncweb;help;help'= {
+        }
+    ]
+    $completions[$command]
+}

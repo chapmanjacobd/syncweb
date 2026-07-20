@@ -40,7 +40,7 @@ impl OfflineQueue {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Show pending offline changes
 syncweb pending
@@ -57,13 +57,13 @@ syncweb pending
 ### Conflict Resolution UX
 When two devices edit the same file offline, iroh-docs detects the conflict (two entries for the same key from different authors). We provide automatic resolution with clear UX:
 
-**Resolution strategy** (default):
+Resolution strategy (default):
 - Best-effort: at decode time, attempt to read both versions as text (UTF-8)
-- If both versions are decodable as text **and** the generated diff is smaller than the latest LWW winner, save a diff file instead of the full file
+- If both versions are decodable as text and the generated diff is smaller than the latest LWW winner, save a diff file instead of the full file
 - Otherwise, save the full file (both versions kept)
 - The winning version always stays at the original path (LWW by timestamp)
 
-**File naming for conflicts:**
+File naming for conflicts:
 ```text
 # Diff saved (decodable text, diff smaller than winner)
 report.md            # Winner (newer timestamp)
@@ -153,7 +153,7 @@ impl Conflict {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Show conflicts
 syncweb conflicts
@@ -359,5 +359,5 @@ This approach:
 - Data is cached locally for fast access
 - Automatically updates as peers connect/disconnect
 - Used by `sort` command for niche/frecency/peers sorting
-- **Memory-efficient**: Bitmask presence tracking for 1000+ peers
-- **Adaptive eviction**: LRU or FIFO based on usage patterns
+- Memory-efficient: Bitmask presence tracking for 1000+ peers
+- Adaptive eviction: LRU or FIFO based on usage patterns

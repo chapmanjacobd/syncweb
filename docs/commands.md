@@ -3,7 +3,7 @@
 ## `find` Command Design
 
 Full-text search across folder entries with regex, glob, or exact substring matching,
-plus depth, size, time, extension, and type filters. Uses doc metadata only — no blob download needed.
+plus depth, size, time, extension, and type filters. Uses doc metadata only -- no blob download needed.
 
 ### Search Parameters
 
@@ -100,7 +100,7 @@ fn matches_all_constraints(p: &FindParams, entry: &DocEntry) -> bool {
 syncweb find '.*\.mp3$' music/
 
 # Glob search
-syncweb find --glob '**/*.mp3' music/
+syncweb find --glob '/*.mp3' music/
 
 # Fixed/exact search (substring)
 syncweb find --fixed-string 'beethoven' music/
@@ -122,7 +122,7 @@ syncweb find '*.iso' linux/ | syncweb download -
 syncweb find --print '*.mp3' audio/ | xargs -I{} syncweb download {}
 ```
 
-**Output** (simple, pipe-friendly):
+Output (simple, pipe-friendly):
 ```
 syncweb find '*.pdf' docs/
 docs/manual.pdf
@@ -191,7 +191,7 @@ enum StatFormat {
 syncweb stat docs/report.md
 ```
 
-**Output:**
+Output:
 ```
   Path: docs/report.md
   Size: 245760             Blocks: 12             regular file
@@ -235,9 +235,9 @@ Uses the PeerTracker for seed/availability data.
 enum SortCriterion {
     /// Number of peers/blobs
     Peers { reverse: bool },
-    /// Niche: |num_peers - target| — find blobs with ~N seeders
+    /// Niche: |num_peers - target| -- find blobs with ~N seeders
     Niche { target: usize, reverse: bool },
-    /// Frecency: peers - (days_since_modified / weight) — popular + recent
+    /// Frecency: peers - (days_since_modified / weight) -- popular + recent
     Frecency { weight: f64, reverse: bool },
     /// File size
     Size { reverse: bool },
@@ -252,7 +252,7 @@ enum SortCriterion {
 enum AggregateField { Size, Modified }
 enum AggregateFunc { Sum, Mean, Median, Min, Max, Count }
 
-/// Sort engine — uses PeerTracker for availability data
+/// Sort engine -- uses PeerTracker for availability data
 struct Sorter {
     criteria: Vec<SortCriterion>,
     filters: Vec<SortFilter>,
@@ -338,7 +338,7 @@ impl IrohNode {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Create folder + output URL
 syncweb init ./documents
@@ -363,7 +363,7 @@ impl IrohNode {
 }
 ```
 
-**CLI:**
+CLI:
 ```bash
 # Show config
 syncweb config
@@ -405,38 +405,38 @@ syncweb config show filter
 | `version` | `version` | Show versions |
 | `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |
-| **NEW** | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
-| **NEW** | `subscribe` | Join public folder via ticket |
-| **NEW** | `public list` | List announced public folders |
-| **NEW** | `package init` | Initialize folder as data package |
-| **NEW** | `package add` | Scan + hash files, update manifest |
-| **NEW** | `package bump` | Create new version with changelog |
-| **NEW** | `package publish` | Blob ticket + gossip announcement |
-| **NEW** | `package search` | Discover packages via gossip |
-| **NEW** | `package info` | Detailed package metadata |
-| **NEW** | `package install` | Fetch + verify + install package |
-| **NEW** | `package upgrade` | Update to latest version |
-| **NEW** | `package remove` | Remove installed package |
-| **NEW** | `package verify` | Integrity check against manifest |
-| **NEW** | `package list` | List locally installed packages |
-| **NEW** | `package versions` | List installed versions |
-| **NEW** | `package switch` | Change active version |
-| **NEW** | `health` | Show seeding status per blob (well/under/unseeded) |
-| **NEW** | `backup` | Create content-addressed snapshot of folder |
-| **NEW** | `restore` | Restore folder from snapshot |
-| **NEW** | `snapshots` | List available snapshots |
-| **NEW** | `network create` | Create named network group |
-| **NEW** | `network ls` | List networks or network details |
-| **NEW** | `network join` | Join a network via ticket |
-| **NEW** | `network leave` | Leave a network |
-| **NEW** | `network invite` | Invite device to a network |
-| **NEW** | `network kick` | Remove device from a network |
-| **NEW** | `stats` | Bandwidth accounting per folder/peer |
-| **NEW** | `verify` | Integrity verification (re-check local blobs) |
-| **NEW** | `schedule` | Show/modify sync schedule |
-| **NEW** | `conflicts` | List/resolve file conflicts |
-| **NEW** | `watch` | File watcher for real-time sync (lowest priority) |
-| **NEW** | `network test-relay` | Test Syncthing relay connectivity |
+| NEW | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
+| NEW | `subscribe` | Join public folder via ticket |
+| NEW | `public list` | List announced public folders |
+| NEW | `package init` | Initialize folder as data package |
+| NEW | `package add` | Scan + hash files, update manifest |
+| NEW | `package bump` | Create new version with changelog |
+| NEW | `package publish` | Blob ticket + gossip announcement |
+| NEW | `package search` | Discover packages via gossip |
+| NEW | `package info` | Detailed package metadata |
+| NEW | `package install` | Fetch + verify + install package |
+| NEW | `package upgrade` | Update to latest version |
+| NEW | `package remove` | Remove installed package |
+| NEW | `package verify` | Integrity check against manifest |
+| NEW | `package list` | List locally installed packages |
+| NEW | `package versions` | List installed versions |
+| NEW | `package switch` | Change active version |
+| NEW | `health` | Show seeding status per blob (well/under/unseeded) |
+| NEW | `backup` | Create content-addressed snapshot of folder |
+| NEW | `restore` | Restore folder from snapshot |
+| NEW | `snapshots` | List available snapshots |
+| NEW | `network create` | Create named network group |
+| NEW | `network ls` | List networks or network details |
+| NEW | `network join` | Join a network via ticket |
+| NEW | `network leave` | Leave a network |
+| NEW | `network invite` | Invite device to a network |
+| NEW | `network kick` | Remove device from a network |
+| NEW | `stats` | Bandwidth accounting per folder/peer |
+| NEW | `verify` | Integrity verification (re-check local blobs) |
+| NEW | `schedule` | Show/modify sync schedule |
+| NEW | `conflicts` | List/resolve file conflicts |
+| NEW | `watch` | File watcher for real-time sync (lowest priority) |
+| NEW | `network test-relay` | Test Syncthing relay connectivity |
 
 ### New CLI Options (from iroh-willow)
 
@@ -503,7 +503,7 @@ syncweb network ls work
 syncweb network invite work <device-id>
 
 # Find with filters
-syncweb find --glob '**/*.mp3' music/
+syncweb find --glob '/*.mp3' music/
 syncweb find --type f --ext mp3 --min-size 10MB music/
 syncweb find 'report.*' --modified-within 7d
 

@@ -3,7 +3,7 @@ mod cli;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
     commands::{Command, ConfigCommand, NetworkCommand},
@@ -29,9 +29,8 @@ async fn main() -> Result<()> {
         Command::Version => print_version(),
         Command::Repl => run_repl()?,
         Command::Create(command) => {
-            std::fs::create_dir_all(&command.path).with_context(|| {
-                format!("failed to create folder path {}", command.path.display())
-            })?;
+            std::fs::create_dir_all(&command.path)
+                .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
             let node = open_node(&cli.data_dir).await?;
             let manager = FolderManager::new(&node);
             let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
@@ -41,14 +40,11 @@ async fn main() -> Result<()> {
             node.stop().await?;
         }
         Command::Join(command) => {
-            std::fs::create_dir_all(&command.path).with_context(|| {
-                format!("failed to create folder path {}", command.path.display())
-            })?;
+            std::fs::create_dir_all(&command.path)
+                .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
             let node = open_node(&cli.data_dir).await?;
             let manager = FolderManager::new(&node);
-            let folder = manager
-                .join(command.ticket, SyncMode::from_str(&command.mode)?)
-                .await?;
+            let folder = manager.join(command.ticket, SyncMode::from_str(&command.mode)?).await?;
             println!("joined: {}", folder.namespace_id());
             node.stop().await?;
         }
@@ -87,13 +83,9 @@ async fn main() -> Result<()> {
                 None | Some(ConfigCommand::Show { section: None }) => {
                     print_config(&config)?;
                 }
-                Some(ConfigCommand::Show {
-                    section: Some(section),
-                }) => {
+                Some(ConfigCommand::Show { section: Some(section) }) => {
                     if section != "bep" {
-                        anyhow::bail!(
-                            "unsupported config section {section:?}; supported section: bep"
-                        );
+                        anyhow::bail!("unsupported config section {section:?}; supported section: bep");
                     }
                     println!("{}", toml::to_string_pretty(&config.bep)?);
                 }
@@ -116,6 +108,41 @@ async fn main() -> Result<()> {
                 .connect_relay(DeviceId::from_node_id(identity.node_id()))
                 .await?;
             println!("relay reachable: {relay_url}");
+        }
+        Command::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "syncweb", &mut std::io::stdout());
+        }
+        Command::Manpages { dir } => {
+            std::fs::create_dir_all(&dir)?;
+            let cmd = Cli::command();
+
+            // Generate main man page
+            let man = clap_mangen::Man::new(cmd.clone());
+            let mut buffer = Vec::default();
+            man.render(&mut buffer)?;
+            std::fs::write(dir.join("syncweb.1"), buffer)?;
+            println!("Generated: syncweb.1");
+
+            // Generate subcommand pages
+            for subcmd in cmd.get_subcommands() {
+                let name = subcmd.get_name();
+                if name == "help" || name == "completions" || name == "manpages" {
+                    continue;
+                }
+
+                // clap_mangen uses the subcommand's name directly in the man page.
+                // We should build a new command for the subpage, or just render it.
+                // Wait, in nofs, we did `let man = clap_mangen::Man::new(subcmd.clone());`
+                // But we also need to change the file name to syncweb-{name}.1
+                let subcmd_man = clap_mangen::Man::new(subcmd.clone());
+                let mut subcmd_buffer = Vec::default();
+                subcmd_man.render(&mut subcmd_buffer)?;
+                let filename = format!("syncweb-{name}.1");
+                std::fs::write(dir.join(&filename), subcmd_buffer)?;
+                println!("Generated: {filename}");
+            }
+
+            println!("manpages generated in {}", dir.display());
         }
     }
     Ok(())

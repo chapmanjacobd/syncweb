@@ -24,18 +24,11 @@ impl Drop for TestDirectory {
     }
 }
 
-async fn test_node(
-    directory: &TestDirectory,
-    name: &str,
-    relay_map: Option<iroh::RelayMap>,
-) -> IrohNode {
+async fn test_node(directory: &TestDirectory, name: &str, relay_map: Option<iroh::RelayMap>) -> IrohNode {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
     let relay_mode = match relay_map {
-        Some(map) => RelayMode::Custom {
-            map,
-            insecure: true,
-        },
+        Some(map) => RelayMode::Custom { map, insecure: true },
         None => RelayMode::Default,
     };
     IrohNode::new(identity, root.join("data"), relay_mode)
@@ -47,11 +40,7 @@ async fn test_node(
 async fn test_create_namespace() {
     let directory = TestDirectory::new();
     let node = test_node(&directory, "node", None).await;
-    let doc = node
-        .docs_engine()
-        .create_namespace()
-        .await
-        .expect("create namespace");
+    let doc = node.docs_engine().create_namespace().await.expect("create namespace");
     assert!(!doc.id().to_string().is_empty());
     node.stop().await.expect("stop node");
 }
@@ -85,11 +74,7 @@ async fn test_watch_entries() {
     let doc = node.docs_engine().create_namespace().await.unwrap();
     let author = node.docs_engine().author().await.unwrap();
 
-    let mut events = node
-        .docs_engine()
-        .watch(&doc)
-        .await
-        .expect("watch document");
+    let mut events = node.docs_engine().watch(&doc).await.expect("watch document");
 
     node.docs_engine()
         .set(&doc, author, b"key2", b"value2")
@@ -105,7 +90,7 @@ async fn test_watch_entries() {
         Ok(iroh_docs::engine::LiveEvent::InsertLocal { entry }) => {
             assert_eq!(entry.key(), b"key2".as_slice());
         }
-        _ => panic!("unexpected event: {:?}", event),
+        _ => panic!("unexpected event: {event:?}"),
     }
 
     node.stop().await.expect("stop node");

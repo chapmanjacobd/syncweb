@@ -24,6 +24,7 @@ pub struct FolderManager {
 }
 
 impl FolderManager {
+    #[must_use]
     pub fn new(node: &IrohNode) -> Self {
         Self {
             endpoint_addr: node.endpoint().addr(),
@@ -34,30 +35,34 @@ impl FolderManager {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the folder namespace cannot be created or initialized.
     pub async fn create(&self, mode: SyncMode) -> Result<SyncwebFolder> {
         let doc = self.docs_engine.create_namespace().await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         folder.grant(self.node_id, Capability::Admin).await;
-        self.folders
-            .write()
-            .await
-            .insert(folder.namespace_id(), folder.clone());
+        self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         Ok(folder)
     }
 
-    pub async fn join(&self, ticket: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
-        let ticket = DocTicket::from_str(ticket.as_ref()).context("invalid folder ticket")?;
+    /// # Errors
+    ///
+    /// Returns an error if the folder ticket cannot be joined or parsed.
+    pub async fn join(&self, ticket_str: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
+        let ticket = DocTicket::from_str(ticket_str.as_ref()).context("invalid folder ticket")?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
-        self.folders
-            .write()
-            .await
-            .insert(folder.namespace_id(), folder.clone());
+        self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         Ok(folder)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the folder namespace cannot be accepted.
     pub async fn accept(&self, namespace_id: NamespaceId) -> Result<SyncwebFolder> {
-        if let Some(folder) = self.folders.read().await.get(&namespace_id).cloned() {
+        let existing_folder = self.folders.read().await.get(&namespace_id).cloned();
+        if let Some(folder) = existing_folder {
             return Ok(folder);
         }
         let doc = self
@@ -66,19 +71,22 @@ impl FolderManager {
             .await?
             .context("folder is not available locally")?;
         let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
-        self.folders
-            .write()
-            .await
-            .insert(namespace_id, folder.clone());
+        self.folders.write().await.insert(namespace_id, folder.clone());
         Ok(folder)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the folder namespace cannot be dropped.
     pub async fn drop(&self, namespace_id: NamespaceId) -> Result<()> {
         self.docs_engine.drop_namespace(namespace_id).await?;
         self.folders.write().await.remove(&namespace_id);
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the folders cannot be listed.
     pub async fn list(&self) -> Result<Vec<SyncwebFolder>> {
         let mut documents = self.docs_engine.inner().list().await?;
         let mut listed = Vec::new();
@@ -106,6 +114,9 @@ impl FolderManager {
         Ok(self.folders.read().await.values().cloned().collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the ticket cannot be generated.
     pub async fn ticket(&self, namespace_id: NamespaceId, writable: bool) -> Result<DocTicket> {
         let folder = self
             .folders

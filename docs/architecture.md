@@ -2,12 +2,12 @@
 
 ## Networks (Multi-Folder Groups)
 
-A **Network** is a named group of folders + devices under a common gossip topic.
+A Network is a named group of folders + devices under a common gossip topic.
 Replaces Syncthing's implicit cluster config with an explicit, shareable abstraction.
 
-- **Network Gossip Topic**: `syncweb/net/<network_id>` (derived from network name)
-- **Membership**: All devices in the network subscribe to this topic
-- **Folders**: All folders in the network share the topic for discovery and auto-join
+- Network Gossip Topic: `syncweb/net/<network_id>` (derived from network name)
+- Membership: All devices in the network subscribe to this topic
+- Folders: All folders in the network share the topic for discovery and auto-join
 
 ```rust
 /// A named group of folders and devices sharing a gossip topic
@@ -59,13 +59,13 @@ impl NetworkManager {
 }
 ```
 
-**Network Ticket:**
+Network Ticket:
 ```
 syncweb://network/<node-id>/<network-id>
 syncweb://network/<node-id>/<network-id>?secret=<shared-secret>
 ```
 
-**CLI:**
+CLI:
 ```bash
 syncweb network create <name>              # Create new network
 syncweb network ls [<name>]                 # List networks or network details
@@ -77,11 +77,11 @@ syncweb create --network <name> <path>      # Add folder to network
 syncweb join --network <name> <url>         # Join folder in network context
 ```
 
-**Use cases:**
-- **Team workspace**: `syncweb network create work`, then `syncweb create --network work ./docs`
-- **Multi-folder sharing**: Share all project folders via single network invite
-- **Departments**: Separate networks for engineering, design, marketing
-- **Home/Plex**: Personal network for media + documents + backups
+Use cases:
+- Team workspace: `syncweb network create work`, then `syncweb create --network work ./docs`
+- Multi-folder sharing: Share all project folders via single network invite
+- Departments: Separate networks for engineering, design, marketing
+- Home/Plex: Personal network for media + documents + backups
 
 Migration: Single-device users skip networks. Multi-folder multi-device users adopt them naturally.
 
@@ -134,7 +134,7 @@ impl Actor {
 }
 ```
 
-**Key insight**: Storage I/O (database writes, file operations) runs in a dedicated thread, keeping the async runtime responsive for network operations.
+Key insight: Storage I/O (database writes, file operations) runs in a dedicated thread, keeping the async runtime responsive for network operations.
 
 ### 2. SessionMode (ReconcileOnce vs Continuous)
 
@@ -161,7 +161,7 @@ impl SessionMode {
 }
 ```
 
-**Use case**: `ReconcileOnce` for `download` command (fetch specific files, then stop), `Continuous` for background sync.
+Use case: `ReconcileOnce` for `download` command (fetch specific files, then stop), `Continuous` for background sync.
 
 ### 3. IntentHandle as Stream
 
@@ -208,7 +208,7 @@ impl Stream for IntentHandle {
 }
 ```
 
-**Use case**: Every sync operation returns an `IntentHandle` that can be `.await`ed for completion or streamed for progress.
+Use case: Every sync operation returns an `IntentHandle` that can be `.await`ed for completion or streamed for progress.
 
 ### 4. PayloadForm (Data Formatting)
 
@@ -246,7 +246,7 @@ impl PayloadForm {
 }
 ```
 
-**Use case**: Allow users to choose metadata format (JSON for debugging, raw for efficiency).
+Use case: Allow users to choose metadata format (JSON for debugging, raw for efficiency).
 
 ### 5. SubscribeParams (Subscription Filtering)
 
@@ -300,7 +300,7 @@ impl SubscribeParams {
 }
 ```
 
-**Use case**: `subscribe` command uses `ingest_only: true` to only show new files, not existing ones.
+Use case: `subscribe` command uses `ingest_only: true` to only show new files, not existing ones.
 
 ### 6. AreaOfInterest with Limits (max_size, max_count)
 
@@ -355,7 +355,7 @@ impl AreaOfInterest {
 }
 ```
 
-**Use case**: `download --limit 10` creates `AreaOfInterest::with_count_limit(area, 10)`, stops after 10 entries.
+Use case: `download --limit 10` creates `AreaOfInterest::with_count_limit(area, 10)`, stops after 10 entries.
 
 ### 7. Deleted Files Tracking (PruneEvent)
 
@@ -419,7 +419,7 @@ impl DeletedTracker {
 }
 ```
 
-**Use case**: Track files that were synced but later deleted, enabling "undelete" or audit trails.
+Use case: Track files that were synced but later deleted, enabling "undelete" or audit trails.
 
 ### 8. Simplified SpaceTicket
 
@@ -484,7 +484,7 @@ impl SpaceTicket {
 }
 ```
 
-**Use case**: `syncweb publish --limit 10 --size 1GB` creates a limited ticket.
+Use case: `syncweb publish --limit 10 --size 1GB` creates a limited ticket.
 
 ### 9. IntentHandle Usage Examples
 

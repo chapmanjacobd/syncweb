@@ -99,24 +99,24 @@
 
 ## Success Criteria
 
-1. **Functional parity**: All syncweb-py commands work (create, join, accept, drop, ls, find, sort, stat, download, devices, folders, automatic, start, shutdown, version, repl)
-2. **Performance**: Faster sync, lower resource usage than Syncthing
-3. **Public folders**: `publish`/`subscribe` work end-to-end
-4. **Data versioning**: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)
-5. **Networks**: `network create/join/invite/kick` work across devices
-6. **Syncthing relay**: Two syncweb nodes can communicate via Syncthing relay when direct QUIC fails
-7. **UX**: Single binary, no daemon, config file optional
-8. **Reliability**: No data loss, verified transfers, BLAKE3 integrity on all transfers
-9. **Conflict resolution**: Automatic LWW for text, keep-both for binary, older version renamed
-10. **Parallel operations**: 4-6x speedup for ls, import, export (default on)
-11. **Memory efficiency**: PeerTracker handles 1000+ peers without OOM
-12. **Network robustness**: Filter-based partial fetch improves seeder counts for rare content
-13. **Cache efficiency**: Age-based eviction prevents unbounded memory growth
-14. **Find parity**: regex/glob/exact search with all syncweb-py filter options
-15. **Sort parity**: niche/frecency/peers/random sorting with folder aggregates
-16. **Stat parity**: detailed file info with availability, version vectors, local/global diffs
-17. **Logging**: Structured tracing with configurable levels and log rotation
-18. **Schedules**: Global + per-folder bandwidth scheduling works
+1. Functional parity: All syncweb-py commands work (create, join, accept, drop, ls, find, sort, stat, download, devices, folders, automatic, start, shutdown, version, repl)
+2. Performance: Faster sync, lower resource usage than Syncthing
+3. Public folders: `publish`/`subscribe` work end-to-end
+4. Data versioning: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)
+5. Networks: `network create/join/invite/kick` work across devices
+6. Syncthing relay: Two syncweb nodes can communicate via Syncthing relay when direct QUIC fails
+7. UX: Single binary, no daemon, config file optional
+8. Reliability: No data loss, verified transfers, BLAKE3 integrity on all transfers
+9. Conflict resolution: Automatic LWW for text, keep-both for binary, older version renamed
+10. Parallel operations: 4-6x speedup for ls, import, export (default on)
+11. Memory efficiency: PeerTracker handles 1000+ peers without OOM
+12. Network robustness: Filter-based partial fetch improves seeder counts for rare content
+13. Cache efficiency: Age-based eviction prevents unbounded memory growth
+14. Find parity: regex/glob/exact search with all syncweb-py filter options
+15. Sort parity: niche/frecency/peers/random sorting with folder aggregates
+16. Stat parity: detailed file info with availability, version vectors, local/global diffs
+17. Logging: Structured tracing with configurable levels and log rotation
+18. Schedules: Global + per-folder bandwidth scheduling works
 
 
 ```console

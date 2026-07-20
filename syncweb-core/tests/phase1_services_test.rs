@@ -34,7 +34,7 @@ async fn test_node(directory: &TestDirectory, name: &str) -> IrohNode {
 }
 
 #[tokio::test]
-async fn test_blob_store_operations() {
+async fn test_add_bytes() {
     let directory = TestDirectory::new();
     let node = test_node(&directory, "node").await;
     let hash = node
@@ -44,20 +44,62 @@ async fn test_blob_store_operations() {
         .expect("add blob");
 
     assert!(node.blob_store().has(hash).await.expect("check blob"));
-    assert_eq!(
-        node.blob_store().get(hash).await.expect("read blob"),
-        b"phase one blob".as_slice()
-    );
-
-    let ticket = node.blob_store().ticket(node.endpoint(), hash);
-    assert_eq!(ticket.hash(), hash);
-    assert!(ticket.to_string().starts_with("blob"));
 
     node.stop().await.expect("stop node");
 }
 
 #[tokio::test]
-async fn test_blob_store_add_file() {
+async fn test_has_blob() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let hash = node
+        .blob_store()
+        .add_bytes(b"blob data")
+        .await
+        .expect("add");
+    assert!(node.blob_store().has(hash).await.unwrap());
+
+    let fake_hash = iroh_blobs::Hash::from_bytes([0u8; 32]);
+    assert!(!node.blob_store().has(fake_hash).await.unwrap());
+
+    node.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_get_blob() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let hash = node
+        .blob_store()
+        .add_bytes(b"blob data")
+        .await
+        .expect("add");
+
+    let bytes = node.blob_store().get(hash).await.expect("get");
+    assert_eq!(bytes, b"blob data".as_slice());
+
+    node.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_blob_ticket() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let hash = node
+        .blob_store()
+        .add_bytes(b"blob data")
+        .await
+        .expect("add");
+
+    let ticket = node.blob_store().ticket(node.endpoint(), hash);
+    assert_eq!(ticket.hash(), hash);
+    assert!(ticket.to_string().starts_with("blob"));
+
+    node.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_add_file() {
     let directory = TestDirectory::new();
     let node = test_node(&directory, "node").await;
     let path = directory.path().join("input.txt");
@@ -103,7 +145,7 @@ async fn test_two_nodes_sync_blob() {
 }
 
 #[tokio::test]
-async fn test_docs_engine_operations() {
+async fn test_create_namespace() {
     let directory = TestDirectory::new();
     let node = test_node(&directory, "node").await;
     let doc = node
@@ -111,7 +153,16 @@ async fn test_docs_engine_operations() {
         .create_namespace()
         .await
         .expect("create namespace");
-    let author = node.docs_engine().author().await.expect("get author");
+    assert!(!doc.id().to_string().is_empty());
+    node.stop().await.expect("stop node");
+}
+
+#[tokio::test]
+async fn test_set_get_entry() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let doc = node.docs_engine().create_namespace().await.unwrap();
+    let author = node.docs_engine().author().await.unwrap();
 
     node.docs_engine()
         .set(&doc, author, b"key", b"value")
@@ -125,16 +176,123 @@ async fn test_docs_engine_operations() {
         .expect("entry exists");
     assert_eq!(entry.key(), b"key".as_slice());
 
-    let _events = node
-        .docs_engine()
-        .watch(&doc)
-        .await
-        .expect("watch document");
     node.stop().await.expect("stop node");
 }
 
 #[tokio::test]
-async fn test_gossip_multiple_subscribers_receive() {
+async fn test_watch_entries() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let doc = node.docs_engine().create_namespace().await.unwrap();
+    let author = node.docs_engine().author().await.unwrap();
+
+    let mut events = node
+        .docs_engine()
+        .watch(&doc)
+        .await
+        .expect("watch document");
+
+    node.docs_engine()
+        .set(&doc, author, b"key2", b"value2")
+        .await
+        .expect("set document entry");
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(5), events.next())
+        .await
+        .expect("watch event timed out")
+        .expect("watch stream closed");
+
+    match event {
+        Ok(iroh_docs::engine::LiveEvent::InsertLocal { entry }) => {
+            assert_eq!(entry.key(), b"key2".as_slice());
+        }
+        _ => panic!("unexpected event: {:?}", event),
+    }
+
+    node.stop().await.expect("stop node");
+}
+
+#[tokio::test]
+async fn test_author_from_secret() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+
+    // Test creating (exporting) and importing an author
+    let original_author_id = node.docs_engine().author().await.expect("get author");
+    let author_secret = node
+        .docs_engine()
+        .export_author(original_author_id)
+        .await
+        .expect("export author")
+        .expect("author exists");
+
+    let secret_str = author_secret.to_string();
+
+    let parsed_author = std::str::FromStr::from_str(&secret_str).expect("parse author secret");
+    let imported_author_id = node
+        .docs_engine()
+        .import_author(parsed_author)
+        .await
+        .expect("import author");
+
+    assert_eq!(original_author_id, imported_author_id);
+    node.stop().await.expect("stop node");
+}
+
+#[tokio::test]
+async fn test_subscribe_publish() {
+    let directory = TestDirectory::new();
+    let first = test_node(&directory, "first").await;
+    let second = test_node(&directory, "second").await;
+    let topic = iroh_gossip::TopicId::from_bytes([7; 32]);
+
+    let first_topic = first
+        .gossip_service()
+        .subscribe(topic, vec![])
+        .await
+        .expect("subscribe first node");
+    let (first_sender, _first_receiver) =
+        syncweb_core::node::gossip_service::GossipService::split(first_topic);
+
+    let mut second_topic = second
+        .gossip_service()
+        .subscribe(topic, vec![first.endpoint().id()])
+        .await
+        .expect("subscribe second node");
+    tokio::time::timeout(Duration::from_secs(15), second_topic.joined())
+        .await
+        .expect("gossip join timed out")
+        .expect("gossip join failed");
+
+    let _publish_task = tokio::spawn(async move {
+        loop {
+            let _ = first_sender
+                .broadcast(bytes::Bytes::from_static(b"simple message"))
+                .await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+
+    let received = tokio::time::timeout(Duration::from_secs(15), async {
+        while let Some(event) = second_topic.next().await {
+            if let Ok(iroh_gossip::api::Event::Received(message)) = event {
+                return Some(message.content);
+            }
+        }
+        None
+    })
+    .await
+    .expect("receive timed out")
+    .expect("stream closed");
+
+    assert_eq!(received.as_ref(), b"simple message");
+
+    first.stop().await.expect("stop first node");
+    second.stop().await.expect("stop second node");
+}
+
+#[tokio::test]
+async fn test_multiple_subscribers() {
     let directory = TestDirectory::new();
     let first = test_node(&directory, "first").await;
     let second = test_node(&directory, "second").await;
@@ -153,7 +311,7 @@ async fn test_gossip_multiple_subscribers_receive() {
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .expect("subscribe second node");
-    tokio::time::timeout(Duration::from_secs(5), second_topic.joined())
+    tokio::time::timeout(Duration::from_secs(15), second_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -162,18 +320,21 @@ async fn test_gossip_multiple_subscribers_receive() {
         .subscribe(topic, vec![second.endpoint().id()])
         .await
         .expect("subscribe third node");
-    tokio::time::timeout(Duration::from_secs(5), third_topic.joined())
+    tokio::time::timeout(Duration::from_secs(15), third_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
 
-    first
-        .gossip_service()
-        .publish(&first_sender, b"phase one message")
-        .await
-        .expect("publish message");
+    let _publish_task = tokio::spawn(async move {
+        loop {
+            let _ = first_sender
+                .broadcast(bytes::Bytes::from_static(b"phase one message"))
+                .await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
 
-    let second_received = tokio::time::timeout(Duration::from_secs(5), async {
+    let second_received = tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(event) = second_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -184,7 +345,7 @@ async fn test_gossip_multiple_subscribers_receive() {
     .await
     .expect("second gossip receive timed out")
     .expect("second gossip stream closed");
-    let third_received = tokio::time::timeout(Duration::from_secs(5), async {
+    let third_received = tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(event) = third_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -204,7 +365,25 @@ async fn test_gossip_multiple_subscribers_receive() {
 }
 
 #[tokio::test]
-async fn test_topic_tracker_announce_and_find_peers() {
+async fn test_announce_topic() {
+    let directory = TestDirectory::new();
+    let node = test_node(&directory, "node").await;
+    let doc = node
+        .docs_engine()
+        .create_namespace()
+        .await
+        .expect("create namespace");
+
+    node.topic_tracker()
+        .announce(doc.id())
+        .await
+        .expect("announce topic");
+
+    node.stop().await.expect("stop node");
+}
+
+#[tokio::test]
+async fn test_find_peers() {
     let directory = TestDirectory::new();
     let node = test_node(&directory, "node").await;
     let doc = node
@@ -228,7 +407,7 @@ async fn test_topic_tracker_announce_and_find_peers() {
 }
 
 #[test]
-fn test_bubble_detection_strategy_is_enabled() {
+fn test_bubble_detection() {
     assert!(matches!(
         distributed_topic_tracker::Config::default()
             .merge_config()

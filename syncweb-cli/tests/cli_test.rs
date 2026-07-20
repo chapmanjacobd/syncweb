@@ -16,7 +16,7 @@ fn version_command_outputs_version() {
 }
 
 #[test]
-fn help_output_lists_phase_one_commands() {
+fn help_output_lists_available_commands() {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .arg("--help")
         .output()
@@ -26,6 +26,66 @@ fn help_output_lists_phase_one_commands() {
     let help = String::from_utf8(output.stdout).expect("UTF-8 output");
     assert!(help.contains("version"));
     assert!(help.contains("repl"));
+    assert!(help.contains("create"));
+    assert!(help.contains("join"));
+    assert!(help.contains("accept"));
+    assert!(help.contains("drop"));
+    assert!(help.contains("folders"));
+    assert!(help.contains("devices"));
+    assert!(help.contains("network"));
+    assert!(help.contains("config"));
+}
+
+#[test]
+fn config_command_persists_bep_settings() {
+    let directory = std::env::temp_dir().join(format!("syncweb-config-{}", uuid::Uuid::new_v4()));
+    let set = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().expect("UTF-8 path"),
+            "config",
+            "set",
+            "bep.enabled",
+            "true",
+        ])
+        .output()
+        .expect("run syncweb config set");
+    assert!(set.status.success());
+
+    let show = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().expect("UTF-8 path"),
+            "config",
+            "show",
+            "bep",
+        ])
+        .output()
+        .expect("run syncweb config show");
+    std::fs::remove_dir_all(directory).expect("remove config directory");
+
+    assert!(show.status.success());
+    let stdout = String::from_utf8(show.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("enabled = true"));
+}
+
+#[test]
+fn devices_command_displays_iroh_and_syncthing_ids() {
+    let directory = std::env::temp_dir().join(format!("syncweb-cli-{}", uuid::Uuid::new_v4()));
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().expect("UTF-8 path"),
+            "devices",
+        ])
+        .output()
+        .expect("run syncweb devices");
+    std::fs::remove_dir_all(directory).expect("remove test directory");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("iroh: "));
+    assert!(stdout.contains("syncthing: "));
 }
 
 #[test]

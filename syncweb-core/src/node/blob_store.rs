@@ -5,6 +5,7 @@ use iroh_blobs::api::Store as BlobApi;
 use iroh_blobs::{BlobsProtocol, Hash, ticket::BlobTicket};
 use std::path::Path;
 
+#[derive(Clone)]
 pub struct BlobStore {
     store: BlobApi,
     address_lookup: MemoryLookup,

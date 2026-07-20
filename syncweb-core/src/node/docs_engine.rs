@@ -1,8 +1,17 @@
 use anyhow::Result;
 use bytes::Bytes;
 use iroh_blobs::Hash;
-use iroh_docs::{AuthorId, Entry, NamespaceId, api::Doc, engine::LiveEvent, protocol::Docs};
+use iroh_docs::{
+    AuthorId, DocTicket, Entry, NamespaceId,
+    api::{
+        Doc,
+        protocol::{AddrInfoOptions, ShareMode},
+    },
+    engine::LiveEvent,
+    protocol::Docs,
+};
 
+#[derive(Clone)]
 pub struct DocsEngine {
     docs: Docs,
 }
@@ -20,8 +29,39 @@ impl DocsEngine {
         self.docs.create().await
     }
 
+    pub async fn import_ticket(&self, ticket: DocTicket) -> Result<Doc> {
+        self.docs.import(ticket).await
+    }
+
+    pub async fn open(&self, namespace_id: NamespaceId) -> Result<Option<Doc>> {
+        self.docs.open(namespace_id).await
+    }
+
+    pub async fn drop_namespace(&self, namespace_id: NamespaceId) -> Result<()> {
+        self.docs.drop_doc(namespace_id).await?;
+        Ok(())
+    }
+
+    pub async fn share(
+        &self,
+        doc: &Doc,
+        mode: ShareMode,
+        _endpoint: iroh::EndpointAddr,
+    ) -> Result<DocTicket> {
+        doc.share(mode, AddrInfoOptions::RelayAndAddresses).await
+    }
+
     pub async fn author(&self) -> Result<AuthorId> {
         self.docs.author_default().await
+    }
+
+    pub async fn export_author(&self, author_id: AuthorId) -> Result<Option<iroh_docs::Author>> {
+        self.docs.author_export(author_id).await
+    }
+
+    pub async fn import_author(&self, author: iroh_docs::Author) -> Result<AuthorId> {
+        self.docs.author_import(author.clone()).await?;
+        Ok(author.id())
     }
 
     pub async fn set(
@@ -37,6 +77,19 @@ impl DocsEngine {
             Bytes::copy_from_slice(value.as_ref()),
         )
         .await
+    }
+
+    pub async fn set_blob(
+        &self,
+        doc: &Doc,
+        author: AuthorId,
+        key: impl AsRef<[u8]>,
+        hash: Hash,
+        size: u64,
+    ) -> Result<()> {
+        doc.set_hash(author, Bytes::copy_from_slice(key.as_ref()), hash, size)
+            .await?;
+        Ok(())
     }
 
     pub async fn get(

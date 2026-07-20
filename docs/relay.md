@@ -123,6 +123,20 @@ syncweb join --relay-fallback syncweb://folder-id#NODE-ID
 syncweb network test-relay
 ```
 
+Relay settings are persisted in `<data-dir>/config.toml`:
+
+```toml
+[bep]
+enabled = true
+relay_urls = ["tcp://relay.syncthing.net:22270"]
+relay_timeout = 10
+auto_fallback = true
+```
+
+Use `syncweb config show bep` to inspect this section and
+`syncweb config set bep.enabled true` (or another supported `bep.*` key) to
+update it.
+
 ### What This Enables
 
 - Two syncweb nodes behind different CGNATs can communicate

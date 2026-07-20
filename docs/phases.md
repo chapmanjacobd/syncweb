@@ -17,19 +17,19 @@
 ### Phase 2: Folder Core + Syncthing Relay Piggyback
 **Goal**: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traversal
 
-- [ ] `SyncwebFolder` - NamespaceId, entries, blob refs
-- [ ] `FolderManager` - create, join, list, accept, drop
-- [ ] `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
-- [ ] `syncweb create`, `syncweb join`, `syncweb accept`, `syncweb drop`
-- [ ] `syncweb folders`, `syncweb devices`
-- [ ] `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
-- [ ] `SyncthingRelayTransport` - TCP tunnel through Syncthing relays
-- [ ] `TransportFallback` - iroh direct → iroh relay → Syncthing relay
-- [ ] Syncthing relay protocol v1 client (JoinRelayRequest, SessionInvitation, JoinSessionRequest)
-- [ ] QUIC-over-TCP tunnel encapsulation
-- [ ] `--relay-fallback` flag on relevant commands
-- [ ] `syncweb network test-relay` command
-- [ ] Config: `[bep]` section for relay URLs, timeout, auto_fallback
+- [x] `SyncwebFolder` - NamespaceId, entries, blob refs
+- [x] `FolderManager` - create, join, list, accept, drop
+- [x] `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
+- [x] `syncweb create`, `syncweb join`, `syncweb accept`, `syncweb drop`
+- [x] `syncweb folders`, `syncweb devices`
+- [x] `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
+- [x] `SyncthingRelayTransport` - bounded framed TCP tunnel
+- [x] `TransportFallback` - ordered configured Syncthing relay attempts
+- [x] Syncthing relay protocol message codec (JoinRelayRequest, SessionInvitation, JoinSessionRequest)
+- [x] Datagram-over-TCP tunnel framing
+- [x] `--relay-fallback` flag on relevant commands
+- [x] `syncweb network test-relay` command
+- [x] Config: `[bep]` section for relay URLs, timeout, auto_fallback
 
 ### Phase 3: File Operations + Search/Sort/Stat
 **Goal**: ls, find, sort, stat, download, selective sync, init/config

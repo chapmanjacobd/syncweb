@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use syncweb_core::{
     folder::{Capability, FolderManager, SyncMode},
     node::{
-        identity::{DeviceId, IdentityManager},
+        identity::IdentityManager,
         iroh_node::{IrohNode, RelayMode},
     },
 };

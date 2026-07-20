@@ -32,7 +32,7 @@ opaque-debug.workspace = true
 clap.workspace = true
 
 # Iroh stack
-iroh.workspace = true
+iroh = { workspace = true, features = ["test-utils"] }
 iroh-blobs.workspace = true
 iroh-docs.workspace = true
 iroh-gossip.workspace = true

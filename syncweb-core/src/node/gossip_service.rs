@@ -1,4 +1,3 @@
-use anyhow::Result;
 use bytes::Bytes;
 use iroh::PublicKey;
 use iroh_gossip::{
@@ -6,6 +5,8 @@ use iroh_gossip::{
     api::{GossipReceiver, GossipSender, GossipTopic},
     net::Gossip,
 };
+
+use crate::error::{Result, SyncwebError};
 
 pub struct GossipService {
     gossip: Gossip,
@@ -26,21 +27,30 @@ impl GossipService {
     ///
     /// Returns an error if subscribing to the topic fails.
     pub async fn subscribe(&self, topic: TopicId, bootstrap: Vec<PublicKey>) -> Result<GossipTopic> {
-        Ok(self.gossip.subscribe(topic, bootstrap).await?)
+        self.gossip
+            .subscribe(topic, bootstrap)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to subscribe to gossip topic", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if subscribing or joining the topic fails.
     pub async fn subscribe_and_join(&self, topic: TopicId, bootstrap: Vec<PublicKey>) -> Result<GossipTopic> {
-        Ok(self.gossip.subscribe_and_join(topic, bootstrap).await?)
+        self.gossip
+            .subscribe_and_join(topic, bootstrap)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to join gossip topic", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the message cannot be published to the topic.
     pub async fn publish(&self, sender: &GossipSender, message: impl AsRef<[u8]>) -> Result<()> {
-        Ok(sender.broadcast(Bytes::copy_from_slice(message.as_ref())).await?)
+        sender
+            .broadcast(Bytes::copy_from_slice(message.as_ref()))
+            .await
+            .map_err(|error| SyncwebError::operation("failed to publish gossip message", error))
     }
 
     #[must_use]

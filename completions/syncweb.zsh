@@ -168,6 +168,78 @@ esac
     ;;
 esac
 ;;
+(ls)
+_arguments "${_arguments_options[@]}" : \
+'--sort=[Collect and sort output instead of streaming it]:SORT:_default' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(find)
+_arguments "${_arguments_options[@]}" : \
+'--kind=[]:KIND:(exact glob regex)' \
+'--max-depth=[]:MAX_DEPTH:_default' \
+'--min-size=[]:MIN_SIZE:_default' \
+'--max-size=[]:MAX_SIZE:_default' \
+'--extension=[]:EXTENSION:_default' \
+'--type=[]:FILE_TYPE:(f d l)' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':pattern:_default' \
+'::path:_files' \
+&& ret=0
+;;
+(sort)
+_arguments "${_arguments_options[@]}" : \
+'--by=[]:BY:(niche frecency peers random folder)' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(stat)
+_arguments "${_arguments_options[@]}" : \
+'(--terse)--format=[]:FORMAT:_default' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'(--format)--terse[]' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path:_files' \
+&& ret=0
+;;
+(download)
+_arguments "${_arguments_options[@]}" : \
+'--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':source:_files' \
+':destination:_files' \
+&& ret=0
+;;
+(init)
+_arguments "${_arguments_options[@]}" : \
+'--mode=[]:MODE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -307,6 +379,30 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(ls)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(find)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sort)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stat)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(download)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(init)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__network_commands" \
@@ -360,6 +456,12 @@ _syncweb_commands() {
 'folders:List managed folders' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
+'ls:List files in a local folder' \
+'find:Search local files' \
+'sort:Sort local files by discovery criteria' \
+'stat:Show detailed metadata for a local file' \
+'download:Download a local file to a destination' \
+'init:Initialize a folder and print a shareable URL' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -430,10 +532,20 @@ _syncweb__subcmd__devices_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb devices commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__download_commands] )) ||
+_syncweb__subcmd__download_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb download commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__drop_commands] )) ||
 _syncweb__subcmd__drop_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb drop commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__find_commands] )) ||
+_syncweb__subcmd__find_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb find commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__folders_commands] )) ||
 _syncweb__subcmd__folders_commands() {
@@ -452,6 +564,12 @@ _syncweb__subcmd__help_commands() {
 'folders:List managed folders' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
+'ls:List files in a local folder' \
+'find:Search local files' \
+'sort:Sort local files by discovery criteria' \
+'stat:Show detailed metadata for a local file' \
+'download:Download a local file to a destination' \
+'init:Initialize a folder and print a shareable URL' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -497,10 +615,20 @@ _syncweb__subcmd__help__subcmd__devices_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help devices commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__download_commands] )) ||
+_syncweb__subcmd__help__subcmd__download_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help download commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__drop_commands] )) ||
 _syncweb__subcmd__help__subcmd__drop_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help drop commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__find_commands] )) ||
+_syncweb__subcmd__help__subcmd__find_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help find commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__folders_commands] )) ||
 _syncweb__subcmd__help__subcmd__folders_commands() {
@@ -512,10 +640,20 @@ _syncweb__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help help commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__init_commands] )) ||
+_syncweb__subcmd__help__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help init commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__join_commands] )) ||
 _syncweb__subcmd__help__subcmd__join_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__ls_commands] )) ||
+_syncweb__subcmd__help__subcmd__ls_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help ls commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__manpages_commands] )) ||
 _syncweb__subcmd__help__subcmd__manpages_commands() {
@@ -539,15 +677,35 @@ _syncweb__subcmd__help__subcmd__repl_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help repl commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__sort_commands] )) ||
+_syncweb__subcmd__help__subcmd__sort_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help sort commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__stat_commands] )) ||
+_syncweb__subcmd__help__subcmd__stat_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help stat commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__version_commands] )) ||
 _syncweb__subcmd__help__subcmd__version_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help version commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__init_commands] )) ||
+_syncweb__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb init commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__join_commands] )) ||
 _syncweb__subcmd__join_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__ls_commands] )) ||
+_syncweb__subcmd__ls_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb ls commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__manpages_commands] )) ||
 _syncweb__subcmd__manpages_commands() {
@@ -589,6 +747,16 @@ _syncweb__subcmd__network__subcmd__test-relay_commands() {
 _syncweb__subcmd__repl_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb repl commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__sort_commands] )) ||
+_syncweb__subcmd__sort_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb sort commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stat_commands] )) ||
+_syncweb__subcmd__stat_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stat commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__version_commands] )) ||
 _syncweb__subcmd__version_commands() {

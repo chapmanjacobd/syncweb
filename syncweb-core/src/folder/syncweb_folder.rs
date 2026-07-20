@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Context, Result, bail};
 use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::{
@@ -9,6 +8,7 @@ use iroh_docs::{
 };
 use tokio::sync::RwLock;
 
+use crate::error::{Result, SyncwebError};
 use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
 
 use super::SyncMode;
@@ -60,6 +60,53 @@ impl SyncwebFolder {
         }
     }
 
+    /// Create a new folder by allocating a namespace in the docs engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be created or the default author cannot be retrieved.
+    pub async fn create(docs_engine: DocsEngine, blob_store: BlobStore, sync_mode: SyncMode) -> Result<Self> {
+        let doc = docs_engine
+            .create_namespace()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to create folder namespace", error))?;
+        let author = docs_engine
+            .author()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to retrieve folder author", error))?;
+        Ok(Self::new(doc, author, blob_store, docs_engine, sync_mode))
+    }
+
+    /// Accept a locally available folder by namespace ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be opened.
+    pub async fn accept(docs_engine: DocsEngine, blob_store: BlobStore, namespace_id: NamespaceId) -> Result<Self> {
+        let doc = docs_engine
+            .open(namespace_id)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to open folder namespace", error))?
+            .ok_or(SyncwebError::NamespaceNotAvailable)?;
+        let author = docs_engine
+            .author()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to retrieve folder author", error))?;
+        Ok(Self::new(doc, author, blob_store, docs_engine, SyncMode::ReceiveOnly))
+    }
+
+    /// Drop this folder's namespace from the docs engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be dropped.
+    pub async fn drop_namespace(&self) -> Result<()> {
+        self.docs_engine
+            .drop_namespace(self.namespace_id)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to drop folder namespace", error))
+    }
+
     #[must_use]
     pub const fn namespace_id(&self) -> NamespaceId {
         self.namespace_id
@@ -97,11 +144,14 @@ impl SyncwebFolder {
     /// Returns an error if the blob fails to be stored or set.
     pub async fn set_blob(&self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Result<Hash> {
         if !self.sync_mode.can_write() {
-            bail!("folder mode {} does not permit local writes", self.sync_mode);
+            return Err(SyncwebError::WriteDenied {
+                mode: self.sync_mode.to_string(),
+            });
         }
         let value_bytes = value.as_ref();
         let hash = self.blob_store.add_bytes(value_bytes).await?;
-        let len = u64::try_from(value_bytes.len()).context("blob size exceeds u64::MAX")?;
+        let len = u64::try_from(value_bytes.len())
+            .map_err(|error| SyncwebError::operation("blob size exceeds u64::MAX", error))?;
         self.docs_engine
             .set_blob(&self.doc, self.author, key, hash, len)
             .await?;

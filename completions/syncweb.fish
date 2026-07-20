@@ -36,6 +36,12 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "drop" -d 'Remove a 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "folders" -d 'List managed folders'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "devices" -d 'Show this device\'s Iroh and Syncthing identities'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "config" -d 'Show or update local configuration'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "ls" -d 'List files in a local folder'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "find" -d 'Search local files'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "sort" -d 'Sort local files by discovery criteria'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stat" -d 'Show detailed metadata for a local file'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "download" -d 'Download a local file to a destination'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "init" -d 'Initialize a folder and print a shareable URL'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "network" -d 'Network connectivity utilities'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "completions" -d 'Generate shell completions'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "manpages" -d 'Generate manpages'
@@ -83,6 +89,48 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "set" -d 'Set a configuration value'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "show" -d 'Show configuration, optionally limited to a section'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l sort -d 'Collect and sort output instead of streaming it' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l kind -r -f -a "exact\t''
+glob\t''
+regex\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l max-depth -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l min-size -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l max-size -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l extension -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l type -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l by -r -f -a "niche\t''
+frecency\t''
+peers\t''
+random\t''
+folder\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l format -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l terse
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l threads -d 'Copy threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l mode -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand init" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand network; and not __fish_seen_subcommand_from test-relay help" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand network; and not __fish_seen_subcommand_from test-relay help" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand network; and not __fish_seen_subcommand_from test-relay help" -s h -l help -d 'Print help'
@@ -100,19 +148,25 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -s h -l hel
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "version" -d 'Show syncweb version information'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "repl" -d 'Start an interactive command shell'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "create" -d 'Create a synchronized folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "join" -d 'Join a folder from an Iroh document ticket'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "accept" -d 'Accept a locally available folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "drop" -d 'Remove a local folder replica'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "folders" -d 'List managed folders'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "devices" -d 'Show this device\'s Iroh and Syncthing identities'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "config" -d 'Show or update local configuration'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "network" -d 'Network connectivity utilities'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "completions" -d 'Generate shell completions'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "manpages" -d 'Generate manpages'
-complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config network completions manpages help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "version" -d 'Show syncweb version information'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "repl" -d 'Start an interactive command shell'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "create" -d 'Create a synchronized folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "join" -d 'Join a folder from an Iroh document ticket'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "accept" -d 'Accept a locally available folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "drop" -d 'Remove a local folder replica'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "folders" -d 'List managed folders'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "devices" -d 'Show this device\'s Iroh and Syncthing identities'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "config" -d 'Show or update local configuration'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "ls" -d 'List files in a local folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "find" -d 'Search local files'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "sort" -d 'Sort local files by discovery criteria'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "stat" -d 'Show detailed metadata for a local file'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "download" -d 'Download a local file to a destination'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "init" -d 'Initialize a folder and print a shareable URL'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "network" -d 'Network connectivity utilities'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "completions" -d 'Generate shell completions'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "manpages" -d 'Generate manpages'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and not __fish_seen_subcommand_from version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "set" -d 'Set a configuration value'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "show" -d 'Show configuration, optionally limited to a section'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from network" -f -a "test-relay" -d 'Test a Syncthing relay TCP connection'

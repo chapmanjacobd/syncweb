@@ -468,23 +468,27 @@ syncweb deleted /path/to/folder
 # Restore deleted file
 syncweb undelete <entry-hash>
 
-# Parallel scan (auto-detect CPU count)
-syncweb ls --parallel
+# Scan with all available CPUs (the default)
+syncweb ls
 
-# Scan with specific thread count
-syncweb ls --parallel --threads 8
+# Scan with a specific thread count; use 1 to disable parallelism
+syncweb ls --threads 8
+syncweb ls --threads 1
 
-# Parallel import
-syncweb import --parallel /path/to/files
+# Parallel import (the default)
+syncweb import /path/to/files
 
-# Parallel export
-syncweb export --parallel /path/to/output
+# Parallel export (the default)
+syncweb export /path/to/output
 
 # Health check (show seeding status)
 syncweb health audio/
 
 # Download poorly-seeded blobs to improve network health
 syncweb download --max-peers 2 audio/
+
+# Download a local tree in parallel (the default); use 1 for sequential copying
+syncweb download --threads 1 /path/to/source /path/to/destination
 
 # Bandwidth limiting
 syncweb folders --limit-upload 1MB/s --limit-download 5MB/s

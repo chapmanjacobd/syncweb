@@ -19,7 +19,9 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("failed to remove test directory {}: {error}", self.0.display());
+        }
     }
 }
 
@@ -54,7 +56,7 @@ async fn test_find_peers() -> anyhow::Result<()> {
 
     node.topic_tracker().announce(doc.id()).await?;
     let peers = node.topic_tracker().find_peers(doc.id()).await?;
-    assert!(peers.is_empty());
+    anyhow::ensure!(peers.is_empty());
 
     node.stop().await?;
     Ok(())

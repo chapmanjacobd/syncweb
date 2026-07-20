@@ -1,4 +1,3 @@
-use anyhow::Result;
 use bytes::Bytes;
 use iroh_blobs::Hash;
 use iroh_docs::{
@@ -10,6 +9,9 @@ use iroh_docs::{
     engine::LiveEvent,
     protocol::Docs,
 };
+use n0_future::StreamExt;
+
+use crate::error::{Result, SyncwebError};
 
 #[derive(Clone)]
 pub struct DocsEngine {
@@ -31,28 +33,40 @@ impl DocsEngine {
     ///
     /// Returns an error if the namespace cannot be created.
     pub async fn create_namespace(&self) -> Result<Doc> {
-        self.docs.create().await
+        self.docs
+            .create()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to create namespace", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the ticket cannot be imported.
     pub async fn import_ticket(&self, ticket: DocTicket) -> Result<Doc> {
-        self.docs.import(ticket).await
+        self.docs
+            .import(ticket)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to import document ticket", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the document cannot be opened.
     pub async fn open(&self, namespace_id: NamespaceId) -> Result<Option<Doc>> {
-        self.docs.open(namespace_id).await
+        self.docs
+            .open(namespace_id)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to open namespace", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the namespace cannot be dropped.
     pub async fn drop_namespace(&self, namespace_id: NamespaceId) -> Result<()> {
-        self.docs.drop_doc(namespace_id).await?;
+        self.docs
+            .drop_doc(namespace_id)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to drop namespace", error))?;
         Ok(())
     }
 
@@ -60,28 +74,39 @@ impl DocsEngine {
     ///
     /// Returns an error if the document cannot be shared.
     pub async fn share(&self, doc: &Doc, mode: ShareMode, _endpoint: iroh::EndpointAddr) -> Result<DocTicket> {
-        doc.share(mode, AddrInfoOptions::RelayAndAddresses).await
+        doc.share(mode, AddrInfoOptions::RelayAndAddresses)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to share document", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the default author cannot be retrieved.
     pub async fn author(&self) -> Result<AuthorId> {
-        self.docs.author_default().await
+        self.docs
+            .author_default()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to retrieve document author", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the author cannot be exported.
     pub async fn export_author(&self, author_id: AuthorId) -> Result<Option<iroh_docs::Author>> {
-        self.docs.author_export(author_id).await
+        self.docs
+            .author_export(author_id)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to export document author", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the author cannot be imported.
     pub async fn import_author(&self, author: iroh_docs::Author) -> Result<AuthorId> {
-        self.docs.author_import(author.clone()).await?;
+        self.docs
+            .author_import(author.clone())
+            .await
+            .map_err(|error| SyncwebError::operation("failed to import document author", error))?;
         Ok(author.id())
     }
 
@@ -101,6 +126,7 @@ impl DocsEngine {
             Bytes::copy_from_slice(value.as_ref()),
         )
         .await
+        .map_err(|error| SyncwebError::operation("failed to set document entry", error))
     }
 
     /// # Errors
@@ -115,7 +141,8 @@ impl DocsEngine {
         size: u64,
     ) -> Result<()> {
         doc.set_hash(author, Bytes::copy_from_slice(key.as_ref()), hash, size)
-            .await?;
+            .await
+            .map_err(|error| SyncwebError::operation("failed to set document blob", error))?;
         Ok(())
     }
 
@@ -123,7 +150,9 @@ impl DocsEngine {
     ///
     /// Returns an error if getting the document entry fails.
     pub async fn get(&self, doc: &Doc, author: AuthorId, key: impl AsRef<[u8]>) -> Result<Option<Entry>> {
-        doc.get_exact(author, key, false).await
+        doc.get_exact(author, key, false)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to get document entry", error))
     }
 
     /// # Errors
@@ -133,7 +162,11 @@ impl DocsEngine {
         &self,
         doc: &Doc,
     ) -> Result<impl n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin + 'static> {
-        doc.subscribe().await
+        let stream = doc
+            .subscribe()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to subscribe to document", error))?;
+        Ok(stream.map(|event| event.map_err(|error| SyncwebError::operation("document event failed", error))))
     }
 
     #[must_use]

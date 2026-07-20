@@ -34,6 +34,12 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
             [CompletionResult]::new('devices', 'devices', [CompletionResultType]::ParameterValue, 'Show this device''s Iroh and Syncthing identities')
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Show or update local configuration')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List files in a local folder')
+            [CompletionResult]::new('find', 'find', [CompletionResultType]::ParameterValue, 'Search local files')
+            [CompletionResult]::new('sort', 'sort', [CompletionResultType]::ParameterValue, 'Sort local files by discovery criteria')
+            [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
+            [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download a local file to a destination')
+            [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
@@ -139,6 +145,64 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;config;help;help' {
             break
         }
+        'syncweb;ls' {
+            [CompletionResult]::new('--sort', '--sort', [CompletionResultType]::ParameterName, 'Collect and sort output instead of streaming it')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;find' {
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
+            [CompletionResult]::new('--max-depth', '--max-depth', [CompletionResultType]::ParameterName, 'max-depth')
+            [CompletionResult]::new('--min-size', '--min-size', [CompletionResultType]::ParameterName, 'min-size')
+            [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
+            [CompletionResult]::new('--extension', '--extension', [CompletionResultType]::ParameterName, 'extension')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;sort' {
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;stat' {
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--terse', '--terse', [CompletionResultType]::ParameterName, 'terse')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;download' {
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Copy threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;init' {
+            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'syncweb;network' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -191,6 +255,12 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
             [CompletionResult]::new('devices', 'devices', [CompletionResultType]::ParameterValue, 'Show this device''s Iroh and Syncthing identities')
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Show or update local configuration')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List files in a local folder')
+            [CompletionResult]::new('find', 'find', [CompletionResultType]::ParameterValue, 'Search local files')
+            [CompletionResult]::new('sort', 'sort', [CompletionResultType]::ParameterValue, 'Sort local files by discovery criteria')
+            [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
+            [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download a local file to a destination')
+            [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
@@ -230,6 +300,24 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;config;show' {
+            break
+        }
+        'syncweb;help;ls' {
+            break
+        }
+        'syncweb;help;find' {
+            break
+        }
+        'syncweb;help;sort' {
+            break
+        }
+        'syncweb;help;stat' {
+            break
+        }
+        'syncweb;help;download' {
+            break
+        }
+        'syncweb;help;init' {
             break
         }
         'syncweb;help;network' {

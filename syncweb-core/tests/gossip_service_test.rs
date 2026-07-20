@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use anyhow::Context;
 use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
@@ -9,10 +10,10 @@ use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {
-    fn new() -> Self {
+    fn new() -> Result<Self, std::io::Error> {
         let path = std::env::temp_dir().join(format!("syncweb-services-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path).expect("create test directory");
-        Self(path)
+        std::fs::create_dir(&path)?;
+        Ok(Self(path))
     }
 
     fn path(&self) -> &Path {
@@ -22,7 +23,19 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("remove test directory");
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("failed to remove test directory {}: {error}", self.0.display());
+        }
+    }
+}
+
+async fn publish_repeatedly(sender: iroh_gossip::api::GossipSender, message: &'static [u8]) -> anyhow::Result<()> {
+    loop {
+        sender
+            .broadcast(bytes::Bytes::copy_from_slice(message))
+            .await
+            .context("failed to broadcast gossip message")?;
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
 
@@ -31,27 +44,20 @@ async fn test_node(
     name: &str,
     relay_map: Option<iroh::RelayMap>,
     address_lookup: Option<MemoryLookup>,
-) -> IrohNode {
+) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
-    let relay_mode = match relay_map {
-        Some(map) => RelayMode::Custom { map, insecure: true },
-        None => RelayMode::Default,
-    };
+    let identity = IdentityManager::new(root.join("identity.key"))?;
+    let relay_mode = relay_map.map_or(RelayMode::Default, |map| RelayMode::Custom { map, insecure: true });
     match address_lookup {
-        Some(lookup) => IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup)
-            .await
-            .expect("start node"),
-        None => IrohNode::new(identity, root.join("data"), relay_mode)
-            .await
-            .expect("start node"),
+        Some(lookup) => Ok(IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup).await?),
+        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode).await?),
     }
 }
 
 #[tokio::test]
-async fn test_subscribe_publish() {
-    let directory = TestDirectory::new();
-    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+async fn test_subscribe_publish() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
     let first = test_node(
         &directory,
@@ -59,8 +65,8 @@ async fn test_subscribe_publish() {
         Some(relay_map.clone()),
         Some(memory_lookup.clone()),
     )
-    .await;
-    let second = test_node(&directory, "second", Some(relay_map), Some(memory_lookup.clone())).await;
+    .await?;
+    let second = test_node(&directory, "second", Some(relay_map), Some(memory_lookup.clone())).await?;
 
     memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(first.endpoint().id()).with_relay_url(relay_url.clone()));
     memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(second.endpoint().id()).with_relay_url(relay_url));
@@ -71,50 +77,55 @@ async fn test_subscribe_publish() {
         .gossip_service()
         .subscribe(topic, vec![])
         .await
-        .expect("subscribe first node");
+        .context("subscribe first node")?;
     let (first_sender, _first_receiver) = syncweb_core::node::gossip_service::GossipService::split(first_topic);
 
     let mut second_topic = second
         .gossip_service()
         .subscribe(topic, vec![first.endpoint().id()])
         .await
-        .expect("subscribe second node");
+        .context("subscribe second node")?;
     tokio::time::timeout(Duration::from_secs(30), second_topic.joined())
         .await
-        .expect("gossip join timed out")
-        .expect("gossip join failed");
+        .context("gossip join timed out")?
+        .context("gossip join failed")?;
 
-    let _publish_task = tokio::spawn(async move {
-        loop {
-            let _ = first_sender
-                .broadcast(bytes::Bytes::from_static(b"simple message"))
-                .await;
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-    });
+    let mut publish_task = tokio::spawn(publish_repeatedly(first_sender, b"simple message"));
 
-    let received = tokio::time::timeout(Duration::from_secs(30), async {
-        while let Some(event) = second_topic.next().await {
-            if let Ok(iroh_gossip::api::Event::Received(message)) = event {
-                return Some(message.content);
+    let received_result = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::select! {
+            result = &mut publish_task => {
+                result.context("gossip publisher task failed")??;
+                anyhow::bail!("gossip publisher task exited unexpectedly");
             }
+            received = async {
+                while let Some(event) = second_topic.next().await {
+                    if let Ok(iroh_gossip::api::Event::Received(message)) = event {
+                        return Some(message.content);
+                    }
+                }
+                None
+            }
+            => anyhow::Ok(received),
         }
-        None
     })
-    .await
-    .expect("receive timed out")
-    .expect("stream closed");
+    .await;
+    publish_task.abort();
+    let received = received_result
+        .context("receive timed out")??
+        .context("stream closed")?;
 
-    assert_eq!(received.as_ref(), b"simple message");
+    anyhow::ensure!(received.as_ref() == b"simple message");
 
-    first.stop().await.expect("stop first node");
-    second.stop().await.expect("stop second node");
+    first.stop().await?;
+    second.stop().await?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_multiple_subscribers() {
-    let directory = TestDirectory::new();
-    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+async fn test_multiple_subscribers() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
     let first = test_node(
         &directory,
@@ -122,15 +133,15 @@ async fn test_multiple_subscribers() {
         Some(relay_map.clone()),
         Some(memory_lookup.clone()),
     )
-    .await;
+    .await?;
     let second = test_node(
         &directory,
         "second",
         Some(relay_map.clone()),
         Some(memory_lookup.clone()),
     )
-    .await;
-    let third = test_node(&directory, "third", Some(relay_map), Some(memory_lookup.clone())).await;
+    .await?;
+    let third = test_node(&directory, "third", Some(relay_map), Some(memory_lookup.clone())).await?;
 
     memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(first.endpoint().id()).with_relay_url(relay_url.clone()));
     memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(second.endpoint().id()).with_relay_url(relay_url.clone()));
@@ -142,47 +153,50 @@ async fn test_multiple_subscribers() {
         .gossip_service()
         .subscribe(topic, vec![])
         .await
-        .expect("subscribe first node");
+        .context("subscribe first node")?;
     let (first_sender, _first_receiver) = syncweb_core::node::gossip_service::GossipService::split(first_topic);
     let mut second_topic = second
         .gossip_service()
         .subscribe(topic, vec![first.endpoint().id()])
         .await
-        .expect("subscribe second node");
+        .context("subscribe second node")?;
     tokio::time::timeout(Duration::from_secs(30), second_topic.joined())
         .await
-        .expect("gossip join timed out")
-        .expect("gossip join failed");
+        .context("gossip join timed out")?
+        .context("gossip join failed")?;
     let mut third_topic = third
         .gossip_service()
         .subscribe(topic, vec![second.endpoint().id()])
         .await
-        .expect("subscribe third node");
+        .context("subscribe third node")?;
     tokio::time::timeout(Duration::from_secs(30), third_topic.joined())
         .await
-        .expect("gossip join timed out")
-        .expect("gossip join failed");
+        .context("gossip join timed out")?
+        .context("gossip join failed")?;
 
-    let _publish_task = tokio::spawn(async move {
-        loop {
-            let _ = first_sender
-                .broadcast(bytes::Bytes::from_static(b"phase one message"))
-                .await;
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-    });
+    let mut publish_task = tokio::spawn(publish_repeatedly(first_sender, b"phase one message"));
 
-    let second_received = tokio::time::timeout(Duration::from_secs(30), async {
-        while let Some(event) = second_topic.next().await {
-            if let Ok(iroh_gossip::api::Event::Received(message)) = event {
-                return Some(message.content);
+    let received_result = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::select! {
+            result = &mut publish_task => {
+                result.context("gossip publisher task failed")??;
+                anyhow::bail!("gossip publisher task exited unexpectedly");
             }
+            received = async {
+                while let Some(event) = second_topic.next().await {
+                    if let Ok(iroh_gossip::api::Event::Received(message)) = event {
+                        return Some(message.content);
+                    }
+                }
+                None
+            } => anyhow::Ok(received),
         }
-        None
     })
-    .await
-    .expect("second gossip receive timed out")
-    .expect("second gossip stream closed");
+    .await;
+    publish_task.abort();
+    let second_received = received_result
+        .context("second gossip receive timed out")??
+        .context("second gossip stream closed")?;
     let third_received = tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = third_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
@@ -192,12 +206,13 @@ async fn test_multiple_subscribers() {
         None
     })
     .await
-    .expect("third gossip receive timed out")
-    .expect("third gossip stream closed");
-    assert_eq!(second_received.as_ref(), b"phase one message");
-    assert_eq!(third_received.as_ref(), b"phase one message");
+    .context("third gossip receive timed out")?
+    .context("third gossip stream closed")?;
+    anyhow::ensure!(second_received.as_ref() == b"phase one message");
+    anyhow::ensure!(third_received.as_ref() == b"phase one message");
 
-    first.stop().await.expect("stop first node");
-    second.stop().await.expect("stop second node");
-    third.stop().await.expect("stop third node");
+    first.stop().await?;
+    second.stop().await?;
+    third.stop().await?;
+    Ok(())
 }

@@ -25,6 +25,18 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
     },
+    #[command(about = "List files in a local folder")]
+    Ls(LocalPathArgs),
+    #[command(about = "Search local files")]
+    Find(FindArgs),
+    #[command(about = "Sort local files by discovery criteria")]
+    Sort(SortArgs),
+    #[command(about = "Show detailed metadata for a local file")]
+    Stat(StatArgs),
+    #[command(about = "Download a local file to a destination")]
+    Download(DownloadArgs),
+    #[command(about = "Initialize a folder and print a shareable URL")]
+    Init(InitArgs),
     #[command(about = "Network connectivity utilities")]
     Network {
         #[command(subcommand)]
@@ -69,6 +81,94 @@ pub struct FolderJoin {
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
     pub relay_fallback: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct LocalPathArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, help = "Collect and sort output instead of streaming it")]
+    pub sort: Option<String>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct FindArgs {
+    pub pattern: String,
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, default_value = "glob", value_parser = ["exact", "glob", "regex"])]
+    pub kind: String,
+    #[arg(long, alias = "depth")]
+    pub max_depth: Option<usize>,
+    #[arg(long)]
+    pub min_size: Option<u64>,
+    #[arg(long)]
+    pub max_size: Option<u64>,
+    #[arg(long, alias = "ext")]
+    pub extension: Option<String>,
+    #[arg(long = "type", value_parser = ["f", "d", "l"])]
+    pub file_type: Option<String>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct SortArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long = "by", alias = "sort", default_value = "niche", value_parser = ["niche", "frecency", "peers", "random", "folder"])]
+    pub by: String,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct StatArgs {
+    pub path: PathBuf,
+    #[arg(long, conflicts_with = "format")]
+    pub terse: bool,
+    #[arg(long, conflicts_with = "terse")]
+    pub format: Option<String>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct DownloadArgs {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Copy threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct InitArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, default_value = "sendreceive")]
+    pub mode: String,
 }
 
 #[derive(Debug, Subcommand)]

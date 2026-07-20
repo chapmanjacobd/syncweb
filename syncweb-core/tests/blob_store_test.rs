@@ -19,7 +19,9 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("failed to remove test directory {}: {error}", self.0.display());
+        }
     }
 }
 
@@ -40,7 +42,7 @@ async fn test_add_bytes() -> anyhow::Result<()> {
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"phase one blob").await?;
 
-    assert!(node.blob_store().has(hash).await?);
+    anyhow::ensure!(node.blob_store().has(hash).await?);
 
     node.stop().await?;
     Ok(())
@@ -51,10 +53,10 @@ async fn test_has_blob() -> anyhow::Result<()> {
     let directory = TestDirectory::new()?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"blob data").await?;
-    assert!(node.blob_store().has(hash).await?);
+    anyhow::ensure!(node.blob_store().has(hash).await?);
 
     let fake_hash = iroh_blobs::Hash::from_bytes([0_u8; 32]);
-    assert!(!node.blob_store().has(fake_hash).await?);
+    anyhow::ensure!(!node.blob_store().has(fake_hash).await?);
 
     node.stop().await?;
     Ok(())
@@ -67,7 +69,7 @@ async fn test_get_blob() -> anyhow::Result<()> {
     let hash = node.blob_store().add_bytes(b"blob data").await?;
 
     let bytes = node.blob_store().get(hash).await?;
-    assert_eq!(bytes, b"blob data".as_slice());
+    anyhow::ensure!(bytes == b"blob data".as_slice());
 
     node.stop().await?;
     Ok(())
@@ -80,8 +82,8 @@ async fn test_blob_ticket() -> anyhow::Result<()> {
     let hash = node.blob_store().add_bytes(b"blob data").await?;
 
     let ticket = node.blob_store().ticket(node.endpoint(), hash);
-    assert_eq!(ticket.hash(), hash);
-    assert!(ticket.to_string().starts_with("blob"));
+    anyhow::ensure!(ticket.hash() == hash);
+    anyhow::ensure!(ticket.to_string().starts_with("blob"));
 
     node.stop().await?;
     Ok(())
@@ -95,7 +97,7 @@ async fn test_add_file() -> anyhow::Result<()> {
     std::fs::write(&path, b"file blob")?;
 
     let hash = node.blob_store().add_file(&path).await?;
-    assert_eq!(node.blob_store().get(hash).await?, b"file blob".as_slice());
+    anyhow::ensure!(node.blob_store().get(hash).await? == b"file blob".as_slice());
 
     node.stop().await?;
     Ok(())
@@ -111,7 +113,7 @@ async fn test_two_nodes_sync_blob() -> anyhow::Result<()> {
     let ticket = first.blob_store().ticket(first.endpoint(), hash);
 
     second.blob_store().fetch(second.endpoint(), &ticket).await?;
-    assert_eq!(second.blob_store().get(hash).await?, b"shared blob".as_slice());
+    anyhow::ensure!(second.blob_store().get(hash).await? == b"shared blob".as_slice());
 
     first.stop().await?;
     second.stop().await?;

@@ -18,7 +18,9 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("failed to remove test directory {}: {error}", self.0.display());
+        }
     }
 }
 
@@ -30,7 +32,7 @@ fn test_generate_node_id() -> anyhow::Result<()> {
         base32::Alphabet::Rfc4648 { padding: false },
         identity.node_id().as_bytes(),
     );
-    assert_eq!(encoded.len(), 52);
+    anyhow::ensure!(encoded.len() == 52);
     Ok(())
 }
 
@@ -39,7 +41,7 @@ fn test_persist_secret_key() -> anyhow::Result<()> {
     let directory = TestDirectory::new()?;
     let path = directory.identity_path();
     let identity = IdentityManager::new(&path)?;
-    assert_eq!(std::fs::read(path)?, identity.secret_key().to_bytes());
+    anyhow::ensure!(std::fs::read(path)? == identity.secret_key().to_bytes());
     Ok(())
 }
 
@@ -49,7 +51,7 @@ fn test_load_existing_identity() -> anyhow::Result<()> {
     let path = directory.identity_path();
     let original = IdentityManager::new(&path)?;
     let loaded = IdentityManager::new(&path)?;
-    assert_eq!(loaded.secret_key().to_bytes(), original.secret_key().to_bytes());
+    anyhow::ensure!(loaded.secret_key().to_bytes() == original.secret_key().to_bytes());
     Ok(())
 }
 
@@ -57,7 +59,7 @@ fn test_load_existing_identity() -> anyhow::Result<()> {
 fn test_node_id_derivation() -> anyhow::Result<()> {
     let directory = TestDirectory::new()?;
     let identity = IdentityManager::new(directory.identity_path())?;
-    assert_eq!(identity.node_id(), identity.secret_key().public());
+    anyhow::ensure!(identity.node_id() == identity.secret_key().public());
     Ok(())
 }
 
@@ -67,9 +69,9 @@ fn test_device_id_conversion() -> anyhow::Result<()> {
     let identity = IdentityManager::new(directory.identity_path())?;
     let device_id = DeviceId::from_node_id(identity.node_id());
     let syncthing_id = device_id.to_syncthing();
-    assert_eq!(syncthing_id.len(), 63);
-    assert_eq!(syncthing_id.replace('-', "").len(), 56);
-    assert_eq!(DeviceId::from_syncthing(&syncthing_id)?.node_id(), identity.node_id());
+    anyhow::ensure!(syncthing_id.len() == 63);
+    anyhow::ensure!(syncthing_id.replace('-', "").len() == 56);
+    anyhow::ensure!(DeviceId::from_syncthing(&syncthing_id)?.node_id() == identity.node_id());
     Ok(())
 }
 
@@ -79,7 +81,7 @@ fn test_persistent_identity_across_restarts() -> anyhow::Result<()> {
     let path = directory.identity_path();
     let first_node_id = IdentityManager::new(&path)?.node_id();
     let restarted_node_id = IdentityManager::new(&path)?.node_id();
-    assert_eq!(restarted_node_id, first_node_id);
+    anyhow::ensure!(restarted_node_id == first_node_id);
     Ok(())
 }
 
@@ -89,6 +91,6 @@ fn test_rejects_invalid_device_id_checksum() -> anyhow::Result<()> {
     let identity = IdentityManager::new(directory.identity_path())?;
     let mut syncthing_id = DeviceId::from_node_id(identity.node_id()).to_syncthing();
     syncthing_id.replace_range(..1, if syncthing_id.starts_with('A') { "B" } else { "A" });
-    assert!(DeviceId::from_syncthing(&syncthing_id).is_err());
+    anyhow::ensure!(DeviceId::from_syncthing(&syncthing_id).is_err());
     Ok(())
 }

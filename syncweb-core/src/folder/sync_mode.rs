@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use anyhow::{Result, bail};
+use crate::error::{Result, SyncwebError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ impl fmt::Display for SyncMode {
 }
 
 impl FromStr for SyncMode {
-    type Err = anyhow::Error;
+    type Err = SyncwebError;
 
     fn from_str(value: &str) -> Result<Self> {
         match value.to_ascii_lowercase().replace(['-', '_'], "").as_str() {
@@ -53,7 +53,7 @@ impl FromStr for SyncMode {
             "receiveonly" => Ok(Self::ReceiveOnly),
             "receiveencrypted" => Ok(Self::ReceiveEncrypted),
             "publicreadonly" => Ok(Self::PublicReadOnly),
-            _ => bail!("invalid sync mode {value:?}"),
+            _ => Err(SyncwebError::InvalidSyncMode(value.to_owned())),
         }
     }
 }

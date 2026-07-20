@@ -31,8 +31,14 @@ _syncweb() {
             syncweb,devices)
                 cmd="syncweb__subcmd__devices"
                 ;;
+            syncweb,download)
+                cmd="syncweb__subcmd__download"
+                ;;
             syncweb,drop)
                 cmd="syncweb__subcmd__drop"
+                ;;
+            syncweb,find)
+                cmd="syncweb__subcmd__find"
                 ;;
             syncweb,folders)
                 cmd="syncweb__subcmd__folders"
@@ -40,8 +46,14 @@ _syncweb() {
             syncweb,help)
                 cmd="syncweb__subcmd__help"
                 ;;
+            syncweb,init)
+                cmd="syncweb__subcmd__init"
+                ;;
             syncweb,join)
                 cmd="syncweb__subcmd__join"
+                ;;
+            syncweb,ls)
+                cmd="syncweb__subcmd__ls"
                 ;;
             syncweb,manpages)
                 cmd="syncweb__subcmd__manpages"
@@ -51,6 +63,12 @@ _syncweb() {
                 ;;
             syncweb,repl)
                 cmd="syncweb__subcmd__repl"
+                ;;
+            syncweb,sort)
+                cmd="syncweb__subcmd__sort"
+                ;;
+            syncweb,stat)
+                cmd="syncweb__subcmd__stat"
                 ;;
             syncweb,version)
                 cmd="syncweb__subcmd__version"
@@ -88,8 +106,14 @@ _syncweb() {
             syncweb__subcmd__help,devices)
                 cmd="syncweb__subcmd__help__subcmd__devices"
                 ;;
+            syncweb__subcmd__help,download)
+                cmd="syncweb__subcmd__help__subcmd__download"
+                ;;
             syncweb__subcmd__help,drop)
                 cmd="syncweb__subcmd__help__subcmd__drop"
+                ;;
+            syncweb__subcmd__help,find)
+                cmd="syncweb__subcmd__help__subcmd__find"
                 ;;
             syncweb__subcmd__help,folders)
                 cmd="syncweb__subcmd__help__subcmd__folders"
@@ -97,8 +121,14 @@ _syncweb() {
             syncweb__subcmd__help,help)
                 cmd="syncweb__subcmd__help__subcmd__help"
                 ;;
+            syncweb__subcmd__help,init)
+                cmd="syncweb__subcmd__help__subcmd__init"
+                ;;
             syncweb__subcmd__help,join)
                 cmd="syncweb__subcmd__help__subcmd__join"
+                ;;
+            syncweb__subcmd__help,ls)
+                cmd="syncweb__subcmd__help__subcmd__ls"
                 ;;
             syncweb__subcmd__help,manpages)
                 cmd="syncweb__subcmd__help__subcmd__manpages"
@@ -108,6 +138,12 @@ _syncweb() {
                 ;;
             syncweb__subcmd__help,repl)
                 cmd="syncweb__subcmd__help__subcmd__repl"
+                ;;
+            syncweb__subcmd__help,sort)
+                cmd="syncweb__subcmd__help__subcmd__sort"
+                ;;
+            syncweb__subcmd__help,stat)
+                cmd="syncweb__subcmd__help__subcmd__stat"
                 ;;
             syncweb__subcmd__help,version)
                 cmd="syncweb__subcmd__help__subcmd__version"
@@ -140,7 +176,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --data-dir --help version repl create join accept drop folders devices config network completions manpages help"
+            opts="-h --verbose --data-dir --help version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -343,6 +379,28 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__download)
+            opts="-h --threads --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__drop)
             opts="-h --verbose --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -350,6 +408,52 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__find)
+            opts="-h --kind --max-depth --min-size --max-size --extension --type --threads --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --kind)
+                    COMPREPLY=($(compgen -W "exact glob regex" -- "${cur}"))
+                    return 0
+                    ;;
+                --max-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --extension)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
+                    return 0
+                    ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -380,7 +484,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help)
-            opts="version repl create join accept drop folders devices config network completions manpages help"
+            opts="version repl create join accept drop folders devices config ls find sort stat download init network completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -491,7 +595,35 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__help__subcmd__download)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__help__subcmd__drop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__find)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -533,7 +665,35 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__help__subcmd__init)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__help__subcmd__join)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__ls)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -603,6 +763,34 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__help__subcmd__sort)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__stat)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__help__subcmd__version)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -610,6 +798,28 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__init)
+            opts="-h --mode --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --mode)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -625,6 +835,32 @@ _syncweb() {
             fi
             case "${prev}" in
                 --mode)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__ls)
+            opts="-h --sort --threads --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --sort)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --threads)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -746,6 +982,58 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__sort)
+            opts="-h --by --threads --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --by)
+                    COMPREPLY=($(compgen -W "niche frecency peers random folder" -- "${cur}"))
+                    return 0
+                    ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__stat)
+            opts="-h --terse --format --threads --verbose --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

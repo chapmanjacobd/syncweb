@@ -4,12 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Result};
 use iroh::PublicKey;
 use iroh_docs::{DocTicket, NamespaceId, api::Doc};
 use n0_future::StreamExt;
 use tokio::sync::RwLock;
 
+use crate::error::{Result, SyncwebError};
 use crate::node::iroh_node::IrohNode;
 
 use super::{Capability, SyncMode, SyncwebFolder};
@@ -50,7 +50,8 @@ impl FolderManager {
     ///
     /// Returns an error if the folder ticket cannot be joined or parsed.
     pub async fn join(&self, ticket_str: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
-        let ticket = DocTicket::from_str(ticket_str.as_ref()).context("invalid folder ticket")?;
+        let ticket =
+            DocTicket::from_str(ticket_str.as_ref()).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
@@ -69,7 +70,7 @@ impl FolderManager {
             .docs_engine
             .open(namespace_id)
             .await?
-            .context("folder is not available locally")?;
+            .ok_or(SyncwebError::NamespaceNotAvailable)?;
         let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
         self.folders.write().await.insert(namespace_id, folder.clone());
         Ok(folder)
@@ -88,10 +89,15 @@ impl FolderManager {
     ///
     /// Returns an error if the folders cannot be listed.
     pub async fn list(&self) -> Result<Vec<SyncwebFolder>> {
-        let mut documents = self.docs_engine.inner().list().await?;
+        let mut documents = self
+            .docs_engine
+            .inner()
+            .list()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to list documents", error))?;
         let mut listed = Vec::new();
         while let Some(document) = documents.next().await {
-            listed.push(document?);
+            listed.push(document.map_err(|error| SyncwebError::operation("failed to read document list", error))?);
         }
         for (namespace_id, capability) in listed {
             if self.folders.read().await.contains_key(&namespace_id) {
@@ -101,7 +107,7 @@ impl FolderManager {
                 .docs_engine
                 .open(namespace_id)
                 .await?
-                .context("listed folder could not be opened")?;
+                .ok_or(SyncwebError::NamespaceNotAvailable)?;
             let mode = match capability {
                 iroh_docs::CapabilityKind::Write => SyncMode::SendReceive,
                 iroh_docs::CapabilityKind::Read => SyncMode::ReceiveOnly,
@@ -124,7 +130,7 @@ impl FolderManager {
             .await
             .get(&namespace_id)
             .cloned()
-            .context("folder is not managed")?;
+            .ok_or(SyncwebError::FolderNotFound(namespace_id.to_string()))?;
         folder.ticket(self.endpoint_addr.clone(), writable).await
     }
 

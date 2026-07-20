@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
 use iroh::PublicKey;
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -10,6 +9,7 @@ use tokio::{
     time::timeout,
 };
 
+use crate::error::{Result, SyncwebError};
 use crate::node::identity::DeviceId;
 
 const MAX_FRAME_SIZE: usize = 1024 * 1024;
@@ -99,39 +99,56 @@ impl RelayMessage {
     ///
     /// Returns an error if the bytes cannot be decoded into a relay message.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
-        let (tag, body) = bytes.split_first().context("relay message is missing a type tag")?;
+        let (tag, body) = bytes
+            .split_first()
+            .ok_or_else(|| SyncwebError::RelayDecode("message is missing a type tag".to_owned()))?;
         match (*tag, body) {
             (1, device_id) if device_id.len() == 32 => Ok(Self::JoinRelayRequest(JoinRelayRequest {
                 device_id: device_id_from_bytes(device_id)?,
             })),
-            (2, [session_key @ .., server_socket]) if session_key.len() == 32 => {
+            (2, [session_key_bytes @ .., server_socket]) if session_key_bytes.len() == 32 => {
                 if *server_socket > 1 {
-                    bail!("invalid session invitation socket flag");
+                    return Err(SyncwebError::RelayDecode(
+                        "invalid session invitation socket flag".to_owned(),
+                    ));
                 }
+                let session_key = session_key_bytes
+                    .try_into()
+                    .map_err(|error| SyncwebError::RelayDecode(format!("invalid session key length: {error}")))?;
                 Ok(Self::SessionInvitation(SessionInvitation {
-                    session_key: session_key.try_into().unwrap_or([0; 32]),
+                    session_key,
                     server_socket: *server_socket == 1,
                 }))
             }
             (3, body_bytes) if body_bytes.len() == 64 => {
-                let session_key = body_bytes.get(..32).context("invalid body length")?;
-                let device_id = body_bytes.get(32..).context("invalid body length")?;
+                let session_key_bytes = body_bytes
+                    .get(..32)
+                    .ok_or_else(|| SyncwebError::RelayDecode("invalid body length".to_owned()))?;
+                let device_id = body_bytes
+                    .get(32..)
+                    .ok_or_else(|| SyncwebError::RelayDecode("invalid body length".to_owned()))?;
+                let session_key = session_key_bytes
+                    .try_into()
+                    .map_err(|error| SyncwebError::RelayDecode(format!("invalid session key length: {error}")))?;
                 Ok(Self::JoinSessionRequest(JoinSessionRequest {
-                    session_key: session_key.try_into().unwrap_or([0; 32]),
+                    session_key,
                     device_id: device_id_from_bytes(device_id)?,
                 }))
             }
             (4, []) => Ok(Self::ResponseSuccess),
             (5, []) => Ok(Self::ResponseNotFound),
             (6, []) => Ok(Self::RelayFull),
-            _ => bail!("invalid relay message encoding"),
+            _ => Err(SyncwebError::RelayDecode("invalid message encoding".to_owned())),
         }
     }
 }
 
 fn device_id_from_bytes(bytes: &[u8]) -> Result<DeviceId> {
-    let arr: [u8; 32] = bytes.try_into().context("relay device ID must be 32 bytes")?;
-    Ok(DeviceId::from_node_id(PublicKey::from_bytes(&arr)?))
+    let arr: [u8; 32] = bytes
+        .try_into()
+        .map_err(|error| SyncwebError::RelayDecode(format!("device ID must be 32 bytes: {error}")))?;
+    let public_key = PublicKey::from_bytes(&arr).map_err(|error| SyncwebError::RelayDecode(error.to_string()))?;
+    Ok(DeviceId::from_node_id(public_key))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -204,8 +221,8 @@ impl SyncthingRelayTransport {
         let address = relay_address(&relay_url)?;
         let stream = timeout(timeout_duration, TcpStream::connect(&address))
             .await
-            .context("relay connection timed out")?
-            .with_context(|| format!("failed to connect to relay {address}"))?;
+            .map_err(|error| SyncwebError::operation("relay connection timed out", error))?
+            .map_err(|error| SyncwebError::operation("failed to connect to relay", error))?;
         let transport = Self {
             stream: Mutex::new(stream),
             relay_url,
@@ -247,9 +264,10 @@ impl SyncthingRelayTransport {
 
     async fn write_frame(&self, payload: &[u8]) -> Result<()> {
         if payload.len() > MAX_FRAME_SIZE {
-            bail!("relay frame exceeds {MAX_FRAME_SIZE} byte limit");
+            return Err(SyncwebError::RelayFrameTooLarge { max: MAX_FRAME_SIZE });
         }
-        let len = u32::try_from(payload.len()).context("payload length exceeds u32::MAX")?;
+        let len = u32::try_from(payload.len())
+            .map_err(|error| SyncwebError::operation("payload length exceeds u32::MAX", error))?;
         let mut stream = self.stream.lock().await;
         stream.write_u32(len).await?;
         stream.write_all(payload).await?;
@@ -260,9 +278,10 @@ impl SyncthingRelayTransport {
 
     async fn read_frame(&self) -> Result<Vec<u8>> {
         let mut stream = self.stream.lock().await;
-        let length = usize::try_from(stream.read_u32().await?).context("length exceeds usize::MAX")?;
+        let length = usize::try_from(stream.read_u32().await?)
+            .map_err(|error| SyncwebError::operation("frame length exceeds usize::MAX", error))?;
         if length > MAX_FRAME_SIZE {
-            bail!("relay frame exceeds {MAX_FRAME_SIZE} byte limit");
+            return Err(SyncwebError::RelayFrameTooLarge { max: MAX_FRAME_SIZE });
         }
         let mut payload = vec![0; length];
         stream.read_exact(&mut payload).await?;
@@ -292,35 +311,32 @@ impl TransportFallback {
     /// Returns an error if connecting to the device via relay fails.
     pub async fn connect_relay(&self, device_id: DeviceId) -> Result<SyncthingRelayTransport> {
         if !self.config.auto_fallback {
-            bail!("Syncthing relay fallback is disabled");
+            return Err(SyncwebError::RelayDisabled);
         }
         let mut failures = Vec::new();
         for relay_url in &self.config.relay_urls {
             match SyncthingRelayTransport::connect(relay_url, device_id, self.config.timeout).await {
                 Ok(transport) => return Ok(transport),
-                Err(error) => failures.push(format!("{relay_url}: {error:#}")),
+                Err(error) => failures.push(format!("{relay_url}: {error}")),
             }
         }
-        bail!(
-            "no Syncthing relay is reachable{}",
-            if failures.is_empty() {
-                ": no relay URLs configured".to_owned()
+        Err(SyncwebError::RelayUnreachable {
+            reasons: if failures.is_empty() {
+                "no relay URLs configured".to_owned()
             } else {
-                format!(": {}", failures.join("; "))
-            }
-        )
+                failures.join("; ")
+            },
+        })
     }
 }
 
 fn relay_address(relay_url: &str) -> Result<String> {
-    let address = relay_url
-        .strip_prefix("tcp://")
-        .ok_or_else(|| anyhow::anyhow!("relay URL must use tcp://"))?;
+    let address = relay_url.strip_prefix("tcp://").ok_or(SyncwebError::RelayBadScheme)?;
     if address.is_empty() || address.contains('/') {
-        bail!("relay URL must contain a host and port");
+        return Err(SyncwebError::RelayBadAddress(relay_url.to_owned()));
     }
     if address.parse::<std::net::SocketAddr>().is_err() && !address.contains(':') {
-        bail!("relay URL must contain a port");
+        return Err(SyncwebError::RelayBadAddress(relay_url.to_owned()));
     }
     Ok(address.to_owned())
 }

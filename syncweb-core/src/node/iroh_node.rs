@@ -1,4 +1,3 @@
-use anyhow::{Context, Result};
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh_blobs::BlobsProtocol;
@@ -6,6 +5,8 @@ use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use crate::error::{Result, SyncwebError};
 
 use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
@@ -48,9 +49,13 @@ impl IrohNode {
         relay_mode: RelayMode,
         address_lookup: MemoryLookup,
     ) -> Result<Self> {
-        tokio::fs::create_dir_all(&data_dir).await?;
+        tokio::fs::create_dir_all(&data_dir)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to create node data directory", error))?;
         let docs_dir = data_dir.join("docs");
-        tokio::fs::create_dir_all(&docs_dir).await?;
+        tokio::fs::create_dir_all(&docs_dir)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to create docs directory", error))?;
 
         let builder = match relay_mode {
             RelayMode::Default => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
@@ -69,11 +74,11 @@ impl IrohNode {
             .secret_key(identity.secret_key().clone())
             .bind()
             .await
-            .context("failed to bind Iroh endpoint")?;
+            .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
 
         let fs_blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
             .await
-            .context("failed to open blob store")?;
+            .map_err(|error| SyncwebError::operation("failed to open blob store", error))?;
         let blobs = BlobsProtocol::new(fs_blob_store.as_ref(), None);
 
         let gossip = Arc::new(Gossip::builder().spawn(endpoint.clone()));
@@ -81,7 +86,7 @@ impl IrohNode {
         let docs = Docs::persistent(docs_dir)
             .spawn(endpoint.clone(), blobs.store().clone(), gossip.as_ref().clone())
             .await
-            .context("failed to open docs store")?;
+            .map_err(|error| SyncwebError::operation("failed to open docs store", error))?;
 
         let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::protocol::ALPN, blobs.clone())
@@ -156,7 +161,10 @@ impl IrohNode {
     ///
     /// Returns an error if the router fails to shutdown properly.
     pub async fn stop(&self) -> Result<()> {
-        self.router.shutdown().await?;
+        self.router
+            .shutdown()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to stop node router", error))?;
         Ok(())
     }
 

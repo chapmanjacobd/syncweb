@@ -34,24 +34,24 @@ Goal: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traver
 ### Phase 3: File Operations + Search/Sort/Stat
 Goal: ls, find, sort, stat, download, selective sync, init/config
 
-- [ ] `FsWatcher` - notify-rs
-- [ ] `Scanner` - walk dir, BLAKE3 hash
-- [ ] `ParallelScanner` - parallel directory scanning ((standard CS pattern: parallel directory traversal))
-- [ ] `Importer` - add to blob store, update doc
-- [ ] `ParallelImporter` - parallel import pipeline
-- [ ] `Exporter` - export blobs to local filesystem
-- [ ] `ParallelExporter` - parallel export pipeline
-- [ ] `LazyFetch` - on-demand blob download (no .stignore needed)
-- [ ] `Actor` - dedicated storage thread (from iroh-willow)
-- [ ] `SessionMode` - ReconcileOnce vs Continuous (from iroh-willow)
-- [ ] `IntentHandle` - Stream + Sink for sync operations (from iroh-willow)
-- [ ] `FindEngine` - regex/glob/exact search with depth/size/time filters
-- [ ] `Sorter` - niche, frecency, peers, random, folder-aggregate sorting
-- [ ] `StatOutput` - detailed file metadata, availability, version vectors
-- [ ] `InitResult` - folder creation + shareable URL output
-- [ ] `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
-- [ ] `syncweb init`, `syncweb config`
-- [ ] Streaming output (default) vs `--sort` collected output
+- [x] `FsWatcher` - notify-rs
+- [x] `Scanner` - walk dir, BLAKE3 hash
+- [x] `ParallelScanner` - parallel directory scanning
+- [x] `Importer` - add to blob store, update doc
+- [x] `ParallelImporter` - parallel import pipeline
+- [x] `Exporter` - export blobs to local filesystem
+- [x] `ParallelExporter` - parallel export pipeline
+- [x] `LazyFetch` - on-demand blob download
+- [x] `Actor` - dedicated storage actor
+- [x] `SessionMode` - ReconcileOnce vs Continuous
+- [x] `IntentHandle` - Stream + Sink for sync operations
+- [x] `FindEngine` - regex/glob/exact search with depth/size/time filters
+- [x] `Sorter` - niche, frecency, peers, random, folder-aggregate sorting
+- [x] `StatOutput` - detailed file metadata and availability
+- [x] `InitResult` - folder creation and shareable URL output
+- [x] `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
+- [x] `syncweb init`, `syncweb config`
+- [x] Streaming output with optional collected sorting
 
 ### Phase 4: Advanced Sync + Networks
 Goal: Sync engine, automatic daemon, networks abstraction

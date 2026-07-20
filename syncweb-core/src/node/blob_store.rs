@@ -1,9 +1,10 @@
-use anyhow::Result;
 use bytes::Bytes;
 use iroh::{EndpointAddr, address_lookup::memory::MemoryLookup, endpoint::Endpoint};
 use iroh_blobs::api::Store as BlobApi;
 use iroh_blobs::{BlobsProtocol, Hash, ticket::BlobTicket};
 use std::path::Path;
+
+use crate::error::{Result, SyncwebError};
 
 #[derive(Clone)]
 pub struct BlobStore {
@@ -34,28 +35,44 @@ impl BlobStore {
     ///
     /// Returns an error if the blob fails to be added to the store.
     pub async fn add_bytes(&self, data: impl AsRef<[u8]>) -> Result<Hash> {
-        Ok(self.store.add_bytes(Bytes::copy_from_slice(data.as_ref())).await?.hash)
+        Ok(self
+            .store
+            .add_bytes(Bytes::copy_from_slice(data.as_ref()))
+            .await
+            .map_err(|error| SyncwebError::operation("failed to add blob bytes", error))?
+            .hash)
     }
 
     /// # Errors
     ///
     /// Returns an error if the file fails to be read or added to the store.
     pub async fn add_file(&self, path: impl AsRef<Path>) -> Result<Hash> {
-        Ok(self.store.add_path(path).await?.hash)
+        Ok(self
+            .store
+            .add_path(path)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to add blob file", error))?
+            .hash)
     }
 
     /// # Errors
     ///
     /// Returns an error if the store cannot be queried.
     pub async fn has(&self, hash: Hash) -> Result<bool> {
-        Ok(self.store.has(hash).await?)
+        self.store
+            .has(hash)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to query blob store", error))
     }
 
     /// # Errors
     ///
     /// Returns an error if the blob cannot be found or read.
     pub async fn get(&self, hash: Hash) -> Result<Bytes> {
-        Ok(self.store.get_bytes(hash).await?)
+        self.store
+            .get_bytes(hash)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to read blob", error))
     }
 
     #[must_use]
@@ -76,7 +93,8 @@ impl BlobStore {
         self.store
             .downloader(endpoint)
             .download(ticket.hash_and_format(), [ticket.addr().id])
-            .await?;
+            .await
+            .map_err(|error| SyncwebError::operation("failed to fetch blob", error))?;
         Ok(())
     }
 }

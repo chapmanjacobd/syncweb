@@ -1,4 +1,3 @@
-use anyhow::Result;
 use distributed_topic_tracker::{
     AutoDiscoveryGossip, Config, DefaultSecretRotation, RecordPublisher, RotationHandle, Topic, TopicId,
 };
@@ -8,6 +7,8 @@ use iroh_docs::NamespaceId;
 use iroh_gossip::net::Gossip;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
+
+use crate::error::{Result, SyncwebError};
 
 #[derive(Clone)]
 pub struct TopicTracker {
@@ -30,7 +31,7 @@ impl TopicTracker {
     ///
     /// Returns an error if joining the topic fails.
     pub async fn announce(&self, namespace_id: NamespaceId) -> Result<()> {
-        let _ = self.topic(namespace_id).await?;
+        self.topic(namespace_id).await?;
         Ok(())
     }
 
@@ -39,8 +40,16 @@ impl TopicTracker {
     /// Returns an error if the topic cannot be joined or gossip neighbors cannot be retrieved.
     pub async fn find_peers(&self, namespace_id: NamespaceId) -> Result<Vec<PublicKey>> {
         let topic = self.topic(namespace_id).await?;
-        let receiver = topic.gossip_receiver().await?;
-        Ok(receiver.neighbors().await?.into_iter().collect())
+        let receiver = topic
+            .gossip_receiver()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to get discovery receiver", error))?;
+        Ok(receiver
+            .neighbors()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to find discovery peers", error))?
+            .into_iter()
+            .collect())
     }
 
     async fn topic(&self, namespace_id: NamespaceId) -> Result<Topic> {
@@ -58,7 +67,8 @@ impl TopicTracker {
         let topic = self
             .gossip
             .subscribe_and_join_with_auto_discovery_no_wait(publisher)
-            .await?;
+            .await
+            .map_err(|error| SyncwebError::operation("failed to join discovery topic", error))?;
         self.topics.lock().await.insert(key, topic.clone());
         Ok(topic)
     }

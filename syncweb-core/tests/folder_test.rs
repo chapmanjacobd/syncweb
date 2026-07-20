@@ -1,5 +1,8 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
+use anyhow::Context;
+use iroh::address_lookup::memory::MemoryLookup;
 use syncweb_core::{
     folder::{Capability, FolderManager, SyncMode},
     node::{
@@ -11,83 +14,354 @@ use syncweb_core::{
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {
-    fn new() -> Self {
+    fn new() -> Result<Self, std::io::Error> {
         let path = std::env::temp_dir().join(format!("syncweb-folder-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path).expect("create test directory");
-        Self(path)
+        std::fs::create_dir(&path)?;
+        Ok(Self(path))
     }
 }
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("remove test directory");
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("failed to remove test directory {}: {error}", self.0.display());
+        }
     }
 }
 
-async fn node(directory: &TestDirectory, name: &str) -> IrohNode {
+async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.0.join(name);
-    let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
-    IrohNode::new(identity, root.join("data"), RelayMode::Default)
-        .await
-        .expect("start node")
+    let identity = IdentityManager::new(root.join("identity.key"))?;
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
 }
 
 #[tokio::test]
-async fn create_join_list_and_drop_folder() {
-    let directory = TestDirectory::new();
-    let first = node(&directory, "first").await;
-    let second = node(&directory, "second").await;
+async fn create_join_list_and_drop_folder() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let first = node(&directory, "first").await?;
+    let second = node(&directory, "second").await?;
     let first_manager = FolderManager::new(&first);
-    let folder = first_manager
-        .create(SyncMode::SendReceive)
-        .await
-        .expect("create folder");
-    let ticket = folder
-        .ticket(first.endpoint().addr(), true)
-        .await
-        .expect("create ticket");
+    let folder = first_manager.create(SyncMode::SendReceive).await?;
+    let ticket = folder.ticket(first.endpoint().addr(), true).await?;
 
     let second_manager = FolderManager::new(&second);
-    let joined = second_manager
-        .join(ticket.to_string(), SyncMode::ReceiveOnly)
-        .await
-        .expect("join folder");
-    assert_eq!(joined.namespace_id(), folder.namespace_id());
-    assert_eq!(second_manager.list().await.expect("list folders").len(), 1);
+    let joined = second_manager.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
+    anyhow::ensure!(joined.namespace_id() == folder.namespace_id());
+    anyhow::ensure!(second_manager.list().await?.len() == 1);
 
-    second_manager.drop(joined.namespace_id()).await.expect("drop folder");
-    assert!(second_manager.list().await.expect("list folders").is_empty());
+    second_manager.drop(joined.namespace_id()).await?;
+    anyhow::ensure!(second_manager.list().await?.is_empty());
 
-    first.stop().await.expect("stop first node");
-    second.stop().await.expect("stop second node");
+    first.stop().await?;
+    second.stop().await?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn modes_enforce_local_writes_and_capabilities() {
-    let directory = TestDirectory::new();
-    let node = node(&directory, "node").await;
+async fn modes_enforce_local_writes_and_capabilities() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = node(&directory, "node").await?;
     let manager = FolderManager::new(&node);
-    let receive_only = manager
-        .create(SyncMode::ReceiveOnly)
-        .await
-        .expect("create receive-only folder");
-    assert!(receive_only.set_blob("file", "data").await.is_err());
+    let receive_only = manager.create(SyncMode::ReceiveOnly).await?;
+    anyhow::ensure!(receive_only.set_blob("file", "data").await.is_err());
 
-    let writable = manager
-        .create(SyncMode::SendReceive)
-        .await
-        .expect("create writable folder");
+    let writable = manager.create(SyncMode::SendReceive).await?;
     writable.grant(node.endpoint().id(), Capability::Write).await;
-    assert!(writable.can_write_as(node.endpoint().id()).await);
-    let hash = writable.set_blob("file", "data").await.expect("store blob");
+    anyhow::ensure!(writable.can_write_as(node.endpoint().id()).await);
+    let hash = writable.set_blob("file", "data").await?;
     let entry = node
         .docs_engine()
         .get(writable.doc(), writable.author(), "file")
-        .await
-        .expect("read entry")
-        .expect("entry exists");
-    assert_eq!(entry.content_hash(), hash);
-    assert_eq!(entry.content_len(), 4);
+        .await?
+        .context("entry exists")?;
+    anyhow::ensure!(entry.content_hash() == hash);
+    anyhow::ensure!(entry.content_len() == 4);
 
-    node.stop().await.expect("stop node");
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sync_modes() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let test_node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&test_node);
+
+    let sr = manager.create(SyncMode::SendReceive).await?;
+    anyhow::ensure!(sr.mode().can_write());
+    anyhow::ensure!(sr.mode().can_receive());
+    anyhow::ensure!(!sr.mode().is_public());
+    anyhow::ensure!(sr.mode().to_string() == "sendreceive");
+
+    let so = manager.create(SyncMode::SendOnly).await?;
+    anyhow::ensure!(so.mode().can_write());
+    anyhow::ensure!(!so.mode().can_receive());
+    anyhow::ensure!(!so.mode().is_public());
+    anyhow::ensure!(so.mode().to_string() == "sendonly");
+
+    let ro = manager.create(SyncMode::ReceiveOnly).await?;
+    anyhow::ensure!(!ro.mode().can_write());
+    anyhow::ensure!(ro.mode().can_receive());
+    anyhow::ensure!(!ro.mode().is_public());
+    anyhow::ensure!(ro.mode().to_string() == "receiveonly");
+
+    let re = manager.create(SyncMode::ReceiveEncrypted).await?;
+    anyhow::ensure!(!re.mode().can_write());
+    anyhow::ensure!(re.mode().can_receive());
+    anyhow::ensure!(!re.mode().is_public());
+    anyhow::ensure!(re.mode().to_string() == "receiveencrypted");
+
+    let pro = manager.create(SyncMode::PublicReadOnly).await?;
+    anyhow::ensure!(!pro.mode().can_write());
+    anyhow::ensure!(pro.mode().can_receive());
+    anyhow::ensure!(pro.mode().is_public());
+    anyhow::ensure!(pro.mode().to_string() == "publicreadonly");
+
+    anyhow::ensure!(manager.list().await?.len() == 5);
+
+    test_node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_capability_map() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let test_node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&test_node);
+    let folder = manager.create(SyncMode::SendReceive).await?;
+
+    let admin_key = iroh::SecretKey::generate().public();
+    let write_key = iroh::SecretKey::generate().public();
+    let read_key = iroh::SecretKey::generate().public();
+    let unknown_key = iroh::SecretKey::generate().public();
+
+    folder.grant(admin_key, Capability::Admin).await;
+    folder.grant(write_key, Capability::Write).await;
+    folder.grant(read_key, Capability::Read).await;
+
+    anyhow::ensure!(folder.capability(admin_key).await == Some(Capability::Admin));
+    anyhow::ensure!(folder.capability(write_key).await == Some(Capability::Write));
+    anyhow::ensure!(folder.capability(read_key).await == Some(Capability::Read));
+    anyhow::ensure!(folder.capability(unknown_key).await == None);
+
+    anyhow::ensure!(Capability::Admin.can_write());
+    anyhow::ensure!(Capability::Write.can_write());
+    anyhow::ensure!(!Capability::Read.can_write());
+
+    test_node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_accept_folder() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let test_node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&test_node);
+    let folder = manager.create(SyncMode::SendReceive).await?;
+    let ns = folder.namespace_id();
+
+    let accepted = manager.accept(ns).await?;
+    anyhow::ensure!(accepted.namespace_id() == ns);
+
+    let listed = manager.list().await?;
+    anyhow::ensure!(listed.len() >= 1);
+    anyhow::ensure!(listed.iter().any(|f| f.namespace_id() == ns));
+
+    test_node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_accept_returns_existing_if_already_managed() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let test_node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&test_node);
+
+    let folder = manager.create(SyncMode::SendReceive).await?;
+    let ns = folder.namespace_id();
+
+    let accepted = manager.accept(ns).await?;
+    anyhow::ensure!(accepted.namespace_id() == ns);
+    anyhow::ensure!(manager.list().await?.len() == 1);
+
+    test_node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+
+    let root_a = directory.0.join("node_a");
+    let identity_a = IdentityManager::new(root_a.join("identity.key"))?;
+    let node_a = IrohNode::new_with_address_lookup(
+        identity_a,
+        root_a.join("data"),
+        RelayMode::Custom {
+            map: relay_map.clone(),
+            insecure: true,
+        },
+        memory_lookup.clone(),
+    )
+    .await?;
+
+    let root_b = directory.0.join("node_b");
+    let identity_b = IdentityManager::new(root_b.join("identity.key"))?;
+    let node_b = IrohNode::new_with_address_lookup(
+        identity_b,
+        root_b.join("data"),
+        RelayMode::Custom {
+            map: relay_map,
+            insecure: true,
+        },
+        memory_lookup.clone(),
+    )
+    .await?;
+
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_a.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_b.endpoint().id()).with_relay_url(relay_url));
+
+    let manager_a = FolderManager::new(&node_a);
+    let folder_a = manager_a.create(SyncMode::SendReceive).await?;
+
+    folder_a.grant(node_a.endpoint().id(), Capability::Admin).await;
+    let hash = folder_a.set_blob("hello.txt", b"hello from A").await?;
+
+    node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
+
+    let ticket = folder_a.ticket(node_a.endpoint().addr(), true).await?;
+
+    let manager_b = FolderManager::new(&node_b);
+    let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
+
+    node_b.topic_tracker().announce(folder_b.namespace_id()).await?;
+
+    let entry = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            if let Some(entry) = node_b
+                .docs_engine()
+                .get(folder_b.doc(), folder_a.author(), "hello.txt")
+                .await?
+            {
+                return anyhow::Ok(entry);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for entry sync")?
+    .context("entry should exist on B")?;
+    anyhow::ensure!(entry.content_hash() == hash);
+
+    let blob_bytes = node_b.blob_store().get(hash).await?;
+    anyhow::ensure!(blob_bytes.as_ref() == b"hello from A");
+
+    node_a.stop().await?;
+    node_b.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+
+    let root_a = directory.0.join("sender");
+    let identity_a = IdentityManager::new(root_a.join("identity.key"))?;
+    let node_a = IrohNode::new_with_address_lookup(
+        identity_a,
+        root_a.join("data"),
+        RelayMode::Custom {
+            map: relay_map.clone(),
+            insecure: true,
+        },
+        memory_lookup.clone(),
+    )
+    .await?;
+
+    let root_b = directory.0.join("receiver");
+    let identity_b = IdentityManager::new(root_b.join("identity.key"))?;
+    let node_b = IrohNode::new_with_address_lookup(
+        identity_b,
+        root_b.join("data"),
+        RelayMode::Custom {
+            map: relay_map,
+            insecure: true,
+        },
+        memory_lookup.clone(),
+    )
+    .await?;
+
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_a.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_b.endpoint().id()).with_relay_url(relay_url));
+
+    let manager_a = FolderManager::new(&node_a);
+    let folder_a = manager_a.create(SyncMode::SendOnly).await?;
+    anyhow::ensure!(folder_a.mode().can_write());
+    anyhow::ensure!(!folder_a.mode().can_receive());
+
+    folder_a.set_blob("doc.txt", b"sent from A").await?;
+
+    node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
+
+    let ticket = folder_a.ticket(node_a.endpoint().addr(), true).await?;
+
+    let manager_b = FolderManager::new(&node_b);
+    let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
+    anyhow::ensure!(!folder_b.mode().can_write());
+    anyhow::ensure!(folder_b.mode().can_receive());
+
+    node_b.topic_tracker().announce(folder_b.namespace_id()).await?;
+
+    let entry = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            if let Some(entry) = node_b
+                .docs_engine()
+                .get(folder_b.doc(), folder_a.author(), "doc.txt")
+                .await?
+            {
+                return anyhow::Ok(entry);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for entry sync")?
+    .context("entry should sync to B")?;
+    anyhow::ensure!(entry.content_len() == 11);
+
+    node_a.stop().await?;
+    node_b.stop().await?;
+    Ok(())
+}
+
+#[test]
+fn test_namespace_key_derivation() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-keyder-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory)?;
+    let identity = IdentityManager::new(directory.join("key"))?;
+
+    let ns_a = iroh_docs::NamespaceId::from([1_u8; 32]);
+    let ns_b = iroh_docs::NamespaceId::from([2_u8; 32]);
+
+    let key_a1 = identity.derive_folder_key(ns_a)?;
+    let key_a2 = identity.derive_folder_key(ns_a)?;
+    let key_b = identity.derive_folder_key(ns_b)?;
+
+    anyhow::ensure!(key_a1.to_bytes() == key_a2.to_bytes());
+    anyhow::ensure!(key_a1.to_bytes() != key_b.to_bytes());
+    anyhow::ensure!(key_a1.to_bytes() != identity.secret_key().to_bytes());
+
+    let author_a = identity.derive_folder_author(ns_a)?;
+    let author_a2 = identity.derive_folder_author(ns_a)?;
+    anyhow::ensure!(author_a.id() == author_a2.id());
+
+    let author_b = identity.derive_folder_author(ns_b)?;
+    anyhow::ensure!(author_a.id() != author_b.id());
+
+    std::fs::remove_dir_all(&directory).context("failed to remove test directory")?;
+    Ok(())
 }

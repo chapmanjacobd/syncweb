@@ -29,7 +29,7 @@
 - [ ] Atomic upgrade: verify rollback works if upgrade fails
 - [ ] Package integrity: verify catches corrupted files
 - [ ] Package discovery: publish → search → info across two nodes
-- [ ] Parallel operations: ls --parallel, import --parallel, export --parallel
+- [ ] Parallel operations: ls/import/export use parallelism by default; `--threads 1` disables it
 - [ ] Partial fetch: download --max-peers improves seeder counts
 - [ ] Cache eviction: test LRU and FIFO under memory pressure
 - [ ] Large peer network: test EfficientPeerCache with 1000+ peers

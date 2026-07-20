@@ -48,6 +48,9 @@ iroh-gossip = "0.101.0"
 distributed-topic-tracker = "0.3.5"
 ed25519-dalek = "3.0.0-rc.0"
 n0-future = "0.3.2"
+globset = "0.4"
+notify = "8"
+regex = "1"
 
 [profile.release]
 lto = true

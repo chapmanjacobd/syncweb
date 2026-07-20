@@ -31,6 +31,12 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand folders 'List managed folders'
             cand devices 'Show this device''s Iroh and Syncthing identities'
             cand config 'Show or update local configuration'
+            cand ls 'List files in a local folder'
+            cand find 'Search local files'
+            cand sort 'Sort local files by discovery criteria'
+            cand stat 'Show detailed metadata for a local file'
+            cand download 'Download a local file to a destination'
+            cand init 'Initialize a folder and print a shareable URL'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -120,6 +126,58 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;config;help;help'= {
         }
+        &'syncweb;ls'= {
+            cand --sort 'Collect and sort output instead of streaming it'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;find'= {
+            cand --kind 'kind'
+            cand --max-depth 'max-depth'
+            cand --min-size 'min-size'
+            cand --max-size 'max-size'
+            cand --extension 'extension'
+            cand --type 'type'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;sort'= {
+            cand --by 'by'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;stat'= {
+            cand --format 'format'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --terse 'terse'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;download'= {
+            cand --threads 'Copy threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;init'= {
+            cand --mode 'mode'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;network'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -165,6 +223,12 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand folders 'List managed folders'
             cand devices 'Show this device''s Iroh and Syncthing identities'
             cand config 'Show or update local configuration'
+            cand ls 'List files in a local folder'
+            cand find 'Search local files'
+            cand sort 'Sort local files by discovery criteria'
+            cand stat 'Show detailed metadata for a local file'
+            cand download 'Download a local file to a destination'
+            cand init 'Initialize a folder and print a shareable URL'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -193,6 +257,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;config;set'= {
         }
         &'syncweb;help;config;show'= {
+        }
+        &'syncweb;help;ls'= {
+        }
+        &'syncweb;help;find'= {
+        }
+        &'syncweb;help;sort'= {
+        }
+        &'syncweb;help;stat'= {
+        }
+        &'syncweb;help;download'= {
+        }
+        &'syncweb;help;init'= {
         }
         &'syncweb;help;network'= {
             cand test-relay 'Test a Syncthing relay TCP connection'

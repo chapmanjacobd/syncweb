@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 tokio.workspace = true
+bytes.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -35,3 +36,5 @@ iroh-blobs.workspace = true
 iroh-docs.workspace = true
 iroh-gossip.workspace = true
 distributed-topic-tracker.workspace = true
+ed25519-dalek.workspace = true
+n0-future.workspace = true

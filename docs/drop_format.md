@@ -1,7 +1,7 @@
 # Syncweb Package Drop Format Design
 
 ## Motivation
-The current [Data Package Management design](./CONVERSION_PLAN.md#data-package-management-non-apt-alternative) heavily relies on the Iroh P2P network (gossip and direct peer connections) to fetch manifests and blobs. While powerful, there are many scenarios where users need an offline or traditional file-transfer mechanism:
+The current [data package management design](./packages.md#1-collection--package-manifests) heavily relies on the Iroh P2P network (gossip and direct peer connections) to fetch manifests and blobs. While powerful, there are many scenarios where users need an offline or traditional file-transfer mechanism:
 * **Air-gapped environments**: Transferring packages via USB drives.
 * **Direct messaging/Email**: Sending a package as an attachment.
 * **Traditional HTTP hosting**: Hosting a static package file on a standard web server without running an Iroh node.

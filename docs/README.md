@@ -1,6 +1,6 @@
-# syncweb Conversion Plan
+# syncweb Design Documentation
 
-Split from the original [CONVERSION_PLAN.md](../CONVERSION_PLAN.md) into focused topic files.
+Focused documentation for the syncweb design and implementation.
 
 ## Files
 

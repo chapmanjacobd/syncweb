@@ -3,16 +3,16 @@
 ### Phase 1: Foundation
 **Goal**: IrohNode + basic identity + storage + logging
 
-- [ ] `Cargo.toml` with correct iroh 1.0.2 dependencies + distributed-topic-tracker 0.3.5
-- [ ] `IrohNode` - Endpoint + Router + protocol setup
-- [ ] `IdentityManager` - SecretKey persistence, NodeId
-- [ ] `BlobStore` - iroh-blobs persistent store
-- [ ] `DocsEngine` - iroh-docs setup
-- [ ] `GossipService` - iroh-gossip setup
-- [ ] `TopicTracker` - distributed-topic-tracker integration (DHT-based peer discovery)
-- [ ] Basic CLI with `clap`
-- [ ] `tracing` structured logging setup
-- [ ] `syncweb version`, `syncweb repl` commands
+- [x] `Cargo.toml` with correct iroh 1.0.2 dependencies + distributed-topic-tracker 0.3.5
+- [x] `IrohNode` - Endpoint + Router + protocol setup
+- [x] `IdentityManager` - SecretKey persistence, NodeId
+- [x] `BlobStore` - iroh-blobs persistent store
+- [x] `DocsEngine` - iroh-docs setup
+- [x] `GossipService` - iroh-gossip setup
+- [x] `TopicTracker` - distributed-topic-tracker integration (DHT-based peer discovery)
+- [x] Basic CLI with `clap`
+- [x] `tracing` structured logging setup
+- [x] `syncweb version`, `syncweb repl` commands
 
 ### Phase 2: Folder Core + Syncthing Relay Piggyback
 **Goal**: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traversal

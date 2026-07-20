@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-
+syncweb-core = { path = "../syncweb-core" }
 tokio.workspace = true
 anyhow.workspace = true
 clap.workspace = true

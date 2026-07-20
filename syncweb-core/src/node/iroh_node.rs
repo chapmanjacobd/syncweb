@@ -1,54 +1,68 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh_blobs::BlobsProtocol;
-use iroh_docs::engine::Engine;
+use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
+use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
 pub struct IrohNode {
     endpoint: iroh::Endpoint,
     router: Arc<Router>,
     blobs: iroh_blobs::BlobsProtocol,
-    docs: Arc<Engine>,
+    docs: Docs,
     gossip: Arc<Gossip>,
+    blob_store: BlobStore,
+    docs_engine: DocsEngine,
+    gossip_service: GossipService,
+    topic_tracker: TopicTracker,
 }
 
 impl IrohNode {
-    /// Create and start a new IrohNode.
+    /// Creates a node and starts accepting the blobs, docs, and gossip protocols.
     pub async fn new(identity: IdentityManager, data_dir: PathBuf) -> Result<Self> {
+        tokio::fs::create_dir_all(&data_dir).await?;
+        let docs_dir = data_dir.join("docs");
+        tokio::fs::create_dir_all(&docs_dir).await?;
+        let address_lookup = MemoryLookup::new();
         let endpoint = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
+            .address_lookup(address_lookup.clone())
             .secret_key(identity.secret_key().clone())
             .bind()
-            .await?;
+            .await
+            .context("failed to bind Iroh endpoint")?;
 
-        let blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs")).await?;
+        let blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
+            .await
+            .context("failed to open blob store")?;
         let blobs = BlobsProtocol::new(blob_store.as_ref(), None);
 
         let gossip = Arc::new(Gossip::builder().spawn(endpoint.clone()));
 
-        let docs_store = iroh_docs::store::Store::persistent(data_dir.join("docs"))?;
-        let downloader = blobs.downloader(&endpoint);
-        let author_storage = iroh_docs::engine::DefaultAuthorStorage::Persistent(data_dir.join("default_author"));
-        let docs = Arc::new(
-            Engine::spawn(
+        let docs = Docs::persistent(docs_dir)
+            .spawn(
                 endpoint.clone(),
-                (*gossip).clone(),
-                docs_store,
                 blobs.store().clone(),
-                downloader,
-                author_storage,
-                None,
+                gossip.as_ref().clone(),
             )
-            .await?,
-        );
+            .await
+            .context("failed to open docs store")?;
 
         let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::protocol::ALPN, blobs.clone())
-            .accept(iroh_gossip::ALPN, gossip.clone()) // Note: this is not the right ALPN for gossip
+            .accept(iroh_docs::ALPN, docs.clone())
+            .accept(iroh_gossip::ALPN, gossip.clone())
             .spawn();
+
+        let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
+        let docs_engine = DocsEngine::new(&docs);
+        let gossip_service = GossipService::new(&gossip);
+        let topic_tracker = TopicTracker::new(&gossip, &endpoint).await?;
 
         Ok(Self {
             endpoint,
@@ -56,6 +70,10 @@ impl IrohNode {
             blobs,
             docs,
             gossip,
+            blob_store,
+            docs_engine,
+            gossip_service,
+            topic_tracker,
         })
     }
 
@@ -67,7 +85,7 @@ impl IrohNode {
         &self.blobs
     }
 
-    pub fn docs(&self) -> &Engine {
+    pub fn docs(&self) -> &Docs {
         &self.docs
     }
 
@@ -75,9 +93,32 @@ impl IrohNode {
         &self.gossip
     }
 
-    pub async fn shutdown(self) -> Result<()> {
+    pub fn blob_store(&self) -> &BlobStore {
+        &self.blob_store
+    }
+
+    pub fn docs_engine(&self) -> &DocsEngine {
+        &self.docs_engine
+    }
+
+    pub fn gossip_service(&self) -> &GossipService {
+        &self.gossip_service
+    }
+
+    pub fn topic_tracker(&self) -> &TopicTracker {
+        &self.topic_tracker
+    }
+
+    pub fn is_running(&self) -> bool {
+        !self.router.is_shutdown()
+    }
+
+    pub async fn stop(&self) -> Result<()> {
         self.router.shutdown().await?;
-        self.endpoint.close().await;
         Ok(())
+    }
+
+    pub async fn shutdown(self) -> Result<()> {
+        self.stop().await
     }
 }

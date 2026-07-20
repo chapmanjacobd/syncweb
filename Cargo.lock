@@ -856,7 +856,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -4291,6 +4291,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "syncweb-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -4303,8 +4304,10 @@ dependencies = [
  "anyhow",
  "base32",
  "blake3",
+ "bytes",
  "clap",
  "distributed-topic-tracker",
+ "ed25519-dalek",
  "fs2",
  "hex",
  "hkdf 0.13.0",
@@ -4313,6 +4316,7 @@ dependencies = [
  "iroh-blobs",
  "iroh-docs",
  "iroh-gossip",
+ "n0-future",
  "opaque-debug 0.4.0",
  "rand 0.10.2",
  "rayon",

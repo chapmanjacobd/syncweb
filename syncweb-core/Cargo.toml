@@ -39,3 +39,6 @@ iroh-gossip.workspace = true
 distributed-topic-tracker.workspace = true
 ed25519-dalek.workspace = true
 n0-future.workspace = true
+
+[dev-dependencies]
+iroh = { workspace = true, features = ["test-utils"] }

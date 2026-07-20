@@ -14,7 +14,7 @@ use syncweb_core::{
     net::TransportFallback,
     node::{
         identity::{DeviceId, IdentityManager},
-        iroh_node::IrohNode,
+        iroh_node::{IrohNode, RelayMode},
     },
     storage::Config as AppConfig,
 };
@@ -128,5 +128,5 @@ fn print_config(config: &AppConfig) -> Result<()> {
 
 async fn open_node(data_dir: &std::path::Path) -> Result<IrohNode> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    IrohNode::new(identity, data_dir.join("data")).await
+    IrohNode::new(identity, data_dir.join("data"), RelayMode::Default).await
 }

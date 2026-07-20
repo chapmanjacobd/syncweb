@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use syncweb_core::{
     folder::{Capability, FolderManager, SyncMode},
-    node::{identity::IdentityManager, iroh_node::IrohNode},
+    node::{
+        identity::{DeviceId, IdentityManager},
+        iroh_node::{IrohNode, RelayMode},
+    },
 };
 
 struct TestDirectory(PathBuf);
@@ -24,7 +27,7 @@ impl Drop for TestDirectory {
 async fn node(directory: &TestDirectory, name: &str) -> IrohNode {
     let root = directory.0.join(name);
     let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
-    IrohNode::new(identity, root.join("data"))
+    IrohNode::new(identity, root.join("data"), RelayMode::Default)
         .await
         .expect("start node")
 }

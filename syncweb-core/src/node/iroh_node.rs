@@ -11,6 +11,11 @@ use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
 use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
+pub enum RelayMode {
+    Default,
+    Custom { map: iroh::RelayMap, insecure: bool },
+}
+
 pub struct IrohNode {
     endpoint: iroh::Endpoint,
     router: Arc<Router>,
@@ -25,12 +30,29 @@ pub struct IrohNode {
 
 impl IrohNode {
     /// Creates a node and starts accepting the blobs, docs, and gossip protocols.
-    pub async fn new(identity: IdentityManager, data_dir: PathBuf) -> Result<Self> {
+    pub async fn new(
+        identity: IdentityManager,
+        data_dir: PathBuf,
+        relay_mode: RelayMode,
+    ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir).await?;
         let docs_dir = data_dir.join("docs");
         tokio::fs::create_dir_all(&docs_dir).await?;
         let address_lookup = MemoryLookup::new();
-        let endpoint = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
+
+        let builder = match relay_mode {
+            RelayMode::Default => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
+            RelayMode::Custom { map, insecure } => {
+                let mut b = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
+                    .relay_mode(iroh::endpoint::RelayMode::Custom(map));
+                if insecure {
+                    b = b.ca_tls_config(iroh::tls::CaTlsConfig::insecure_skip_verify());
+                }
+                b
+            }
+        };
+
+        let endpoint = builder
             .address_lookup(address_lookup.clone())
             .secret_key(identity.secret_key().clone())
             .bind()

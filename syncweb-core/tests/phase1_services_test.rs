@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
-use syncweb_core::node::iroh_node::IrohNode;
+use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
 struct TestDirectory(PathBuf);
 
@@ -25,10 +25,21 @@ impl Drop for TestDirectory {
     }
 }
 
-async fn test_node(directory: &TestDirectory, name: &str) -> IrohNode {
+async fn test_node(
+    directory: &TestDirectory,
+    name: &str,
+    relay_map: Option<iroh::RelayMap>,
+) -> IrohNode {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key")).expect("create identity");
-    IrohNode::new(identity, root.join("data"))
+    let relay_mode = match relay_map {
+        Some(map) => RelayMode::Custom {
+            map,
+            insecure: true,
+        },
+        None => RelayMode::Default,
+    };
+    IrohNode::new(identity, root.join("data"), relay_mode)
         .await
         .expect("start node")
 }
@@ -36,7 +47,7 @@ async fn test_node(directory: &TestDirectory, name: &str) -> IrohNode {
 #[tokio::test]
 async fn test_add_bytes() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let hash = node
         .blob_store()
         .add_bytes(b"phase one blob")
@@ -51,7 +62,7 @@ async fn test_add_bytes() {
 #[tokio::test]
 async fn test_has_blob() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let hash = node
         .blob_store()
         .add_bytes(b"blob data")
@@ -68,7 +79,7 @@ async fn test_has_blob() {
 #[tokio::test]
 async fn test_get_blob() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let hash = node
         .blob_store()
         .add_bytes(b"blob data")
@@ -84,7 +95,7 @@ async fn test_get_blob() {
 #[tokio::test]
 async fn test_blob_ticket() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let hash = node
         .blob_store()
         .add_bytes(b"blob data")
@@ -101,7 +112,7 @@ async fn test_blob_ticket() {
 #[tokio::test]
 async fn test_add_file() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let path = directory.path().join("input.txt");
     std::fs::write(&path, b"file blob").expect("write input file");
 
@@ -117,8 +128,9 @@ async fn test_add_file() {
 #[tokio::test]
 async fn test_two_nodes_sync_blob() {
     let directory = TestDirectory::new();
-    let first = test_node(&directory, "first").await;
-    let second = test_node(&directory, "second").await;
+    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+    let first = test_node(&directory, "first", Some(relay_map.clone())).await;
+    let second = test_node(&directory, "second", Some(relay_map)).await;
     let hash = first
         .blob_store()
         .add_bytes(b"shared blob")
@@ -147,7 +159,7 @@ async fn test_two_nodes_sync_blob() {
 #[tokio::test]
 async fn test_create_namespace() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let doc = node
         .docs_engine()
         .create_namespace()
@@ -160,7 +172,7 @@ async fn test_create_namespace() {
 #[tokio::test]
 async fn test_set_get_entry() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let doc = node.docs_engine().create_namespace().await.unwrap();
     let author = node.docs_engine().author().await.unwrap();
 
@@ -182,7 +194,7 @@ async fn test_set_get_entry() {
 #[tokio::test]
 async fn test_watch_entries() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let doc = node.docs_engine().create_namespace().await.unwrap();
     let author = node.docs_engine().author().await.unwrap();
 
@@ -215,7 +227,7 @@ async fn test_watch_entries() {
 #[tokio::test]
 async fn test_author_from_secret() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
 
     // Test creating (exporting) and importing an author
     let original_author_id = node.docs_engine().author().await.expect("get author");
@@ -242,9 +254,10 @@ async fn test_author_from_secret() {
 #[tokio::test]
 async fn test_subscribe_publish() {
     let directory = TestDirectory::new();
-    let first = test_node(&directory, "first").await;
-    let second = test_node(&directory, "second").await;
-    let topic = iroh_gossip::TopicId::from_bytes([7; 32]);
+    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+    let first = test_node(&directory, "first", Some(relay_map.clone())).await;
+    let second = test_node(&directory, "second", Some(relay_map)).await;
+    let topic = iroh_gossip::TopicId::from_bytes(rand::random());
 
     let first_topic = first
         .gossip_service()
@@ -259,7 +272,7 @@ async fn test_subscribe_publish() {
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .expect("subscribe second node");
-    tokio::time::timeout(Duration::from_secs(15), second_topic.joined())
+    tokio::time::timeout(Duration::from_secs(60), second_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -273,7 +286,7 @@ async fn test_subscribe_publish() {
         }
     });
 
-    let received = tokio::time::timeout(Duration::from_secs(15), async {
+    let received = tokio::time::timeout(Duration::from_secs(60), async {
         while let Some(event) = second_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -294,10 +307,11 @@ async fn test_subscribe_publish() {
 #[tokio::test]
 async fn test_multiple_subscribers() {
     let directory = TestDirectory::new();
-    let first = test_node(&directory, "first").await;
-    let second = test_node(&directory, "second").await;
-    let third = test_node(&directory, "third").await;
-    let topic = iroh_gossip::TopicId::from_bytes([7; 32]);
+    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await.unwrap();
+    let first = test_node(&directory, "first", Some(relay_map.clone())).await;
+    let second = test_node(&directory, "second", Some(relay_map.clone())).await;
+    let third = test_node(&directory, "third", Some(relay_map)).await;
+    let topic = iroh_gossip::TopicId::from_bytes(rand::random());
 
     let first_topic = first
         .gossip_service()
@@ -311,7 +325,7 @@ async fn test_multiple_subscribers() {
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .expect("subscribe second node");
-    tokio::time::timeout(Duration::from_secs(15), second_topic.joined())
+    tokio::time::timeout(Duration::from_secs(60), second_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -320,7 +334,7 @@ async fn test_multiple_subscribers() {
         .subscribe(topic, vec![second.endpoint().id()])
         .await
         .expect("subscribe third node");
-    tokio::time::timeout(Duration::from_secs(15), third_topic.joined())
+    tokio::time::timeout(Duration::from_secs(60), third_topic.joined())
         .await
         .expect("gossip join timed out")
         .expect("gossip join failed");
@@ -334,7 +348,7 @@ async fn test_multiple_subscribers() {
         }
     });
 
-    let second_received = tokio::time::timeout(Duration::from_secs(15), async {
+    let second_received = tokio::time::timeout(Duration::from_secs(60), async {
         while let Some(event) = second_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -345,7 +359,7 @@ async fn test_multiple_subscribers() {
     .await
     .expect("second gossip receive timed out")
     .expect("second gossip stream closed");
-    let third_received = tokio::time::timeout(Duration::from_secs(15), async {
+    let third_received = tokio::time::timeout(Duration::from_secs(60), async {
         while let Some(event) = third_topic.next().await {
             if let Ok(iroh_gossip::api::Event::Received(message)) = event {
                 return Some(message.content);
@@ -367,7 +381,7 @@ async fn test_multiple_subscribers() {
 #[tokio::test]
 async fn test_announce_topic() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let doc = node
         .docs_engine()
         .create_namespace()
@@ -385,7 +399,7 @@ async fn test_announce_topic() {
 #[tokio::test]
 async fn test_find_peers() {
     let directory = TestDirectory::new();
-    let node = test_node(&directory, "node").await;
+    let node = test_node(&directory, "node", None).await;
     let doc = node
         .docs_engine()
         .create_namespace()

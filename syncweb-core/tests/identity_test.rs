@@ -41,7 +41,12 @@ fn test_persist_secret_key() -> anyhow::Result<()> {
     let directory = TestDirectory::new()?;
     let path = directory.identity_path();
     let identity = IdentityManager::new(&path)?;
-    anyhow::ensure!(std::fs::read(path)? == identity.secret_key().to_bytes());
+    let content = std::fs::read_to_string(&path)?;
+    let encoded = base32::encode(
+        base32::Alphabet::Rfc4648 { padding: false },
+        &identity.secret_key().to_bytes(),
+    );
+    anyhow::ensure!(content == encoded);
     Ok(())
 }
 

@@ -70,6 +70,20 @@ impl DocsEngine {
         Ok(())
     }
 
+    /// Start live synchronization for a document.
+    ///
+    /// An empty peer list uses peers already learned by iroh-docs for the
+    /// namespace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document cannot be opened for synchronization.
+    pub async fn start_sync(&self, doc: &Doc, peers: Vec<iroh::EndpointAddr>) -> Result<()> {
+        doc.start_sync(peers)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to start document synchronization", error))
+    }
+
     /// # Errors
     ///
     /// Returns an error if the document cannot be shared.

@@ -11,10 +11,11 @@ use cli::{
 };
 use rayon::prelude::*;
 use syncweb_core::{
+    filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry},
     folder::{FolderManager, SyncMode},
     fs::{FileEntry, FileType, ParallelScanner},
     init::InitResult,
-    net::TransportFallback,
+    net::{NetworkManager, NetworkOptions, TransportFallback},
     node::{
         identity::{DeviceId, IdentityManager},
         iroh_node::{IrohNode, RelayMode},
@@ -23,6 +24,7 @@ use syncweb_core::{
     sort::{SortCriterion, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
     storage::Config as AppConfig,
+    sync::{AreaFilter, AreaOfInterest, SessionMode, SubscribeParams, SyncEngine},
 };
 
 #[tokio::main]
@@ -64,6 +66,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
             println!("share_url: {}", result.share_url);
             node.stop().await?;
         }
+        Command::Automatic(command) => handle_automatic(&cli.data_dir, command).await?,
+        Command::Subscribe(command) => handle_subscribe(&cli.data_dir, command).await?,
         Command::Config { command } => {
             let config_path = cli.data_dir.join("config.toml");
             let mut config = AppConfig::load(&config_path)?;
@@ -85,19 +89,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Command::Network {
-            command: NetworkCommand::TestRelay { relay_url },
-        } => {
-            let identity = IdentityManager::new(cli.data_dir.join("identity.key"))?;
-            let app_config = AppConfig::load(cli.data_dir.join("config.toml"))?;
-            let mut config = app_config.relay_config();
-            config.relay_urls = vec![relay_url.clone()];
-            config.auto_fallback = true;
-            TransportFallback::new(config)
-                .connect_relay(DeviceId::from_node_id(identity.node_id()))
-                .await?;
-            println!("relay reachable: {relay_url}");
-        }
+        Command::Network { command } => handle_network(&cli.data_dir, command).await?,
         Command::Completions { shell } => {
             clap_complete::generate(shell, &mut Cli::command(), "syncweb", &mut std::io::stdout());
         }
@@ -143,6 +135,9 @@ async fn handle_create(data_dir: &std::path::Path, command: crate::cli::commands
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
+    if let Some(network_name) = command.network {
+        add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
+    }
     let ticket = folder.ticket(node.endpoint().addr(), true).await?;
     println!("namespace: {}", folder.namespace_id());
     println!("ticket: {ticket}");
@@ -156,8 +151,220 @@ async fn handle_join(data_dir: &std::path::Path, command: crate::cli::commands::
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.join(command.ticket, SyncMode::from_str(&command.mode)?).await?;
+    if let Some(network_name) = command.network {
+        add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
+    }
     println!("joined: {}", folder.namespace_id());
     node.stop().await?;
+    Ok(())
+}
+
+async fn handle_automatic(data_dir: &std::path::Path, command: crate::cli::commands::AutomaticArgs) -> Result<()> {
+    let filter_path = command.filters.unwrap_or_else(|| data_dir.join("filters.toml"));
+    let engine = if filter_path.exists() {
+        FilterEngine::load(&filter_path)?
+    } else {
+        FilterEngine::new(FilterConfig::default())?
+    };
+    if command.show_filters {
+        print!("{}", toml::to_string_pretty(&engine.config())?);
+        return Ok(());
+    }
+    if command.dry_run {
+        for path in command.paths {
+            for entry in ParallelScanner::new(&path, Vec::<String>::new(), 0).scan()? {
+                let filter_entry = FilterEntry::from_file(&entry);
+                let action = engine.evaluate(&filter_entry);
+                let label = match action {
+                    FilterAction::Accept => "accept",
+                    FilterAction::Reject => "reject",
+                    _ => "unknown",
+                };
+                println!("{label}\t{}", entry.path.display());
+            }
+        }
+        return Ok(());
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let sync = SyncEngine::new(
+        manager.clone(),
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        node.gossip_service().clone(),
+    );
+    let network_manager = open_network_manager(data_dir)?;
+    let mut network_topics = Vec::new();
+    for network in network_manager.list() {
+        network_topics.push(network_manager.subscribe(network.id, node.gossip_service()).await?);
+    }
+    let mut intents = Vec::new();
+    for folder in manager.list().await? {
+        intents.push(
+            sync.sync_with_filter(
+                folder.namespace_id(),
+                SessionMode::Continuous,
+                syncweb_core::sync::SubscribeParams::default(),
+                engine.clone(),
+            )
+            .await?,
+        );
+    }
+    println!("automatic synchronization running: {} folders", intents.len());
+    tokio::signal::ctrl_c().await?;
+    for intent in &intents {
+        let _result = intent.cancel();
+    }
+    drop(network_topics);
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_subscribe(data_dir: &std::path::Path, command: crate::cli::commands::SubscribeArgs) -> Result<()> {
+    std::fs::create_dir_all(&command.path)?;
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.join(command.ticket, SyncMode::ReceiveOnly).await?;
+    let session_id = uuid::Uuid::new_v4();
+    let mut params = if command.ingest_only {
+        SubscribeParams::ingest_only()
+    } else {
+        SubscribeParams::default()
+    };
+    if command.ignore_self {
+        params.ignore_session = Some(session_id);
+    }
+    let area = command
+        .prefix
+        .map(AreaFilter::Prefix)
+        .or_else(|| command.glob.map(AreaFilter::Glob));
+    if let Some(filter) = area.clone() {
+        params = params.with_area(filter);
+    }
+    if command.max_size.is_some() || command.max_count.is_some() {
+        let limit_area = area.unwrap_or(AreaFilter::All);
+        let limits = AreaOfInterest::with_limits(
+            limit_area,
+            command.max_size.unwrap_or(0),
+            command.max_count.unwrap_or(0),
+        );
+        if limits.is_limit_reached(0, 0) {
+            anyhow::bail!("subscription limits are already exhausted");
+        }
+        params = params.with_limits(limits);
+    }
+    let sync = SyncEngine::new(
+        manager,
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        node.gossip_service().clone(),
+    );
+    let intent = sync.subscribe(folder.namespace_id(), params.clone()).await?;
+    println!("subscribed: {}", folder.namespace_id());
+    println!("ingest_only: {}", params.ingest_only);
+    tokio::signal::ctrl_c().await?;
+    let _result = intent.cancel();
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_network(data_dir: &std::path::Path, command: NetworkCommand) -> Result<()> {
+    let mut manager = open_network_manager(data_dir)?;
+    match command {
+        NetworkCommand::Create {
+            name,
+            label,
+            invite_only,
+        } => {
+            let mut options = NetworkOptions::default();
+            options.label = label;
+            options.invite_only = invite_only;
+            let id = manager.create(&name, options)?;
+            println!("created: {name}\t{id}");
+        }
+        NetworkCommand::List { name } => {
+            if let Some(network_name) = name {
+                let network = manager
+                    .get_by_name(&network_name)
+                    .with_context(|| format!("network not found: {network_name}"))?;
+                println!(
+                    "{}\t{}\t{} members\t{} folders",
+                    network.name,
+                    network.id,
+                    network.members.len(),
+                    network.folders.len()
+                );
+            } else {
+                for network in manager.list() {
+                    println!(
+                        "{}\t{}\t{} members\t{} folders",
+                        network.name,
+                        network.id,
+                        network.members.len(),
+                        network.folders.len()
+                    );
+                }
+            }
+        }
+        NetworkCommand::Join { ticket } => {
+            let parsed = ticket.parse()?;
+            let id = manager.join(parsed)?;
+            println!("joined: {id}");
+        }
+        NetworkCommand::Leave { name } => {
+            let id = network_id_by_name(&manager, &name)?;
+            manager.leave(id)?;
+            println!("left: {name}");
+        }
+        NetworkCommand::Invite { name, device } => {
+            let id = network_id_by_name(&manager, &name)?;
+            let ticket = if let Some(node_id) = device {
+                manager.invite(id, node_id.parse()?)?
+            } else {
+                manager.invite_any(id)?
+            };
+            println!("{ticket}");
+        }
+        NetworkCommand::Kick { name, device } => {
+            let id = network_id_by_name(&manager, &name)?;
+            manager.kick(id, &device.parse()?)?;
+            println!("kicked: {device}");
+        }
+        NetworkCommand::TestRelay { relay_url } => {
+            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+            let app_config = AppConfig::load(data_dir.join("config.toml"))?;
+            let mut config = app_config.relay_config();
+            config.relay_urls = vec![relay_url.clone()];
+            config.auto_fallback = true;
+            TransportFallback::new(config)
+                .connect_relay(DeviceId::from_node_id(identity.node_id()))
+                .await?;
+            println!("relay reachable: {relay_url}");
+        }
+    }
+    Ok(())
+}
+
+fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    Ok(NetworkManager::new(data_dir.join("networks.json"), identity.node_id())?)
+}
+
+fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {
+    manager
+        .get_by_name(name)
+        .map(|network| network.id)
+        .with_context(|| format!("network not found: {name}"))
+}
+
+fn add_folder_to_network(
+    data_dir: &std::path::Path,
+    network_name: &str,
+    namespace: iroh_docs::NamespaceId,
+) -> Result<()> {
+    let mut networks = open_network_manager(data_dir)?;
+    let id = network_id_by_name(&networks, network_name)?;
+    networks.add_folder(id, namespace)?;
     Ok(())
 }
 

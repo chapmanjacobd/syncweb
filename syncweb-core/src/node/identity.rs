@@ -21,9 +21,12 @@ impl IdentityManager {
     pub fn new(path: impl Into<PathBuf>) -> Result<Self> {
         let path_buf = path.into();
         let secret_key = if path_buf.exists() {
-            let bytes = std::fs::read(&path_buf).map_err(|error| SyncwebError::identity(&path_buf, error))?;
-            let arr: [u8; 32] = bytes.try_into().map_err(|error: Vec<u8>| {
-                SyncwebError::InvalidIdentity(format!("expected 32 bytes, got {} bytes", error.len()))
+            let content =
+                std::fs::read_to_string(&path_buf).map_err(|error| SyncwebError::identity(&path_buf, error))?;
+            let decoded = base32::decode(base32::Alphabet::Rfc4648 { padding: false }, content.trim())
+                .ok_or_else(|| SyncwebError::InvalidIdentity("invalid base32 encoding".to_string()))?;
+            let arr: [u8; 32] = decoded.try_into().map_err(|error: Vec<u8>| {
+                SyncwebError::InvalidIdentity(format!("expected 32 bytes, got {}", error.len()))
             })?;
             SecretKey::from_bytes(&arr)
         } else {
@@ -33,7 +36,7 @@ impl IdentityManager {
             {
                 std::fs::create_dir_all(parent).map_err(|error| SyncwebError::identity(&path_buf, error))?;
             }
-            write_secret_key(&path_buf, secret_key.to_bytes())?;
+            write_secret_key(&path_buf, &secret_key)?;
             secret_key
         };
 
@@ -89,7 +92,7 @@ impl IdentityManager {
     }
 }
 
-fn write_secret_key(path: &Path, bytes: [u8; 32]) -> Result<()> {
+fn write_secret_key(path: &Path, secret_key: &SecretKey) -> Result<()> {
     use std::io::Write;
 
     let temporary_path = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
@@ -105,7 +108,8 @@ fn write_secret_key(path: &Path, bytes: [u8; 32]) -> Result<()> {
         let mut file = options
             .open(&temporary_path)
             .map_err(|error| SyncwebError::identity(path, error))?;
-        file.write_all(&bytes)?;
+        let encoded = base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &secret_key.to_bytes());
+        file.write_all(encoded.as_bytes())?;
         file.sync_all()?;
         std::fs::rename(&temporary_path, path).map_err(|error| SyncwebError::identity(path, error))
     })();

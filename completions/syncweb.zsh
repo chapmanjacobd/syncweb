@@ -47,6 +47,7 @@ _arguments "${_arguments_options[@]}" : \
 (create)
 _arguments "${_arguments_options[@]}" : \
 '--mode=[]:MODE:_default' \
+'--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--verbose[Enable verbose structured logging]' \
@@ -58,6 +59,7 @@ _arguments "${_arguments_options[@]}" : \
 (join)
 _arguments "${_arguments_options[@]}" : \
 '--mode=[]:MODE:_default' \
+'--network=[Add the joined folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--verbose[Enable verbose structured logging]' \
@@ -240,6 +242,34 @@ _arguments "${_arguments_options[@]}" : \
 '::path:_files' \
 && ret=0
 ;;
+(automatic)
+_arguments "${_arguments_options[@]}" : \
+'*--paths=[Paths evaluated by --dry-run]:PATHS:_files' \
+'--filters=[Filter configuration (defaults to DATA_DIR/filters.toml)]:FILTERS:_files' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--show-filters[Print the active filter configuration and exit]' \
+'--dry-run[Evaluate paths without starting the daemon]' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(subscribe)
+_arguments "${_arguments_options[@]}" : \
+'(--glob)--prefix=[]:PREFIX:_files' \
+'(--prefix)--glob=[]:GLOB:_default' \
+'--max-count=[]:MAX_COUNT:_default' \
+'--max-size=[]:MAX_SIZE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--ingest-only[Only deliver entries ingested after subscription]' \
+'--ignore-self[Ignore events emitted by this subscription session]' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':ticket:_default' \
+'::path:_files' \
+&& ret=0
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -256,7 +286,65 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-network-command-$line[1]:"
         case $line[1] in
-            (test-relay)
+            (create)
+_arguments "${_arguments_options[@]}" : \
+'--label=[]:LABEL:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--invite-only[]' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+&& ret=0
+;;
+(ls)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name:_default' \
+&& ret=0
+;;
+(join)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':ticket:_default' \
+&& ret=0
+;;
+(leave)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+&& ret=0
+;;
+(invite)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+'::device -- Optional Iroh node ID to bind the invitation to:_default' \
+&& ret=0
+;;
+(kick)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+':device:_default' \
+&& ret=0
+;;
+(test-relay)
 _arguments "${_arguments_options[@]}" : \
 '--relay-url=[]:RELAY_URL:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -277,7 +365,31 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-network-help-command-$line[1]:"
         case $line[1] in
-            (test-relay)
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ls)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(join)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(leave)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(invite)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(kick)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(test-relay)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -403,6 +515,14 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(automatic)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(subscribe)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__network_commands" \
@@ -415,7 +535,31 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-help-network-command-$line[1]:"
         case $line[1] in
-            (test-relay)
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ls)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(join)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(leave)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(invite)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(kick)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(test-relay)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -462,6 +606,8 @@ _syncweb_commands() {
 'stat:Show detailed metadata for a local file' \
 'download:Download a local file to a destination' \
 'init:Initialize a folder and print a shareable URL' \
+'automatic:Run rules-based automatic synchronization' \
+'subscribe:Subscribe to a folder with event filters' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -473,6 +619,11 @@ _syncweb_commands() {
 _syncweb__subcmd__accept_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb accept commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__automatic_commands] )) ||
+_syncweb__subcmd__automatic_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb automatic commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__completions_commands] )) ||
 _syncweb__subcmd__completions_commands() {
@@ -570,6 +721,8 @@ _syncweb__subcmd__help_commands() {
 'stat:Show detailed metadata for a local file' \
 'download:Download a local file to a destination' \
 'init:Initialize a folder and print a shareable URL' \
+'automatic:Run rules-based automatic synchronization' \
+'subscribe:Subscribe to a folder with event filters' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -581,6 +734,11 @@ _syncweb__subcmd__help_commands() {
 _syncweb__subcmd__help__subcmd__accept_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help accept commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__automatic_commands] )) ||
+_syncweb__subcmd__help__subcmd__automatic_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help automatic commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__completions_commands] )) ||
 _syncweb__subcmd__help__subcmd__completions_commands() {
@@ -663,9 +821,45 @@ _syncweb__subcmd__help__subcmd__manpages_commands() {
 (( $+functions[_syncweb__subcmd__help__subcmd__network_commands] )) ||
 _syncweb__subcmd__help__subcmd__network_commands() {
     local commands; commands=(
+'create:Create a named network' \
+'ls:List networks or inspect one' \
+'join:Join a network from an invitation' \
+'leave:Leave a network' \
+'invite:Generate a network invitation' \
+'kick:Remove a device from a network' \
 'test-relay:Test a Syncthing relay TCP connection' \
     )
     _describe -t commands 'syncweb help network commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__create_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__invite_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__invite_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network invite commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__join_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__join_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__kick_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__kick_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network kick commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__leave_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__leave_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network leave commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__ls_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__ls_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network ls commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands] )) ||
 _syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands() {
@@ -686,6 +880,11 @@ _syncweb__subcmd__help__subcmd__sort_commands() {
 _syncweb__subcmd__help__subcmd__stat_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help stat commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__help__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__version_commands] )) ||
 _syncweb__subcmd__help__subcmd__version_commands() {
@@ -715,28 +914,100 @@ _syncweb__subcmd__manpages_commands() {
 (( $+functions[_syncweb__subcmd__network_commands] )) ||
 _syncweb__subcmd__network_commands() {
     local commands; commands=(
+'create:Create a named network' \
+'ls:List networks or inspect one' \
+'join:Join a network from an invitation' \
+'leave:Leave a network' \
+'invite:Generate a network invitation' \
+'kick:Remove a device from a network' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__network__subcmd__create_commands] )) ||
+_syncweb__subcmd__network__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network create commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__network__subcmd__help_commands] )) ||
 _syncweb__subcmd__network__subcmd__help_commands() {
     local commands; commands=(
+'create:Create a named network' \
+'ls:List networks or inspect one' \
+'join:Join a network from an invitation' \
+'leave:Leave a network' \
+'invite:Generate a network invitation' \
+'kick:Remove a device from a network' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb network help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__create_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help create commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__help_commands] )) ||
 _syncweb__subcmd__network__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network help help commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__invite_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__invite_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help invite commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__join_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__join_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__kick_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__kick_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help kick commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__leave_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__leave_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help leave commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__ls_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__ls_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help ls commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__test-relay_commands] )) ||
 _syncweb__subcmd__network__subcmd__help__subcmd__test-relay_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network help test-relay commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__invite_commands] )) ||
+_syncweb__subcmd__network__subcmd__invite_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network invite commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__join_commands] )) ||
+_syncweb__subcmd__network__subcmd__join_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__kick_commands] )) ||
+_syncweb__subcmd__network__subcmd__kick_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network kick commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__leave_commands] )) ||
+_syncweb__subcmd__network__subcmd__leave_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network leave commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__ls_commands] )) ||
+_syncweb__subcmd__network__subcmd__ls_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network ls commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__test-relay_commands] )) ||
 _syncweb__subcmd__network__subcmd__test-relay_commands() {
@@ -757,6 +1028,11 @@ _syncweb__subcmd__sort_commands() {
 _syncweb__subcmd__stat_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb stat commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__version_commands] )) ||
 _syncweb__subcmd__version_commands() {

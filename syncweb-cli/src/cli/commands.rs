@@ -37,6 +37,10 @@ pub enum Command {
     Download(DownloadArgs),
     #[command(about = "Initialize a folder and print a shareable URL")]
     Init(InitArgs),
+    #[command(about = "Run rules-based automatic synchronization")]
+    Automatic(AutomaticArgs),
+    #[command(about = "Subscribe to a folder with event filters")]
+    Subscribe(SubscribeArgs),
     #[command(about = "Network connectivity utilities")]
     Network {
         #[command(subcommand)]
@@ -70,6 +74,8 @@ pub struct FolderCreate {
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
     pub relay_fallback: bool,
+    #[arg(long, help = "Add the created folder to a named network")]
+    pub network: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -81,6 +87,8 @@ pub struct FolderJoin {
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
     pub relay_fallback: bool,
+    #[arg(long, help = "Add the joined folder to a named network")]
+    pub network: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -171,8 +179,61 @@ pub struct InitArgs {
     pub mode: String,
 }
 
+#[derive(Debug, Args)]
+pub struct AutomaticArgs {
+    #[arg(long, help = "Print the active filter configuration and exit")]
+    pub show_filters: bool,
+    #[arg(long, help = "Evaluate paths without starting the daemon")]
+    pub dry_run: bool,
+    #[arg(long, num_args = 1.., help = "Paths evaluated by --dry-run")]
+    pub paths: Vec<PathBuf>,
+    #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
+    pub filters: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct SubscribeArgs {
+    pub ticket: String,
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, help = "Only deliver entries ingested after subscription")]
+    pub ingest_only: bool,
+    #[arg(long, help = "Ignore events emitted by this subscription session")]
+    pub ignore_self: bool,
+    #[arg(long, conflicts_with = "glob")]
+    pub prefix: Option<PathBuf>,
+    #[arg(long, conflicts_with = "prefix")]
+    pub glob: Option<String>,
+    #[arg(long)]
+    pub max_count: Option<u64>,
+    #[arg(long)]
+    pub max_size: Option<u64>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum NetworkCommand {
+    #[command(about = "Create a named network")]
+    Create {
+        name: String,
+        #[arg(long, default_value = "")]
+        label: String,
+        #[arg(long)]
+        invite_only: bool,
+    },
+    #[command(name = "ls", about = "List networks or inspect one")]
+    List { name: Option<String> },
+    #[command(about = "Join a network from an invitation")]
+    Join { ticket: String },
+    #[command(about = "Leave a network")]
+    Leave { name: String },
+    #[command(about = "Generate a network invitation")]
+    Invite {
+        name: String,
+        #[arg(help = "Optional Iroh node ID to bind the invitation to")]
+        device: Option<String>,
+    },
+    #[command(about = "Remove a device from a network")]
+    Kick { name: String, device: String },
     #[command(about = "Test a Syncthing relay TCP connection")]
     TestRelay {
         #[arg(long = "relay-url")]

@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH automatic 1  "automatic " 
+.SH NAME
+automatic \- Run rules\-based automatic synchronization
+.SH SYNOPSIS
+\fBautomatic\fR [\fB\-\-show\-filters\fR] [\fB\-\-dry\-run\fR] [\fB\-\-paths\fR] [\fB\-\-filters\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Run rules\-based automatic synchronization
+.SH OPTIONS
+.TP
+\fB\-\-show\-filters\fR
+Print the active filter configuration and exit
+.TP
+\fB\-\-dry\-run\fR
+Evaluate paths without starting the daemon
+.TP
+\fB\-\-paths\fR \fI<PATHS>...\fR
+Paths evaluated by \-\-dry\-run
+.TP
+\fB\-\-filters\fR \fI<FILTERS>\fR
+Filter configuration (defaults to DATA_DIR/filters.toml)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

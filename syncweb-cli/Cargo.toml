@@ -21,8 +21,7 @@ tracing-subscriber.workspace = true
 clap_complete = "4.6"
 clap_mangen = "0.3"
 blake3.workspace = true
-
-[dev-dependencies]
+iroh-docs.workspace = true
 uuid.workspace = true
 
 [lints]

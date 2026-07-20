@@ -37,6 +37,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand stat 'Show detailed metadata for a local file'
             cand download 'Download a local file to a destination'
             cand init 'Initialize a folder and print a shareable URL'
+            cand automatic 'Run rules-based automatic synchronization'
+            cand subscribe 'Subscribe to a folder with event filters'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -56,6 +58,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;create'= {
             cand --mode 'mode'
+            cand --network 'Add the created folder to a named network'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --verbose 'Enable verbose structured logging'
@@ -64,6 +67,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;join'= {
             cand --mode 'mode'
+            cand --network 'Add the joined folder to a named network'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --verbose 'Enable verbose structured logging'
@@ -178,13 +182,79 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;automatic'= {
+            cand --paths 'Paths evaluated by --dry-run'
+            cand --filters 'Filter configuration (defaults to DATA_DIR/filters.toml)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --show-filters 'Print the active filter configuration and exit'
+            cand --dry-run 'Evaluate paths without starting the daemon'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;subscribe'= {
+            cand --prefix 'prefix'
+            cand --glob 'glob'
+            cand --max-count 'max-count'
+            cand --max-size 'max-size'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --ingest-only 'Only deliver entries ingested after subscription'
+            cand --ignore-self 'Ignore events emitted by this subscription session'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;network'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand create 'Create a named network'
+            cand ls 'List networks or inspect one'
+            cand join 'Join a network from an invitation'
+            cand leave 'Leave a network'
+            cand invite 'Generate a network invitation'
+            cand kick 'Remove a device from a network'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;network;create'= {
+            cand --label 'label'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --invite-only 'invite-only'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;ls'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;join'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;leave'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;invite'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;kick'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'syncweb;network;test-relay'= {
             cand --relay-url 'relay-url'
@@ -194,8 +264,26 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;network;help'= {
+            cand create 'Create a named network'
+            cand ls 'List networks or inspect one'
+            cand join 'Join a network from an invitation'
+            cand leave 'Leave a network'
+            cand invite 'Generate a network invitation'
+            cand kick 'Remove a device from a network'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;network;help;create'= {
+        }
+        &'syncweb;network;help;ls'= {
+        }
+        &'syncweb;network;help;join'= {
+        }
+        &'syncweb;network;help;leave'= {
+        }
+        &'syncweb;network;help;invite'= {
+        }
+        &'syncweb;network;help;kick'= {
         }
         &'syncweb;network;help;test-relay'= {
         }
@@ -229,6 +317,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand stat 'Show detailed metadata for a local file'
             cand download 'Download a local file to a destination'
             cand init 'Initialize a folder and print a shareable URL'
+            cand automatic 'Run rules-based automatic synchronization'
+            cand subscribe 'Subscribe to a folder with event filters'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -270,8 +360,30 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;init'= {
         }
+        &'syncweb;help;automatic'= {
+        }
+        &'syncweb;help;subscribe'= {
+        }
         &'syncweb;help;network'= {
+            cand create 'Create a named network'
+            cand ls 'List networks or inspect one'
+            cand join 'Join a network from an invitation'
+            cand leave 'Leave a network'
+            cand invite 'Generate a network invitation'
+            cand kick 'Remove a device from a network'
             cand test-relay 'Test a Syncthing relay TCP connection'
+        }
+        &'syncweb;help;network;create'= {
+        }
+        &'syncweb;help;network;ls'= {
+        }
+        &'syncweb;help;network;join'= {
+        }
+        &'syncweb;help;network;leave'= {
+        }
+        &'syncweb;help;network;invite'= {
+        }
+        &'syncweb;help;network;kick'= {
         }
         &'syncweb;help;network;test-relay'= {
         }

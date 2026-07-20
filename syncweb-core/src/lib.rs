@@ -1,4 +1,5 @@
 pub mod error;
+pub mod filter;
 pub mod folder;
 pub mod fs;
 pub mod init;

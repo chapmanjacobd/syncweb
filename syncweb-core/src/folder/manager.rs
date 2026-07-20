@@ -120,6 +120,23 @@ impl FolderManager {
         Ok(self.folders.read().await.values().cloned().collect())
     }
 
+    /// Return a managed folder, loading locally available namespaces first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local namespace list cannot be read.
+    pub async fn get(&self, namespace_id: NamespaceId) -> Result<SyncwebFolder> {
+        let existing = self.folders.read().await.get(&namespace_id).cloned();
+        if let Some(folder) = existing {
+            return Ok(folder);
+        }
+        self.list()
+            .await?
+            .into_iter()
+            .find(|folder| folder.namespace_id() == namespace_id)
+            .ok_or_else(|| SyncwebError::FolderNotFound(namespace_id.to_string()))
+    }
+
     /// # Errors
     ///
     /// Returns an error if the ticket cannot be generated.

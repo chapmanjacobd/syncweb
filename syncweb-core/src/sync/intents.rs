@@ -6,6 +6,8 @@ use std::{
 use n0_future::{Sink, Stream};
 use tokio::sync::mpsc;
 
+use super::TransferStats;
+
 /// Commands accepted by a running synchronization intent.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -21,6 +23,7 @@ pub enum SyncCommand {
 pub enum SyncEvent {
     Started,
     Progress { completed: u64, total: Option<u64> },
+    Stats(TransferStats),
     Paused,
     Resumed,
     Cancelled,

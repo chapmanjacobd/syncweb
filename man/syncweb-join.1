@@ -4,7 +4,7 @@
 .SH NAME
 join \- Join a folder from an Iroh document ticket
 .SH SYNOPSIS
-\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Join a folder from an Iroh document ticket
 .SH OPTIONS
@@ -14,6 +14,9 @@ Join a folder from an Iroh document ticket
 .TP
 \fB\-\-relay\-fallback\fR
 Enable Syncthing relay fallback for this folder
+.TP
+\fB\-\-network\fR \fI<NETWORK>\fR
+Add the joined folder to a named network
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

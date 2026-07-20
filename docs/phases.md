@@ -56,22 +56,22 @@ Goal: ls, find, sort, stat, download, selective sync, init/config
 ### Phase 4: Advanced Sync + Networks
 Goal: Sync engine, automatic daemon, networks abstraction
 
-- [ ] `SyncEngine` - orchestration
-- [ ] Progress tracking, transfer stats
-- [ ] `PeerTracker` - cached peer availability from natural iroh flow
-- [ ] `PeerTracker` - age-based cache eviction ((standard CS pattern: age-based cache eviction))
-- [ ] `EfficientPeerCache` - memory-efficient bitmask cache ((standard CS pattern: memory-efficient bitmask presence))
-- [ ] `FilterEngine` - rules-based automatic daemon
-- [ ] `SubscribeParams` - subscription filtering (from iroh-willow)
-- [ ] `DeletedTracker` - track deleted-but-previously-seen files (from iroh-willow)
-- [ ] `AreaOfInterest` with limits (max_size, max_count) (from iroh-willow)
-- [ ] `Network` struct + `NetworkManager` - create, join, leave, invite, kick
-- [ ] Network gossip topics (`syncweb/net/<id>`)
-- [ ] `syncweb automatic` with filter engine
-- [ ] `syncweb subscribe` with SubscribeParams
-- [ ] `syncweb network create`, `syncweb network ls`, `syncweb network join`
-- [ ] `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
-- [ ] `syncweb create --network <name>`, `syncweb join --network <name>`
+- [x] `SyncEngine` - orchestration
+- [x] Progress tracking, transfer stats
+- [x] `PeerTracker` - cached peer availability from natural iroh flow
+- [x] `PeerTracker` - age-based cache eviction ((standard CS pattern: age-based cache eviction))
+- [x] `EfficientPeerCache` - memory-efficient bitmask cache ((standard CS pattern: memory-efficient bitmask presence))
+- [x] `FilterEngine` - rules-based automatic daemon
+- [x] `SubscribeParams` - subscription filtering (from iroh-willow)
+- [x] `DeletedTracker` - track deleted-but-previously-seen files (from iroh-willow)
+- [x] `AreaOfInterest` with limits (max_size, max_count) (from iroh-willow)
+- [x] `Network` struct + `NetworkManager` - create, join, leave, invite, kick
+- [x] Network gossip topics (`syncweb/net/<id>`)
+- [x] `syncweb automatic` with filter engine
+- [x] `syncweb subscribe` with SubscribeParams
+- [x] `syncweb network create`, `syncweb network ls`, `syncweb network join`
+- [x] `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
+- [x] `syncweb create --network <name>`, `syncweb join --network <name>`
 
 ### Phase 5: Public Folders + Living Folders
 Goal: Public sharing + data package versioning

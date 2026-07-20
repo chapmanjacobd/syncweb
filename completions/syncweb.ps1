@@ -40,6 +40,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
             [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download a local file to a destination')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
+            [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a folder with event filters')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
@@ -62,6 +64,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;create' {
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
+            [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the created folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--relay-fallback', '--relay-fallback', [CompletionResultType]::ParameterName, 'Enable Syncthing relay fallback for this folder')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -71,6 +74,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;join' {
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
+            [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the joined folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--relay-fallback', '--relay-fallback', [CompletionResultType]::ParameterName, 'Enable Syncthing relay fallback for this folder')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -203,13 +207,87 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'syncweb;automatic' {
+            [CompletionResult]::new('--paths', '--paths', [CompletionResultType]::ParameterName, 'Paths evaluated by --dry-run')
+            [CompletionResult]::new('--filters', '--filters', [CompletionResultType]::ParameterName, 'Filter configuration (defaults to DATA_DIR/filters.toml)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--show-filters', '--show-filters', [CompletionResultType]::ParameterName, 'Print the active filter configuration and exit')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Evaluate paths without starting the daemon')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;subscribe' {
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'glob')
+            [CompletionResult]::new('--max-count', '--max-count', [CompletionResultType]::ParameterName, 'max-count')
+            [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--ingest-only', '--ingest-only', [CompletionResultType]::ParameterName, 'Only deliver entries ingested after subscription')
+            [CompletionResult]::new('--ignore-self', '--ignore-self', [CompletionResultType]::ParameterName, 'Ignore events emitted by this subscription session')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'syncweb;network' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a named network')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List networks or inspect one')
+            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a network from an invitation')
+            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a network')
+            [CompletionResult]::new('invite', 'invite', [CompletionResultType]::ParameterValue, 'Generate a network invitation')
+            [CompletionResult]::new('kick', 'kick', [CompletionResultType]::ParameterValue, 'Remove a device from a network')
             [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;network;create' {
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'label')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--invite-only', '--invite-only', [CompletionResultType]::ParameterName, 'invite-only')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;network;ls' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;network;join' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;network;leave' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;network;invite' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;network;kick' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'syncweb;network;test-relay' {
@@ -221,8 +299,32 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;network;help' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a named network')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List networks or inspect one')
+            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a network from an invitation')
+            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a network')
+            [CompletionResult]::new('invite', 'invite', [CompletionResultType]::ParameterValue, 'Generate a network invitation')
+            [CompletionResult]::new('kick', 'kick', [CompletionResultType]::ParameterValue, 'Remove a device from a network')
             [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;network;help;create' {
+            break
+        }
+        'syncweb;network;help;ls' {
+            break
+        }
+        'syncweb;network;help;join' {
+            break
+        }
+        'syncweb;network;help;leave' {
+            break
+        }
+        'syncweb;network;help;invite' {
+            break
+        }
+        'syncweb;network;help;kick' {
             break
         }
         'syncweb;network;help;test-relay' {
@@ -261,6 +363,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
             [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download a local file to a destination')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
+            [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a folder with event filters')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
@@ -320,8 +424,38 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;help;init' {
             break
         }
+        'syncweb;help;automatic' {
+            break
+        }
+        'syncweb;help;subscribe' {
+            break
+        }
         'syncweb;help;network' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a named network')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List networks or inspect one')
+            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a network from an invitation')
+            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a network')
+            [CompletionResult]::new('invite', 'invite', [CompletionResultType]::ParameterValue, 'Generate a network invitation')
+            [CompletionResult]::new('kick', 'kick', [CompletionResultType]::ParameterValue, 'Remove a device from a network')
             [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
+            break
+        }
+        'syncweb;help;network;create' {
+            break
+        }
+        'syncweb;help;network;ls' {
+            break
+        }
+        'syncweb;help;network;join' {
+            break
+        }
+        'syncweb;help;network;leave' {
+            break
+        }
+        'syncweb;help;network;invite' {
+            break
+        }
+        'syncweb;help;network;kick' {
             break
         }
         'syncweb;help;network;test-relay' {

@@ -479,3 +479,379 @@ fn test_init_outputs_url() {
     assert!(stdout.contains("ticket:"), "should print ticket: {stdout}");
     assert!(stdout.contains("share_url:"), "should print share_url: {stdout}");
 }
+
+#[test]
+fn phase4_commands_are_available() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .arg("--help")
+        .output()
+        .expect("run syncweb help");
+    let help = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(help.contains("automatic"));
+    assert!(help.contains("subscribe"));
+
+    let network = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["network", "--help"])
+        .output()
+        .expect("run network help");
+    let network_help = String::from_utf8(network.stdout).expect("UTF-8 output");
+    for command in ["create", "ls", "join", "leave", "invite", "kick"] {
+        assert!(network_help.contains(command));
+    }
+}
+
+#[test]
+fn network_create_and_list_persist() {
+    let directory = cli_test_dir("network");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "work"])
+        .output()
+        .expect("create network");
+    assert!(
+        create.status.success(),
+        "network create failed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "ls"])
+        .output()
+        .expect("list networks");
+    std::fs::remove_dir_all(directory).expect("cleanup");
+    assert!(list.status.success());
+    assert!(String::from_utf8(list.stdout).expect("UTF-8 output").contains("work"));
+}
+
+#[test]
+fn automatic_dry_run_uses_filter_engine() {
+    let directory = cli_test_dir("automatic");
+    std::fs::create_dir_all(&directory).expect("create directory");
+    std::fs::write(directory.join("file.txt"), b"data").expect("write file");
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "automatic",
+            "--dry-run",
+            "--paths",
+            directory.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("run automatic dry-run");
+    std::fs::remove_dir_all(directory).expect("cleanup");
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8(output.stdout)
+            .expect("UTF-8 output")
+            .contains("accept")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.7 – CLI command coverage
+// ---------------------------------------------------------------------------
+
+#[test]
+fn subscribe_help_lists_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["subscribe", "--help"])
+        .output()
+        .expect("run subscribe --help");
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(help.contains("ingest-only"), "should list ingest-only: {help}");
+    assert!(help.contains("ignore-self"), "should list ignore-self: {help}");
+    assert!(help.contains("prefix"), "should list prefix: {help}");
+    assert!(help.contains("glob"), "should list glob: {help}");
+    assert!(help.contains("max-count"), "should list max-count: {help}");
+    assert!(help.contains("max-size"), "should list max-size: {help}");
+}
+
+#[test]
+fn automatic_help_lists_filters_and_dry_run() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["automatic", "--help"])
+        .output()
+        .expect("run automatic --help");
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(help.contains("show-filters"), "should list show-filters: {help}");
+    assert!(help.contains("dry-run"), "should list dry-run: {help}");
+    assert!(help.contains("paths"), "should list paths: {help}");
+    assert!(help.contains("filters"), "should list filters path: {help}");
+}
+
+#[test]
+fn network_create_with_label_and_invite_only() {
+    let directory = cli_test_dir("net-create-opts");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir,
+            "network",
+            "create",
+            "secure-net",
+            "--label",
+            "Secure",
+            "--invite-only",
+        ])
+        .output()
+        .expect("create network with options");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(
+        output.status.success(),
+        "network create --label --invite-only should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("created:"), "should print created: {stdout}");
+    assert!(stdout.contains("secure-net"), "should contain network name: {stdout}");
+}
+
+#[test]
+fn network_list_inspects_single_network() {
+    let directory = cli_test_dir("net-list-inspect");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "inspect-me"])
+        .output()
+        .expect("create network");
+    assert!(create.status.success());
+
+    let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "ls", "inspect-me"])
+        .output()
+        .expect("inspect network");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(list.status.success());
+    let stdout = String::from_utf8(list.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("inspect-me"), "should show network name: {stdout}");
+    assert!(stdout.contains("members"), "should show members count: {stdout}");
+    assert!(stdout.contains("folders"), "should show folders count: {stdout}");
+}
+
+#[test]
+fn network_invite_outputs_ticket() {
+    let directory = cli_test_dir("net-invite");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "invite-net"])
+        .output()
+        .expect("create network");
+    assert!(create.status.success());
+
+    let invite = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "invite", "invite-net"])
+        .output()
+        .expect("invite to network");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(
+        invite.status.success(),
+        "network invite should succeed: {}",
+        String::from_utf8_lossy(&invite.stderr)
+    );
+    let stdout = String::from_utf8(invite.stdout).expect("UTF-8 output");
+    assert!(
+        stdout.contains("syncweb://network/"),
+        "should output a ticket URL: {stdout}"
+    );
+}
+
+#[test]
+fn network_kick_nonexistent_device_fails() {
+    let directory = cli_test_dir("net-kick");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "kick-net"])
+        .output()
+        .expect("create network");
+    assert!(create.status.success());
+
+    let kick = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir,
+            "network",
+            "kick",
+            "kick-net",
+            "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        ])
+        .output()
+        .expect("kick from network");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(!kick.status.success(), "kicking a non-member should fail");
+}
+
+#[test]
+fn network_leave_removes_from_list() {
+    let directory = cli_test_dir("net-leave");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "leave-net"])
+        .output()
+        .expect("create network");
+    assert!(create.status.success());
+
+    let leave = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "leave", "leave-net"])
+        .output()
+        .expect("leave network");
+    assert!(
+        leave.status.success(),
+        "network leave should succeed: {}",
+        String::from_utf8_lossy(&leave.stderr)
+    );
+
+    let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "ls"])
+        .output()
+        .expect("list after leave");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(list.status.success());
+    let stdout = String::from_utf8(list.stdout).expect("UTF-8 output");
+    assert!(
+        !stdout.contains("leave-net"),
+        "network should be gone after leave: {stdout}"
+    );
+}
+
+#[test]
+fn network_join_invalid_ticket_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["network", "join", "not-a-valid-ticket"])
+        .output()
+        .expect("join with invalid ticket");
+
+    assert!(!output.status.success(), "joining with invalid ticket should fail");
+}
+
+#[test]
+fn create_with_network_flag_adds_folder_to_network() {
+    let directory = cli_test_dir("create-network");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let net = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "team-net"])
+        .output()
+        .expect("create network");
+    assert!(net.status.success());
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "create", "--network", "team-net"])
+        .output()
+        .expect("create with --network");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(
+        create.status.success(),
+        "create --network should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let stdout = String::from_utf8(create.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("namespace:"), "should print namespace: {stdout}");
+}
+
+#[test]
+fn join_with_network_flag_adds_folder_to_network() {
+    let directory = cli_test_dir("join-network");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let net = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "join-net"])
+        .output()
+        .expect("create network");
+    assert!(net.status.success());
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "create"])
+        .output()
+        .expect("create folder for ticket");
+    assert!(create.status.success());
+    let stdout = String::from_utf8(create.stdout).expect("UTF-8 output");
+    let ticket = stdout
+        .lines()
+        .find(|l| l.starts_with("ticket: "))
+        .expect("should have ticket line")
+        .trim_start_matches("ticket: ")
+        .trim()
+        .to_owned();
+
+    let join_dir = directory.join("join_target");
+    std::fs::create_dir(&join_dir).expect("create join dir");
+
+    let join = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir,
+            "join",
+            &ticket,
+            join_dir.to_str().expect("UTF-8 path"),
+            "--network",
+            "join-net",
+        ])
+        .output()
+        .expect("join with --network");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(
+        join.status.success(),
+        "join --network should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+    let join_stdout = String::from_utf8(join.stdout).expect("UTF-8 output");
+    assert!(join_stdout.contains("joined:"), "should print joined: {join_stdout}");
+}
+
+#[test]
+fn network_duplicate_name_rejected() {
+    let directory = cli_test_dir("net-dup");
+    let data_dir = directory.to_str().expect("UTF-8 path");
+
+    let first = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "dup-net"])
+        .output()
+        .expect("first create");
+    assert!(first.status.success());
+
+    let second = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "network", "create", "dup-net"])
+        .output()
+        .expect("second create");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(!second.status.success(), "duplicate network name should be rejected");
+}
+
+#[test]
+fn automatic_show_filters_empty_config() {
+    let directory = cli_test_dir("auto-show");
+    std::fs::create_dir_all(&directory).expect("create directory");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "automatic",
+            "--show-filters",
+            "--filters",
+            directory.join("nonexistent.toml").to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("run automatic --show-filters");
+    std::fs::remove_dir_all(&directory).expect("cleanup");
+
+    assert!(
+        output.status.success(),
+        "show-filters should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 output");
+    assert!(stdout.contains("rules"), "should show rules table: {stdout}");
+}

@@ -8,6 +8,7 @@ use iroh_gossip::{
 
 use crate::error::{Result, SyncwebError};
 
+#[derive(Clone)]
 pub struct GossipService {
     gossip: Gossip,
 }

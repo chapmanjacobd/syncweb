@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use iroh::PublicKey;
-use iroh_blobs::Hash;
+use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::{
     AuthorId, DocTicket, NamespaceId,
     api::{Doc, protocol::ShareMode},
@@ -169,4 +169,38 @@ impl SyncwebFolder {
         };
         self.docs_engine.share(&self.doc, mode, endpoint).await
     }
+
+    /// Create an unauthenticated ticket for a blob in this folder and pin it
+    /// while it is publicly shared.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob is unavailable or cannot be pinned.
+    pub async fn publish_blob(&self, endpoint: iroh::EndpointAddr, hash: Hash) -> Result<BlobTicket> {
+        if !self.blob_store.has(hash).await? {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "cannot publish missing blob {hash}"
+            )));
+        }
+        self.blob_store
+            .pin(public_pin_name(self.namespace_id, hash), hash)
+            .await?;
+        Ok(self.blob_store.ticket_for_addr(endpoint, hash))
+    }
+
+    /// Remove the public-sharing pin from a folder blob.
+    ///
+    /// Existing blob tickets are capabilities and remain usable while another
+    /// tag or active transfer retains the blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the public-sharing pin cannot be removed.
+    pub async fn unpublish_blob(&self, hash: Hash) -> Result<()> {
+        self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await
+    }
+}
+
+fn public_pin_name(namespace_id: NamespaceId, hash: Hash) -> String {
+    format!("syncweb/public/{namespace_id}/{hash}")
 }

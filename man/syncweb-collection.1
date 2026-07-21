@@ -1,0 +1,29 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH collection 1  "collection " 
+.SH NAME
+collection \- Create and publish versioned content collections
+.SH SYNOPSIS
+\fBcollection\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Create and publish versioned content collections
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+collection\-init(1)
+Initialize a directory as a versioned collection
+.TP
+collection\-add(1)
+Scan files and update the local collection manifest
+.TP
+collection\-versions(1)
+Create a new collection manifest version
+.TP
+collection\-publish(1)
+Store a collection manifest and mutable head in a folder
+.TP
+collection\-help(1)
+Print this message or the help of the given subcommand(s)

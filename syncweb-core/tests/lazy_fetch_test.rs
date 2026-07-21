@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -93,13 +94,13 @@ async fn test_fetch_intent_emits_events() -> anyhow::Result<()> {
 
     let event = tokio::time::timeout(Duration::from_secs(5), handle.next())
         .await?
-        .expect("stream should not be empty");
+        .context("stream should not be empty")?;
     anyhow::ensure!(matches!(event, SyncEvent::Started));
 
     loop {
         let next_event = tokio::time::timeout(Duration::from_secs(5), handle.next())
             .await?
-            .expect("stream should not be empty");
+            .context("stream should not be empty")?;
         if matches!(next_event, SyncEvent::Finished) {
             break;
         }

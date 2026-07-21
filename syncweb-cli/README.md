@@ -5,7 +5,7 @@ CLI for [syncweb](https://github.com/chapmanjacobd/syncweb) -- delay-tolerant pe
 ## Installation
 
 ```sh
-cargo install syncweb
+cargo install --locked syncweb
 ```
 
 Or from source:

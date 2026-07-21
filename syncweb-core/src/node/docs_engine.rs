@@ -8,6 +8,7 @@ use iroh_docs::{
     },
     engine::LiveEvent,
     protocol::Docs,
+    store::Query,
 };
 use n0_future::StreamExt;
 
@@ -167,6 +168,23 @@ impl DocsEngine {
         doc.get_exact(author, key, false)
             .await
             .map_err(|error| SyncwebError::operation("failed to get document entry", error))
+    }
+
+    /// Read the latest entry for a key regardless of which author wrote it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document query fails.
+    pub async fn get_any(&self, doc: &Doc, key: impl AsRef<[u8]>) -> Result<Option<Entry>> {
+        let entries = doc
+            .get_many(Query::single_latest_per_key().key_exact(key))
+            .await
+            .map_err(|error| SyncwebError::operation("failed to query document entries", error))?;
+        tokio::pin!(entries);
+        n0_future::StreamExt::next(&mut entries)
+            .await
+            .transpose()
+            .map_err(|error| SyncwebError::operation("failed to read document query result", error))
     }
 
     /// # Errors

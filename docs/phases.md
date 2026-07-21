@@ -76,27 +76,27 @@ Goal: Sync engine, automatic daemon, networks abstraction
 ### Phase 5: Public Folders + Living Folders
 Goal: Public sharing + data package versioning
 
-- [ ] `SyncMode::PublicReadOnly`
-- [ ] Blob ticket generation
-- [ ] Content pinning (prevent GC for shared blobs)
-- [ ] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
-- [ ] `CollectionManifest` struct + iroh-docs storage
-- [ ] `CollectionState` local tracking (installed collections, versions)
-- [ ] `syncweb collection init` (with package profile) -- initialize folder as data package
-- [ ] `syncweb collection add` -- scan + hash files, update manifest
-- [ ] `syncweb collection versions` -- create new version with changelog
-- [ ] `syncweb collection publish` -- blob ticket + gossip announcement
-- [ ] `syncweb package search` -- discover packages via gossip
-- [ ] `syncweb package info` -- detailed package metadata
-- [ ] `syncweb package install` -- fetch + verify + stage + atomic swap
-- [ ] `syncweb package upgrade` -- update to latest version
-- [ ] `syncweb package remove` -- clean up installed package
-- [ ] `syncweb package verify` -- integrity check against manifest
-- [ ] `syncweb package list` -- list locally installed packages
-- [ ] `syncweb package versions` -- list installed versions
-- [ ] `syncweb package switch` -- change active version
-- [ ] Multi-version coexistence (versioned dirs + `current` symlink)
-- [ ] Atomic upgrade (stage → verify → symlink swap → cleanup)
+- [x] `SyncMode::PublicReadOnly`
+- [x] Blob ticket generation
+- [x] Content pinning (prevent GC for shared blobs)
+- [x] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
+- [x] `CollectionManifest` struct + iroh-docs storage
+- [x] `CollectionState` local tracking (installed collections, versions)
+- [x] `syncweb collection init` (with package profile) -- initialize folder as data package
+- [x] `syncweb collection add` -- scan + hash files, update manifest
+- [x] `syncweb collection versions` -- create new version with changelog
+- [x] `syncweb collection publish` -- blob ticket + gossip announcement
+- [x] `syncweb package search` -- discover packages via gossip
+- [x] `syncweb package info` -- detailed package metadata
+- [x] `syncweb package install` -- fetch + verify + stage + atomic swap
+- [x] `syncweb package upgrade` -- update to latest version
+- [x] `syncweb package remove` -- clean up installed package
+- [x] `syncweb package verify` -- integrity check against manifest
+- [x] `syncweb package list` -- list locally installed packages
+- [x] `syncweb package versions` -- list installed versions
+- [x] `syncweb package switch` -- change active version
+- [x] Multi-version coexistence (versioned dirs + `current` symlink)
+- [x] Atomic upgrade (stage → verify → symlink swap → cleanup)
 
 ### Phase 6: Backup/Snapshot + Partial Fetch
 Goal: Content-addressed snapshots + robustness fetch

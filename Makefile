@@ -8,12 +8,21 @@ fmt:
 lint:
 	cargo fix --broken-code --allow-dirty
 	cargo clippy --fix --allow-dirty
-	cargo clippy --all-targets --all-features -- -D warnings
+	@bash -c 'set -o pipefail; \
+	cargo clippy --all-targets --all-features --color always 2>&1 | tee clippy.log || EXIT_CODE=$$?; \
+	EXIT_CODE=$${EXIT_CODE:-0}; \
+	echo ""; echo "Error Summary:"; \
+	cat clippy.log | sed "s/\x1B\[[0-9;]*[a-zA-Z]//g" | grep -E -i "error(\[[^]]+\])?:" | grep -v "could not compile" | sort | uniq -c | sort -g || true; \
+	rm -f clippy.log; \
+	exit $$EXIT_CODE'
 
 clippy:
 	cargo clippy --all-targets --all-features
 
 test:
+	cargo nextest run --show-progress only
+
+test0:
 	cargo test --all-targets --all-features --quiet
 	cargo test --doc
 

@@ -21,7 +21,7 @@ async fn test_actor_panic_isolation() {
     let handle = Actor::spawn(move |msg: String| {
         let count = call_count.fetch_add(1, Ordering::SeqCst);
         async move {
-            assert_ne!(msg, "panic", "intentional test panic");
+            assert!(msg != "panic", "intentional test panic");
             format!("ok:{count}")
         }
     });

@@ -270,6 +270,290 @@ _arguments "${_arguments_options[@]}" : \
 '::path:_files' \
 && ret=0
 ;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+'--blob=[Publish this content hash as an unauthenticated blob ticket]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':namespace:_default' \
+&& ret=0
+;;
+(unpublish)
+_arguments "${_arguments_options[@]}" : \
+'--blob=[]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':namespace:_default' \
+&& ret=0
+;;
+(collection)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__collection_commands" \
+"*::: :->collection" \
+&& ret=0
+
+    case $state in
+    (collection)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-collection-command-$line[1]:"
+        case $line[1] in
+            (init)
+_arguments "${_arguments_options[@]}" : \
+'--version=[]:VERSION:_default' \
+'--name=[]:NAME:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(add)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+'--version=[]:VERSION:_default' \
+'--changelog=[]:CHANGELOG:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[]:NAMESPACE:_default' \
+'--sequence=[]:SEQUENCE:_default' \
+'*--bootstrap=[]:NODE_ID:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__collection__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-collection-help-command-$line[1]:"
+        case $line[1] in
+            (init)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(add)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(package)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__package_commands" \
+"*::: :->package" \
+&& ret=0
+
+    case $state in
+    (package)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-package-command-$line[1]:"
+        case $line[1] in
+            (search)
+_arguments "${_arguments_options[@]}" : \
+'*--bootstrap=[]:NODE_ID:_default' \
+'--timeout-ms=[]:TIMEOUT_MS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::query:_default' \
+&& ret=0
+;;
+(info)
+_arguments "${_arguments_options[@]}" : \
+'()--ticket=[]:TICKET:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::manifest:_files' \
+&& ret=0
+;;
+(install)
+_arguments "${_arguments_options[@]}" : \
+'()--ticket=[]:TICKET:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::manifest:_files' \
+'::source:_files' \
+&& ret=0
+;;
+(upgrade)
+_arguments "${_arguments_options[@]}" : \
+'()--ticket=[]:TICKET:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::manifest:_files' \
+'::source:_files' \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':collection:_default' \
+':version:_default' \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':manifest:_files' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':collection:_default' \
+&& ret=0
+;;
+(switch)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':collection:_default' \
+':version:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__package__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-package-help-command-$line[1]:"
+        case $line[1] in
+            (search)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(upgrade)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(switch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -523,6 +807,98 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(unpublish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(collection)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__collection_commands" \
+"*::: :->collection" \
+&& ret=0
+
+    case $state in
+    (collection)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-collection-command-$line[1]:"
+        case $line[1] in
+            (init)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(add)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(package)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__package_commands" \
+"*::: :->package" \
+&& ret=0
+
+    case $state in
+    (package)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-package-command-$line[1]:"
+        case $line[1] in
+            (search)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(upgrade)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(versions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(switch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (network)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__network_commands" \
@@ -608,6 +984,10 @@ _syncweb_commands() {
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'subscribe:Subscribe to a folder with event filters' \
+'publish:Publish a folder or blob for public read access' \
+'unpublish:Remove a public blob pin' \
+'collection:Create and publish versioned content collections' \
+'package:Manage locally installed collection packages' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -624,6 +1004,73 @@ _syncweb__subcmd__accept_commands() {
 _syncweb__subcmd__automatic_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb automatic commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection_commands] )) ||
+_syncweb__subcmd__collection_commands() {
+    local commands; commands=(
+'init:Initialize a directory as a versioned collection' \
+'add:Scan files and update the local collection manifest' \
+'versions:Create a new collection manifest version' \
+'publish:Store a collection manifest and mutable head in a folder' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb collection commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__add_commands] )) ||
+_syncweb__subcmd__collection__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help_commands() {
+    local commands; commands=(
+'init:Initialize a directory as a versioned collection' \
+'add:Scan files and update the local collection manifest' \
+'versions:Create a new collection manifest version' \
+'publish:Store a collection manifest and mutable head in a folder' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb collection help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__add_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection help add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__init_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection help init commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__publish_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection help publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__versions_commands] )) ||
+_syncweb__subcmd__collection__subcmd__help__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection help versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__init_commands] )) ||
+_syncweb__subcmd__collection__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection init commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__publish_commands] )) ||
+_syncweb__subcmd__collection__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__collection__subcmd__versions_commands] )) ||
+_syncweb__subcmd__collection__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb collection versions commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__completions_commands] )) ||
 _syncweb__subcmd__completions_commands() {
@@ -723,6 +1170,10 @@ _syncweb__subcmd__help_commands() {
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'subscribe:Subscribe to a folder with event filters' \
+'publish:Publish a folder or blob for public read access' \
+'unpublish:Remove a public blob pin' \
+'collection:Create and publish versioned content collections' \
+'package:Manage locally installed collection packages' \
 'network:Network connectivity utilities' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -739,6 +1190,36 @@ _syncweb__subcmd__help__subcmd__accept_commands() {
 _syncweb__subcmd__help__subcmd__automatic_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help automatic commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__collection_commands] )) ||
+_syncweb__subcmd__help__subcmd__collection_commands() {
+    local commands; commands=(
+'init:Initialize a directory as a versioned collection' \
+'add:Scan files and update the local collection manifest' \
+'versions:Create a new collection manifest version' \
+'publish:Store a collection manifest and mutable head in a folder' \
+    )
+    _describe -t commands 'syncweb help collection commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__add_commands] )) ||
+_syncweb__subcmd__help__subcmd__collection__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help collection add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__init_commands] )) ||
+_syncweb__subcmd__help__subcmd__collection__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help collection init commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__publish_commands] )) ||
+_syncweb__subcmd__help__subcmd__collection__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help collection publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__versions_commands] )) ||
+_syncweb__subcmd__help__subcmd__collection__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help collection versions commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__completions_commands] )) ||
 _syncweb__subcmd__help__subcmd__completions_commands() {
@@ -866,6 +1347,71 @@ _syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help network test-relay commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__package_commands] )) ||
+_syncweb__subcmd__help__subcmd__package_commands() {
+    local commands; commands=(
+'search:List locally installed packages, optionally filtering by text' \
+'info:Show a collection manifest' \
+'install:Verify, stage, and atomically install a collection version' \
+'upgrade:Install a newer collection manifest version' \
+'remove:Remove a non-current installed collection version' \
+'verify:Verify an installed collection version against its manifest' \
+'list:List locally installed collections' \
+'versions:List installed versions for a collection' \
+'switch:Switch the active installed collection version' \
+    )
+    _describe -t commands 'syncweb help package commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__info_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__install_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package install commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__list_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__remove_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package remove commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__search_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package search commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__switch_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__switch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package switch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__upgrade_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__upgrade_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package upgrade commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__verify_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package verify commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__versions_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__publish_commands] )) ||
+_syncweb__subcmd__help__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help publish commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__repl_commands] )) ||
 _syncweb__subcmd__help__subcmd__repl_commands() {
     local commands; commands=()
@@ -885,6 +1431,11 @@ _syncweb__subcmd__help__subcmd__stat_commands() {
 _syncweb__subcmd__help__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__unpublish_commands] )) ||
+_syncweb__subcmd__help__subcmd__unpublish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help unpublish commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__version_commands] )) ||
 _syncweb__subcmd__help__subcmd__version_commands() {
@@ -1014,6 +1565,138 @@ _syncweb__subcmd__network__subcmd__test-relay_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network test-relay commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__package_commands] )) ||
+_syncweb__subcmd__package_commands() {
+    local commands; commands=(
+'search:List locally installed packages, optionally filtering by text' \
+'info:Show a collection manifest' \
+'install:Verify, stage, and atomically install a collection version' \
+'upgrade:Install a newer collection manifest version' \
+'remove:Remove a non-current installed collection version' \
+'verify:Verify an installed collection version against its manifest' \
+'list:List locally installed collections' \
+'versions:List installed versions for a collection' \
+'switch:Switch the active installed collection version' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb package commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help_commands] )) ||
+_syncweb__subcmd__package__subcmd__help_commands() {
+    local commands; commands=(
+'search:List locally installed packages, optionally filtering by text' \
+'info:Show a collection manifest' \
+'install:Verify, stage, and atomically install a collection version' \
+'upgrade:Install a newer collection manifest version' \
+'remove:Remove a non-current installed collection version' \
+'verify:Verify an installed collection version against its manifest' \
+'list:List locally installed collections' \
+'versions:List installed versions for a collection' \
+'switch:Switch the active installed collection version' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb package help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__info_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__install_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help install commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__list_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__remove_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help remove commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__search_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help search commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__switch_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__switch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help switch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__upgrade_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__upgrade_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help upgrade commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__verify_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help verify commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__versions_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__info_commands] )) ||
+_syncweb__subcmd__package__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__install_commands] )) ||
+_syncweb__subcmd__package__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package install commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__list_commands] )) ||
+_syncweb__subcmd__package__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__remove_commands] )) ||
+_syncweb__subcmd__package__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package remove commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__search_commands] )) ||
+_syncweb__subcmd__package__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package search commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__switch_commands] )) ||
+_syncweb__subcmd__package__subcmd__switch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package switch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__upgrade_commands] )) ||
+_syncweb__subcmd__package__subcmd__upgrade_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package upgrade commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__verify_commands] )) ||
+_syncweb__subcmd__package__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package verify commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__versions_commands] )) ||
+_syncweb__subcmd__package__subcmd__versions_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__publish_commands] )) ||
+_syncweb__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb publish commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__repl_commands] )) ||
 _syncweb__subcmd__repl_commands() {
     local commands; commands=()
@@ -1033,6 +1716,11 @@ _syncweb__subcmd__stat_commands() {
 _syncweb__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__unpublish_commands] )) ||
+_syncweb__subcmd__unpublish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb unpublish commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__version_commands] )) ||
 _syncweb__subcmd__version_commands() {

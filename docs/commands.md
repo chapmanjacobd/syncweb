@@ -408,10 +408,10 @@ syncweb config show filter
 | NEW | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
 | NEW | `subscribe` | Join public folder via ticket |
 | NEW | `public list` | List announced public folders |
-| NEW | `package init` | Initialize folder as data package |
-| NEW | `package add` | Scan + hash files, update manifest |
-| NEW | `package bump` | Create new version with changelog |
-| NEW | `package publish` | Blob ticket + gossip announcement |
+| NEW | `collection init` | Initialize folder as data package |
+| NEW | `collection add` | Scan + hash files, update manifest |
+| NEW | `collection versions` | Create new version with changelog |
+| NEW | `collection publish` | Store manifest, pin content, and announce a blob ticket |
 | NEW | `package search` | Discover packages via gossip |
 | NEW | `package info` | Detailed package metadata |
 | NEW | `package install` | Fetch + verify + install package |

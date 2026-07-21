@@ -41,6 +41,20 @@ pub enum Command {
     Automatic(AutomaticArgs),
     #[command(about = "Subscribe to a folder with event filters")]
     Subscribe(SubscribeArgs),
+    #[command(about = "Publish a folder or blob for public read access")]
+    Publish(PublishArgs),
+    #[command(about = "Remove a public blob pin")]
+    Unpublish(UnpublishArgs),
+    #[command(about = "Create and publish versioned content collections")]
+    Collection {
+        #[command(subcommand)]
+        command: CollectionCommand,
+    },
+    #[command(about = "Manage locally installed collection packages")]
+    Package {
+        #[command(subcommand)]
+        command: PackageCommand,
+    },
     #[command(about = "Network connectivity utilities")]
     Network {
         #[command(subcommand)]
@@ -208,6 +222,105 @@ pub struct SubscribeArgs {
     pub max_count: Option<u64>,
     #[arg(long)]
     pub max_size: Option<u64>,
+}
+
+#[derive(Debug, Args)]
+pub struct PublishArgs {
+    pub namespace: String,
+    #[arg(long, help = "Publish this content hash as an unauthenticated blob ticket")]
+    pub blob: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct UnpublishArgs {
+    pub namespace: String,
+    #[arg(long)]
+    pub blob: String,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CollectionCommand {
+    #[command(about = "Initialize a directory as a versioned collection")]
+    Init {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value = "1.0.0")]
+        version: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    #[command(about = "Scan files and update the local collection manifest")]
+    Add {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    #[command(about = "Create a new collection manifest version")]
+    Versions {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        changelog: Option<String>,
+    },
+    #[command(about = "Store a collection manifest and mutable head in a folder")]
+    Publish {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        namespace: String,
+        #[arg(long, default_value_t = 1)]
+        sequence: u64,
+        #[arg(long, value_name = "NODE_ID")]
+        bootstrap: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PackageCommand {
+    #[command(about = "List locally installed packages, optionally filtering by text")]
+    Search {
+        query: Option<String>,
+        #[arg(long, value_name = "NODE_ID")]
+        bootstrap: Vec<String>,
+        #[arg(long, default_value_t = 250)]
+        timeout_ms: u64,
+    },
+    #[command(about = "Show a collection manifest")]
+    Info {
+        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
+        manifest: Option<PathBuf>,
+        #[arg(long, conflicts_with = "manifest")]
+        ticket: Option<String>,
+    },
+    #[command(about = "Verify, stage, and atomically install a collection version")]
+    Install {
+        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
+        manifest: Option<PathBuf>,
+        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
+        source: Option<PathBuf>,
+        #[arg(long, conflicts_with_all = ["manifest", "source"])]
+        ticket: Option<String>,
+    },
+    #[command(about = "Install a newer collection manifest version")]
+    Upgrade {
+        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
+        manifest: Option<PathBuf>,
+        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
+        source: Option<PathBuf>,
+        #[arg(long, conflicts_with_all = ["manifest", "source"])]
+        ticket: Option<String>,
+    },
+    #[command(about = "Remove a non-current installed collection version")]
+    Remove { collection: String, version: String },
+    #[command(about = "Verify an installed collection version against its manifest")]
+    Verify { manifest: PathBuf },
+    #[command(name = "list", about = "List locally installed collections")]
+    List,
+    #[command(about = "List installed versions for a collection")]
+    Versions { collection: String },
+    #[command(about = "Switch the active installed collection version")]
+    Switch { collection: String, version: String },
 }
 
 #[derive(Debug, Subcommand)]

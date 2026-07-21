@@ -1,3 +1,4 @@
+use anyhow::{Context, ensure};
 use iroh::SecretKey;
 use syncweb_core::net::{NetworkManager, NetworkOptions, NetworkTicket};
 
@@ -35,94 +36,107 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_network_create_rejects_empty_name() {
+fn test_network_create_rejects_empty_name() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-phase4-net-empty-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).unwrap();
+    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
 
     let result = manager.create("", NetworkOptions::default());
-    assert!(result.is_err());
+    ensure!(result.is_err());
 
     let result_spaces = manager.create("  ", NetworkOptions::default());
-    assert!(result_spaces.is_err());
+    ensure!(result_spaces.is_err());
 
-    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(root).context("unwrap failed")?;
+    Ok(())
 }
 
 #[test]
-fn test_network_invite_rejects_non_owner() {
+fn test_network_invite_rejects_non_owner() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-phase4-net-owner-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let other = SecretKey::generate().public();
     let path = root.join("networks.json");
-    let mut manager_owner = NetworkManager::new(&path, owner).unwrap();
-    let mut manager_other = NetworkManager::new(&path, other).unwrap();
+    let mut manager_owner = NetworkManager::new(&path, owner).context("unwrap failed")?;
+    let mut manager_other = NetworkManager::new(&path, other).context("unwrap failed")?;
 
-    let id = manager_owner.create("test", NetworkOptions::default()).unwrap();
+    let id = manager_owner
+        .create("test", NetworkOptions::default())
+        .context("unwrap failed")?;
 
     // Other node cannot invite.
     let result = manager_other.invite(id, SecretKey::generate().public());
-    assert!(result.is_err());
+    ensure!(result.is_err());
 
-    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(root).context("unwrap failed")?;
+    Ok(())
 }
 
 #[test]
-fn test_network_kick_owner_rejected() {
+fn test_network_kick_owner_rejected() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-phase4-net-kick-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).unwrap();
+    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
 
-    let id = manager.create("test", NetworkOptions::default()).unwrap();
+    let id = manager
+        .create("test", NetworkOptions::default())
+        .context("unwrap failed")?;
     let result = manager.kick(id, &owner);
-    assert!(result.is_err());
+    ensure!(result.is_err());
 
-    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(root).context("unwrap failed")?;
+    Ok(())
 }
 
 #[test]
-fn test_network_leave_removes_network() {
+fn test_network_leave_removes_network() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-phase4-net-leave-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).unwrap();
+    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
 
-    let id = manager.create("test", NetworkOptions::default()).unwrap();
-    assert_eq!(manager.list().len(), 1);
+    let id = manager
+        .create("test", NetworkOptions::default())
+        .context("unwrap failed")?;
+    anyhow::ensure!(manager.list().len() == 1);
 
-    manager.leave(id).unwrap();
-    assert!(manager.list().is_empty());
-    assert!(manager.get(&id).is_none());
+    manager.leave(id).context("unwrap failed")?;
+    ensure!(manager.list().is_empty());
+    ensure!(manager.get(&id).is_none());
 
-    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(root).context("unwrap failed")?;
+    Ok(())
 }
 
 #[test]
-fn test_network_folder_membership() {
+fn test_network_folder_membership() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-phase4-net-folder-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).unwrap();
+    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
 
-    let id = manager.create("test", NetworkOptions::default()).unwrap();
+    let id = manager
+        .create("test", NetworkOptions::default())
+        .context("unwrap failed")?;
     let folder = iroh_docs::NamespaceId::default();
 
-    manager.add_folder(id, folder).unwrap();
-    let network = manager.get(&id).unwrap();
-    assert!(network.folders.contains(&folder));
+    manager.add_folder(id, folder).context("unwrap failed")?;
+    let network = manager.get(&id).context("unwrap failed")?;
+    ensure!(network.folders.contains(&folder));
 
-    manager.remove_folder(id, folder).unwrap();
-    let network_after = manager.get(&id).unwrap();
-    assert!(!network_after.folders.contains(&folder));
+    manager.remove_folder(id, folder).context("unwrap failed")?;
+    let network_after = manager.get(&id).context("unwrap failed")?;
+    ensure!(!network_after.folders.contains(&folder));
 
-    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(root).context("unwrap failed")?;
+    Ok(())
 }
 
 #[test]
@@ -151,18 +165,20 @@ fn test_network_ticket_round_trip_deterministic() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_network_id_from_name_is_stable() {
+fn test_network_id_from_name_is_stable() -> anyhow::Result<()> {
     let a = syncweb_core::net::NetworkId::from_name("hello");
     let b = syncweb_core::net::NetworkId::from_name("hello");
     let c = syncweb_core::net::NetworkId::from_name("world");
-    assert_eq!(a, b);
-    assert_ne!(a, c);
+    anyhow::ensure!(a == b);
+    anyhow::ensure!(a != c);
+    Ok(())
 }
 
 #[test]
-fn test_network_id_hex_round_trip() {
+fn test_network_id_hex_round_trip() -> anyhow::Result<()> {
     let id = syncweb_core::net::NetworkId::from_name("test");
     let hex = id.to_string();
-    let parsed: syncweb_core::net::NetworkId = hex.parse().unwrap();
-    assert_eq!(id, parsed);
+    let parsed: syncweb_core::net::NetworkId = hex.parse().context("unwrap failed")?;
+    anyhow::ensure!(id == parsed);
+    Ok(())
 }

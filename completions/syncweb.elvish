@@ -39,6 +39,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand subscribe 'Subscribe to a folder with event filters'
+            cand publish 'Publish a folder or blob for public read access'
+            cand unpublish 'Remove a public blob pin'
+            cand collection 'Create and publish versioned content collections'
+            cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -204,6 +208,186 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;publish'= {
+            cand --blob 'Publish this content hash as an unauthenticated blob ticket'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;unpublish'= {
+            cand --blob 'blob'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;collection'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand init 'Initialize a directory as a versioned collection'
+            cand add 'Scan files and update the local collection manifest'
+            cand versions 'Create a new collection manifest version'
+            cand publish 'Store a collection manifest and mutable head in a folder'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;collection;init'= {
+            cand --version 'version'
+            cand --name 'name'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;collection;add'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;collection;versions'= {
+            cand --version 'version'
+            cand --changelog 'changelog'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;collection;publish'= {
+            cand --namespace 'namespace'
+            cand --sequence 'sequence'
+            cand --bootstrap 'bootstrap'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;collection;help'= {
+            cand init 'Initialize a directory as a versioned collection'
+            cand add 'Scan files and update the local collection manifest'
+            cand versions 'Create a new collection manifest version'
+            cand publish 'Store a collection manifest and mutable head in a folder'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;collection;help;init'= {
+        }
+        &'syncweb;collection;help;add'= {
+        }
+        &'syncweb;collection;help;versions'= {
+        }
+        &'syncweb;collection;help;publish'= {
+        }
+        &'syncweb;collection;help;help'= {
+        }
+        &'syncweb;package'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand search 'List locally installed packages, optionally filtering by text'
+            cand info 'Show a collection manifest'
+            cand install 'Verify, stage, and atomically install a collection version'
+            cand upgrade 'Install a newer collection manifest version'
+            cand remove 'Remove a non-current installed collection version'
+            cand verify 'Verify an installed collection version against its manifest'
+            cand list 'List locally installed collections'
+            cand versions 'List installed versions for a collection'
+            cand switch 'Switch the active installed collection version'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;package;search'= {
+            cand --bootstrap 'bootstrap'
+            cand --timeout-ms 'timeout-ms'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;info'= {
+            cand --ticket 'ticket'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;install'= {
+            cand --ticket 'ticket'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;upgrade'= {
+            cand --ticket 'ticket'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;remove'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;verify'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;list'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;versions'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;switch'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;help'= {
+            cand search 'List locally installed packages, optionally filtering by text'
+            cand info 'Show a collection manifest'
+            cand install 'Verify, stage, and atomically install a collection version'
+            cand upgrade 'Install a newer collection manifest version'
+            cand remove 'Remove a non-current installed collection version'
+            cand verify 'Verify an installed collection version against its manifest'
+            cand list 'List locally installed collections'
+            cand versions 'List installed versions for a collection'
+            cand switch 'Switch the active installed collection version'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;package;help;search'= {
+        }
+        &'syncweb;package;help;info'= {
+        }
+        &'syncweb;package;help;install'= {
+        }
+        &'syncweb;package;help;upgrade'= {
+        }
+        &'syncweb;package;help;remove'= {
+        }
+        &'syncweb;package;help;verify'= {
+        }
+        &'syncweb;package;help;list'= {
+        }
+        &'syncweb;package;help;versions'= {
+        }
+        &'syncweb;package;help;switch'= {
+        }
+        &'syncweb;package;help;help'= {
+        }
         &'syncweb;network'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -319,6 +503,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand subscribe 'Subscribe to a folder with event filters'
+            cand publish 'Publish a folder or blob for public read access'
+            cand unpublish 'Remove a public blob pin'
+            cand collection 'Create and publish versioned content collections'
+            cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -363,6 +551,53 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;automatic'= {
         }
         &'syncweb;help;subscribe'= {
+        }
+        &'syncweb;help;publish'= {
+        }
+        &'syncweb;help;unpublish'= {
+        }
+        &'syncweb;help;collection'= {
+            cand init 'Initialize a directory as a versioned collection'
+            cand add 'Scan files and update the local collection manifest'
+            cand versions 'Create a new collection manifest version'
+            cand publish 'Store a collection manifest and mutable head in a folder'
+        }
+        &'syncweb;help;collection;init'= {
+        }
+        &'syncweb;help;collection;add'= {
+        }
+        &'syncweb;help;collection;versions'= {
+        }
+        &'syncweb;help;collection;publish'= {
+        }
+        &'syncweb;help;package'= {
+            cand search 'List locally installed packages, optionally filtering by text'
+            cand info 'Show a collection manifest'
+            cand install 'Verify, stage, and atomically install a collection version'
+            cand upgrade 'Install a newer collection manifest version'
+            cand remove 'Remove a non-current installed collection version'
+            cand verify 'Verify an installed collection version against its manifest'
+            cand list 'List locally installed collections'
+            cand versions 'List installed versions for a collection'
+            cand switch 'Switch the active installed collection version'
+        }
+        &'syncweb;help;package;search'= {
+        }
+        &'syncweb;help;package;info'= {
+        }
+        &'syncweb;help;package;install'= {
+        }
+        &'syncweb;help;package;upgrade'= {
+        }
+        &'syncweb;help;package;remove'= {
+        }
+        &'syncweb;help;package;verify'= {
+        }
+        &'syncweb;help;package;list'= {
+        }
+        &'syncweb;help;package;versions'= {
+        }
+        &'syncweb;help;package;switch'= {
         }
         &'syncweb;help;network'= {
             cand create 'Create a named network'

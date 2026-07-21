@@ -1,3 +1,4 @@
+use anyhow::{Result, ensure};
 use std::path::{Path, PathBuf};
 
 use syncweb_core::node::identity::IdentityManager;
@@ -63,11 +64,12 @@ async fn test_find_peers() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_bubble_detection() {
-    assert!(matches!(
+fn test_bubble_detection() -> anyhow::Result<()> {
+    ensure!(matches!(
         distributed_topic_tracker::Config::default()
             .merge_config()
             .bubble_merge(),
         distributed_topic_tracker::BubbleMergeConfig::Enabled(_)
     ));
+    Ok(())
 }

@@ -6,13 +6,16 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
-    commands::{Command, ConfigCommand, NetworkCommand},
+    commands::{CollectionCommand, Command, ConfigCommand, NetworkCommand, PackageCommand},
     output::{init_tracing, print_version, run_repl},
 };
 use rayon::prelude::*;
 use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry},
-    folder::{FolderManager, SyncMode},
+    folder::{
+        CollectionEntry, CollectionManifest, CollectionStore, FolderManager, PackageAnnouncement, PackageCatalog,
+        PackageManager, SyncMode,
+    },
     fs::{FileEntry, FileType, ParallelScanner},
     init::InitResult,
     net::{NetworkManager, NetworkOptions, TransportFallback},
@@ -68,6 +71,10 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         }
         Command::Automatic(command) => handle_automatic(&cli.data_dir, command).await?,
         Command::Subscribe(command) => handle_subscribe(&cli.data_dir, command).await?,
+        Command::Publish(command) => handle_publish(&cli.data_dir, command).await?,
+        Command::Unpublish(command) => handle_unpublish(&cli.data_dir, command).await?,
+        Command::Collection { command } => handle_collection(&cli.data_dir, command).await?,
+        Command::Package { command } => handle_package(&cli.data_dir, command).await?,
         Command::Config { command } => {
             let config_path = cli.data_dir.join("config.toml");
             let mut config = AppConfig::load(&config_path)?;
@@ -224,6 +231,13 @@ async fn handle_subscribe(data_dir: &std::path::Path, command: crate::cli::comma
     std::fs::create_dir_all(&command.path)?;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
+    if let Ok(ticket) = command.ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
+        let folder = manager.subscribe_public(&ticket).await?;
+        println!("subscribed: {}", folder.namespace_id());
+        println!("blob: {}", ticket.hash());
+        node.stop().await?;
+        return Ok(());
+    }
     let folder = manager.join(command.ticket, SyncMode::ReceiveOnly).await?;
     let session_id = uuid::Uuid::new_v4();
     let mut params = if command.ingest_only {
@@ -266,6 +280,330 @@ async fn handle_subscribe(data_dir: &std::path::Path, command: crate::cli::comma
     let _result = intent.cancel();
     node.stop().await?;
     Ok(())
+}
+
+async fn handle_publish(data_dir: &std::path::Path, command: crate::cli::commands::PublishArgs) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.get(command.namespace.parse()?).await?;
+    if let Some(blob) = command.blob {
+        let hash = blob.parse()?;
+        println!(
+            "blob_ticket: {}",
+            folder.publish_blob(node.endpoint().addr(), hash).await?
+        );
+    } else {
+        println!("ticket: {}", folder.ticket(node.endpoint().addr(), false).await?);
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_unpublish(data_dir: &std::path::Path, command: crate::cli::commands::UnpublishArgs) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.get(command.namespace.parse()?).await?;
+    folder.unpublish_blob(command.blob.parse()?).await?;
+    println!("unpublished: {}", command.blob);
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_collection(data_dir: &std::path::Path, command: CollectionCommand) -> Result<()> {
+    match command {
+        CollectionCommand::Init {
+            path,
+            version,
+            name: package_name,
+        } => {
+            std::fs::create_dir_all(&path)?;
+            let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), version);
+            if let Some(name) = package_name {
+                manifest.package = Some(syncweb_core::folder::PackageProfile::new(name));
+            }
+            save_manifest(&path, &manifest)?;
+            println!("collection: {}", manifest.collection_id);
+        }
+        CollectionCommand::Add { path } => {
+            let mut manifest = load_manifest(&path)?;
+            manifest.entries = scan_collection_entries(&path)?;
+            save_manifest(&path, &manifest)?;
+            println!("entries: {}", manifest.entries.len());
+        }
+        CollectionCommand::Versions {
+            path,
+            version,
+            changelog,
+        } => {
+            let mut manifest = load_manifest(&path)?;
+            let parent = manifest.content_id()?;
+            manifest.parent = Some(parent);
+            manifest.version = version;
+            manifest.changelog = changelog;
+            save_manifest(&path, &manifest)?;
+            println!("version: {}", manifest.version);
+        }
+        CollectionCommand::Publish {
+            path,
+            namespace,
+            sequence,
+            bootstrap,
+        } => {
+            let manifest = load_manifest(&path)?;
+            let node = open_node(data_dir).await?;
+            for entry in &manifest.entries {
+                let hash = node.blob_store().add_file(path.join(&entry.logical_path)).await?;
+                if hash != entry.content_id {
+                    anyhow::bail!(
+                        "collection content changed while publishing: {}",
+                        entry.logical_path.display()
+                    );
+                }
+            }
+            let manager = FolderManager::new(&node);
+            let folder = manager.get(namespace.parse()?).await?;
+            let store = CollectionStore::new(
+                folder.doc().clone(),
+                folder.author(),
+                node.blob_store().clone(),
+                node.docs_engine().clone(),
+            );
+            let head = store.publish(&manifest, sequence).await?;
+            let name = manifest
+                .package
+                .as_ref()
+                .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
+            let announcement = PackageAnnouncement::new(
+                manifest.collection_id,
+                name,
+                manifest.version.clone(),
+                head.sequence,
+                head.manifest,
+                node.blob_store().ticket(node.endpoint(), head.manifest).to_string(),
+                node.endpoint().id(),
+            )?;
+            let bootstrap_nodes = parse_bootstrap(bootstrap)?;
+            let catalog = PackageCatalog::new(node.gossip_service());
+            let topic = if bootstrap_nodes.is_empty() {
+                catalog.subscribe(bootstrap_nodes).await?
+            } else {
+                catalog.subscribe_and_join(bootstrap_nodes).await?
+            };
+            let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+            catalog.announce(&sender, &announcement).await?;
+            println!("manifest: {}", head.manifest);
+            println!("manifest_ticket: {}", announcement.manifest_ticket);
+            println!("sequence: {}", head.sequence);
+            node.stop().await?;
+        }
+    }
+    Ok(())
+}
+
+async fn handle_package(data_dir: &std::path::Path, command: PackageCommand) -> Result<()> {
+    let packages = PackageManager::new(data_dir.join("packages"));
+    match command {
+        PackageCommand::Search {
+            query,
+            bootstrap: bootstrap_values,
+            timeout_ms,
+        } => handle_package_search(data_dir, query, bootstrap_values, timeout_ms, &packages).await?,
+        PackageCommand::Info {
+            manifest: manifest_path,
+            ticket: ticket_value,
+        } => {
+            let collection_manifest = load_package_manifest(data_dir, manifest_path, ticket_value).await?;
+            println!("{}", serde_json::to_string_pretty(&collection_manifest)?);
+        }
+        PackageCommand::Install {
+            manifest: manifest_path,
+            source,
+            ticket: ticket_value,
+        }
+        | PackageCommand::Upgrade {
+            manifest: manifest_path,
+            source,
+            ticket: ticket_value,
+        } => {
+            let collection_manifest = install_package(data_dir, &packages, manifest_path, source, ticket_value).await?;
+            println!(
+                "installed: {} {}",
+                collection_manifest.collection_id, collection_manifest.version
+            );
+        }
+        PackageCommand::Remove {
+            collection: collection_id,
+            version,
+        } => {
+            let collection = collection_id.parse()?;
+            packages.remove(collection, &version)?;
+            println!("removed: {collection} {version}");
+        }
+        PackageCommand::Verify {
+            manifest: manifest_path,
+        } => {
+            let collection_manifest = load_manifest_file(&manifest_path)?;
+            packages.verify(&collection_manifest)?;
+            println!(
+                "verified: {} {}",
+                collection_manifest.collection_id, collection_manifest.version
+            );
+        }
+        PackageCommand::List => {
+            for (collection, installed) in packages.state()?.installed {
+                println!("{collection}\t{}", installed.current);
+            }
+        }
+        PackageCommand::Versions {
+            collection: collection_id,
+        } => {
+            let collection = collection_id.parse()?;
+            let state = packages.state()?;
+            let installed = state
+                .current(collection)
+                .ok_or_else(|| anyhow::anyhow!("collection is not installed: {collection}"))?;
+            for version in installed.versions.keys() {
+                println!("{version}");
+            }
+        }
+        PackageCommand::Switch {
+            collection: collection_id,
+            version,
+        } => {
+            let collection = collection_id.parse()?;
+            packages.switch(collection, &version)?;
+            println!("current: {collection} {version}");
+        }
+    }
+    Ok(())
+}
+
+async fn handle_package_search(
+    data_dir: &std::path::Path,
+    query: Option<String>,
+    bootstrap_values: Vec<String>,
+    timeout_ms: u64,
+    packages: &PackageManager,
+) -> Result<()> {
+    for (collection, installed) in packages.state()?.installed {
+        let line = format!("{collection}\t{}", installed.current);
+        if query.as_ref().is_none_or(|value| line.contains(value)) {
+            println!("{line}");
+        }
+    }
+    let bootstrap = parse_bootstrap(bootstrap_values)?;
+    let node = open_node(data_dir).await?;
+    let catalog = PackageCatalog::new(node.gossip_service());
+    let mut topic = if bootstrap.is_empty() {
+        catalog.subscribe(bootstrap).await?
+    } else {
+        catalog.subscribe_and_join(bootstrap).await?
+    };
+    for announcement in catalog
+        .search(
+            &mut topic,
+            query.as_deref(),
+            std::time::Duration::from_millis(timeout_ms),
+        )
+        .await?
+    {
+        println!(
+            "{}\t{}\t{}\t{}",
+            announcement.name, announcement.version, announcement.collection_id, announcement.manifest
+        );
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn load_package_manifest(
+    data_dir: &std::path::Path,
+    manifest_path: Option<std::path::PathBuf>,
+    ticket_value: Option<String>,
+) -> Result<CollectionManifest> {
+    if let Some(ticket_text) = ticket_value {
+        let node = open_node(data_dir).await?;
+        let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
+        if !node.blob_store().has(blob_ticket.hash()).await? {
+            node.blob_store().fetch(node.endpoint(), &blob_ticket).await?;
+        }
+        let manifest = CollectionManifest::from_bytes(node.blob_store().get(blob_ticket.hash()).await?)?;
+        if manifest.content_id()? != blob_ticket.hash() {
+            node.stop().await?;
+            anyhow::bail!("manifest ticket hash does not match manifest content");
+        }
+        node.stop().await?;
+        Ok(manifest)
+    } else {
+        load_manifest_file(&manifest_path.ok_or_else(|| anyhow::anyhow!("manifest path is required"))?)
+    }
+}
+
+async fn install_package(
+    data_dir: &std::path::Path,
+    packages: &PackageManager,
+    manifest_path: Option<std::path::PathBuf>,
+    source: Option<std::path::PathBuf>,
+    ticket_value: Option<String>,
+) -> Result<CollectionManifest> {
+    if let Some(ticket_text) = ticket_value {
+        let node = open_node(data_dir).await?;
+        let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
+        let manifest = packages
+            .install_from_ticket(&blob_ticket, node.endpoint(), node.blob_store())
+            .await?;
+        node.stop().await?;
+        Ok(manifest)
+    } else {
+        let manifest = load_manifest_file(&manifest_path.ok_or_else(|| anyhow::anyhow!("manifest path is required"))?)?;
+        packages.install(
+            &manifest,
+            source.ok_or_else(|| anyhow::anyhow!("package source is required"))?,
+        )?;
+        Ok(manifest)
+    }
+}
+
+fn parse_bootstrap(values: Vec<String>) -> Result<Vec<iroh::PublicKey>> {
+    values
+        .into_iter()
+        .map(|value| value.parse().map_err(anyhow::Error::from))
+        .collect()
+}
+
+fn manifest_path(path: &std::path::Path) -> std::path::PathBuf {
+    path.join(".syncweb-collection.json")
+}
+
+fn load_manifest(path: &std::path::Path) -> Result<CollectionManifest> {
+    load_manifest_file(&manifest_path(path))
+}
+
+fn load_manifest_file(path: &std::path::Path) -> Result<CollectionManifest> {
+    let bytes =
+        std::fs::read(path).with_context(|| format!("failed to read collection manifest {}", path.display()))?;
+    Ok(CollectionManifest::from_bytes(bytes)?)
+}
+
+fn save_manifest(path: &std::path::Path, manifest: &CollectionManifest) -> Result<()> {
+    std::fs::write(manifest_path(path), manifest.to_bytes()?)?;
+    Ok(())
+}
+
+fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
+    ParallelScanner::new(path, vec![".syncweb-collection.json".to_owned()], 0)
+        .scan()?
+        .into_iter()
+        .filter(|entry| entry.file_type == FileType::File)
+        .map(|entry| {
+            CollectionEntry::new(
+                iroh_blobs::Hash::from_bytes(*entry.hash.as_bytes()),
+                entry.relative_path,
+                entry.size,
+            )
+            .map_err(anyhow::Error::from)
+        })
+        .collect()
 }
 
 async fn handle_network(data_dir: &std::path::Path, command: NetworkCommand) -> Result<()> {

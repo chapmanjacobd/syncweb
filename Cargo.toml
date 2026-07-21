@@ -77,14 +77,16 @@ unused_import_braces = "deny"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
+correctness = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
 multiple_crate_versions = "warn"
 
 # Specific lints
 await_holding_lock = "deny"
 char_lit_as_u8 = "deny"
 checked_conversions = "deny"
-dbg_macro = "deny"
 debug_assert_with_mut_call = "deny"
 doc_link_with_quotes = "deny"
 doc_markdown = "deny"
@@ -233,8 +235,9 @@ unwrap_used = "deny"
 unwrap_in_result = "deny"
 expect_used = "deny"
 expect_fun_call = "deny"
+items_after_statements = "deny"
 panic = "deny"
 panic_in_result_fn = "deny"
 todo = "deny"
 unimplemented = "deny"
-items_after_statements = "deny"
+dbg_macro = "deny"

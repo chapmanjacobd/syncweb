@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use syncweb_core::node::identity::IdentityManager;
@@ -84,6 +85,21 @@ async fn test_blob_ticket() -> anyhow::Result<()> {
     let ticket = node.blob_store().ticket(node.endpoint(), hash);
     anyhow::ensure!(ticket.hash() == hash);
     anyhow::ensure!(ticket.to_string().starts_with("blob"));
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_content_pinning() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = test_node(&directory, "node", None).await?;
+    let hash = node.blob_store().add_bytes(b"pinned blob").await?;
+
+    node.blob_store().pin("syncweb/test-pinned", hash).await?;
+    anyhow::ensure!(node.blob_store().is_pinned("syncweb/test-pinned", hash).await?);
+    node.blob_store().unpin("syncweb/test-pinned").await?;
+    anyhow::ensure!(!node.blob_store().is_pinned("syncweb/test-pinned", hash).await?);
 
     node.stop().await?;
     Ok(())

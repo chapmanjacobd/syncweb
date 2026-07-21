@@ -20,7 +20,7 @@ A successor to [syncweb-py](https://github.com/chapmanjacobd/syncweb-py), rewrit
 ## Installation
 
 ```sh
-cargo install syncweb
+cargo install --locked syncweb
 ```
 
 ### From source

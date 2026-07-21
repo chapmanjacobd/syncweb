@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Context;
 use iroh::address_lookup::memory::MemoryLookup;
 use syncweb_core::{
-    folder::{Capability, FolderManager, SyncMode},
+    folder::{Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
         iroh_node::{IrohNode, RelayMode},
@@ -120,6 +120,126 @@ async fn test_sync_modes() -> anyhow::Result<()> {
     anyhow::ensure!(manager.list().await?.len() == 5);
 
     test_node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_public_readonly_blob_ticket_requires_no_folder_capability() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::PublicReadOnly).await?;
+    let hash = node.blob_store().add_bytes(b"public content").await?;
+
+    let ticket = folder.publish_blob(node.endpoint().addr(), hash).await?;
+    anyhow::ensure!(ticket.hash() == hash);
+    anyhow::ensure!(
+        node.blob_store()
+            .is_pinned(format!("syncweb/public/{}/{}", folder.namespace_id(), hash), hash)
+            .await?
+    );
+    anyhow::ensure!(!folder.can_write_as(node.endpoint().id()).await);
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = node(&directory, "node").await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::PublicReadOnly).await?;
+
+    let restarted_manager = FolderManager::new(&node);
+    let restored = restarted_manager.get(folder.namespace_id()).await?;
+    anyhow::ensure!(restored.mode() == SyncMode::PublicReadOnly);
+    anyhow::ensure!(!restored.mode().can_write());
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+    let first = {
+        let root = directory.0.join("publisher");
+        let identity = IdentityManager::new(root.join("identity.key"))?;
+        IrohNode::new_with_address_lookup(
+            identity,
+            root.join("data"),
+            RelayMode::Custom {
+                map: relay_map.clone(),
+                insecure: true,
+            },
+            memory_lookup.clone(),
+        )
+        .await?
+    };
+    let second = {
+        let root = directory.0.join("subscriber");
+        let identity = IdentityManager::new(root.join("identity.key"))?;
+        IrohNode::new_with_address_lookup(
+            identity,
+            root.join("data"),
+            RelayMode::Custom {
+                map: relay_map,
+                insecure: true,
+            },
+            memory_lookup.clone(),
+        )
+        .await?
+    };
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(first.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(second.endpoint().id()).with_relay_url(relay_url));
+
+    let hash = first.blob_store().add_bytes(b"public subscription").await?;
+    let ticket = first.blob_store().ticket(first.endpoint(), hash);
+    let folder = FolderManager::new(&second).subscribe_public(&ticket).await?;
+    anyhow::ensure!(folder.mode() == SyncMode::PublicReadOnly);
+    let entry = second
+        .docs_engine()
+        .get(folder.doc(), folder.author(), "public/content")
+        .await?
+        .context("public content entry")?;
+    anyhow::ensure!(entry.content_hash() == hash);
+    anyhow::ensure!(second.blob_store().get(hash).await? == b"public subscription".as_slice());
+
+    first.stop().await?;
+    second.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_collection_head_is_persisted_and_monotonic() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = node(&directory, "node").await?;
+    let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
+    let collection_id = uuid::Uuid::new_v4();
+    let content = node.blob_store().add_bytes(b"collection v1").await?;
+    let mut manifest = CollectionManifest::new(collection_id, "1.0.0");
+    manifest.entries.push(CollectionEntry::new(content, "file", 13)?);
+    let store = CollectionStore::new(
+        folder.doc().clone(),
+        folder.author(),
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+    );
+
+    let first_head = store.publish(&manifest, 1).await?;
+    anyhow::ensure!(store.head(collection_id).await? == Some(first_head));
+    anyhow::ensure!(store.publish(&manifest, 1).await.is_err());
+
+    manifest.version = "1.1.0".to_owned();
+    manifest.parent = Some(first_head.manifest);
+    let second_head = store.publish(&manifest, 2).await?;
+    anyhow::ensure!(second_head.sequence == 2);
+    anyhow::ensure!(store.head(collection_id).await? == Some(second_head));
+
+    node.stop().await?;
     Ok(())
 }
 

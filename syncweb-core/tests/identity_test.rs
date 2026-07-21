@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::path::PathBuf;
 
 use syncweb_core::node::identity::{DeviceId, IdentityManager};

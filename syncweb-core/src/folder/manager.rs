@@ -5,6 +5,7 @@ use std::{
 };
 
 use iroh::PublicKey;
+use iroh_blobs::ticket::BlobTicket;
 use iroh_docs::{DocTicket, NamespaceId, api::Doc};
 use n0_future::StreamExt;
 use tokio::sync::RwLock;
@@ -14,8 +15,11 @@ use crate::node::iroh_node::IrohNode;
 
 use super::{Capability, SyncMode, SyncwebFolder};
 
+const MODE_KEY: &[u8] = b"sys/syncweb/mode";
+
 #[derive(Clone)]
 pub struct FolderManager {
+    endpoint: iroh::Endpoint,
     endpoint_addr: iroh::EndpointAddr,
     node_id: PublicKey,
     blob_store: crate::node::blob_store::BlobStore,
@@ -27,6 +31,7 @@ impl FolderManager {
     #[must_use]
     pub fn new(node: &IrohNode) -> Self {
         Self {
+            endpoint: node.endpoint().clone(),
             endpoint_addr: node.endpoint().addr(),
             node_id: node.endpoint().id(),
             blob_store: node.blob_store().clone(),
@@ -40,7 +45,9 @@ impl FolderManager {
     /// Returns an error if the folder namespace cannot be created or initialized.
     pub async fn create(&self, mode: SyncMode) -> Result<SyncwebFolder> {
         let doc = self.docs_engine.create_namespace().await?;
-        let folder = self.folder_from_doc(doc, mode).await?;
+        let author = self.docs_engine.author().await?;
+        self.docs_engine.set(&doc, author, MODE_KEY, mode.to_string()).await?;
+        let folder = SyncwebFolder::new(doc, author, self.blob_store.clone(), self.docs_engine.clone(), mode);
         folder.grant(self.node_id, Capability::Admin).await;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         Ok(folder)
@@ -54,6 +61,42 @@ impl FolderManager {
             DocTicket::from_str(ticket_str.as_ref()).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
+        self.folders.write().await.insert(folder.namespace_id(), folder.clone());
+        Ok(folder)
+    }
+
+    /// Subscribe to a public blob ticket by creating a local read-only
+    /// namespace containing the fetched content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob cannot be fetched or the local namespace
+    /// cannot be created.
+    pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<SyncwebFolder> {
+        self.blob_store.fetch(&self.endpoint, ticket).await?;
+        let bytes = self.blob_store.get(ticket.hash()).await?;
+        let doc = self.docs_engine.create_namespace().await?;
+        let author = self.docs_engine.author().await?;
+        self.docs_engine
+            .set(&doc, author, MODE_KEY, SyncMode::PublicReadOnly.to_string())
+            .await?;
+        self.docs_engine
+            .set_blob(
+                &doc,
+                author,
+                b"public/content",
+                ticket.hash(),
+                u64::try_from(bytes.len())
+                    .map_err(|error| SyncwebError::operation("public blob is too large", error))?,
+            )
+            .await?;
+        let folder = SyncwebFolder::new(
+            doc,
+            author,
+            self.blob_store.clone(),
+            self.docs_engine.clone(),
+            SyncMode::PublicReadOnly,
+        );
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         Ok(folder)
     }
@@ -108,10 +151,11 @@ impl FolderManager {
                 .open(namespace_id)
                 .await?
                 .ok_or(SyncwebError::NamespaceNotAvailable)?;
-            let mode = match capability {
+            let fallback_mode = match capability {
                 iroh_docs::CapabilityKind::Write => SyncMode::SendReceive,
                 iroh_docs::CapabilityKind::Read => SyncMode::ReceiveOnly,
             };
+            let mode = self.mode_from_doc(&doc, fallback_mode).await?;
             let folder = self.folder_from_doc(doc, mode).await?;
             if let Entry::Vacant(entry) = self.folders.write().await.entry(namespace_id) {
                 entry.insert(folder);
@@ -159,5 +203,16 @@ impl FolderManager {
             self.docs_engine.clone(),
             mode,
         ))
+    }
+
+    async fn mode_from_doc(&self, doc: &Doc, fallback: SyncMode) -> Result<SyncMode> {
+        let author = self.docs_engine.author().await?;
+        let Some(entry) = self.docs_engine.get(doc, author, MODE_KEY).await? else {
+            return Ok(fallback);
+        };
+        let mode_bytes = self.blob_store.get(entry.content_hash()).await?;
+        let mode_value = std::str::from_utf8(&mode_bytes)
+            .map_err(|error| SyncwebError::operation("folder mode metadata is not UTF-8", error))?;
+        mode_value.parse()
     }
 }

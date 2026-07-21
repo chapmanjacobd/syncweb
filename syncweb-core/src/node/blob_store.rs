@@ -85,6 +85,45 @@ impl BlobStore {
         BlobTicket::new(addr, hash, iroh_blobs::BlobFormat::Raw)
     }
 
+    /// Pin a blob with a durable named tag so garbage collection cannot remove it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag cannot be written.
+    pub async fn pin(&self, name: impl AsRef<str>, hash: Hash) -> Result<()> {
+        self.store
+            .tags()
+            .set(name.as_ref(), hash)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to pin blob", error))
+    }
+
+    /// Remove a durable pin from a blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag cannot be removed.
+    pub async fn unpin(&self, name: impl AsRef<str>) -> Result<()> {
+        self.store
+            .tags()
+            .delete(name.as_ref())
+            .await
+            .map(|_deleted| ())
+            .map_err(|error| SyncwebError::operation("failed to unpin blob", error))
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the pin cannot be queried.
+    pub async fn is_pinned(&self, name: impl AsRef<str>, hash: Hash) -> Result<bool> {
+        self.store
+            .tags()
+            .get(name.as_ref())
+            .await
+            .map(|tag_info| tag_info.is_some_and(|tag| tag.hash == hash))
+            .map_err(|error| SyncwebError::operation("failed to query blob pin", error))
+    }
+
     /// # Errors
     ///
     /// Returns an error if the blob cannot be fetched from the remote endpoint.

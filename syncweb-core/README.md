@@ -1,44 +1,23 @@
-# syncweb-core
+# syncweb-core ![License: MIT](https://img.shields.io/badge/license-MIT-blue) [![syncweb-core on crates.io](https://img.shields.io/crates/v/syncweb-core)](https://crates.io/crates/syncweb-core) [![syncweb-core on docs.rs](https://docs.rs/syncweb-core/badge.svg)](https://docs.rs/syncweb-core) [![Source Code Repository](https://img.shields.io/badge/Code-On%20GitHub-blue?logo=GitHub)](https://github.com/chapmanjacobd/syncweb)
 
-Core library for [syncweb](https://github.com/chapmanjacobd/syncweb) -- delay-tolerant peer-to-peer file synchronization.
+## syncweb-core
 
-## Modules
+Core library for `syncweb`, enabling delay-tolerant web surfing and decentralized synchronization.
 
-| Module | Description |
-|--------|-------------|
-| `folder` | Folder management, sync modes, namespace lifecycle |
-| `node` | Iroh node wrapper, identity management (HKDF-derived per-folder keys) |
-| `net` | Networking and transport fallback (QUIC + relay) |
-| `storage` | Configuration and persistent storage (redb) |
+This crate provides the foundational building blocks for the syncweb application, including:
 
-## Key Types
+* Decentralized folder synchronization and package management.
+* Network and node management using the Iroh stack.
+* File system scanning, filtering, and statistical analysis.
+* Delay-tolerant networking capabilities.
 
-```rust
-use syncweb_core::folder::{FolderManager, SyncMode};
-use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
-use syncweb_core::node::identity::{DeviceId, IdentityManager};
-use syncweb_core::net::TransportFallback;
-use syncweb_core::storage::Config;
-```
+### Modules
 
-## Design
-
-- Content-addressed storage -- BLAKE3 + Bao trees for verified streaming and deduplication
-- CRDT conflict resolution -- last-writer-wins with best-effort text diffs
-- Engine pattern -- dedicated storage thread with message-passing keeps the async runtime responsive
-- One namespace per folder -- independent sync, permissions, and sharing
-- Per-folder author keys -- derived via HKDF from a master identity; revocable per-folder
-
-## Dependencies
-
-Built on the [Iroh](https://iroh.computer/) networking stack:
-
-- `iroh` -- peer connections and relay
-- `iroh-blobs` -- content-addressed blob transfer
-- `iroh-docs` -- CRDT document replication
-- `iroh-gossip` -- pub/sub messaging
-- `distributed-topic-tracker` -- DHT-based peer discovery
-
-## License
-
-[MIT](https://opensource.org/licenses/MIT)
+* `error`: Common error types and `Result` aliases.
+* `filter`: Tools for filtering files during synchronization and scanning.
+* `folder`: Management of synchronized folders, collections, and packages.
+* `fs`: File system utilities, including parallel scanning.
+* `net`: Network management and routing configurations.
+* `node`: Iroh node integration and identity management.
+* `search`: Find engine for querying synchronized assets.
+* `sync`: The core synchronization engine and session management.

@@ -5,6 +5,7 @@ pub mod package;
 pub mod sync_mode;
 pub mod syncweb_folder;
 
+pub use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotEntry, SnapshotId, SnapshotStore};
 pub use catalog::{PackageAnnouncement, PackageCatalog, catalog_topic};
 pub use collection::{
     CollectionEntry, CollectionHead, CollectionManifest, CollectionState, CollectionStore, InstalledCollection,

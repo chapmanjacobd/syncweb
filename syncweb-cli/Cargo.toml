@@ -25,7 +25,9 @@ blake3.workspace = true
 iroh-docs.workspace = true
 iroh-blobs.workspace = true
 iroh.workspace = true
+n0-future.workspace = true
 uuid.workspace = true
+async-recursion = "1.1.1"
 
 [lints]
 workspace = true

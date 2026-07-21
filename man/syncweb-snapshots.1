@@ -1,0 +1,26 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH snapshots 1  "snapshots " 
+.SH NAME
+snapshots \- List, diff, or delete snapshots
+.SH SYNOPSIS
+\fBsnapshots\fR [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+List, diff, or delete snapshots
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+
+.SH SUBCOMMANDS
+.TP
+snapshots\-diff(1)
+Compare two snapshots
+.TP
+snapshots\-delete(1)
+Delete a snapshot and release its pins
+.TP
+snapshots\-help(1)
+Print this message or the help of the given subcommand(s)

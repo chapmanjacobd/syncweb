@@ -135,7 +135,7 @@ async fn test_find_without_download() -> anyhow::Result<()> {
 fn dir_path(name: &str) -> anyhow::Result<PathBuf> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../target")
-        .join(format!("phase3-lazy-{name}-{}", uuid::Uuid::new_v4()));
+        .join(format!("lazy-{name}-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&path)?;
     Ok(path)
 }

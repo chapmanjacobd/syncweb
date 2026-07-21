@@ -33,8 +33,16 @@ pub enum Command {
     Sort(SortArgs),
     #[command(about = "Show detailed metadata for a local file")]
     Stat(StatArgs),
-    #[command(about = "Download a local file to a destination")]
+    #[command(about = "Download folder content or copy a local file")]
     Download(DownloadArgs),
+    #[command(about = "Create a content-addressed snapshot")]
+    Backup(BackupArgs),
+    #[command(about = "Restore a snapshot to a folder or directory")]
+    Restore(RestoreArgs),
+    #[command(about = "List, diff, or delete snapshots")]
+    Snapshots(SnapshotsArgs),
+    #[command(about = "Show seeding status per folder blob")]
+    Health(HealthArgs),
     #[command(about = "Initialize a folder and print a shareable URL")]
     Init(InitArgs),
     #[command(about = "Run rules-based automatic synchronization")]
@@ -176,13 +184,67 @@ pub struct StatArgs {
 #[derive(Debug, Args)]
 pub struct DownloadArgs {
     pub source: PathBuf,
-    pub destination: PathBuf,
+    pub destination: Option<PathBuf>,
+    #[arg(long, help = "Fetch only blobs with at most N observed peers")]
+    pub max_peers: Option<usize>,
+    #[arg(long, help = "Fetch only blobs with at least N observed peers")]
+    pub min_peers: Option<usize>,
+    #[arg(long)]
+    pub min_count: Option<usize>,
+    #[arg(long)]
+    pub max_count: Option<usize>,
     #[arg(
         long,
         default_value_t = 0,
         help = "Copy threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct BackupArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long)]
+    pub description: Option<String>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct RestoreArgs {
+    pub path: PathBuf,
+    pub snapshot: String,
+}
+
+#[derive(Debug, Args)]
+pub struct HealthArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct SnapshotsArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[command(subcommand)]
+    pub command: Option<SnapshotCommand>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SnapshotCommand {
+    #[command(about = "Compare two snapshots")]
+    Diff {
+        path: PathBuf,
+        first: String,
+        second: String,
+    },
+    #[command(about = "Delete a snapshot and release its pins")]
+    Delete { path: PathBuf, snapshot: String },
 }
 
 #[derive(Debug, Args)]

@@ -35,7 +35,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand find 'Search local files'
             cand sort 'Sort local files by discovery criteria'
             cand stat 'Show detailed metadata for a local file'
-            cand download 'Download a local file to a destination'
+            cand download 'Download folder content or copy a local file'
+            cand backup 'Create a content-addressed snapshot'
+            cand restore 'Restore a snapshot to a folder or directory'
+            cand snapshots 'List, diff, or delete snapshots'
+            cand health 'Show seeding status per folder blob'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand subscribe 'Subscribe to a folder with event filters'
@@ -173,7 +177,63 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;download'= {
+            cand --max-peers 'Fetch only blobs with at most N observed peers'
+            cand --min-peers 'Fetch only blobs with at least N observed peers'
+            cand --min-count 'min-count'
+            cand --max-count 'max-count'
             cand --threads 'Copy threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;backup'= {
+            cand --description 'description'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;restore'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;snapshots'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand diff 'Compare two snapshots'
+            cand delete 'Delete a snapshot and release its pins'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;snapshots;diff'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;snapshots;delete'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;snapshots;help'= {
+            cand diff 'Compare two snapshots'
+            cand delete 'Delete a snapshot and release its pins'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;snapshots;help;diff'= {
+        }
+        &'syncweb;snapshots;help;delete'= {
+        }
+        &'syncweb;snapshots;help;help'= {
+        }
+        &'syncweb;health'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand -h 'Print help'
@@ -499,7 +559,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand find 'Search local files'
             cand sort 'Sort local files by discovery criteria'
             cand stat 'Show detailed metadata for a local file'
-            cand download 'Download a local file to a destination'
+            cand download 'Download folder content or copy a local file'
+            cand backup 'Create a content-addressed snapshot'
+            cand restore 'Restore a snapshot to a folder or directory'
+            cand snapshots 'List, diff, or delete snapshots'
+            cand health 'Show seeding status per folder blob'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand subscribe 'Subscribe to a folder with event filters'
@@ -545,6 +609,20 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;stat'= {
         }
         &'syncweb;help;download'= {
+        }
+        &'syncweb;help;backup'= {
+        }
+        &'syncweb;help;restore'= {
+        }
+        &'syncweb;help;snapshots'= {
+            cand diff 'Compare two snapshots'
+            cand delete 'Delete a snapshot and release its pins'
+        }
+        &'syncweb;help;snapshots;diff'= {
+        }
+        &'syncweb;help;snapshots;delete'= {
+        }
+        &'syncweb;help;health'= {
         }
         &'syncweb;help;init'= {
         }

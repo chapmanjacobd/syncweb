@@ -101,13 +101,13 @@ Goal: Public sharing + data package versioning
 ### Phase 6: Backup/Snapshot + Partial Fetch
 Goal: Content-addressed snapshots + robustness fetch
 
-- [ ] `syncweb backup` - create content-addressed snapshot
-- [ ] `syncweb restore` - restore from snapshot
-- [ ] `syncweb snapshots` - list available snapshots
-- [ ] `FetchStrategy::Filter` with `min_peers`/`max_peers` - fetch by seeder count
-- [ ] `FetchStrategy::Filter` with `min_count`/`max_count` - fetch by file count
-- [ ] `syncweb download --max-peers N` - improve folder network health
-- [ ] `syncweb health` - show seeding status per blob
+- [x] `syncweb backup` - create content-addressed snapshot
+- [x] `syncweb restore` - restore from snapshot
+- [x] `syncweb snapshots` - list available snapshots
+- [x] `FetchStrategy::Filter` with `min_peers`/`max_peers` - fetch by seeder count
+- [x] `FetchStrategy::Filter` with `min_count`/`max_count` - fetch by file count
+- [x] `syncweb download --max-peers N` - improve folder network health
+- [x] `syncweb health` - show seeding status per blob
 
 ### Phase 7: Polish + Integrations
 Goal: Full CLI parity + UX + advanced features

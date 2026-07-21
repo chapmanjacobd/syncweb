@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::error::{Result, SyncwebError};
 use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
+use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotId, SnapshotStore};
 
 use super::SyncMode;
 
@@ -139,6 +140,70 @@ impl SyncwebFolder {
         self.sync_mode.can_write() && self.capability(node_id).await.is_some_and(Capability::can_write)
     }
 
+    /// Check whether a blob is complete in this folder's local store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob store cannot be queried.
+    pub async fn has_local(&self, hash: Hash) -> Result<bool> {
+        self.blob_store.has(hash).await
+    }
+
+    /// Create a content-addressed snapshot of this folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if document entries cannot be read or referenced blobs
+    /// are unavailable.
+    pub async fn create_snapshot(&self, description: Option<String>) -> Result<Snapshot> {
+        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
+            .create_for_folder(self, description)
+            .await
+    }
+
+    /// Restore this folder's document entries from a snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot belongs to another folder or content
+    /// is unavailable.
+    pub async fn restore_snapshot(&self, snapshot: &Snapshot) -> Result<()> {
+        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
+            .restore_for_folder(self, snapshot)
+            .await
+    }
+
+    /// List snapshots stored in the local blob store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if snapshot manifests cannot be read.
+    pub async fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
+        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
+            .list()
+            .await
+    }
+
+    /// Delete a snapshot and release its pins.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot cannot be found or pins cannot be released.
+    pub async fn delete_snapshot(&self, snapshot_id: SnapshotId) -> Result<()> {
+        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
+            .delete(snapshot_id)
+            .await
+    }
+
+    /// Compare two snapshots.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either snapshot is invalid.
+    pub fn diff_snapshots(&self, first: &Snapshot, second: &Snapshot) -> Result<SnapshotDiff> {
+        first.diff(second)
+    }
+
     /// # Errors
     ///
     /// Returns an error if the blob fails to be stored or set.
@@ -156,6 +221,38 @@ impl SyncwebFolder {
             .set_blob(&self.doc, self.author, key, hash, len)
             .await?;
         Ok(hash)
+    }
+
+    /// Store an existing blob reference in this folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder is read-only, the blob is unavailable, or
+    /// the document entry cannot be written.
+    pub async fn set_blob_ref(&self, key: impl AsRef<[u8]>, hash: Hash, size: u64) -> Result<()> {
+        if !self.sync_mode.can_write() {
+            return Err(SyncwebError::WriteDenied {
+                mode: self.sync_mode.to_string(),
+            });
+        }
+        if !self.blob_store.has(hash).await? {
+            return Err(SyncwebError::InvalidConfig(format!("blob is missing: {hash}")));
+        }
+        self.docs_engine.set_blob(&self.doc, self.author, key, hash, size).await
+    }
+
+    /// Delete a folder entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder is read-only or the document entry cannot be deleted.
+    pub async fn delete_entry(&self, key: impl AsRef<[u8]>) -> Result<()> {
+        if !self.sync_mode.can_write() {
+            return Err(SyncwebError::WriteDenied {
+                mode: self.sync_mode.to_string(),
+            });
+        }
+        self.docs_engine.delete(&self.doc, self.author, key).await
     }
 
     /// # Errors

@@ -1,14 +1,20 @@
 mod cli;
 
+use async_recursion::async_recursion;
+
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
-    commands::{CollectionCommand, Command, ConfigCommand, NetworkCommand, PackageCommand},
+    commands::{
+        BackupArgs, CollectionCommand, Command, ConfigCommand, HealthArgs, NetworkCommand, PackageCommand,
+        SnapshotCommand,
+    },
     output::{init_tracing, print_version, run_repl},
 };
+use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry},
@@ -24,10 +30,14 @@ use syncweb_core::{
         iroh_node::{IrohNode, RelayMode},
     },
     search::{FindEngine, FindQuery},
+    snapshot::SnapshotStore,
     sort::{SortCriterion, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
     storage::Config as AppConfig,
-    sync::{AreaFilter, AreaOfInterest, SessionMode, SubscribeParams, SyncEngine},
+    sync::{
+        AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SessionMode,
+        SubscribeParams, SyncEngine, SyncEvent,
+    },
 };
 
 #[tokio::main]
@@ -52,10 +62,13 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Find(command) => handle_find(command)?,
         Command::Sort(command) => handle_sort(&command)?,
         Command::Stat(command) => handle_stat(command)?,
-        Command::Download(command) => {
-            copy_path(&command.source, &command.destination, command.threads)?;
-            println!("{}", command.destination.display());
+        Command::Download(command) => handle_download(&cli.data_dir, command).await?,
+        Command::Backup(command) => handle_backup(&cli.data_dir, command).await?,
+        Command::Restore(command) => handle_restore(&cli.data_dir, command).await?,
+        Command::Snapshots(command) => {
+            handle_snapshots(&cli.data_dir, command.path, command.command).await?;
         }
+        Command::Health(command) => handle_health(&cli.data_dir, command).await?,
         Command::Init(command) => {
             std::fs::create_dir_all(&command.path)?;
             let node = open_node(&cli.data_dir).await?;
@@ -136,6 +149,218 @@ async fn execute_cli(cli: Cli) -> Result<()> {
     Ok(())
 }
 
+#[async_recursion]
+async fn handle_download(data_dir: &std::path::Path, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    if let Some(destination) = command.destination {
+        if command.max_peers.is_some()
+            || command.min_peers.is_some()
+            || command.min_count.is_some()
+            || command.max_count.is_some()
+        {
+            anyhow::bail!("fetch filters require a folder source without a destination");
+        }
+        copy_path(&command.source, &destination, command.threads)?;
+        println!("{}", destination.display());
+        return Ok(());
+    }
+
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = resolve_folder(&manager, &command.source).await?;
+    let mut filter = FetchFilter::new();
+    if let Some(peers) = command.min_peers {
+        filter = filter.with_min_peers(peers);
+    }
+    if let Some(peers) = command.max_peers {
+        filter = filter.with_max_peers(peers);
+    }
+    if let Some(count) = command.min_count {
+        filter = filter.with_min_count(count);
+    }
+    if let Some(count) = command.max_count {
+        filter = filter.with_max_count(count);
+    }
+    let strategy = if command.max_peers.is_some()
+        || command.min_peers.is_some()
+        || command.min_count.is_some()
+        || command.max_count.is_some()
+    {
+        FetchStrategy::Filter(filter)
+    } else {
+        FetchStrategy::All
+    };
+    let sync = SyncEngine::new(
+        manager,
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        node.gossip_service().clone(),
+    );
+    let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+    while let Some(event) = intent.next().await {
+        match event {
+            SyncEvent::Failed(message) => {
+                node.stop().await?;
+                anyhow::bail!("download failed: {message}");
+            }
+            SyncEvent::Finished => break,
+            SyncEvent::Started
+            | SyncEvent::Progress { .. }
+            | SyncEvent::Stats(_)
+            | SyncEvent::Paused
+            | SyncEvent::Resumed
+            | SyncEvent::Cancelled
+            | _ => {}
+        }
+    }
+    println!("downloaded: {}", folder.namespace_id());
+    node.stop().await?;
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_backup(data_dir: &std::path::Path, command: BackupArgs) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+    let snapshot = if command.path.exists() {
+        snapshots
+            .create_from_path(&command.path, command.threads, command.description)
+            .await?
+    } else {
+        let folder = resolve_folder(&manager, &command.path).await?;
+        snapshots.create_for_folder(&folder, command.description).await?
+    };
+    println!("snapshot: {}", snapshot.id);
+    println!("root_hash: {}", snapshot.root_hash);
+    println!("files: {}", snapshot.file_count);
+    println!("size: {}", snapshot.total_size);
+    node.stop().await?;
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_restore(data_dir: &std::path::Path, command: crate::cli::commands::RestoreArgs) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+    let id = command.snapshot.parse::<iroh_blobs::Hash>()?;
+    let snapshot = snapshots.load(id).await?;
+    if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
+        let folder = manager.get(namespace).await?;
+        snapshots.restore_for_folder(&folder, &snapshot).await?;
+        println!("restored: {}", folder.namespace_id());
+    } else {
+        let paths = snapshots.restore_to_path(&snapshot, &command.path).await?;
+        println!("restored: {} files", paths.len());
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_snapshots(
+    data_dir: &std::path::Path,
+    path: std::path::PathBuf,
+    command: Option<SnapshotCommand>,
+) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+    match command {
+        None => {
+            let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
+            for snapshot in snapshots.list().await? {
+                if namespace.is_none_or(|id| snapshot.namespace_id == Some(id)) {
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}",
+                        snapshot.id,
+                        snapshot.created_at,
+                        snapshot.total_size,
+                        snapshot.file_count,
+                        snapshot.description.unwrap_or_default()
+                    );
+                }
+            }
+        }
+        Some(SnapshotCommand::Diff { path: _, first, second }) => {
+            let left = snapshots.load(first.parse()?).await?;
+            let right = snapshots.load(second.parse()?).await?;
+            let diff = left.diff(&right)?;
+            for entry in diff.added {
+                println!("added\t{}", entry.path.display());
+            }
+            for entry in diff.removed {
+                println!("removed\t{}", entry.path.display());
+            }
+            for (old, new) in diff.modified {
+                println!("modified\t{}\t{}\t{}", old.path.display(), old.hash, new.hash);
+            }
+        }
+        Some(SnapshotCommand::Delete { path: _, snapshot }) => {
+            let id = snapshot.parse()?;
+            snapshots.delete(id).await?;
+            println!("deleted: {id}");
+        }
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_health(data_dir: &std::path::Path, command: HealthArgs) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = resolve_folder(&manager, &command.path).await?;
+    let entries = node.docs_engine().list_latest(folder.doc()).await?;
+    let mut candidates = Vec::new();
+    for entry in entries {
+        if entry.key().starts_with(b"sys/") {
+            continue;
+        }
+        let path = String::from_utf8(entry.key().to_vec())
+            .map_err(|error| anyhow::anyhow!("folder entry path is not UTF-8: {error}"))?;
+        candidates.push(FetchCandidate::new(
+            path,
+            entry.content_hash(),
+            entry.content_len(),
+            0,
+            folder.has_local(entry.content_hash()).await?,
+        ));
+    }
+    let report = HealthReport::from_candidates(&candidates, 4);
+    println!("Total blobs: {}", report.total);
+    println!("Well-seeded (>=4 peers): {}", report.well_seeded);
+    println!("Under-seeded (1-3 peers): {}", report.under_seeded);
+    println!("Unseeded (0 peers): {}", report.unseeded);
+    println!("Least-seeded:");
+    for blob in report.least_seeded.iter().take(10) {
+        println!(
+            "{}\t{}\t{}\t{}",
+            blob.hash,
+            blob.peer_count,
+            blob.size,
+            blob.path.display()
+        );
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn resolve_folder(
+    manager: &FolderManager,
+    selector: &std::path::Path,
+) -> Result<syncweb_core::folder::SyncwebFolder> {
+    if let Ok(namespace) = selector.to_string_lossy().parse() {
+        return Ok(manager.get(namespace).await?);
+    }
+    let folders = manager.list().await?;
+    match folders.as_slice() {
+        [folder] => Ok(folder.clone()),
+        [] => anyhow::bail!("no synchronized folders are available"),
+        _ => anyhow::bail!("folder path is not a namespace ID and more than one synchronized folder is available"),
+    }
+}
+
+#[async_recursion]
 async fn handle_create(data_dir: &std::path::Path, command: crate::cli::commands::FolderCreate) -> Result<()> {
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
@@ -152,6 +377,7 @@ async fn handle_create(data_dir: &std::path::Path, command: crate::cli::commands
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_join(data_dir: &std::path::Path, command: crate::cli::commands::FolderJoin) -> Result<()> {
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
@@ -166,6 +392,7 @@ async fn handle_join(data_dir: &std::path::Path, command: crate::cli::commands::
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_automatic(data_dir: &std::path::Path, command: crate::cli::commands::AutomaticArgs) -> Result<()> {
     let filter_path = command.filters.unwrap_or_else(|| data_dir.join("filters.toml"));
     let engine = if filter_path.exists() {
@@ -227,6 +454,7 @@ async fn handle_automatic(data_dir: &std::path::Path, command: crate::cli::comma
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_subscribe(data_dir: &std::path::Path, command: crate::cli::commands::SubscribeArgs) -> Result<()> {
     std::fs::create_dir_all(&command.path)?;
     let node = open_node(data_dir).await?;
@@ -282,6 +510,7 @@ async fn handle_subscribe(data_dir: &std::path::Path, command: crate::cli::comma
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_publish(data_dir: &std::path::Path, command: crate::cli::commands::PublishArgs) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -299,6 +528,7 @@ async fn handle_publish(data_dir: &std::path::Path, command: crate::cli::command
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_unpublish(data_dir: &std::path::Path, command: crate::cli::commands::UnpublishArgs) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -309,6 +539,7 @@ async fn handle_unpublish(data_dir: &std::path::Path, command: crate::cli::comma
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_collection(data_dir: &std::path::Path, command: CollectionCommand) -> Result<()> {
     match command {
         CollectionCommand::Init {
@@ -400,6 +631,7 @@ async fn handle_collection(data_dir: &std::path::Path, command: CollectionComman
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_package(data_dir: &std::path::Path, command: PackageCommand) -> Result<()> {
     let packages = PackageManager::new(data_dir.join("packages"));
     match command {
@@ -478,6 +710,7 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand) -> 
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_package_search(
     data_dir: &std::path::Path,
     query: Option<String>,
@@ -606,6 +839,7 @@ fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry
         .collect()
 }
 
+#[async_recursion]
 async fn handle_network(data_dir: &std::path::Path, command: NetworkCommand) -> Result<()> {
     let mut manager = open_network_manager(data_dir)?;
     match command {
@@ -706,6 +940,7 @@ fn add_folder_to_network(
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_accept(data_dir: &std::path::Path, namespace: String) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -715,6 +950,7 @@ async fn handle_accept(data_dir: &std::path::Path, namespace: String) -> Result<
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_drop(data_dir: &std::path::Path, namespace: String) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -724,6 +960,7 @@ async fn handle_drop(data_dir: &std::path::Path, namespace: String) -> Result<()
     Ok(())
 }
 
+#[async_recursion]
 async fn handle_folders(data_dir: &std::path::Path) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);

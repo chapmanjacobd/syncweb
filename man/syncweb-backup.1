@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH backup 1  "backup " 
+.SH NAME
+backup \- Create a content\-addressed snapshot
+.SH SYNOPSIS
+\fBbackup\fR [\fB\-\-description\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+.SH DESCRIPTION
+Create a content\-addressed snapshot
+.SH OPTIONS
+.TP
+\fB\-\-description\fR \fI<DESCRIPTION>\fR
+
+.TP
+\fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
+Scanner threads (1 disables parallelism, 0 uses all available CPUs)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+

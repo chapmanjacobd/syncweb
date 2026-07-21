@@ -19,20 +19,20 @@ Based on the implementation phases and [testing strategy](docs/testing.md).
 
 ### 6.1 Snapshot System (TDD)
 Unit Tests (`tests/unit/snapshot_test.rs`):
-- [ ] `test_create_snapshot` - Instant, references blobs
-- [ ] `test_restore_snapshot` - Instant restore
-- [ ] `test_snapshot_diff` - Added/removed/modified
-- [ ] `test_snapshot_pin_gc` - Pinned blobs not GC'd
-- [ ] `test_snapshot_sharing` - Share via ticket
+- [x] `test_create_snapshot` - Instant, references blobs
+- [x] `test_restore_snapshot` - Instant restore
+- [x] `test_snapshot_diff` - Added/removed/modified
+- [x] `test_snapshot_pin_gc` - Pinned blobs not GC'd
+- [x] `test_snapshot_sharing` - Share via ticket
 
 Integration Tests:
-- [ ] `test_backup_restore_cycle` - Backup -> modify -> restore -> verify
+- [x] `test_backup_restore_cycle` - Backup -> modify -> restore -> verify
 
 ### 6.2 Partial Fetch / Health (TDD)
 Unit Tests (`tests/unit/partial_fetch_test.rs`):
-- [ ] `test_fetch_filter_min_peers` - Fetch blobs with <= N peers
-- [ ] `test_fetch_filter_max_count` - Limit blob count
-- [ ] `test_health_command` - Well/under/unseeded counts
+- [x] `test_fetch_filter_min_peers` - Fetch blobs with <= N peers
+- [x] `test_fetch_filter_max_count` - Limit blob count
+- [x] `test_health_command` - Well/under/unseeded counts
 
 Integration Tests:
 - [ ] `test_download_max_peers` - Improves seeder distribution

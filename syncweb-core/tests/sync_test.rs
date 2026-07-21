@@ -100,7 +100,7 @@ fn transfer_stats_report_rate_and_eta() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-engine-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-engine-{}", uuid::Uuid::new_v4()));
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let node = IrohNode::new(identity, root.join("data"), RelayMode::Default).await?;
     let folders = FolderManager::new(&node);

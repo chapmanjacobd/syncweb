@@ -187,6 +187,38 @@ impl DocsEngine {
             .map_err(|error| SyncwebError::operation("failed to read document query result", error))
     }
 
+    /// Read the latest non-empty entry for every document key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document query fails.
+    pub async fn list_latest(&self, doc: &Doc) -> Result<Vec<Entry>> {
+        let entries = doc
+            .get_many(Query::single_latest_per_key().build())
+            .await
+            .map_err(|error| SyncwebError::operation("failed to query document entries", error))?;
+        tokio::pin!(entries);
+        let mut output = Vec::new();
+        while let Some(entry_result) = n0_future::StreamExt::next(&mut entries).await {
+            let entry =
+                entry_result.map_err(|error| SyncwebError::operation("failed to read document entry", error))?;
+            output.push(entry);
+        }
+        Ok(output)
+    }
+
+    /// Delete the current value for a document key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document entry cannot be deleted.
+    pub async fn delete(&self, doc: &Doc, author: AuthorId, key: impl AsRef<[u8]>) -> Result<()> {
+        doc.del(author, key.as_ref().to_vec())
+            .await
+            .map_err(|error| SyncwebError::operation("failed to delete document entry", error))?;
+        Ok(())
+    }
+
     /// # Errors
     ///
     /// Returns an error if watching the document fails.

@@ -251,7 +251,7 @@ fn test_join_command() -> anyhow::Result<()> {
 }
 
 fn cli_test_dir(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("syncweb-cli-phase3-{name}-{}", uuid::Uuid::new_v4()))
+    std::env::temp_dir().join(format!("syncweb-cli-{name}-{}", uuid::Uuid::new_v4()))
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn test_init_outputs_url() -> anyhow::Result<()> {
 }
 
 #[test]
-fn phase4_commands_are_available() -> anyhow::Result<()> {
+fn network_commands_are_available() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .arg("--help")
         .output()

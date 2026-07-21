@@ -1,6 +1,6 @@
-.PHONY: all fmt lint test build clean check clippy install install-completions install-manpage manpage completions
+.PHONY: all fmt lint test build clean check clippy install install-completions install-manpage manpage completions readme
 
-all: fmt lint test build manpage completions
+all: fmt lint test build manpage completions readme
 
 fmt:
 	cargo fmt --all
@@ -49,6 +49,9 @@ completions: build
 manpage: build
 	mkdir -p man
 	./target/debug/syncweb manpages
+
+readme:
+	cd syncweb-core && cargo doc2readme
 
 install-completions:
 	install -d $(DESTDIR)/usr/share/bash-completion/completions

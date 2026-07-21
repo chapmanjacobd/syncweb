@@ -223,13 +223,117 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (download)
 _arguments "${_arguments_options[@]}" : \
+'--max-peers=[Fetch only blobs with at most N observed peers]:MAX_PEERS:_default' \
+'--min-peers=[Fetch only blobs with at least N observed peers]:MIN_PEERS:_default' \
+'--min-count=[]:MIN_COUNT:_default' \
+'--max-count=[]:MAX_COUNT:_default' \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
-':destination:_files' \
+'::destination:_files' \
+&& ret=0
+;;
+(backup)
+_arguments "${_arguments_options[@]}" : \
+'--description=[]:DESCRIPTION:_default' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path:_files' \
+':snapshot:_default' \
+&& ret=0
+;;
+(snapshots)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+":: :_syncweb__subcmd__snapshots_commands" \
+"*::: :->snapshots" \
+&& ret=0
+
+    case $state in
+    (snapshots)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-snapshots-command-$line[2]:"
+        case $line[2] in
+            (diff)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path:_files' \
+':first:_default' \
+':second:_default' \
+&& ret=0
+;;
+(delete)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path:_files' \
+':snapshot:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__snapshots__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-snapshots-help-command-$line[1]:"
+        case $line[1] in
+            (diff)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(delete)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
 && ret=0
 ;;
 (init)
@@ -795,6 +899,42 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(backup)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(snapshots)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__snapshots_commands" \
+"*::: :->snapshots" \
+&& ret=0
+
+    case $state in
+    (snapshots)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-snapshots-command-$line[1]:"
+        case $line[1] in
+            (diff)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(delete)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (init)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -980,7 +1120,11 @@ _syncweb_commands() {
 'find:Search local files' \
 'sort:Sort local files by discovery criteria' \
 'stat:Show detailed metadata for a local file' \
-'download:Download a local file to a destination' \
+'download:Download folder content or copy a local file' \
+'backup:Create a content-addressed snapshot' \
+'restore:Restore a snapshot to a folder or directory' \
+'snapshots:List, diff, or delete snapshots' \
+'health:Show seeding status per folder blob' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'subscribe:Subscribe to a folder with event filters' \
@@ -1004,6 +1148,11 @@ _syncweb__subcmd__accept_commands() {
 _syncweb__subcmd__automatic_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb automatic commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__backup_commands] )) ||
+_syncweb__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb backup commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__collection_commands] )) ||
 _syncweb__subcmd__collection_commands() {
@@ -1150,6 +1299,11 @@ _syncweb__subcmd__folders_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb folders commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__health_commands] )) ||
+_syncweb__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb health commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help_commands] )) ||
 _syncweb__subcmd__help_commands() {
     local commands; commands=(
@@ -1166,7 +1320,11 @@ _syncweb__subcmd__help_commands() {
 'find:Search local files' \
 'sort:Sort local files by discovery criteria' \
 'stat:Show detailed metadata for a local file' \
-'download:Download a local file to a destination' \
+'download:Download folder content or copy a local file' \
+'backup:Create a content-addressed snapshot' \
+'restore:Restore a snapshot to a folder or directory' \
+'snapshots:List, diff, or delete snapshots' \
+'health:Show seeding status per folder blob' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'subscribe:Subscribe to a folder with event filters' \
@@ -1190,6 +1348,11 @@ _syncweb__subcmd__help__subcmd__accept_commands() {
 _syncweb__subcmd__help__subcmd__automatic_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help automatic commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__backup_commands] )) ||
+_syncweb__subcmd__help__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help backup commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__collection_commands] )) ||
 _syncweb__subcmd__help__subcmd__collection_commands() {
@@ -1273,6 +1436,11 @@ _syncweb__subcmd__help__subcmd__find_commands() {
 _syncweb__subcmd__help__subcmd__folders_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help folders commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__health_commands] )) ||
+_syncweb__subcmd__help__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__help_commands] )) ||
 _syncweb__subcmd__help__subcmd__help_commands() {
@@ -1416,6 +1584,29 @@ _syncweb__subcmd__help__subcmd__publish_commands() {
 _syncweb__subcmd__help__subcmd__repl_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help repl commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__restore_commands] )) ||
+_syncweb__subcmd__help__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help restore commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__snapshots_commands] )) ||
+_syncweb__subcmd__help__subcmd__snapshots_commands() {
+    local commands; commands=(
+'diff:Compare two snapshots' \
+'delete:Delete a snapshot and release its pins' \
+    )
+    _describe -t commands 'syncweb help snapshots commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__snapshots__subcmd__delete_commands] )) ||
+_syncweb__subcmd__help__subcmd__snapshots__subcmd__delete_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help snapshots delete commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__snapshots__subcmd__diff_commands] )) ||
+_syncweb__subcmd__help__subcmd__snapshots__subcmd__diff_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help snapshots diff commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__sort_commands] )) ||
 _syncweb__subcmd__help__subcmd__sort_commands() {
@@ -1701,6 +1892,54 @@ _syncweb__subcmd__publish_commands() {
 _syncweb__subcmd__repl_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb repl commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__restore_commands] )) ||
+_syncweb__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb restore commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots_commands] )) ||
+_syncweb__subcmd__snapshots_commands() {
+    local commands; commands=(
+'diff:Compare two snapshots' \
+'delete:Delete a snapshot and release its pins' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb snapshots commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__delete_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__delete_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb snapshots delete commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__diff_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__diff_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb snapshots diff commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__help_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__help_commands() {
+    local commands; commands=(
+'diff:Compare two snapshots' \
+'delete:Delete a snapshot and release its pins' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb snapshots help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__help__subcmd__delete_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__help__subcmd__delete_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb snapshots help delete commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__help__subcmd__diff_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__help__subcmd__diff_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb snapshots help diff commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__snapshots__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__snapshots__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb snapshots help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__sort_commands] )) ||
 _syncweb__subcmd__sort_commands() {

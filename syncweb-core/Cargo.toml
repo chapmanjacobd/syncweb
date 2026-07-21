@@ -31,7 +31,6 @@ hmac.workspace = true
 hkdf.workspace = true
 uuid.workspace = true
 opaque-debug.workspace = true
-clap.workspace = true
 
 # Iroh stack
 iroh = { workspace = true, features = ["test-utils"] }

@@ -16,7 +16,7 @@ use crate::{
     node::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService},
 };
 
-use super::{IntentHandle, SessionMode, SubscribeParams, SyncCommand, SyncEvent};
+use super::{FetchStrategy, IntentHandle, SessionMode, SubscribeParams, SyncCommand, SyncEvent};
 
 /// Current aggregate statistics for a synchronization intent.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -116,6 +116,22 @@ impl SyncEngine {
         self.sync_with_params(folder_id, SessionMode::Continuous, params).await
     }
 
+    /// Fetch folder content using a full or filtered reconciliation strategy.
+    ///
+    /// Peer-count filters are applied by callers that have availability
+    /// observations. The document subscription still carries path, size, and
+    /// count limits so the remote reconciliation remains bounded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder is not managed locally or synchronization
+    /// cannot be started.
+    pub async fn fetch(&self, folder_id: NamespaceId, strategy: FetchStrategy) -> Result<IntentHandle> {
+        let params = Self::fetch_params(strategy);
+        self.sync_with_params(folder_id, SessionMode::ReconcileOnce, params)
+            .await
+    }
+
     /// Start a synchronization intent and filter emitted entries.
     ///
     /// The document reconciliation remains content-addressed and is handled
@@ -134,6 +150,28 @@ impl SyncEngine {
         filter: FilterEngine,
     ) -> Result<IntentHandle> {
         self.start(folder_id, mode, params, Some(filter)).await
+    }
+
+    fn fetch_params(strategy: FetchStrategy) -> SubscribeParams {
+        let FetchStrategy::Filter(filter) = strategy else {
+            return SubscribeParams::default();
+        };
+        let mut params = SubscribeParams::default();
+        if let Some(paths) = filter.paths
+            && let Some(path) = paths.first()
+        {
+            params = params.with_area(super::AreaFilter::Prefix(path.clone()));
+        }
+        if filter.max_size.is_some() || filter.max_count.is_some() {
+            let area = params.area_filter.clone().unwrap_or(super::AreaFilter::All);
+            let limits = super::AreaOfInterest::with_limits(
+                area,
+                filter.max_size.unwrap_or(0),
+                u64::try_from(filter.max_count.unwrap_or(0)).unwrap_or(u64::MAX),
+            );
+            params = params.with_limits(limits);
+        }
+        params
     }
 
     async fn start(

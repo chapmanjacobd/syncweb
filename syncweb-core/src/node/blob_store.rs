@@ -2,6 +2,7 @@ use bytes::Bytes;
 use iroh::{EndpointAddr, address_lookup::memory::MemoryLookup, endpoint::Endpoint};
 use iroh_blobs::api::Store as BlobApi;
 use iroh_blobs::{BlobsProtocol, Hash, ticket::BlobTicket};
+use n0_future::StreamExt;
 use std::path::Path;
 
 use crate::error::{Result, SyncwebError};
@@ -122,6 +123,42 @@ impl BlobStore {
             .await
             .map(|tag_info| tag_info.is_some_and(|tag| tag.hash == hash))
             .map_err(|error| SyncwebError::operation("failed to query blob pin", error))
+    }
+
+    /// List all complete blobs currently in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store cannot be queried.
+    pub async fn list_hashes(&self) -> Result<Vec<Hash>> {
+        self.store
+            .blobs()
+            .list()
+            .hashes()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to list blobs", error))
+    }
+
+    /// List named pins whose names start with `prefix`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store cannot be queried.
+    pub async fn list_pins(&self, prefix: impl AsRef<[u8]>) -> Result<Vec<(String, Hash)>> {
+        let mut tags = self
+            .store
+            .tags()
+            .list_prefix(prefix)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to list blob pins", error))?;
+        let mut pins = Vec::new();
+        while let Some(tag_result) = tags.next().await {
+            let tag = tag_result.map_err(|error| SyncwebError::operation("failed to read blob pin", error))?;
+            let name = String::from_utf8(tag.name.as_ref().to_vec())
+                .map_err(|error| SyncwebError::operation("blob pin name is not UTF-8", error))?;
+            pins.push((name, tag.hash));
+        }
+        Ok(pins)
     }
 
     /// # Errors

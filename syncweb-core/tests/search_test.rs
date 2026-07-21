@@ -12,7 +12,7 @@ use syncweb_core::{
 fn test_root(name: &str) -> std::io::Result<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../target")
-        .join(format!("phase3-{name}-{}", uuid::Uuid::new_v4()));
+        .join(format!("{name}-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     Ok(root)
 }

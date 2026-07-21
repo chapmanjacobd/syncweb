@@ -4,7 +4,7 @@ use syncweb_core::net::{NetworkManager, NetworkOptions, NetworkTicket};
 
 #[test]
 fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-network-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-network-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root)?;
     let owner = SecretKey::generate().public();
     let member = SecretKey::generate().public();
@@ -37,7 +37,7 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
 
 #[test]
 fn test_network_create_rejects_empty_name() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-empty-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-empty-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
@@ -55,7 +55,7 @@ fn test_network_create_rejects_empty_name() -> anyhow::Result<()> {
 
 #[test]
 fn test_network_invite_rejects_non_owner() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-owner-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-owner-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let other = SecretKey::generate().public();
@@ -77,7 +77,7 @@ fn test_network_invite_rejects_non_owner() -> anyhow::Result<()> {
 
 #[test]
 fn test_network_kick_owner_rejected() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-kick-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-kick-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
@@ -95,7 +95,7 @@ fn test_network_kick_owner_rejected() -> anyhow::Result<()> {
 
 #[test]
 fn test_network_leave_removes_network() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-leave-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-leave-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
@@ -116,7 +116,7 @@ fn test_network_leave_removes_network() -> anyhow::Result<()> {
 
 #[test]
 fn test_network_folder_membership() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-folder-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-folder-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let path = root.join("networks.json");
@@ -143,7 +143,7 @@ fn test_network_folder_membership() -> anyhow::Result<()> {
 fn test_network_ticket_round_trip_deterministic() -> anyhow::Result<()> {
     let owner = SecretKey::generate().public();
     let member = SecretKey::generate().public();
-    let root = std::env::temp_dir().join(format!("syncweb-phase4-net-ticket-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("syncweb-net-ticket-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root)?;
 
     let path = root.join("networks.json");

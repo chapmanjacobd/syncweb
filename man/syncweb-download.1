@@ -2,12 +2,24 @@
 .el .ds Aq '
 .TH download 1  "download " 
 .SH NAME
-download \- Download a local file to a destination
+download \- Download folder content or copy a local file
 .SH SYNOPSIS
-\fBdownload\fR [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> <\fIDESTINATION\fR> 
+\fBdownload\fR [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
 .SH DESCRIPTION
-Download a local file to a destination
+Download folder content or copy a local file
 .SH OPTIONS
+.TP
+\fB\-\-max\-peers\fR \fI<MAX_PEERS>\fR
+Fetch only blobs with at most N observed peers
+.TP
+\fB\-\-min\-peers\fR \fI<MIN_PEERS>\fR
+Fetch only blobs with at least N observed peers
+.TP
+\fB\-\-min\-count\fR \fI<MIN_COUNT>\fR
+
+.TP
+\fB\-\-max\-count\fR \fI<MAX_COUNT>\fR
+
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Copy threads (1 disables parallelism, 0 uses all available CPUs)
@@ -18,5 +30,5 @@ Print help
 <\fISOURCE\fR>
 
 .TP
-<\fIDESTINATION\fR>
+[\fIDESTINATION\fR]
 

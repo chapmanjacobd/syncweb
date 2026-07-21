@@ -60,6 +60,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('collection', 'collection', [CompletionResultType]::ParameterValue, 'Create and publish versioned content collections')
             [CompletionResult]::new('package', 'package', [CompletionResultType]::ParameterValue, 'Manage locally installed collection packages')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
+            [CompletionResult]::new('indexing', 'indexing', [CompletionResultType]::ParameterValue, 'Manage opt-in indexing, catalogs, and metadata')
+            [CompletionResult]::new('link', 'link', [CompletionResultType]::ParameterValue, 'Create and resolve stable syncweb links')
+            [CompletionResult]::new('mirror', 'mirror', [CompletionResultType]::ParameterValue, 'Register alternate content providers')
+            [CompletionResult]::new('trust', 'trust', [CompletionResultType]::ParameterValue, 'Inspect and delegate local trust')
+            [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Sign content provenance attestations')
+            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Submit a local moderation report')
+            [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -606,6 +613,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR drop file')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -620,12 +628,26 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'syncweb;package;drop;import' {
+            [CompletionResult]::new('--filter', '--filter', [CompletionResultType]::ParameterName, 'filter')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'syncweb;package;drop;help' {
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR drop file')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;package;drop;help;export' {
+            break
+        }
+        'syncweb;package;drop;help;import' {
             break
         }
         'syncweb;package;drop;help;help' {
@@ -733,9 +755,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;package;help;drop' {
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR drop file')
             break
         }
         'syncweb;package;help;drop;export' {
+            break
+        }
+        'syncweb;package;help;drop;import' {
             break
         }
         'syncweb;package;help;search' {
@@ -886,6 +912,408 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;network;help;help' {
             break
         }
+        'syncweb;indexing' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('enable', 'enable', [CompletionResultType]::ParameterValue, 'Opt a synchronized folder into indexing')
+            [CompletionResult]::new('disable', 'disable', [CompletionResultType]::ParameterValue, 'Remove a folder from the local index')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search subscribed catalogs')
+            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
+            [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
+            [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;enable' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;disable' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;publish' {
+            [CompletionResult]::new('--catalog', '--catalog', [CompletionResultType]::ParameterName, 'catalog')
+            [CompletionResult]::new('--tag', '--tag', [CompletionResultType]::ParameterName, 'tag')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;search' {
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;health' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;meta' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;meta;add' {
+            [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;meta;help' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;meta;help;add' {
+            break
+        }
+        'syncweb;indexing;meta;help;help' {
+            break
+        }
+        'syncweb;indexing;filter' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;filter;add' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;filter;subscribe' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;indexing;filter;help' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;filter;help;add' {
+            break
+        }
+        'syncweb;indexing;filter;help;subscribe' {
+            break
+        }
+        'syncweb;indexing;filter;help;help' {
+            break
+        }
+        'syncweb;indexing;help' {
+            [CompletionResult]::new('enable', 'enable', [CompletionResultType]::ParameterValue, 'Opt a synchronized folder into indexing')
+            [CompletionResult]::new('disable', 'disable', [CompletionResultType]::ParameterValue, 'Remove a folder from the local index')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search subscribed catalogs')
+            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
+            [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
+            [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;indexing;help;enable' {
+            break
+        }
+        'syncweb;indexing;help;disable' {
+            break
+        }
+        'syncweb;indexing;help;publish' {
+            break
+        }
+        'syncweb;indexing;help;search' {
+            break
+        }
+        'syncweb;indexing;help;health' {
+            break
+        }
+        'syncweb;indexing;help;meta' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
+            break
+        }
+        'syncweb;indexing;help;meta;add' {
+            break
+        }
+        'syncweb;indexing;help;filter' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
+            break
+        }
+        'syncweb;indexing;help;filter;add' {
+            break
+        }
+        'syncweb;indexing;help;filter;subscribe' {
+            break
+        }
+        'syncweb;indexing;help;help' {
+            break
+        }
+        'syncweb;link' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
+            [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;link;create' {
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
+            [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--expires', '--expires', [CompletionResultType]::ParameterName, 'Private-link expiration as a Unix timestamp')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--private', '--private', [CompletionResultType]::ParameterName, 'private')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;link;resolve' {
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;link;revoke' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;link;help' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
+            [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;link;help;create' {
+            break
+        }
+        'syncweb;link;help;resolve' {
+            break
+        }
+        'syncweb;link;help;revoke' {
+            break
+        }
+        'syncweb;link;help;help' {
+            break
+        }
+        'syncweb;mirror' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;mirror;add' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;mirror;help' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;mirror;help;add' {
+            break
+        }
+        'syncweb;mirror;help;help' {
+            break
+        }
+        'syncweb;trust' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
+            [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;show' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;delegate' {
+            [CompletionResult]::new('--expires', '--expires', [CompletionResultType]::ParameterName, 'expires')
+            [CompletionResult]::new('--scope', '--scope', [CompletionResultType]::ParameterName, 'scope')
+            [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;help' {
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
+            [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;help;show' {
+            break
+        }
+        'syncweb;trust;help;delegate' {
+            break
+        }
+        'syncweb;trust;help;help' {
+            break
+        }
+        'syncweb;attest' {
+            [CompletionResult]::new('--license', '--license', [CompletionResultType]::ParameterName, 'license')
+            [CompletionResult]::new('--provenance', '--provenance', [CompletionResultType]::ParameterName, 'provenance')
+            [CompletionResult]::new('--derivative', '--derivative', [CompletionResultType]::ParameterName, 'derivative')
+            [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;report' {
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;moderation' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
+            [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;moderation;ls' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;moderation;hide' {
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;moderation;help' {
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
+            [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;moderation;help;ls' {
+            break
+        }
+        'syncweb;moderation;help;hide' {
+            break
+        }
+        'syncweb;moderation;help;help' {
+            break
+        }
         'syncweb;completions' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -938,6 +1366,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('collection', 'collection', [CompletionResultType]::ParameterValue, 'Create and publish versioned content collections')
             [CompletionResult]::new('package', 'package', [CompletionResultType]::ParameterValue, 'Manage locally installed collection packages')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
+            [CompletionResult]::new('indexing', 'indexing', [CompletionResultType]::ParameterValue, 'Manage opt-in indexing, catalogs, and metadata')
+            [CompletionResult]::new('link', 'link', [CompletionResultType]::ParameterValue, 'Create and resolve stable syncweb links')
+            [CompletionResult]::new('mirror', 'mirror', [CompletionResultType]::ParameterValue, 'Register alternate content providers')
+            [CompletionResult]::new('trust', 'trust', [CompletionResultType]::ParameterValue, 'Inspect and delegate local trust')
+            [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Sign content provenance attestations')
+            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Submit a local moderation report')
+            [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -1091,9 +1526,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;help;package;drop' {
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR drop file')
             break
         }
         'syncweb;help;package;drop;export' {
+            break
+        }
+        'syncweb;help;package;drop;import' {
             break
         }
         'syncweb;help;package;search' {
@@ -1152,6 +1591,99 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;network;test-relay' {
+            break
+        }
+        'syncweb;help;indexing' {
+            [CompletionResult]::new('enable', 'enable', [CompletionResultType]::ParameterValue, 'Opt a synchronized folder into indexing')
+            [CompletionResult]::new('disable', 'disable', [CompletionResultType]::ParameterValue, 'Remove a folder from the local index')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search subscribed catalogs')
+            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
+            [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
+            [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
+            break
+        }
+        'syncweb;help;indexing;enable' {
+            break
+        }
+        'syncweb;help;indexing;disable' {
+            break
+        }
+        'syncweb;help;indexing;publish' {
+            break
+        }
+        'syncweb;help;indexing;search' {
+            break
+        }
+        'syncweb;help;indexing;health' {
+            break
+        }
+        'syncweb;help;indexing;meta' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
+            break
+        }
+        'syncweb;help;indexing;meta;add' {
+            break
+        }
+        'syncweb;help;indexing;filter' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
+            break
+        }
+        'syncweb;help;indexing;filter;add' {
+            break
+        }
+        'syncweb;help;indexing;filter;subscribe' {
+            break
+        }
+        'syncweb;help;link' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
+            [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
+            break
+        }
+        'syncweb;help;link;create' {
+            break
+        }
+        'syncweb;help;link;resolve' {
+            break
+        }
+        'syncweb;help;link;revoke' {
+            break
+        }
+        'syncweb;help;mirror' {
+            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
+            break
+        }
+        'syncweb;help;mirror;add' {
+            break
+        }
+        'syncweb;help;trust' {
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
+            [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            break
+        }
+        'syncweb;help;trust;show' {
+            break
+        }
+        'syncweb;help;trust;delegate' {
+            break
+        }
+        'syncweb;help;attest' {
+            break
+        }
+        'syncweb;help;report' {
+            break
+        }
+        'syncweb;help;moderation' {
+            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
+            [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
+            break
+        }
+        'syncweb;help;moderation;ls' {
+            break
+        }
+        'syncweb;help;moderation;hide' {
             break
         }
         'syncweb;help;completions' {

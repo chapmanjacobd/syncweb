@@ -12,7 +12,7 @@ lint:
 	cargo clippy --all-targets --all-features --color always 2>&1 | tee clippy.log || EXIT_CODE=$$?; \
 	EXIT_CODE=$${EXIT_CODE:-0}; \
 	echo ""; echo "Error Summary:"; \
-	cat clippy.log | sed "s/\x1B\[[0-9;]*[a-zA-Z]//g" | grep -E -i "error(\[[^]]+\])?:" | grep -v "could not compile" | sort | uniq -c | sort -g || true; \
+	cat clippy.log | sed "s/\x1B\[[0-9;]*[a-zA-Z]//g" | grep -E -i "^error(\[[^]]+\])?:" | grep -v "could not compile" | sort | uniq -c | sort -g || true; \
 	rm -f clippy.log; \
 	exit $$EXIT_CODE'
 

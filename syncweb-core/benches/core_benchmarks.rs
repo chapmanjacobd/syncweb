@@ -111,6 +111,8 @@ fn bench_filter_compile(c: &mut Criterion) {
 
 fn bench_sort(c: &mut Criterion) {
     let mut group = c.benchmark_group("sort");
+    group.sample_size(20);
+    group.measurement_time(Duration::from_secs(20));
 
     let make_entries = |n: usize| -> Vec<SortEntry> {
         (0_usize..n)

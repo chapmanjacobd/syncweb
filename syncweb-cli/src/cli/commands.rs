@@ -85,6 +85,35 @@ pub enum Command {
         #[command(subcommand)]
         command: NetworkCommand,
     },
+    #[command(about = "Manage opt-in indexing, catalogs, and metadata")]
+    Indexing {
+        #[command(subcommand)]
+        command: IndexingCommand,
+    },
+    #[command(about = "Create and resolve stable syncweb links")]
+    Link {
+        #[command(subcommand)]
+        command: LinkCommand,
+    },
+    #[command(about = "Register alternate content providers")]
+    Mirror {
+        #[command(subcommand)]
+        command: MirrorCommand,
+    },
+    #[command(about = "Inspect and delegate local trust")]
+    Trust {
+        #[command(subcommand)]
+        command: TrustCommand,
+    },
+    #[command(about = "Sign content provenance attestations")]
+    Attest(AttestArgs),
+    #[command(about = "Submit a local moderation report")]
+    Report(ReportArgs),
+    #[command(about = "Manage local moderation decisions")]
+    Moderation {
+        #[command(subcommand)]
+        command: ModerationCommand,
+    },
     #[command(about = "Generate shell completions")]
     Completions {
         #[arg(value_enum)]
@@ -484,6 +513,12 @@ pub enum DropCommand {
         #[arg(long, value_name = "EXPRESSION")]
         filter: Vec<String>,
     },
+    #[command(about = "Import and install a compressed CAR drop file")]
+    Import {
+        archive: PathBuf,
+        #[arg(long, value_name = "EXPRESSION")]
+        filter: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -514,5 +549,143 @@ pub enum NetworkCommand {
     TestRelay {
         #[arg(long = "relay-url")]
         relay_url: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IndexingCommand {
+    #[command(about = "Opt a synchronized folder into indexing")]
+    Enable { folder: PathBuf },
+    #[command(about = "Remove a folder from the local index")]
+    Disable { folder: PathBuf },
+    #[command(about = "Publish folder metadata to a catalog")]
+    Publish {
+        folder: PathBuf,
+        #[arg(long)]
+        catalog: String,
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+    },
+    #[command(about = "Search subscribed catalogs")]
+    Search {
+        query: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(about = "Show verified provider health for a content hash")]
+    Health { hash: String },
+    #[command(about = "Manage signed metadata")]
+    Meta {
+        #[command(subcommand)]
+        command: MetaCommand,
+    },
+    #[command(about = "Manage local and federated denylists")]
+    Filter {
+        #[command(subcommand)]
+        command: FilterCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MetaCommand {
+    #[command(about = "Append signed metadata to a content hash")]
+    Add {
+        hash: String,
+        key: String,
+        value: String,
+        #[arg(long, default_value_t = 1)]
+        sequence: u64,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FilterCommand {
+    #[command(about = "Add a device, file, or hash denylist rule")]
+    Add {
+        #[arg(value_parser = ["device", "file", "hash"])]
+        rule_type: String,
+        value: String,
+    },
+    #[command(about = "Import a signed federated filter list")]
+    Subscribe { source: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum LinkCommand {
+    #[command(about = "Create an immutable, private, or mutable link")]
+    Create {
+        source: PathBuf,
+        #[arg(long, alias = "alias", conflicts_with = "private")]
+        name: Option<String>,
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        sequence: u64,
+        #[arg(long, conflicts_with = "name")]
+        private: bool,
+        #[arg(long, help = "Private-link expiration as a Unix timestamp")]
+        expires: Option<u64>,
+    },
+    #[command(about = "Resolve a stable link")]
+    Resolve {
+        link: String,
+        #[arg(long)]
+        version: Option<String>,
+    },
+    #[command(about = "Revoke a private capability link")]
+    Revoke { link: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MirrorCommand {
+    #[command(about = "Register a blob ticket as an alternate provider")]
+    Add { collection: String, provider: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TrustCommand {
+    #[command(about = "Show trust and moderation state")]
+    Show { subject: String },
+    #[command(about = "Delegate trust to a publisher identity")]
+    Delegate {
+        publisher: String,
+        #[arg(long)]
+        expires: Option<u64>,
+        #[arg(long)]
+        scope: Option<String>,
+        #[arg(long, default_value_t = 1)]
+        sequence: u64,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct AttestArgs {
+    pub content: String,
+    #[arg(long, conflicts_with_all = ["provenance", "derivative"])]
+    pub license: Option<String>,
+    #[arg(long, conflicts_with_all = ["license", "derivative"])]
+    pub provenance: Option<String>,
+    #[arg(long, conflicts_with_all = ["license", "provenance"])]
+    pub derivative: Option<String>,
+    #[arg(long, default_value_t = 1)]
+    pub sequence: u64,
+}
+
+#[derive(Debug, Args)]
+pub struct ReportArgs {
+    pub record: String,
+    #[arg(long)]
+    pub reason: String,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ModerationCommand {
+    #[command(name = "ls", about = "List local moderation records")]
+    List { content: Option<String> },
+    #[command(about = "Hide a content record locally")]
+    Hide {
+        record: String,
+        #[arg(long, default_value = "hidden by local policy")]
+        reason: String,
     },
 }

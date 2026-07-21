@@ -20,8 +20,8 @@ use rayon::prelude::*;
 use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
-        CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, FolderManager,
-        PackageAnnouncement, PackageCatalog, PackageManager, SyncMode,
+        CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
+        DropImporter, FolderManager, PackageAnnouncement, PackageCatalog, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::InitResult,
@@ -117,6 +117,13 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Collection { command } => handle_collection(&cli.data_dir, command, output_json).await?,
         Command::Package { command } => handle_package(&cli.data_dir, command, output_json).await?,
         Command::Network { command } => handle_network(&cli.data_dir, command, output_json).await?,
+        Command::Indexing { command } => cli::indexing::handle_indexing(&cli.data_dir, command, output_json).await?,
+        Command::Link { command } => cli::indexing::handle_link(&cli.data_dir, command, output_json)?,
+        Command::Mirror { command } => cli::indexing::handle_mirror(&cli.data_dir, command, output_json)?,
+        Command::Trust { command } => cli::indexing::handle_trust(&cli.data_dir, command, output_json)?,
+        Command::Attest(command) => cli::indexing::handle_attest(&cli.data_dir, command, output_json)?,
+        Command::Report(command) => cli::indexing::handle_report(&cli.data_dir, command, output_json)?,
+        Command::Moderation { command } => cli::indexing::handle_moderation(&cli.data_dir, command, output_json)?,
         Command::Start
         | Command::Shutdown
         | Command::Watch(_)
@@ -1444,6 +1451,89 @@ async fn handle_package_drop(data_dir: &std::path::Path, command: DropCommand, o
         DropCommand::Export { paths, version, filter } => {
             handle_package_drop_export(data_dir, paths, version, filter, output_json).await?;
         }
+        DropCommand::Import { archive, filter } => {
+            handle_package_drop_import(data_dir, archive, filter, output_json).await?;
+        }
+    }
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_package_drop_import(
+    data_dir: &std::path::Path,
+    archive: std::path::PathBuf,
+    filters: Vec<String>,
+    output_json: bool,
+) -> Result<()> {
+    let packages = PackageManager::new(data_dir.join("packages"));
+    let filter = parse_drop_filters(&filters)?;
+    let mut options = DropImportOptions::default().with_available_dependencies(packages.available_versions()?);
+    if let Some(engine) = filter {
+        options = options.with_filter(engine);
+    }
+
+    let node = open_node(data_dir).await?;
+    let importer = DropImporter::new(node.blob_store().clone());
+    let result = importer.import_drop(&archive, options).await?;
+    let collection = result.collection_id;
+    let version = result.version.clone();
+    if packages
+        .state()?
+        .current(collection)
+        .is_some_and(|installed| installed.versions.contains_key(&version))
+    {
+        node.stop().await?;
+        anyhow::bail!("collection version {collection} {version} is already installed");
+    }
+
+    let source = data_dir.join(format!(".syncweb-drop-source-{}", uuid::Uuid::new_v4()));
+    let materialize_result = importer.materialize(&result, &source).await;
+    if let Err(error) = materialize_result {
+        node.stop().await?;
+        return Err(error.into());
+    }
+    let install_result = packages.install(&result.collection_manifest, &source);
+    let cleanup_result = std::fs::remove_dir_all(&source)
+        .map_err(|error| anyhow::anyhow!("failed to remove temporary drop source: {error}"));
+    if let Err(error) = install_result {
+        let _ = cleanup_result;
+        node.stop().await?;
+        return Err(error.into());
+    }
+    if let Err(error) = cleanup_result {
+        node.stop().await?;
+        return Err(error);
+    }
+
+    let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
+    let store = CollectionStore::new(
+        folder.doc().clone(),
+        folder.author(),
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+    );
+    store.publish(&result.collection_manifest, 1).await?;
+    let namespace = folder.namespace_id();
+    node.stop().await?;
+
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "imported",
+                "collection": collection.to_string(),
+                "version": version,
+                "manifest": result.manifest.to_string(),
+                "entries": result.imported_entry_count,
+                "skipped_entries": result.skipped_entry_count,
+                "namespace": namespace,
+            })
+        );
+    } else {
+        println!(
+            "imported: {collection} {version} ({} entries)",
+            result.imported_entry_count
+        );
     }
     Ok(())
 }

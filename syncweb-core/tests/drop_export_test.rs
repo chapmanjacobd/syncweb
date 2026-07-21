@@ -213,3 +213,25 @@ async fn test_export_drop_concurrent_replacement_is_valid() -> Result<()> {
     node.stop().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_export_drop_multi_package_same_collection() -> Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = test_node(&directory).await?;
+    let collection_id = uuid::Uuid::new_v4();
+    let v1 = manifest(collection_id, "1.0.0", &[("old.txt", b"v1".as_slice())])?;
+    let v2 = manifest(collection_id, "2.0.0", &[("new.txt", b"v2".as_slice())])?;
+    node.blob_store().add_bytes(b"v1").await?;
+    node.blob_store().add_bytes(b"v2").await?;
+    let output = directory.path().join("multi.car.zst");
+    let result = DropExporter::new(node.blob_store().clone())
+        .export_manifests(&[v1, v2], &output, DropExportOptions::default())
+        .await?;
+    anyhow::ensure!(result.version == "2.0.0", "exporter should select the latest version");
+    let blocks = read_archive(&output).await?;
+    let first_block = blocks.first().context("CAR has no manifest block")?;
+    let exported = CollectionManifest::from_bytes(&first_block.1)?;
+    anyhow::ensure!(exported.version == "2.0.0");
+    node.stop().await?;
+    Ok(())
+}

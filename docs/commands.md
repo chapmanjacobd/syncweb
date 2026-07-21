@@ -415,6 +415,7 @@ syncweb config show filter
 | NEW | `package search` | Discover packages via gossip |
 | NEW | `package info` | Detailed package metadata |
 | NEW | `package drop export` | Export package versions as compressed `.car.zst` drops |
+| NEW | `package drop import` | Import and install a compressed `.car.zst` drop |
 | NEW | `package install` | Fetch + verify + install package |
 | NEW | `package upgrade` | Update to latest version |
 | NEW | `package remove` | Remove installed package |

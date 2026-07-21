@@ -4,6 +4,22 @@ To ensure the core `iroh-blobs` and `iroh-docs` sync engine remains lean and str
 
 This service runs independently (often in the same binary, but asynchronously) and subscribes to events from the core engine. It manages its own SQLite database for full-text search (FTS) and metadata tracking, ensuring that core data synchronization is never blocked by complex querying or network health monitoring.
 
+### Core Infrastructure
+The core library exposes `syncweb_core::indexing::IndexingService`. Constructing it
+opens a private SQLite database and initializes FTS5 metadata tables. Calling
+`enable_folder` opts a synchronized folder into indexing, indexes existing
+document entries, and subscribes to subsequent document events. The service
+publishes indexing events through `subscribe`; disabling a folder removes its
+local index entries without affecting the synchronized namespace.
+
+Public discovery uses `syncweb_core::indexing::CatalogService`. A catalog is an
+iroh-docs namespace containing searchable folder metadata (paths, titles, tags,
+hashes, and sizes), never the file contents. `create_catalog` creates a
+namespace, `publish_folder` writes a folder's records, and `subscribe` accepts
+the catalog's doc ticket, starts synchronization, and imports new records into
+the subscriber's local FTS database. `search` searches subscribed catalogs;
+the existing database `search` method remains the local-folder search.
+
 An indexer may be:
 
   - local and private;
@@ -24,6 +40,14 @@ Instead of the core managing complex replication leases, the indexing service ac
 *   Thundering Herd Mitigation: To prevent all peers from fetching simultaneously when availability drops, the system uses consistent hashing (only peers mathematically closest to the blob's hash are responsible), randomized jitter (staggered fetch delays), and gossip short-circuiting (if a peer gossips a new `ProviderLease` during the delay, others cancel their fetch).
 *   Overlap Note: Core `syncweb health` shows basic local observations of peers. `syncweb indexing health` shows cryptographically verified leases and historical uptime.
 
+The Rust API for this layer is `syncweb_core::indexing::ResilienceService`.
+`ProviderLease` values bind a signed provider identity, blob hash, expiry, and
+blob ticket together. `ProviderLeaseTracker` keeps verified leases separate from
+local observations, while `ReplicationBudget` controls the minimum provider
+count, responsible peer count, jitter window, and observation lifetime.
+`ensure_replication` uses the existing `BlobStore` fetch path and pins repaired
+content under an indexing-owned tag; it does not alter document synchronization.
+
 ### 3. Web of Trust (WoT) Metadata
 Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running automatically on all clients, metadata extraction is crowdsourced to trusted entities.
 *   Action: Trusted authors in a Web of Trust (WoT)--whether humans or automated bots—can manually append metadata, tags, or derivatives to a file's record.
@@ -34,6 +58,15 @@ Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running
     • Self-Revocation (Mechanical): If a publisher wants to take down their own content, they publish a new Signed Mutable Pointer with an incremented sequence number pointing to a tombstone or empty manifest. The core resolver handles this automatically.
     • Takedowns/Filtering (Contextual): If a publisher distributes malware and refuses to take it down, the community moderator publishes a signed ModerationRecord against the publisher's identity or content hash. The syncweb trust layer intercepts the discovery and hides the content, even though the publisher's pointer remains mathematically valid.
 
+The Rust API is `syncweb_core::indexing::WotService`. `MetadataEntry`,
+`TrustDelegation`, `RevocationRecord`, `ModerationRecord`, and `Attestation`
+are independently signed records with domain-separated payloads. A local
+`TrustPolicy` accepts roots and scoped, expiring delegations; only accepted
+metadata is written to the SQLite FTS index, and local revocation or
+moderation decisions filter search results without deleting immutable content.
+`ModerationScope` can restrict a decision to a network, folder, or file, and
+`moderation_decision` evaluates the applicable record locally.
+
 ### 4. Stable Links, Resolvers, and Mirrors
 A direct blob ticket is useful for immediate transfer, but it is not a durable public reference. It lacks a stable name and provides no standard way to resolve a newer version or alternate mirror. The indexing service manages stable references, resolution, and mirrors.
 *   Action: Users can create immutable links (`syncweb://content/<content-id>` or `syncweb://collection/<collection-id>@<version>`) and signed mutable links (`syncweb://name/<publisher>/<alias>`).
@@ -41,12 +74,24 @@ A direct blob ticket is useful for immediate transfer, but it is not a durable p
 *   Security & Revocation: Signed name records use monotonic sequence numbers to prevent rollbacks. Private links remain capability-based, carrying read capabilities and expiration. Revoking a private link prevents new authorized fetches.
 *   Overlap Note: Core provides direct single-peer blob tickets. The indexing layer provides stable names, verifiable resolution across multiple providers, and mirror fallback.
 
+The link API is `syncweb_core::indexing::LinkResolver`. `ContentLink` is an
+immutable `syncweb://content/<hash>` reference. `NameLink` follows a signed
+`MutablePointer`, enforcing monotonic sequences and retaining version-pinned
+history. `PrivateLink::generate` creates an expiring bearer capability;
+revoking it prevents future resolution. Registered mirror tickets are
+appended to resolution results and `fetch_with_mirrors` tries them in order.
+
 ### 5. Denylists and Filtering
 To keep the core engine lightweight (relying only on basic `PeerStats` and `FolderStats`), advanced filtering is handled by the indexing service via hooks. Other applications can build GUIs/TUIs on top of these hooks (similar to libtorrent-rasterbar), so no complex transfers UI is needed natively.
 *   Action: Users can configure Device-Level, File-Level, and Hash-Level local denylists to block specific content or peers.
 *   Execution: The indexing service hooks into the sync engine's discovery and fetch pipeline. When an intent to fetch is created, it is validated against the denylists.
 *   Federated Filter Lists: Users can subscribe to federated, community-maintained filter lists (similar to uBlock Origin filter lists or PeerBlock). These are distributed as standard `iroh-docs` namespaces and automatically update the local indexing service's blocklist.
 *   Overlap Note: The core engine simply respects the filtering decisions provided by the indexing hooks, remaining ignorant of complex rule evaluation or federated list syncing.
+
+`Denylist` supports device, file, and content-hash rules. `check_fetch` and
+`check_discovery` are the hooks for transfer and catalog pipelines.
+`FilterList` updates are signed and monotonic per namespace, and
+`IndexingService::denylist_service` exposes the thread-safe local policy.
 
 ### 6. Trust, Governance, and Moderation
 Content hashes prove integrity, but they do not prove accuracy, authorship, legality, or quality. Public and community catalogs require mechanisms for spam, abuse, takedown, and conflicting claims without relying on a single global authority.

@@ -44,6 +44,7 @@ regex.workspace = true
 semver.workspace = true
 async-recursion.workspace = true
 async-compression.workspace = true
+rusqlite.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

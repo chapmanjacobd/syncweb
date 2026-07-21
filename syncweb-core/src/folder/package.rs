@@ -6,6 +6,7 @@ use std::{
 
 use iroh::Endpoint;
 use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
+use semver::Version;
 #[cfg(not(unix))]
 use serde_json::Value;
 use uuid::Uuid;
@@ -46,6 +47,26 @@ impl PackageManager {
             fs::read(&path).map_err(|error| SyncwebError::operation("failed to read collection state", error))?;
         serde_json::from_slice(&bytes)
             .map_err(|error| SyncwebError::operation("failed to decode collection state", error))
+    }
+
+    /// Return the currently selected version for each installed collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an installed version is not valid semver.
+    pub fn available_versions(&self) -> Result<BTreeMap<Uuid, Version>> {
+        self.state()?
+            .installed
+            .into_iter()
+            .map(|(collection_id, installed)| {
+                let version = Version::parse(&installed.current).map_err(|error| {
+                    SyncwebError::InvalidConfig(format!(
+                        "installed collection {collection_id} has an invalid version: {error}"
+                    ))
+                })?;
+                Ok((collection_id, version))
+            })
+            .collect()
     }
 
     /// Stage, verify, and atomically make a collection version current.

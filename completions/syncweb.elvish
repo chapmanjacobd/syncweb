@@ -57,6 +57,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand collection 'Create and publish versioned content collections'
             cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
+            cand indexing 'Manage opt-in indexing, catalogs, and metadata'
+            cand link 'Create and resolve stable syncweb links'
+            cand mirror 'Register alternate content providers'
+            cand trust 'Inspect and delegate local trust'
+            cand attest 'Sign content provenance attestations'
+            cand report 'Submit a local moderation report'
+            cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -542,6 +549,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand export 'Export one or more package directories'
+            cand import 'Import and install a compressed CAR drop file'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;package;drop;export'= {
@@ -554,11 +562,23 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;package;drop;import'= {
+            cand --filter 'filter'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;package;drop;help'= {
             cand export 'Export one or more package directories'
+            cand import 'Import and install a compressed CAR drop file'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;package;drop;help;export'= {
+        }
+        &'syncweb;package;drop;help;import'= {
         }
         &'syncweb;package;drop;help;help'= {
         }
@@ -654,8 +674,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;package;help;drop'= {
             cand export 'Export one or more package directories'
+            cand import 'Import and install a compressed CAR drop file'
         }
         &'syncweb;package;help;drop;export'= {
+        }
+        &'syncweb;package;help;drop;import'= {
         }
         &'syncweb;package;help;search'= {
         }
@@ -778,6 +801,348 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;network;help;help'= {
         }
+        &'syncweb;indexing'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand enable 'Opt a synchronized folder into indexing'
+            cand disable 'Remove a folder from the local index'
+            cand publish 'Publish folder metadata to a catalog'
+            cand search 'Search subscribed catalogs'
+            cand health 'Show verified provider health for a content hash'
+            cand meta 'Manage signed metadata'
+            cand filter 'Manage local and federated denylists'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;enable'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;disable'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;publish'= {
+            cand --catalog 'catalog'
+            cand --tag 'tag'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;search'= {
+            cand --limit 'limit'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;health'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;meta'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand add 'Append signed metadata to a content hash'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;meta;add'= {
+            cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;meta;help'= {
+            cand add 'Append signed metadata to a content hash'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;meta;help;add'= {
+        }
+        &'syncweb;indexing;meta;help;help'= {
+        }
+        &'syncweb;indexing;filter'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand add 'Add a device, file, or hash denylist rule'
+            cand subscribe 'Import a signed federated filter list'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;filter;add'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;filter;subscribe'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;filter;help'= {
+            cand add 'Add a device, file, or hash denylist rule'
+            cand subscribe 'Import a signed federated filter list'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;filter;help;add'= {
+        }
+        &'syncweb;indexing;filter;help;subscribe'= {
+        }
+        &'syncweb;indexing;filter;help;help'= {
+        }
+        &'syncweb;indexing;help'= {
+            cand enable 'Opt a synchronized folder into indexing'
+            cand disable 'Remove a folder from the local index'
+            cand publish 'Publish folder metadata to a catalog'
+            cand search 'Search subscribed catalogs'
+            cand health 'Show verified provider health for a content hash'
+            cand meta 'Manage signed metadata'
+            cand filter 'Manage local and federated denylists'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;indexing;help;enable'= {
+        }
+        &'syncweb;indexing;help;disable'= {
+        }
+        &'syncweb;indexing;help;publish'= {
+        }
+        &'syncweb;indexing;help;search'= {
+        }
+        &'syncweb;indexing;help;health'= {
+        }
+        &'syncweb;indexing;help;meta'= {
+            cand add 'Append signed metadata to a content hash'
+        }
+        &'syncweb;indexing;help;meta;add'= {
+        }
+        &'syncweb;indexing;help;filter'= {
+            cand add 'Add a device, file, or hash denylist rule'
+            cand subscribe 'Import a signed federated filter list'
+        }
+        &'syncweb;indexing;help;filter;add'= {
+        }
+        &'syncweb;indexing;help;filter;subscribe'= {
+        }
+        &'syncweb;indexing;help;help'= {
+        }
+        &'syncweb;link'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand create 'Create an immutable, private, or mutable link'
+            cand resolve 'Resolve a stable link'
+            cand revoke 'Revoke a private capability link'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;link;create'= {
+            cand --name 'name'
+            cand --version 'version'
+            cand --sequence 'sequence'
+            cand --expires 'Private-link expiration as a Unix timestamp'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --private 'private'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;link;resolve'= {
+            cand --version 'version'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;link;revoke'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;link;help'= {
+            cand create 'Create an immutable, private, or mutable link'
+            cand resolve 'Resolve a stable link'
+            cand revoke 'Revoke a private capability link'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;link;help;create'= {
+        }
+        &'syncweb;link;help;resolve'= {
+        }
+        &'syncweb;link;help;revoke'= {
+        }
+        &'syncweb;link;help;help'= {
+        }
+        &'syncweb;mirror'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand add 'Register a blob ticket as an alternate provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;mirror;add'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;mirror;help'= {
+            cand add 'Register a blob ticket as an alternate provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;mirror;help;add'= {
+        }
+        &'syncweb;mirror;help;help'= {
+        }
+        &'syncweb;trust'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand show 'Show trust and moderation state'
+            cand delegate 'Delegate trust to a publisher identity'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;show'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;delegate'= {
+            cand --expires 'expires'
+            cand --scope 'scope'
+            cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;help'= {
+            cand show 'Show trust and moderation state'
+            cand delegate 'Delegate trust to a publisher identity'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;help;show'= {
+        }
+        &'syncweb;trust;help;delegate'= {
+        }
+        &'syncweb;trust;help;help'= {
+        }
+        &'syncweb;attest'= {
+            cand --license 'license'
+            cand --provenance 'provenance'
+            cand --derivative 'derivative'
+            cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;report'= {
+            cand --reason 'reason'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;moderation'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand ls 'List local moderation records'
+            cand hide 'Hide a content record locally'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;moderation;ls'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;moderation;hide'= {
+            cand --reason 'reason'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;moderation;help'= {
+            cand ls 'List local moderation records'
+            cand hide 'Hide a content record locally'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;moderation;help;ls'= {
+        }
+        &'syncweb;moderation;help;hide'= {
+        }
+        &'syncweb;moderation;help;help'= {
+        }
         &'syncweb;completions'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -828,6 +1193,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand collection 'Create and publish versioned content collections'
             cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
+            cand indexing 'Manage opt-in indexing, catalogs, and metadata'
+            cand link 'Create and resolve stable syncweb links'
+            cand mirror 'Register alternate content providers'
+            cand trust 'Inspect and delegate local trust'
+            cand attest 'Sign content provenance attestations'
+            cand report 'Submit a local moderation report'
+            cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -938,8 +1310,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;package;drop'= {
             cand export 'Export one or more package directories'
+            cand import 'Import and install a compressed CAR drop file'
         }
         &'syncweb;help;package;drop;export'= {
+        }
+        &'syncweb;help;package;drop;import'= {
         }
         &'syncweb;help;package;search'= {
         }
@@ -981,6 +1356,74 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;network;kick'= {
         }
         &'syncweb;help;network;test-relay'= {
+        }
+        &'syncweb;help;indexing'= {
+            cand enable 'Opt a synchronized folder into indexing'
+            cand disable 'Remove a folder from the local index'
+            cand publish 'Publish folder metadata to a catalog'
+            cand search 'Search subscribed catalogs'
+            cand health 'Show verified provider health for a content hash'
+            cand meta 'Manage signed metadata'
+            cand filter 'Manage local and federated denylists'
+        }
+        &'syncweb;help;indexing;enable'= {
+        }
+        &'syncweb;help;indexing;disable'= {
+        }
+        &'syncweb;help;indexing;publish'= {
+        }
+        &'syncweb;help;indexing;search'= {
+        }
+        &'syncweb;help;indexing;health'= {
+        }
+        &'syncweb;help;indexing;meta'= {
+            cand add 'Append signed metadata to a content hash'
+        }
+        &'syncweb;help;indexing;meta;add'= {
+        }
+        &'syncweb;help;indexing;filter'= {
+            cand add 'Add a device, file, or hash denylist rule'
+            cand subscribe 'Import a signed federated filter list'
+        }
+        &'syncweb;help;indexing;filter;add'= {
+        }
+        &'syncweb;help;indexing;filter;subscribe'= {
+        }
+        &'syncweb;help;link'= {
+            cand create 'Create an immutable, private, or mutable link'
+            cand resolve 'Resolve a stable link'
+            cand revoke 'Revoke a private capability link'
+        }
+        &'syncweb;help;link;create'= {
+        }
+        &'syncweb;help;link;resolve'= {
+        }
+        &'syncweb;help;link;revoke'= {
+        }
+        &'syncweb;help;mirror'= {
+            cand add 'Register a blob ticket as an alternate provider'
+        }
+        &'syncweb;help;mirror;add'= {
+        }
+        &'syncweb;help;trust'= {
+            cand show 'Show trust and moderation state'
+            cand delegate 'Delegate trust to a publisher identity'
+        }
+        &'syncweb;help;trust;show'= {
+        }
+        &'syncweb;help;trust;delegate'= {
+        }
+        &'syncweb;help;attest'= {
+        }
+        &'syncweb;help;report'= {
+        }
+        &'syncweb;help;moderation'= {
+            cand ls 'List local moderation records'
+            cand hide 'Hide a content record locally'
+        }
+        &'syncweb;help;moderation;ls'= {
+        }
+        &'syncweb;help;moderation;hide'= {
         }
         &'syncweb;help;completions'= {
         }

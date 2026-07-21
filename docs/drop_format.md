@@ -8,11 +8,12 @@ The current [data package management design](./packages.md#1-collection--package
 
 The Syncweb Drop Format provides a single-file, self-contained bundle of a data package that can be easily "dropped" into another node.
 
-The export pipeline is available through `syncweb package drop export`. It
-creates the archive in a staging file and atomically renames it into place,
-so concurrent exports cannot leave a partially written destination. Content
-blocks are copied in bounded chunks and verified against their manifest hash
-while they are streamed through the Zstandard encoder.
+The export pipeline is available through `syncweb package drop export`, and
+imports are handled by `syncweb package drop import`. Export creates the
+archive in a staging file and atomically renames it into place, so concurrent
+exports cannot leave a partially written destination. Content blocks are
+copied in bounded chunks and verified against their manifest hash while they
+are streamed through the Zstandard encoder.
 
 ## Format Specification
 The drop format is essentially a Zstandard-compressed Content Addressable aRchive (CAR), matching Iroh's native CAR export conventions.
@@ -54,6 +55,20 @@ A user can import a drop file. The system will extract the manifest, ingest the 
 syncweb package drop import my-dataset.car.zst
 ```
 
+### 3. Verifying a Drop
+
+Drops can be verified before import with the streaming core API:
+
+```rust
+let result = syncweb_core::verify_drop("my-dataset.car.zst").await?;
+```
+
+Verification decompresses and parses the CAR incrementally. It checks the CAR
+root, manifest serialization and signature, every content block's BLAKE3 hash
+and size, and that the archive contains exactly the blocks referenced by the
+manifest. Header, section, manifest, and varint limits are checked before any
+attacker-controlled allocation.
+
 ## Implementation Details
 
 ### Export Pipeline (`drop_export`)
@@ -71,44 +86,23 @@ syncweb package drop import my-dataset.car.zst
    file per package into the requested output directory.
 
 ### Import Pipeline (`drop_import`)
-1. Decompress: Open the `.car.zst` file and stream it through a `zstd` decoder. Map decoding and stream errors explicitly to user-friendly messages (e.g. "unexpected end of file").
-2. Granular Filtering (Optional): Wrap the decompressed stream with a filtering decoder based on the `FilterEngine` or local blocklists. This allows skipping massive media files or rejecting blobs from known malicious authors directly from the stream without buffering into memory.
-3. Ingest CAR: Stream the decompressed (and potentially filtered) CAR directly into `iroh_blobs::import::import_car`. Iroh will automatically verify the BLAKE3 hashes and store the blobs.
-4. Extract Manifest: The root CID of the CAR points to the `PackageManifest`. Read this blob, parse the JSON.
-5. Dependency Check: Validate the `PackageManifest` dependencies. Prevent installation of the package if its required dependencies are not already present in the local node at the time of import.
-6. Update Docs: Insert the `PackageManifest` into the local iroh-docs namespace (`/.iroh-package/manifest.json`), updating the package state.
-7. Atomic Swap (Optional): If the package is meant to be instantly materialized on disk, trigger the parallel export/checkout to the local filesystem.
+1. Decompress the `.car.zst` file through a streaming Zstandard decoder.
+2. Validate the CAR header, root manifest, signatures, sizes, hashes,
+   duplicate blocks, and dependencies before mutating the local blob store.
+3. Optionally evaluate each manifest entry with `FilterEngine`; rejected
+   blocks are consumed and verified but are not retained.
+4. Stage accepted blocks in bounded temporary files, then ingest them into the
+   local blob store after the complete archive passes validation.
+5. Publish the validated manifest into a new local `iroh-docs` namespace.
+6. Materialize accepted blobs through a staging directory and atomic rename.
 
 ```rust
-pub async fn import_drop(node: &IrohNode, in_path: &Path, target_dir: &Path, filter_engine: Option<&FilterEngine>) -> Result<()> {
-    let file = tokio::fs::File::open(in_path).await?;
-    let mut decoder = async_compression::tokio::read::ZstdDecoder::new(file);
-    
-    // Hook in granular filtering on the stream here if applicable
-    // let mut filtering_decoder = ...
-    
-    // Ingest blobs directly into iroh
-    let roots = node.blobs().import_car(&mut decoder).await
-        .map_err(|e| anyhow::anyhow!("corrupted archive or unexpected EOF: {}", e))?;
-    let manifest_hash = roots.first().context("Empty drop file")?;
-    
-    // Read manifest
-    let manifest_bytes = node.blobs().read_to_bytes(*manifest_hash).await?;
-    let manifest: PackageManifest = serde_json::from_slice(&manifest_bytes)?;
-    
-    // Check missing dependencies
-    // if !node.has_dependencies(&manifest.dependencies).await? {
-    //     anyhow::bail!("Cannot install package: missing required dependencies in local node.");
-    // }
-    
-    // Set up folder / docs
-    let mut folder = SyncwebFolder::init_from_manifest(node, target_dir, manifest).await?;
-    
-    // Materialize files to disk
-    folder.checkout_latest().await?;
-    
-    Ok(())
-}
+let result = syncweb_core::import_drop(
+    &node,
+    "my-dataset.car.zst",
+    "./my-dataset",
+    None,
+).await?;
 ```
 
 ## Security & Integrity
@@ -139,16 +133,16 @@ Implement the "drop format" (`.car.zst`) for `syncweb` data packages, allowing o
 - [ ] CLI command: `syncweb package drop export [--version <v>] [--filter <rules>] <path>... [<output>]`
 
 ## Phase 3: Import Pipeline
-- [ ] Implement `drop_import` logic with strict error mapping for better UX (e.g. decoding errors, consumed bytes mismatches).
-- [ ] Add `zstd` streaming decompression.
-- [ ] Wrap decompression in a stream filtering step (using `FilterEngine` or local blocklists) to skip malicious or undesired blobs on the fly.
-- [ ] Stream decompressed output directly into `iroh-blobs` CAR import.
-- [ ] Extract `PackageManifest` from imported blobs.
-- [ ] Verify manifest signature against the maintainer's public key.
-- [ ] Validate package dependencies and abort import if required dependency packages are not present locally.
-- [ ] Upsert the validated `PackageManifest` into the local `iroh-docs` namespace.
-- [ ] CLI command: `syncweb package drop import <file.car.zst>`
+- [x] Implement `drop_import` with strict CAR, decompression, and hash validation.
+- [x] Add streaming Zstandard decompression with bounded staging writes.
+- [x] Apply optional `FilterEngine` rules while consuming rejected blocks.
+- [x] Ingest verified blocks into the local blob store.
+- [x] Extract and validate the collection manifest.
+- [x] Verify manifest signatures against the embedded maintainer public key.
+- [x] Validate package dependencies before import.
+- [x] Publish the validated manifest into a new local `iroh-docs` namespace.
+- [x] CLI command: `syncweb package drop import <file.car.zst>`
 
 ## Phase 4: Verification and Atomic Materialization
-- [ ] Add tests to ensure that corrupted or maliciously modified `.car.zst` files correctly fail the import process.
-- [ ] Automatically checkout (materialize) the package to the filesystem using the existing parallel checkout logic after successful import.
+- [x] Reject corrupted or maliciously modified `.car.zst` files before blob ingestion.
+- [x] Materialize the package through a staging directory after successful import.

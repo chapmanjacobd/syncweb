@@ -17,6 +17,7 @@ This crate provides the foundational building blocks for the syncweb application
 * `filter`: Tools for filtering files during synchronization and scanning.
 * `folder`: Management of synchronized folders, collections, and packages.
 * `fs`: File system utilities, including parallel scanning.
+* `indexing`: Opt-in SQLite/FTS5 indexing for synchronized folders.
 * `net`: Network management and routing configurations.
 * `node`: Iroh node integration and identity management.
 * `search`: Find engine for querying synchronized assets.

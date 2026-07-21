@@ -1,6 +1,8 @@
 pub mod catalog;
 pub mod collection;
 pub mod drop_export;
+pub mod drop_import;
+pub mod drop_verify;
 pub mod manager;
 pub mod package;
 pub mod sync_mode;
@@ -13,6 +15,8 @@ pub use collection::{
     PackageDependency, PackageProfile,
 };
 pub use drop_export::{DropExportOptions, DropExportResult, DropExporter};
+pub use drop_import::{DropImportOptions, DropImportResult, DropImporter, import_drop};
+pub use drop_verify::{DropVerificationResult, DropVerifier, DropVerifyResult, verify_drop, verify_drop_reader};
 pub use manager::FolderManager;
 pub use package::PackageManager;
 pub use sync_mode::SyncMode;

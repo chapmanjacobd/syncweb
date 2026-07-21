@@ -51,6 +51,7 @@ semver = "1"
 criterion = { version = "0.8", features = ["html_reports"] }
 async-recursion = "1.1"
 async-compression = { version = "0.4", features = ["tokio", "zstd"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [profile.release]
 lto = true

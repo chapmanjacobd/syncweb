@@ -14,6 +14,7 @@
 //! - `filter`: Tools for filtering files during synchronization and scanning.
 //! - `folder`: Management of synchronized folders, collections, and packages.
 //! - `fs`: File system utilities, including parallel scanning.
+//! - `indexing`: Opt-in SQLite/FTS5 indexing for synchronized folders.
 //! - `net`: Network management and routing configurations.
 //! - `node`: Iroh node integration and identity management.
 //! - `search`: Find engine for querying synchronized assets.
@@ -23,6 +24,7 @@ pub mod error;
 pub mod filter;
 pub mod folder;
 pub mod fs;
+pub mod indexing;
 pub mod init;
 pub mod net;
 pub mod node;
@@ -38,3 +40,8 @@ pub mod verify;
 
 pub use error::{Error, Result, SyncwebError};
 pub use folder::drop_export;
+pub use folder::drop_import;
+pub use folder::drop_import::{DropImportOptions, DropImportResult, DropImporter, import_drop};
+pub use folder::drop_verify::{
+    DropVerificationResult, DropVerifier, DropVerifyResult, verify_drop, verify_drop_reader,
+};

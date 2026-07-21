@@ -1,0 +1,38 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH indexing 1  "indexing " 
+.SH NAME
+indexing \- Manage opt\-in indexing, catalogs, and metadata
+.SH SYNOPSIS
+\fBindexing\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Manage opt\-in indexing, catalogs, and metadata
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+indexing\-enable(1)
+Opt a synchronized folder into indexing
+.TP
+indexing\-disable(1)
+Remove a folder from the local index
+.TP
+indexing\-publish(1)
+Publish folder metadata to a catalog
+.TP
+indexing\-search(1)
+Search subscribed catalogs
+.TP
+indexing\-health(1)
+Show verified provider health for a content hash
+.TP
+indexing\-meta(1)
+Manage signed metadata
+.TP
+indexing\-filter(1)
+Manage local and federated denylists
+.TP
+indexing\-help(1)
+Print this message or the help of the given subcommand(s)

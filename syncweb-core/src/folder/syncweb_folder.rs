@@ -128,6 +128,11 @@ impl SyncwebFolder {
         &self.doc
     }
 
+    #[must_use]
+    pub const fn docs_engine(&self) -> &DocsEngine {
+        &self.docs_engine
+    }
+
     pub async fn grant(&self, node_id: PublicKey, capability: Capability) {
         self.capabilities.write().await.insert(node_id, capability);
     }

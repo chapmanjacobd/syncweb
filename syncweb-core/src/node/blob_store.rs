@@ -56,6 +56,18 @@ impl BlobStore {
             .hash)
     }
 
+    /// Export a complete blob to a temporary or caller-managed path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob cannot be read or written.
+    pub async fn export_to_path(&self, hash: Hash, destination: impl AsRef<Path>) -> Result<u64> {
+        self.store
+            .export(hash, destination)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to export blob", error))
+    }
+
     /// # Errors
     ///
     /// Returns an error if the store cannot be queried.

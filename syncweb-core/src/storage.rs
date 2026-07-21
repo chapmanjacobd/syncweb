@@ -1,3 +1,3 @@
 pub mod config;
 
-pub use config::{BepConfig, Config};
+pub use config::{AdvancedConfig, BandwidthConfig, BepConfig, CacheConfig, Config, ParallelConfig};

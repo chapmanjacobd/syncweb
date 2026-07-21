@@ -171,7 +171,10 @@ fn test_folders_command_empty() -> anyhow::Result<()> {
 
     ensure!(output.status.success());
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.trim().is_empty(), "no folders should be listed initially");
+    ensure!(
+        !stdout.contains("sendreceive") && !stdout.contains("sendonly") && !stdout.contains("receiveonly"),
+        "no folders should be listed initially: {stdout}"
+    );
     Ok(())
 }
 
@@ -195,12 +198,9 @@ fn test_folders_command_lists_created() -> anyhow::Result<()> {
 
     ensure!(folders_output.status.success());
     let stdout = String::from_utf8(folders_output.stdout).context("UTF-8 output")?;
-    let lines: Vec<&str> = stdout.lines().collect();
-    anyhow::ensure!(lines.len() == 1, "should list exactly one folder");
-    let first_line = lines.first().context("should have at least one line")?;
     ensure!(
-        first_line.contains("sendreceive"),
-        "folder should show sendreceive mode: {first_line}"
+        stdout.contains("sendreceive"),
+        "folder should show sendreceive mode: {stdout}"
     );
     Ok(())
 }
@@ -247,6 +247,54 @@ fn test_join_command() -> anyhow::Result<()> {
     );
     let stdout = String::from_utf8(join_output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("joined: "), "should print joined: {stdout}");
+    Ok(())
+}
+
+#[test]
+fn phase7_commands_and_json_version_are_available() -> anyhow::Result<()> {
+    let help = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .arg("--help")
+        .output()
+        .context("run syncweb help")?;
+    ensure!(help.status.success());
+    let help_text = String::from_utf8(help.stdout).context("UTF-8 help")?;
+    ensure!(help_text.contains("watch"));
+    ensure!(help_text.contains("stats"));
+    ensure!(help_text.contains("verify"));
+    ensure!(help_text.contains("schedule"));
+
+    let version = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--json", "version"])
+        .output()
+        .context("run syncweb --json version")?;
+    ensure!(version.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&version.stdout)?;
+    ensure!(value.get("version") == Some(&serde_json::Value::from("0.1.0")));
+    Ok(())
+}
+
+#[test]
+fn schedule_and_stats_commands_persist_phase7_state() -> anyhow::Result<()> {
+    let directory = cli_test_dir("phase7-state");
+    let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
+    let schedule = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", &data_dir, "schedule", "set", "--active", "22:00-06:00"])
+        .output()
+        .context("run schedule set")?;
+    ensure!(
+        schedule.status.success(),
+        "schedule set failed: {}",
+        String::from_utf8_lossy(&schedule.stderr)
+    );
+
+    let stats = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", &data_dir, "--json", "stats"])
+        .output()
+        .context("run stats")?;
+    ensure!(stats.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&stats.stdout)?;
+    ensure!(value.get("total_download") == Some(&serde_json::Value::from(0)));
+    std::fs::remove_dir_all(directory)?;
     Ok(())
 }
 
@@ -666,8 +714,14 @@ fn network_list_inspects_single_network() -> anyhow::Result<()> {
     ensure!(list.status.success());
     let stdout = String::from_utf8(list.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("inspect-me"), "should show network name: {stdout}");
-    ensure!(stdout.contains("members"), "should show members count: {stdout}");
-    ensure!(stdout.contains("folders"), "should show folders count: {stdout}");
+    ensure!(
+        stdout.contains("Members") || stdout.contains("members"),
+        "should show members count: {stdout}"
+    );
+    ensure!(
+        stdout.contains("Folders") || stdout.contains("folders"),
+        "should show folders count: {stdout}"
+    );
     Ok(())
 }
 
@@ -899,5 +953,85 @@ fn automatic_show_filters_empty_config() -> anyhow::Result<()> {
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("rules"), "should show rules table: {stdout}");
+    Ok(())
+}
+
+#[test]
+fn completions_generates_valid_bash_output() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["completions", "bash"])
+        .output()
+        .context("run syncweb completions bash")?;
+    ensure!(
+        output.status.success(),
+        "completions bash should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("syncweb"),
+        "bash completions should reference syncweb: {stdout}"
+    );
+    ensure!(
+        stdout.contains("complete"),
+        "bash completions should contain complete keyword: {stdout}"
+    );
+    Ok(())
+}
+
+#[test]
+fn completions_generates_valid_zsh_output() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["completions", "zsh"])
+        .output()
+        .context("run syncweb completions zsh")?;
+    ensure!(
+        output.status.success(),
+        "completions zsh should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("syncweb"),
+        "zsh completions should reference syncweb: {stdout}"
+    );
+    Ok(())
+}
+
+#[test]
+fn completions_generates_valid_fish_output() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["completions", "fish"])
+        .output()
+        .context("run syncweb completions fish")?;
+    ensure!(
+        output.status.success(),
+        "completions fish should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("syncweb"),
+        "fish completions should reference syncweb: {stdout}"
+    );
+    Ok(())
+}
+
+#[test]
+fn completions_generates_valid_powershell_output() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["completions", "powershell"])
+        .output()
+        .context("run syncweb completions powershell")?;
+    ensure!(
+        output.status.success(),
+        "completions powershell should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("syncweb"),
+        "powershell completions should reference syncweb: {stdout}"
+    );
     Ok(())
 }

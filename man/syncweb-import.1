@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH import 1  "import " 
+.SH NAME
+import \- Import local files into a synchronized folder
+.SH SYNOPSIS
+\fBimport\fR [\fB\-\-folder\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPATH\fR> 
+.SH DESCRIPTION
+Import local files into a synchronized folder
+.SH OPTIONS
+.TP
+\fB\-\-folder\fR \fI<FOLDER>\fR
+Folder namespace; defaults to the only managed folder
+.TP
+\fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
+Import threads (1 disables parallelism, 0 uses all available CPUs)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIPATH\fR>
+

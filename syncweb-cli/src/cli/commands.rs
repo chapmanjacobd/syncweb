@@ -8,6 +8,10 @@ pub enum Command {
     Version,
     #[command(about = "Start an interactive command shell")]
     Repl,
+    #[command(about = "Start the local syncweb node for one command invocation")]
+    Start,
+    #[command(about = "Stop the local syncweb node")]
+    Shutdown,
     #[command(about = "Create a synchronized folder")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
@@ -35,6 +39,8 @@ pub enum Command {
     Stat(StatArgs),
     #[command(about = "Download folder content or copy a local file")]
     Download(DownloadArgs),
+    #[command(about = "Import local files into a synchronized folder")]
+    Import(ImportArgs),
     #[command(about = "Create a content-addressed snapshot")]
     Backup(BackupArgs),
     #[command(about = "Restore a snapshot to a folder or directory")]
@@ -47,6 +53,17 @@ pub enum Command {
     Init(InitArgs),
     #[command(about = "Run rules-based automatic synchronization")]
     Automatic(AutomaticArgs),
+    #[command(about = "Watch a folder and import filesystem changes")]
+    Watch(WatchArgs),
+    #[command(about = "Show persisted bandwidth accounting")]
+    Stats(StatsArgs),
+    #[command(about = "Re-check local folder blob integrity")]
+    Verify(VerifyArgs),
+    #[command(about = "Show or update synchronization schedules")]
+    Schedule {
+        #[command(subcommand)]
+        command: Option<ScheduleCommand>,
+    },
     #[command(about = "Subscribe to a folder with event filters")]
     Subscribe(SubscribeArgs),
     #[command(about = "Publish a folder or blob for public read access")]
@@ -202,6 +219,19 @@ pub struct DownloadArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct ImportArgs {
+    pub path: PathBuf,
+    #[arg(long, help = "Folder namespace; defaults to the only managed folder")]
+    pub folder: Option<String>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Import threads (1 disables parallelism, 0 uses all available CPUs)"
+    )]
+    pub threads: usize,
+}
+
+#[derive(Debug, Args)]
 pub struct BackupArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
@@ -265,6 +295,59 @@ pub struct AutomaticArgs {
     pub paths: Vec<PathBuf>,
     #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
     pub filters: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct WatchArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, default_value_t = 500, help = "Debounce changes in milliseconds")]
+    pub debounce_ms: u64,
+    #[arg(long, value_name = "GLOB", help = "Ignore a path glob; may be repeated")]
+    pub exclude: Vec<String>,
+    #[arg(long, help = "Process one event and exit")]
+    pub once: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct StatsArgs {
+    #[arg(long, help = "Limit display to a folder or namespace")]
+    pub folder: Option<PathBuf>,
+    #[arg(long, help = "Limit display to a peer node ID")]
+    pub peer: Option<String>,
+    #[arg(long, help = "Reset persisted counters before displaying them")]
+    pub reset: bool,
+    #[arg(long, help = "Retained for compatibility; counters are persisted since period start")]
+    pub period: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct VerifyArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ScheduleCommand {
+    #[command(about = "Update the global schedule")]
+    Set {
+        #[arg(long)]
+        active: Option<String>,
+        #[arg(long)]
+        bandwidth: Option<String>,
+        #[arg(long, requires = "bandwidth")]
+        period: Option<String>,
+    },
+    #[command(about = "Set schedule overrides for a named folder")]
+    Folder {
+        name: String,
+        #[arg(long)]
+        active: Option<String>,
+        #[arg(long)]
+        max_upload: Option<String>,
+        #[arg(long)]
+        max_download: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -340,6 +423,11 @@ pub enum CollectionCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PackageCommand {
+    #[command(about = "Export package versions as compressed CAR drop files")]
+    Drop {
+        #[command(subcommand)]
+        command: DropCommand,
+    },
     #[command(about = "List locally installed packages, optionally filtering by text")]
     Search {
         query: Option<String>,
@@ -383,6 +471,19 @@ pub enum PackageCommand {
     Versions { collection: String },
     #[command(about = "Switch the active installed collection version")]
     Switch { collection: String, version: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DropCommand {
+    #[command(about = "Export one or more package directories")]
+    Export {
+        #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_OUTPUT")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long, value_name = "EXPRESSION")]
+        filter: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

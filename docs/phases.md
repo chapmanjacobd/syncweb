@@ -112,14 +112,14 @@ Goal: Content-addressed snapshots + robustness fetch
 ### Phase 7: Polish + Integrations
 Goal: Full CLI parity + UX + advanced features
 
-- [ ] All commands implemented
-- [ ] Rich output (tables, progress bars)
-- [ ] Config file support (TOML)
-- [ ] Shell completions
-- [ ] Integration tests
-- [ ] Documentation
-- [ ] `syncweb watch` -- file watcher for real-time sync (lowest priority)
-- [ ] `syncweb stats` -- bandwidth accounting per folder/peer
-- [ ] `syncweb verify` -- integrity verification (re-check all local blobs)
-- [ ] Sync schedules (global + per-folder overrides)
-- [ ] Platform settings files (suggested configs for laptop/server/phone)
+- [x] All commands implemented
+- [x] Rich output (tables, progress bars, and JSON output for scripting)
+- [x] Config file support (TOML)
+- [x] Shell completions
+- [x] Integration tests
+- [x] Documentation
+- [x] `syncweb watch` -- file watcher for real-time sync (lowest priority)
+- [x] `syncweb stats` -- bandwidth accounting per folder/peer
+- [x] `syncweb verify` -- integrity verification (re-check all local blobs)
+- [x] Sync schedules (global + per-folder overrides)
+- [x] Platform settings files (suggested configs for laptop/server/phone)

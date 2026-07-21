@@ -56,7 +56,7 @@ impl PackageManager {
     pub fn install(&self, manifest: &CollectionManifest, source: impl AsRef<Path>) -> Result<()> {
         manifest.validate()?;
         verify_directory(manifest, source.as_ref())?;
-        let manifest_hash = manifest.content_id()?;
+        let manifest_hash = manifest.blob_id()?;
         let collection_dir = self.root.join(manifest.collection_id.to_string());
         fs::create_dir_all(&collection_dir)
             .map_err(|error| SyncwebError::operation("failed to create package directory", error))?;
@@ -107,7 +107,7 @@ impl PackageManager {
         }
         let manifest_bytes = blobs.get(manifest_ticket.hash()).await?;
         let manifest = CollectionManifest::from_bytes(&manifest_bytes)?;
-        if manifest.content_id()? != manifest_ticket.hash() {
+        if manifest.blob_id()? != manifest_ticket.hash() {
             return Err(SyncwebError::InvalidTicket(
                 "manifest ticket hash does not match manifest content".to_owned(),
             ));

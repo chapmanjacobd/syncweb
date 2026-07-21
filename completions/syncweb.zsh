@@ -17,6 +17,8 @@ _syncweb() {
     _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb_commands" \
@@ -32,6 +34,8 @@ _syncweb() {
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -40,6 +44,28 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(start)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(shutdown)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -51,6 +77,8 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -63,6 +91,8 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -73,6 +103,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -82,6 +114,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -91,6 +125,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -99,6 +135,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -107,6 +145,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__config_commands" \
@@ -123,6 +163,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':key:_default' \
@@ -133,6 +175,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::section:_default' \
@@ -176,6 +220,8 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -192,6 +238,8 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':pattern:_default' \
@@ -204,6 +252,8 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -216,6 +266,8 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '(--format)--terse[]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -230,10 +282,25 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
 '::destination:_files' \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--folder=[Folder namespace; defaults to the only managed folder]:FOLDER:_default' \
+'--threads=[Import threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path:_files' \
 && ret=0
 ;;
 (backup)
@@ -242,6 +309,8 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -251,6 +320,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -261,6 +332,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -278,6 +351,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -289,6 +364,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -331,6 +408,8 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -341,6 +420,8 @@ _arguments "${_arguments_options[@]}" : \
 '--mode=[]:MODE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -354,9 +435,127 @@ _arguments "${_arguments_options[@]}" : \
 '--show-filters[Print the active filter configuration and exit]' \
 '--dry-run[Evaluate paths without starting the daemon]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
+;;
+(watch)
+_arguments "${_arguments_options[@]}" : \
+'--debounce-ms=[Debounce changes in milliseconds]:DEBOUNCE_MS:_default' \
+'*--exclude=[Ignore a path glob; may be repeated]:GLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--once[Process one event and exit]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+'--folder=[Limit display to a folder or namespace]:FOLDER:_files' \
+'--peer=[Limit display to a peer node ID]:PEER:_default' \
+'--period=[Retained for compatibility; counters are persisted since period start]:PERIOD:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--reset[Reset persisted counters before displaying them]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(schedule)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__schedule_commands" \
+"*::: :->schedule" \
+&& ret=0
+
+    case $state in
+    (schedule)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-schedule-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+'--active=[]:ACTIVE:_default' \
+'--bandwidth=[]:BANDWIDTH:_default' \
+'--period=[]:PERIOD:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(folder)
+_arguments "${_arguments_options[@]}" : \
+'--active=[]:ACTIVE:_default' \
+'--max-upload=[]:MAX_UPLOAD:_default' \
+'--max-download=[]:MAX_DOWNLOAD:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__schedule__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-schedule-help-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(folder)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
 ;;
 (subscribe)
 _arguments "${_arguments_options[@]}" : \
@@ -368,6 +567,8 @@ _arguments "${_arguments_options[@]}" : \
 '--ingest-only[Only deliver entries ingested after subscription]' \
 '--ignore-self[Ignore events emitted by this subscription session]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -379,6 +580,8 @@ _arguments "${_arguments_options[@]}" : \
 '--blob=[Publish this content hash as an unauthenticated blob ticket]:BLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -389,6 +592,8 @@ _arguments "${_arguments_options[@]}" : \
 '--blob=[]:BLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -398,6 +603,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__collection_commands" \
@@ -416,6 +623,8 @@ _arguments "${_arguments_options[@]}" : \
 '--name=[]:NAME:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -425,6 +634,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -436,6 +647,8 @@ _arguments "${_arguments_options[@]}" : \
 '--changelog=[]:CHANGELOG:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -448,6 +661,8 @@ _arguments "${_arguments_options[@]}" : \
 '*--bootstrap=[]:NODE_ID:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -497,6 +712,8 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__package_commands" \
@@ -509,12 +726,73 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-package-command-$line[1]:"
         case $line[1] in
-            (search)
+            (drop)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__package__subcmd__drop_commands" \
+"*::: :->drop" \
+&& ret=0
+
+    case $state in
+    (drop)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-package-drop-command-$line[1]:"
+        case $line[1] in
+            (export)
+_arguments "${_arguments_options[@]}" : \
+'--version=[]:VERSION:_default' \
+'*--filter=[]:EXPRESSION:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::paths:_files' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__package__subcmd__drop__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-package-drop-help-command-$line[1]:"
+        case $line[1] in
+            (export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(search)
 _arguments "${_arguments_options[@]}" : \
 '*--bootstrap=[]:NODE_ID:_default' \
 '--timeout-ms=[]:TIMEOUT_MS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::query:_default' \
@@ -525,6 +803,8 @@ _arguments "${_arguments_options[@]}" : \
 '()--ticket=[]:TICKET:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -535,6 +815,8 @@ _arguments "${_arguments_options[@]}" : \
 '()--ticket=[]:TICKET:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -546,6 +828,8 @@ _arguments "${_arguments_options[@]}" : \
 '()--ticket=[]:TICKET:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -556,6 +840,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -566,6 +852,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':manifest:_files' \
@@ -575,6 +863,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -583,6 +873,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -592,6 +884,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -610,7 +904,27 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-package-help-command-$line[1]:"
         case $line[1] in
-            (search)
+            (drop)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__package__subcmd__help__subcmd__drop_commands" \
+"*::: :->drop" \
+&& ret=0
+
+    case $state in
+    (drop)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-package-help-drop-command-$line[1]:"
+        case $line[1] in
+            (export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(search)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -662,6 +976,8 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__network_commands" \
@@ -680,6 +996,8 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--invite-only[]' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -689,6 +1007,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name:_default' \
@@ -698,6 +1018,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -707,6 +1029,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -716,6 +1040,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -726,6 +1052,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -737,6 +1065,8 @@ _arguments "${_arguments_options[@]}" : \
 '--relay-url=[]:RELAY_URL:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -797,6 +1127,8 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':shell:(bash elvish fish powershell zsh)' \
@@ -806,6 +1138,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::dir:_files' \
@@ -828,6 +1162,14 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (repl)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(start)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(shutdown)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -899,6 +1241,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (backup)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -942,6 +1288,42 @@ _arguments "${_arguments_options[@]}" : \
 (automatic)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
+;;
+(watch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(schedule)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__schedule_commands" \
+"*::: :->schedule" \
+&& ret=0
+
+    case $state in
+    (schedule)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-schedule-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(folder)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (subscribe)
 _arguments "${_arguments_options[@]}" : \
@@ -999,7 +1381,27 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-help-package-command-$line[1]:"
         case $line[1] in
-            (search)
+            (drop)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__package__subcmd__drop_commands" \
+"*::: :->drop" \
+&& ret=0
+
+    case $state in
+    (drop)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-package-drop-command-$line[1]:"
+        case $line[1] in
+            (export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(search)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -1109,6 +1511,8 @@ _syncweb_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
 'repl:Start an interactive command shell' \
+'start:Start the local syncweb node for one command invocation' \
+'shutdown:Stop the local syncweb node' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
 'accept:Accept a locally available folder' \
@@ -1121,12 +1525,17 @@ _syncweb_commands() {
 'sort:Sort local files by discovery criteria' \
 'stat:Show detailed metadata for a local file' \
 'download:Download folder content or copy a local file' \
+'import:Import local files into a synchronized folder' \
 'backup:Create a content-addressed snapshot' \
 'restore:Restore a snapshot to a folder or directory' \
 'snapshots:List, diff, or delete snapshots' \
 'health:Show seeding status per folder blob' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
+'watch:Watch a folder and import filesystem changes' \
+'stats:Show persisted bandwidth accounting' \
+'verify:Re-check local folder blob integrity' \
+'schedule:Show or update synchronization schedules' \
 'subscribe:Subscribe to a folder with event filters' \
 'publish:Publish a folder or blob for public read access' \
 'unpublish:Remove a public blob pin' \
@@ -1309,6 +1718,8 @@ _syncweb__subcmd__help_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
 'repl:Start an interactive command shell' \
+'start:Start the local syncweb node for one command invocation' \
+'shutdown:Stop the local syncweb node' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
 'accept:Accept a locally available folder' \
@@ -1321,12 +1732,17 @@ _syncweb__subcmd__help_commands() {
 'sort:Sort local files by discovery criteria' \
 'stat:Show detailed metadata for a local file' \
 'download:Download folder content or copy a local file' \
+'import:Import local files into a synchronized folder' \
 'backup:Create a content-addressed snapshot' \
 'restore:Restore a snapshot to a folder or directory' \
 'snapshots:List, diff, or delete snapshots' \
 'health:Show seeding status per folder blob' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
+'watch:Watch a folder and import filesystem changes' \
+'stats:Show persisted bandwidth accounting' \
+'verify:Re-check local folder blob integrity' \
+'schedule:Show or update synchronization schedules' \
 'subscribe:Subscribe to a folder with event filters' \
 'publish:Publish a folder or blob for public read access' \
 'unpublish:Remove a public blob pin' \
@@ -1447,6 +1863,11 @@ _syncweb__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help help commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__import_commands] )) ||
+_syncweb__subcmd__help__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help import commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__init_commands] )) ||
 _syncweb__subcmd__help__subcmd__init_commands() {
     local commands; commands=()
@@ -1518,6 +1939,7 @@ _syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands() {
 (( $+functions[_syncweb__subcmd__help__subcmd__package_commands] )) ||
 _syncweb__subcmd__help__subcmd__package_commands() {
     local commands; commands=(
+'drop:Export package versions as compressed CAR drop files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -1529,6 +1951,18 @@ _syncweb__subcmd__help__subcmd__package_commands() {
 'switch:Switch the active installed collection version' \
     )
     _describe -t commands 'syncweb help package commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__drop_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__drop_commands() {
+    local commands; commands=(
+'export:Export one or more package directories' \
+    )
+    _describe -t commands 'syncweb help package drop commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__export_commands] )) ||
+_syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help package drop export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__info_commands] )) ||
 _syncweb__subcmd__help__subcmd__package__subcmd__info_commands() {
@@ -1590,6 +2024,29 @@ _syncweb__subcmd__help__subcmd__restore_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help restore commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__schedule_commands] )) ||
+_syncweb__subcmd__help__subcmd__schedule_commands() {
+    local commands; commands=(
+'set:Update the global schedule' \
+'folder:Set schedule overrides for a named folder' \
+    )
+    _describe -t commands 'syncweb help schedule commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__schedule__subcmd__folder_commands] )) ||
+_syncweb__subcmd__help__subcmd__schedule__subcmd__folder_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help schedule folder commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__schedule__subcmd__set_commands] )) ||
+_syncweb__subcmd__help__subcmd__schedule__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help schedule set commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__shutdown_commands] )) ||
+_syncweb__subcmd__help__subcmd__shutdown_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help shutdown commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__snapshots_commands] )) ||
 _syncweb__subcmd__help__subcmd__snapshots_commands() {
     local commands; commands=(
@@ -1613,10 +2070,20 @@ _syncweb__subcmd__help__subcmd__sort_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help sort commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__start_commands] )) ||
+_syncweb__subcmd__help__subcmd__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help start commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__stat_commands] )) ||
 _syncweb__subcmd__help__subcmd__stat_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help stat commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__stats_commands] )) ||
+_syncweb__subcmd__help__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help stats commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__subscribe_commands] )) ||
 _syncweb__subcmd__help__subcmd__subscribe_commands() {
@@ -1628,10 +2095,25 @@ _syncweb__subcmd__help__subcmd__unpublish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help unpublish commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__verify_commands] )) ||
+_syncweb__subcmd__help__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help verify commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__version_commands] )) ||
 _syncweb__subcmd__help__subcmd__version_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help version commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__watch_commands] )) ||
+_syncweb__subcmd__help__subcmd__watch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help watch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__import_commands] )) ||
+_syncweb__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb import commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__init_commands] )) ||
 _syncweb__subcmd__init_commands() {
@@ -1759,6 +2241,7 @@ _syncweb__subcmd__network__subcmd__test-relay_commands() {
 (( $+functions[_syncweb__subcmd__package_commands] )) ||
 _syncweb__subcmd__package_commands() {
     local commands; commands=(
+'drop:Export package versions as compressed CAR drop files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -1772,9 +2255,41 @@ _syncweb__subcmd__package_commands() {
     )
     _describe -t commands 'syncweb package commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__package__subcmd__drop_commands] )) ||
+_syncweb__subcmd__package__subcmd__drop_commands() {
+    local commands; commands=(
+'export:Export one or more package directories' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb package drop commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__export_commands] )) ||
+_syncweb__subcmd__package__subcmd__drop__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package drop export commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help_commands] )) ||
+_syncweb__subcmd__package__subcmd__drop__subcmd__help_commands() {
+    local commands; commands=(
+'export:Export one or more package directories' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb package drop help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__export_commands] )) ||
+_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package drop help export commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package drop help help commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__package__subcmd__help_commands] )) ||
 _syncweb__subcmd__package__subcmd__help_commands() {
     local commands; commands=(
+'drop:Export package versions as compressed CAR drop files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -1787,6 +2302,18 @@ _syncweb__subcmd__package__subcmd__help_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb package help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__drop_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__drop_commands() {
+    local commands; commands=(
+'export:Export one or more package directories' \
+    )
+    _describe -t commands 'syncweb package help drop commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__export_commands] )) ||
+_syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package help drop export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__help_commands] )) ||
 _syncweb__subcmd__package__subcmd__help__subcmd__help_commands() {
@@ -1898,6 +2425,54 @@ _syncweb__subcmd__restore_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb restore commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__schedule_commands] )) ||
+_syncweb__subcmd__schedule_commands() {
+    local commands; commands=(
+'set:Update the global schedule' \
+'folder:Set schedule overrides for a named folder' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb schedule commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__folder_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__folder_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb schedule folder commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__help_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__help_commands() {
+    local commands; commands=(
+'set:Update the global schedule' \
+'folder:Set schedule overrides for a named folder' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb schedule help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__folder_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__help__subcmd__folder_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb schedule help folder commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb schedule help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__set_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__help__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb schedule help set commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__schedule__subcmd__set_commands] )) ||
+_syncweb__subcmd__schedule__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb schedule set commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__shutdown_commands] )) ||
+_syncweb__subcmd__shutdown_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb shutdown commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__snapshots_commands] )) ||
 _syncweb__subcmd__snapshots_commands() {
     local commands; commands=(
@@ -1946,10 +2521,20 @@ _syncweb__subcmd__sort_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb sort commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__start_commands] )) ||
+_syncweb__subcmd__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb start commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__stat_commands] )) ||
 _syncweb__subcmd__stat_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb stat commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stats_commands] )) ||
+_syncweb__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stats commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__subscribe_commands] )) ||
 _syncweb__subcmd__subscribe_commands() {
@@ -1961,10 +2546,20 @@ _syncweb__subcmd__unpublish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb unpublish commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__verify_commands] )) ||
+_syncweb__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb verify commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__version_commands] )) ||
 _syncweb__subcmd__version_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb version commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__watch_commands] )) ||
+_syncweb__subcmd__watch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb watch commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_syncweb" ]; then

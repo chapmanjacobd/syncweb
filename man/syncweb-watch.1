@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH watch 1  "watch " 
+.SH NAME
+watch \- Watch a folder and import filesystem changes
+.SH SYNOPSIS
+\fBwatch\fR [\fB\-\-debounce\-ms\fR] [\fB\-\-exclude\fR] [\fB\-\-once\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+.SH DESCRIPTION
+Watch a folder and import filesystem changes
+.SH OPTIONS
+.TP
+\fB\-\-debounce\-ms\fR \fI<DEBOUNCE_MS>\fR [default: 500]
+Debounce changes in milliseconds
+.TP
+\fB\-\-exclude\fR \fI<GLOB>\fR
+Ignore a path glob; may be repeated
+.TP
+\fB\-\-once\fR
+Process one event and exit
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+

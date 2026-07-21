@@ -20,10 +20,14 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand version 'Show syncweb version information'
             cand repl 'Start an interactive command shell'
+            cand start 'Start the local syncweb node for one command invocation'
+            cand shutdown 'Stop the local syncweb node'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand accept 'Accept a locally available folder'
@@ -36,12 +40,17 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand sort 'Sort local files by discovery criteria'
             cand stat 'Show detailed metadata for a local file'
             cand download 'Download folder content or copy a local file'
+            cand import 'Import local files into a synchronized folder'
             cand backup 'Create a content-addressed snapshot'
             cand restore 'Restore a snapshot to a folder or directory'
             cand snapshots 'List, diff, or delete snapshots'
             cand health 'Show seeding status per folder blob'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
+            cand watch 'Watch a folder and import filesystem changes'
+            cand stats 'Show persisted bandwidth accounting'
+            cand verify 'Re-check local folder blob integrity'
+            cand schedule 'Show or update synchronization schedules'
             cand subscribe 'Subscribe to a folder with event filters'
             cand publish 'Publish a folder or blob for public read access'
             cand unpublish 'Remove a public blob pin'
@@ -55,12 +64,32 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;version'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;repl'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;start'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;shutdown'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -70,6 +99,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -79,36 +110,48 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;accept'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;drop'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;folders'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;devices'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;config'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand set 'Set a configuration value'
@@ -118,12 +161,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;config;set'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;config;show'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -143,6 +190,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -156,6 +205,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -164,6 +215,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -173,6 +226,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --terse 'terse'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -184,6 +239,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --threads 'Copy threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;import'= {
+            cand --folder 'Folder namespace; defaults to the only managed folder'
+            cand --threads 'Import threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -192,18 +259,24 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;restore'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;snapshots'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand diff 'Compare two snapshots'
@@ -213,12 +286,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;snapshots;diff'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;snapshots;delete'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -236,6 +313,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;health'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -243,6 +322,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --mode 'mode'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -253,8 +334,85 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --show-filters 'Print the active filter configuration and exit'
             cand --dry-run 'Evaluate paths without starting the daemon'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
+        }
+        &'syncweb;watch'= {
+            cand --debounce-ms 'Debounce changes in milliseconds'
+            cand --exclude 'Ignore a path glob; may be repeated'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --once 'Process one event and exit'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;stats'= {
+            cand --folder 'Limit display to a folder or namespace'
+            cand --peer 'Limit display to a peer node ID'
+            cand --period 'Retained for compatibility; counters are persisted since period start'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --reset 'Reset persisted counters before displaying them'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;verify'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;schedule'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand set 'Update the global schedule'
+            cand folder 'Set schedule overrides for a named folder'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;schedule;set'= {
+            cand --active 'active'
+            cand --bandwidth 'bandwidth'
+            cand --period 'period'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;schedule;folder'= {
+            cand --active 'active'
+            cand --max-upload 'max-upload'
+            cand --max-download 'max-download'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;schedule;help'= {
+            cand set 'Update the global schedule'
+            cand folder 'Set schedule overrides for a named folder'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;schedule;help;set'= {
+        }
+        &'syncweb;schedule;help;folder'= {
+        }
+        &'syncweb;schedule;help;help'= {
         }
         &'syncweb;subscribe'= {
             cand --prefix 'prefix'
@@ -265,6 +423,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --ingest-only 'Only deliver entries ingested after subscription'
             cand --ignore-self 'Ignore events emitted by this subscription session'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -272,6 +432,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --blob 'Publish this content hash as an unauthenticated blob ticket'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -279,12 +441,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --blob 'blob'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;collection'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand init 'Initialize a directory as a versioned collection'
@@ -298,12 +464,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --name 'name'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;collection;add'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -312,6 +482,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --changelog 'changelog'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -321,6 +493,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --bootstrap 'bootstrap'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -344,8 +518,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;package'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand drop 'Export package versions as compressed CAR drop files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -357,11 +534,41 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand switch 'Switch the active installed collection version'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
+        &'syncweb;package;drop'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand export 'Export one or more package directories'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;package;drop;export'= {
+            cand --version 'version'
+            cand --filter 'filter'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;drop;help'= {
+            cand export 'Export one or more package directories'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;package;drop;help;export'= {
+        }
+        &'syncweb;package;drop;help;help'= {
+        }
         &'syncweb;package;search'= {
             cand --bootstrap 'bootstrap'
             cand --timeout-ms 'timeout-ms'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -369,6 +576,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --ticket 'ticket'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -376,6 +585,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --ticket 'ticket'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -383,40 +594,53 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --ticket 'ticket'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;remove'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;verify'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;list'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;versions'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;switch'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;package;help'= {
+            cand drop 'Export package versions as compressed CAR drop files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -427,6 +651,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
             cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;package;help;drop'= {
+            cand export 'Export one or more package directories'
+        }
+        &'syncweb;package;help;drop;export'= {
         }
         &'syncweb;package;help;search'= {
         }
@@ -451,6 +680,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;network'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a named network'
@@ -467,36 +698,48 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --invite-only 'invite-only'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;network;ls'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;network;join'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;network;leave'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;network;invite'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;network;kick'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -504,6 +747,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --relay-url 'relay-url'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -536,18 +781,24 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;completions'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;manpages'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'syncweb;help'= {
             cand version 'Show syncweb version information'
             cand repl 'Start an interactive command shell'
+            cand start 'Start the local syncweb node for one command invocation'
+            cand shutdown 'Stop the local syncweb node'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand accept 'Accept a locally available folder'
@@ -560,12 +811,17 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand sort 'Sort local files by discovery criteria'
             cand stat 'Show detailed metadata for a local file'
             cand download 'Download folder content or copy a local file'
+            cand import 'Import local files into a synchronized folder'
             cand backup 'Create a content-addressed snapshot'
             cand restore 'Restore a snapshot to a folder or directory'
             cand snapshots 'List, diff, or delete snapshots'
             cand health 'Show seeding status per folder blob'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
+            cand watch 'Watch a folder and import filesystem changes'
+            cand stats 'Show persisted bandwidth accounting'
+            cand verify 'Re-check local folder blob integrity'
+            cand schedule 'Show or update synchronization schedules'
             cand subscribe 'Subscribe to a folder with event filters'
             cand publish 'Publish a folder or blob for public read access'
             cand unpublish 'Remove a public blob pin'
@@ -579,6 +835,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;version'= {
         }
         &'syncweb;help;repl'= {
+        }
+        &'syncweb;help;start'= {
+        }
+        &'syncweb;help;shutdown'= {
         }
         &'syncweb;help;create'= {
         }
@@ -610,6 +870,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;download'= {
         }
+        &'syncweb;help;import'= {
+        }
         &'syncweb;help;backup'= {
         }
         &'syncweb;help;restore'= {
@@ -627,6 +889,20 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;init'= {
         }
         &'syncweb;help;automatic'= {
+        }
+        &'syncweb;help;watch'= {
+        }
+        &'syncweb;help;stats'= {
+        }
+        &'syncweb;help;verify'= {
+        }
+        &'syncweb;help;schedule'= {
+            cand set 'Update the global schedule'
+            cand folder 'Set schedule overrides for a named folder'
+        }
+        &'syncweb;help;schedule;set'= {
+        }
+        &'syncweb;help;schedule;folder'= {
         }
         &'syncweb;help;subscribe'= {
         }
@@ -649,6 +925,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;collection;publish'= {
         }
         &'syncweb;help;package'= {
+            cand drop 'Export package versions as compressed CAR drop files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -658,6 +935,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
+        }
+        &'syncweb;help;package;drop'= {
+            cand export 'Export one or more package directories'
+        }
+        &'syncweb;help;package;drop;export'= {
         }
         &'syncweb;help;package;search'= {
         }

@@ -46,6 +46,12 @@
 - [ ] Bidirectional sync
 - [ ] Relay-only connection
 
+### Phase 7 Local Tests
+- [x] Schedule parsing, cross-midnight windows, and per-folder overrides
+- [x] Persisted bandwidth statistics and reset behavior
+- [x] CLI JSON output and Phase 7 command discovery
+- [x] Configured schedule persistence
+
 ---
 
 ## Performance Targets

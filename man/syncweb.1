@@ -4,13 +4,19 @@
 .SH NAME
 syncweb \- Delay\-tolerant web surfing
 .SH SYNOPSIS
-\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-color\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Delay\-tolerant web surfing
 .SH OPTIONS
 .TP
 \fB\-\-verbose\fR
 Enable verbose structured logging
+.TP
+\fB\-\-json\fR
+Emit machine\-readable JSON where supported
+.TP
+\fB\-\-no\-color\fR
+Disable colored output
 .TP
 \fB\-\-data\-dir\fR \fI<DATA_DIR>\fR [default: .syncweb]
 Directory used for persistent node identity and data
@@ -24,6 +30,12 @@ Show syncweb version information
 .TP
 syncweb\-repl(1)
 Start an interactive command shell
+.TP
+syncweb\-start(1)
+Start the local syncweb node for one command invocation
+.TP
+syncweb\-shutdown(1)
+Stop the local syncweb node
 .TP
 syncweb\-create(1)
 Create a synchronized folder
@@ -61,6 +73,9 @@ Show detailed metadata for a local file
 syncweb\-download(1)
 Download folder content or copy a local file
 .TP
+syncweb\-import(1)
+Import local files into a synchronized folder
+.TP
 syncweb\-backup(1)
 Create a content\-addressed snapshot
 .TP
@@ -78,6 +93,18 @@ Initialize a folder and print a shareable URL
 .TP
 syncweb\-automatic(1)
 Run rules\-based automatic synchronization
+.TP
+syncweb\-watch(1)
+Watch a folder and import filesystem changes
+.TP
+syncweb\-stats(1)
+Show persisted bandwidth accounting
+.TP
+syncweb\-verify(1)
+Re\-check local folder blob integrity
+.TP
+syncweb\-schedule(1)
+Show or update synchronization schedules
 .TP
 syncweb\-subscribe(1)
 Subscribe to a folder with event filters

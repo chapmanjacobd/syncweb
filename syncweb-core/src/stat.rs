@@ -5,11 +5,12 @@ use std::{
 };
 
 use iroh_blobs::Hash;
+use serde::Serialize;
 
 use crate::fs::FileEntry;
 
 /// Detailed metadata for a local or synchronized file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 #[non_exhaustive]
 pub struct StatOutput {
     pub path: PathBuf,

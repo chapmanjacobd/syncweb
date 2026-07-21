@@ -414,6 +414,7 @@ syncweb config show filter
 | NEW | `collection publish` | Store manifest, pin content, and announce a blob ticket |
 | NEW | `package search` | Discover packages via gossip |
 | NEW | `package info` | Detailed package metadata |
+| NEW | `package drop export` | Export package versions as compressed `.car.zst` drops |
 | NEW | `package install` | Fetch + verify + install package |
 | NEW | `package upgrade` | Update to latest version |
 | NEW | `package remove` | Remove installed package |
@@ -446,6 +447,15 @@ syncweb --home /path/to/data ls    # Custom data directory
 syncweb --verbose find .            # Verbose output
 syncweb --json folders              # JSON output (for scripting)
 syncweb --no-color devices          # Disable color output
+
+syncweb import ./documents
+syncweb watch --once ./documents
+syncweb stats --period 24h
+syncweb verify ./documents
+syncweb schedule
+syncweb schedule set --active "22:00-06:00"
+syncweb schedule set --bandwidth "5MB/s" --period "08:00-18:00"
+syncweb schedule folder media --active "01:00-05:00"
 
 # Download with limits (max entries)
 syncweb download --limit 10 /path/to/files

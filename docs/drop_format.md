@@ -8,14 +8,20 @@ The current [data package management design](./packages.md#1-collection--package
 
 The Syncweb Drop Format provides a single-file, self-contained bundle of a data package that can be easily "dropped" into another node.
 
+The export pipeline is available through `syncweb package drop export`. It
+creates the archive in a staging file and atomically renames it into place,
+so concurrent exports cannot leave a partially written destination. Content
+blocks are copied in bounded chunks and verified against their manifest hash
+while they are streamed through the Zstandard encoder.
+
 ## Format Specification
 The drop format is essentially a Zstandard-compressed Content Addressable aRchive (CAR), matching Iroh's native CAR export conventions.
 
 * Extension: `.car.zst`
 * MIME Type: `application/vnd.syncweb.package+zstd`
 * Underlying Structure: 
-  1. A root CID pointing to the JSON `PackageManifest`.
-  2. All the file blobs referenced in the manifest's `files` array.
+  1. A root CID pointing to the JSON `CollectionManifest`.
+  2. All the file blobs referenced in the manifest's `entries` array.
   3. The whole stream is compressed using `zstd` (which provides excellent compression ratios and decompression speeds).
 
 ### Why CAR?
@@ -51,39 +57,18 @@ syncweb package drop import my-dataset.car.zst
 ## Implementation Details
 
 ### Export Pipeline (`drop_export`)
-1. Resolve Manifest: Fetch the `PackageManifest` from the local iroh-docs for the given package/version.
-2. Filter & Collect Hashes: Hook into the existing `FilterEngine` to allow granular filtering of files. Extract the `manifest_hash` and iterate over `manifest.files`, evaluating each file against the `FilterEngine`. Only collect blob hashes for accepted files to create a partial drop.
-3. Generate CAR Stream: Use `iroh_blobs::export::export_car` (or similar) with the list of hashes. The root of the CAR should be the manifest blob.
-4. Compress: Pipe the CAR stream through `zstd` encoder. Handle export stream errors explicitly for better UX.
-5. Write: Write the compressed stream to the destination file.
-6. Multi-Export: If multiple packages are specified, iterate through each package sequentially, executing the pipeline and saving each package as an individual `.car.zst` file in the destination directory to maintain isolated drops.
-
-```rust
-pub async fn export_drop(folder: &SyncwebFolder, out_path: &Path, filter_engine: Option<&FilterEngine>) -> Result<()> {
-    // Note: ensure concurrency safety (e.g. acquire locks or snapshot) so changes to the package during export don't silently corrupt the CAR.
-    let manifest = folder.load_manifest().await?;
-    let mut hashes = vec![manifest.manifest_hash];
-    
-    for file_meta in &manifest.files {
-        // Granular filtering via FilterEngine
-        if let Some(engine) = filter_engine {
-            // Pseudo-code for evaluation
-            // if engine.evaluate_file(file_meta) == FilterAction::Reject { continue; }
-        }
-        hashes.push(file_meta.hash);
-    }
-    
-    let file = tokio::fs::File::create(out_path).await?;
-    let mut encoder = async_compression::tokio::write::ZstdEncoder::new(file);
-    
-    // iroh-blobs export to CAR stream
-    folder.blob_store.export_car(hashes, &mut encoder).await
-        .map_err(|e| anyhow::anyhow!("failed to stream package: {}", e))?;
-    encoder.shutdown().await?;
-    
-    Ok(())
-}
-```
+1. Resolve Manifest: Select the requested semver version or the newest
+   manifest supplied by the package source.
+2. Filter & Collect Entries: Evaluate each `CollectionEntry` with the existing
+   `FilterEngine`. A filtered manifest is unsigned because its content changed.
+3. Generate CAR Stream: Write a CAR v1 header, the manifest as the root block,
+   and each unique referenced BLAKE3 blob using raw BLAKE3 CIDs.
+4. Compress: Stream CAR bytes through an asynchronous Zstandard encoder while
+   copying blob data in bounded chunks and checking its size and hash.
+5. Write Atomically: Write to a unique staging file and rename it into place
+   only after compression completes.
+6. Multi-Export: For multiple package paths, export one isolated `.car.zst`
+   file per package into the requested output directory.
 
 ### Import Pipeline (`drop_import`)
 1. Decompress: Open the `.car.zst` file and stream it through a `zstd` decoder. Map decoding and stream errors explicitly to user-friendly messages (e.g. "unexpected end of file").
@@ -131,6 +116,10 @@ pub async fn import_drop(node: &IrohNode, in_path: &Path, target_dir: &Path, fil
 * Manifest Validation: The manifest hash acts as the absolute source of truth. If the manifest dictates a file should have hash `X`, and the `.car.zst` provides a tampered file with hash `Y`, the package validation will fail.
 * Manifest Signatures: The `PackageManifest` includes an Ed25519 signature from the package maintainer. During the import pipeline, the node verifies this signature against the maintainer's public key. *Note: Since modifying the manifest alters its hash, the signature must be generated over a deterministic, unsigned representation of the manifest.* If someone provides a modified manifest or swaps out blobs and updates the manifest hash, the signature verification will fail, preventing the installation of tampered drops.
 * Anti-DOS / Allocation Limits: When parsing drop files from untrusted sources, it is important to prevent out-of-memory attacks. `iroh-blobs` CAR import handles varint length parsing securely (e.g., enforcing `MAX_ALLOC` limits per block). Because we pipe `async-compression` directly into `iroh-blobs`, we get these stream safety guarantees automatically without loading the entire archive into memory.
+
+## Manifest identity and signatures
+
+Collection manifests store the Ed25519 signature and maintainer public key as lowercase hexadecimal strings. `content_id()` hashes the canonical manifest with the signature removed, while `blob_id()` hashes the serialized manifest blob; the latter is used for blob tickets and document references so signed manifests remain fetchable. Dependency requirements use semver ranges and are checked against the versions available locally.
 # Syncweb Drop Format Implementation Plan
 
 ## Overview

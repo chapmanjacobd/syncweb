@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH stats 1  "stats " 
+.SH NAME
+stats \- Show persisted bandwidth accounting
+.SH SYNOPSIS
+\fBstats\fR [\fB\-\-folder\fR] [\fB\-\-peer\fR] [\fB\-\-reset\fR] [\fB\-\-period\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Show persisted bandwidth accounting
+.SH OPTIONS
+.TP
+\fB\-\-folder\fR \fI<FOLDER>\fR
+Limit display to a folder or namespace
+.TP
+\fB\-\-peer\fR \fI<PEER>\fR
+Limit display to a peer node ID
+.TP
+\fB\-\-reset\fR
+Reset persisted counters before displaying them
+.TP
+\fB\-\-period\fR \fI<PERIOD>\fR
+Retained for compatibility; counters are persisted since period start
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

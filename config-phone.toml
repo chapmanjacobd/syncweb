@@ -1,0 +1,10 @@
+# Storage- and battery-constrained defaults.
+[bandwidth]
+max_upload = "100KB/s"
+max_download = "500KB/s"
+
+[parallel]
+threads = 1
+
+[advanced]
+blob_cache_size_gb = 2

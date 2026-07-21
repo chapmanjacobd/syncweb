@@ -26,11 +26,15 @@ pub mod fs;
 pub mod init;
 pub mod net;
 pub mod node;
+pub mod schedule;
 pub mod search;
 pub mod snapshot;
 pub mod sort;
 pub mod stat;
+pub mod stats;
 pub mod storage;
 pub mod sync;
+pub mod verify;
 
 pub use error::{Error, Result, SyncwebError};
+pub use folder::drop_export;

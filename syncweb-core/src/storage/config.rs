@@ -9,12 +9,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayConfig;
+use crate::schedule::{ScheduleConfig, TimeWindow, parse_rate};
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct Config {
     #[serde(default)]
     pub bep: BepConfig,
+    #[serde(default)]
+    pub schedule: ScheduleConfig,
+    #[serde(default)]
+    pub bandwidth: BandwidthConfig,
+    #[serde(default)]
+    pub parallel: ParallelConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
+    #[serde(default)]
+    pub advanced: AdvancedConfig,
+    #[serde(default)]
+    pub default_path: Option<PathBuf>,
+    #[serde(default = "default_sync_mode")]
+    pub default_sync_mode: String,
 }
 
 impl Config {
@@ -60,15 +75,117 @@ impl Config {
                 })?;
             }
             "bep.auto_fallback" => self.bep.auto_fallback = parse_bool(key, value)?,
+            "schedule.active_hours" => {
+                TimeWindow::parse(value)?;
+                value.clone_into(&mut self.schedule.active_hours);
+            }
+            "bandwidth.max_upload" => {
+                parse_rate(value)?;
+                value.clone_into(&mut self.bandwidth.max_upload);
+            }
+            "bandwidth.max_download" => {
+                parse_rate(value)?;
+                value.clone_into(&mut self.bandwidth.max_download);
+            }
+            "parallel.threads" => {
+                self.parallel.threads = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
+            "cache.max_cache_size" => {
+                self.cache.max_cache_size = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
+            "advanced.blob_cache_size_gb" => {
+                self.advanced.blob_cache_size_gb = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
+            "default_path" => self.default_path = Some(PathBuf::from(value)),
+            "default_sync_mode" => {
+                value.parse::<crate::folder::SyncMode>()?;
+                value.clone_into(&mut self.default_sync_mode);
+            }
             _ => {
                 return Err(SyncwebError::InvalidConfig(format!(
                     "unsupported config key {key:?}; supported keys: \
-                     bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback"
+                     bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback, schedule.active_hours, \
+                     bandwidth.max_upload, bandwidth.max_download, parallel.threads, cache.max_cache_size, \
+                     advanced.blob_cache_size_gb, default_path, default_sync_mode"
                 )));
             }
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct BandwidthConfig {
+    #[serde(default)]
+    pub max_upload: String,
+    #[serde(default)]
+    pub max_download: String,
+}
+
+impl Default for BandwidthConfig {
+    fn default() -> Self {
+        Self {
+            max_upload: "0".to_owned(),
+            max_download: "0".to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+#[derive(Default)]
+pub struct ParallelConfig {
+    #[serde(default)]
+    pub threads: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct CacheConfig {
+    #[serde(default = "default_cache_size")]
+    pub max_cache_size: usize,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            max_cache_size: default_cache_size(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct AdvancedConfig {
+    #[serde(default = "default_blob_cache_size")]
+    pub blob_cache_size_gb: u64,
+}
+
+impl Default for AdvancedConfig {
+    fn default() -> Self {
+        Self {
+            blob_cache_size_gb: default_blob_cache_size(),
+        }
+    }
+}
+
+fn default_sync_mode() -> String {
+    "sendreceive".to_owned()
+}
+
+const fn default_cache_size() -> usize {
+    5_000
+}
+
+const fn default_blob_cache_size() -> u64 {
+    2
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

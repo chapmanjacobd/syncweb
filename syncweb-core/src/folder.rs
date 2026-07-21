@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod collection;
+pub mod drop_export;
 pub mod manager;
 pub mod package;
 pub mod sync_mode;
@@ -11,6 +12,7 @@ pub use collection::{
     CollectionEntry, CollectionHead, CollectionManifest, CollectionState, CollectionStore, InstalledCollection,
     PackageDependency, PackageProfile,
 };
+pub use drop_export::{DropExportOptions, DropExportResult, DropExporter};
 pub use manager::FolderManager;
 pub use package::PackageManager;
 pub use sync_mode::SyncMode;

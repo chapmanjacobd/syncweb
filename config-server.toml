@@ -1,0 +1,13 @@
+# Throughput- and availability-oriented defaults.
+[bandwidth]
+max_upload = "0"
+max_download = "0"
+
+[schedule]
+active_hours = ""
+
+[parallel]
+threads = 0
+
+[cache]
+max_cache_size = 50000

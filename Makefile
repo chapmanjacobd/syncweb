@@ -1,4 +1,4 @@
-.PHONY: all fmt lint test build clean check clippy install install-completions install-manpage manpage completions readme
+.PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme
 
 all: fmt lint test build manpage completions readme
 
@@ -26,6 +26,9 @@ test0:
 	cargo test --all-targets --all-features --quiet
 	cargo test --doc
 
+bench:
+	cargo bench --all-features
+
 build:
 	cargo build --all-targets --all-features
 
@@ -36,7 +39,7 @@ clean:
 	cargo clean
 
 install:
-	cargo install --path .
+	cargo install --path syncweb-cli
 
 completions: build
 	mkdir -p completions

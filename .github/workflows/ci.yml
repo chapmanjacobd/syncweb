@@ -18,8 +18,8 @@ jobs:
           rustup component add rustfmt clippy --toolchain stable
           rustup default stable
 
-      - run: cargo test --all-targets --all-features
-      - run: cargo test --doc --all-features
+      - run: cargo test --all-targets --all-features --no-fail-fast
+      - run: cargo test --doc --all-features --no-fail-fast
 
   test-windows:
     runs-on: windows-latest
@@ -30,7 +30,7 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - run: cargo test --all-targets --all-features
+      - run: cargo test --all-targets --all-features --no-fail-fast
 
   test-macos:
     runs-on: macos-latest
@@ -41,4 +41,4 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - run: cargo test --all-targets --all-features
+      - run: cargo test --all-targets --all-features --no-fail-fast

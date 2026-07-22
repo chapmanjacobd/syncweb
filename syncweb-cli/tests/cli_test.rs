@@ -27,8 +27,7 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
     ensure!(help.contains("repl"));
     ensure!(help.contains("create"));
     ensure!(help.contains("join"));
-    ensure!(help.contains("accept"));
-    ensure!(help.contains("drop"));
+    ensure!(help.contains("leave"));
     ensure!(help.contains("folders"));
     ensure!(help.contains("devices"));
     ensure!(help.contains("network"));
@@ -232,6 +231,7 @@ fn test_join_command() -> anyhow::Result<()> {
             "--data-dir",
             &data_dir,
             "join",
+            "--once",
             &ticket,
             join_dir.to_str().context("UTF-8 path")?,
         ])
@@ -317,7 +317,7 @@ fn test_ls_streaming() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&source).context("cleanup")?;
 
     ensure!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?.replace("\\", "/");
     let lines: Vec<&str> = stdout.lines().collect();
     anyhow::ensure!(lines.len() == 2, "should list 2 files: {stdout}");
     ensure!(lines.contains(&"a.txt"));
@@ -890,6 +890,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             "--data-dir",
             data_dir,
             "join",
+            "--once",
             &ticket,
             join_dir.to_str().context("UTF-8 path")?,
             "--network",

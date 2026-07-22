@@ -72,7 +72,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (create)
 _arguments "${_arguments_options[@]}" : \
-'--prefix=[]:PREFIX:_files' \
 '--mode=[]:MODE:_default' \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -87,11 +86,18 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (join)
 _arguments "${_arguments_options[@]}" : \
-'--prefix=[]:PREFIX:_files' \
 '--mode=[]:MODE:_default' \
 '--network=[Add the joined folder to a named network]:NETWORK:_default' \
+'--prefix=[Parent directory prepended to the path argument]:PREFIX:_files' \
+'(--glob)--sync-prefix=[Area prefix filter for subscription entries]:SYNC_PREFIX:_files' \
+'(--sync-prefix)--glob=[]:GLOB:_default' \
+'--max-count=[]:MAX_COUNT:_default' \
+'--max-size=[]:MAX_SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
+'--once[Exit after joining without entering the sync loop]' \
+'--ingest-only[Only deliver entries ingested after subscription]' \
+'--ignore-self[Ignore events emitted by this subscription session]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
@@ -101,7 +107,7 @@ _arguments "${_arguments_options[@]}" : \
 '::path:_files' \
 && ret=0
 ;;
-(accept)
+(leave)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -109,10 +115,10 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace:_default' \
+':folder -- Namespace ID or path to a managed folder:_default' \
 && ret=0
 ;;
-(drop)
+(unsubscribe)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -120,7 +126,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace:_default' \
+':folder -- Namespace ID or path to a managed folder:_default' \
 && ret=0
 ;;
 (folders)
@@ -232,13 +238,34 @@ _arguments "${_arguments_options[@]}" : \
 (find)
 _arguments "${_arguments_options[@]}" : \
 '--kind=[]:KIND:(exact glob regex)' \
-'--max-depth=[]:MAX_DEPTH:_default' \
-'--min-size=[]:MIN_SIZE:_default' \
-'--max-size=[]:MAX_SIZE:_default' \
-'--extension=[]:EXTENSION:_default' \
-'--type=[]:FILE_TYPE:(f d l)' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'*--sizes=[Size constraints\: N, -N, +N, N%10, +5GB, etc.]:SIZES:_default' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'']:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'']:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older)]:TIME_MODIFIED:_default' \
+'*-e+[File extensions to include]:EXTENSION:_default' \
+'*--extension=[File extensions to include]:EXTENSION:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'(-s --case-sensitive)-i[Case insensitive search]' \
+'(-s --case-sensitive)--ignore-case[Case insensitive search]' \
+'(-i --ignore-case)-s[Case sensitive search]' \
+'(-i --ignore-case)--case-sensitive[Case sensitive search]' \
+'-F[Treat patterns as literal strings]' \
+'--fixed-strings[Treat patterns as literal strings]' \
+'-p[Search full path (default\: filename only)]' \
+'--full-path[Search full path (default\: filename only)]' \
+'-H[Search hidden files and directories]' \
+'--hidden[Search hidden files and directories]' \
+'-L[Follow symbolic links]' \
+'--follow-links[Follow symbolic links]' \
+'-a[Print absolute paths]' \
+'--absolute-path[Print absolute paths]' \
+'-d[Exclude sendonly/publicreadonly folders from search]' \
+'--download[Exclude sendonly/publicreadonly folders from search]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
@@ -250,7 +277,15 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (sort)
 _arguments "${_arguments_options[@]}" : \
-'--by=[]:BY:(niche frecency peers random folder)' \
+'--by=[]:BY:(niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count)' \
+'--min-seeders=[Filter files with fewer than N seeders]:MIN_SEEDERS:_default' \
+'--max-seeders=[Filter files with more than N seeders]:MAX_SEEDERS:_default' \
+'--niche=[Ideal popularity (peer count) for niche scoring]:NICHE:_default' \
+'--frecency-weight=[Divisor for recency weighting in frecency calculation]:FRECENCY_WEIGHT:_default' \
+'--limit-size=[Quit after printing N bytes of files]:LIMIT_SIZE:_default' \
+'*--depth=[Constrain folder aggregates by depth\: N, +N (min), -N (max)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -441,7 +476,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (init)
 _arguments "${_arguments_options[@]}" : \
-'--prefix=[]:PREFIX:_files' \
 '--mode=[]:MODE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -584,8 +618,8 @@ esac
 ;;
 (subscribe)
 _arguments "${_arguments_options[@]}" : \
-'(--glob)--prefix=[]:PREFIX:_files' \
-'(--prefix)--glob=[]:GLOB:_default' \
+'(--glob)--sync-prefix=[Area prefix filter for subscription entries]:SYNC_PREFIX:_files' \
+'(--sync-prefix)--glob=[]:GLOB:_default' \
 '--max-count=[]:MAX_COUNT:_default' \
 '--max-size=[]:MAX_SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -596,8 +630,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':ticket:_default' \
-'::path:_files' \
+':folder -- Namespace ID or path to a managed folder:_default' \
 && ret=0
 ;;
 (publish)
@@ -1783,11 +1816,11 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(accept)
+(leave)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(drop)
+(unsubscribe)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2293,8 +2326,8 @@ _syncweb_commands() {
 'shutdown:Stop the local syncweb node' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
-'accept:Accept a locally available folder' \
-'drop:Remove a local folder replica' \
+'leave:Leave and remove a synchronized folder' \
+'unsubscribe:Unsubscribe from a folder'\''s live sync loop' \
 'folders:List managed folders' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
@@ -2330,11 +2363,6 @@ _syncweb_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__accept_commands] )) ||
-_syncweb__subcmd__accept_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb accept commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__attest_commands] )) ||
 _syncweb__subcmd__attest_commands() {
@@ -2476,11 +2504,6 @@ _syncweb__subcmd__download_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb download commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__drop_commands] )) ||
-_syncweb__subcmd__drop_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb drop commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__find_commands] )) ||
 _syncweb__subcmd__find_commands() {
     local commands; commands=()
@@ -2505,8 +2528,8 @@ _syncweb__subcmd__help_commands() {
 'shutdown:Stop the local syncweb node' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
-'accept:Accept a locally available folder' \
-'drop:Remove a local folder replica' \
+'leave:Leave and remove a synchronized folder' \
+'unsubscribe:Unsubscribe from a folder'\''s live sync loop' \
 'folders:List managed folders' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
@@ -2542,11 +2565,6 @@ _syncweb__subcmd__help_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__accept_commands] )) ||
-_syncweb__subcmd__help__subcmd__accept_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help accept commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__attest_commands] )) ||
 _syncweb__subcmd__help__subcmd__attest_commands() {
@@ -2625,11 +2643,6 @@ _syncweb__subcmd__help__subcmd__devices_commands() {
 _syncweb__subcmd__help__subcmd__download_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help download commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__drop_commands] )) ||
-_syncweb__subcmd__help__subcmd__drop_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help drop commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__find_commands] )) ||
 _syncweb__subcmd__help__subcmd__find_commands() {
@@ -2733,6 +2746,11 @@ _syncweb__subcmd__help__subcmd__init_commands() {
 _syncweb__subcmd__help__subcmd__join_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__leave_commands] )) ||
+_syncweb__subcmd__help__subcmd__leave_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help leave commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__link_commands] )) ||
 _syncweb__subcmd__help__subcmd__link_commands() {
@@ -3040,6 +3058,11 @@ _syncweb__subcmd__help__subcmd__unpublish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help unpublish commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__unsubscribe_commands] )) ||
+_syncweb__subcmd__help__subcmd__unsubscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help unsubscribe commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__verify_commands] )) ||
 _syncweb__subcmd__help__subcmd__verify_commands() {
     local commands; commands=()
@@ -3256,6 +3279,11 @@ _syncweb__subcmd__init_commands() {
 _syncweb__subcmd__join_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb join commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__leave_commands] )) ||
+_syncweb__subcmd__leave_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb leave commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__link_commands] )) ||
 _syncweb__subcmd__link_commands() {
@@ -3864,6 +3892,11 @@ _syncweb__subcmd__trust__subcmd__show_commands() {
 _syncweb__subcmd__unpublish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb unpublish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__unsubscribe_commands] )) ||
+_syncweb__subcmd__unsubscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb unsubscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

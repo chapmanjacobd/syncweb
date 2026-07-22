@@ -81,6 +81,12 @@ impl IntentHandle {
     pub fn cancel(&self) -> Result<(), mpsc::error::SendError<SyncCommand>> {
         self.commands.send(SyncCommand::Cancel)
     }
+
+    /// Clone the cancel sender for external session tracking.
+    #[must_use]
+    pub fn cancel_sender(&self) -> mpsc::UnboundedSender<SyncCommand> {
+        self.commands.clone()
+    }
 }
 
 impl Stream for IntentHandle {

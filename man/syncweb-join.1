@@ -4,13 +4,10 @@
 .SH NAME
 join \- Join a folder from an Iroh document ticket
 .SH SYNOPSIS
-\fBjoin\fR [\fB\-\-prefix\fR] [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-once\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Join a folder from an Iroh document ticket
 .SH OPTIONS
-.TP
-\fB\-\-prefix\fR \fI<PREFIX>\fR
-
 .TP
 \fB\-\-mode\fR \fI<MODE>\fR [default: receiveonly]
 
@@ -20,6 +17,30 @@ Enable Syncthing relay fallback for this folder
 .TP
 \fB\-\-network\fR \fI<NETWORK>\fR
 Add the joined folder to a named network
+.TP
+\fB\-\-once\fR
+Exit after joining without entering the sync loop
+.TP
+\fB\-\-ingest\-only\fR
+Only deliver entries ingested after subscription
+.TP
+\fB\-\-ignore\-self\fR
+Ignore events emitted by this subscription session
+.TP
+\fB\-\-prefix\fR \fI<PREFIX>\fR
+Parent directory prepended to the path argument
+.TP
+\fB\-\-sync\-prefix\fR \fI<SYNC_PREFIX>\fR
+Area prefix filter for subscription entries
+.TP
+\fB\-\-glob\fR \fI<GLOB>\fR
+
+.TP
+\fB\-\-max\-count\fR \fI<MAX_COUNT>\fR
+
+.TP
+\fB\-\-max\-size\fR \fI<MAX_SIZE>\fR
+
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

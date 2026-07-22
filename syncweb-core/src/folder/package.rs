@@ -7,8 +7,7 @@ use std::{
 use iroh::Endpoint;
 use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
 use semver::Version;
-#[cfg(not(unix))]
-use serde_json::Value;
+
 use uuid::Uuid;
 
 use crate::{
@@ -285,6 +284,6 @@ fn create_current_link(version: &str, path: &Path) -> Result<()> {
 
 #[cfg(not(unix))]
 fn create_current_link(version: &str, path: &Path) -> Result<()> {
-    fs::write(path, Value::String(version.to_owned()))
+    fs::write(path, version)
         .map_err(|error| SyncwebError::operation("failed to create current collection marker", error))
 }

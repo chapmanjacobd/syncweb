@@ -20,7 +20,7 @@ clippy:
 	cargo clippy --all-targets --all-features
 
 test:
-	cargo nextest run --show-progress only
+	cargo nextest run --show-progress only --no-fail-fast
 
 test0:
 	cargo test --all-targets --all-features --quiet

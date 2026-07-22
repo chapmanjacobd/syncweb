@@ -30,8 +30,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand shutdown 'Stop the local syncweb node'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
-            cand accept 'Accept a locally available folder'
-            cand drop 'Remove a local folder replica'
+            cand leave 'Leave and remove a synchronized folder'
+            cand unsubscribe 'Unsubscribe from a folder''s live sync loop'
             cand folders 'List managed folders'
             cand devices 'Show this device''s Iroh and Syncthing identities'
             cand config 'Show or update local configuration'
@@ -99,7 +99,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;create'= {
-            cand --prefix 'prefix'
             cand --mode 'mode'
             cand --network 'Add the created folder to a named network'
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -111,18 +110,25 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;join'= {
-            cand --prefix 'prefix'
             cand --mode 'mode'
             cand --network 'Add the joined folder to a named network'
+            cand --prefix 'Parent directory prepended to the path argument'
+            cand --sync-prefix 'Area prefix filter for subscription entries'
+            cand --glob 'glob'
+            cand --max-count 'max-count'
+            cand --max-size 'max-size'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
+            cand --once 'Exit after joining without entering the sync loop'
+            cand --ingest-only 'Only deliver entries ingested after subscription'
+            cand --ignore-self 'Ignore events emitted by this subscription session'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;accept'= {
+        &'syncweb;leave'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -130,7 +136,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;drop'= {
+        &'syncweb;unsubscribe'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -204,13 +210,34 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;find'= {
             cand --kind 'kind'
-            cand --max-depth 'max-depth'
-            cand --min-size 'min-size'
-            cand --max-size 'max-size'
-            cand --extension 'extension'
-            cand --type 'type'
+            cand --depth 'Depth constraints: N, +N (min), -N (max)'
+            cand --min-depth 'Alternative min depth notation'
+            cand --max-depth 'Alternative max depth notation'
+            cand --sizes 'Size constraints: N, -N, +N, N%10, +5GB, etc.'
+            cand --modified-within 'Newer than: ''3 days'', ''2 weeks'''
+            cand --modified-before 'Older than: ''3 years'', ''1 month'''
+            cand --time-modified 'Time modified: ''-3 days'' (newer), ''+3 days'' (older)'
+            cand -e 'File extensions to include'
+            cand --extension 'File extensions to include'
+            cand --type 'Filter by type: f=file, d=dir, l=symlink'
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand -i 'Case insensitive search'
+            cand --ignore-case 'Case insensitive search'
+            cand -s 'Case sensitive search'
+            cand --case-sensitive 'Case sensitive search'
+            cand -F 'Treat patterns as literal strings'
+            cand --fixed-strings 'Treat patterns as literal strings'
+            cand -p 'Search full path (default: filename only)'
+            cand --full-path 'Search full path (default: filename only)'
+            cand -H 'Search hidden files and directories'
+            cand --hidden 'Search hidden files and directories'
+            cand -L 'Follow symbolic links'
+            cand --follow-links 'Follow symbolic links'
+            cand -a 'Print absolute paths'
+            cand --absolute-path 'Print absolute paths'
+            cand -d 'Exclude sendonly/publicreadonly folders from search'
+            cand --download 'Exclude sendonly/publicreadonly folders from search'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
@@ -219,6 +246,14 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;sort'= {
             cand --by 'by'
+            cand --min-seeders 'Filter files with fewer than N seeders'
+            cand --max-seeders 'Filter files with more than N seeders'
+            cand --niche 'Ideal popularity (peer count) for niche scoring'
+            cand --frecency-weight 'Divisor for recency weighting in frecency calculation'
+            cand --limit-size 'Quit after printing N bytes of files'
+            cand --depth 'Constrain folder aggregates by depth: N, +N (min), -N (max)'
+            cand --min-depth 'Alternative min depth notation'
+            cand --max-depth 'Alternative max depth notation'
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -346,7 +381,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;init'= {
-            cand --prefix 'prefix'
             cand --mode 'mode'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -443,7 +477,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;schedule;help;help'= {
         }
         &'syncweb;subscribe'= {
-            cand --prefix 'prefix'
+            cand --sync-prefix 'Area prefix filter for subscription entries'
             cand --glob 'glob'
             cand --max-count 'max-count'
             cand --max-size 'max-size'
@@ -1163,8 +1197,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand shutdown 'Stop the local syncweb node'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
-            cand accept 'Accept a locally available folder'
-            cand drop 'Remove a local folder replica'
+            cand leave 'Leave and remove a synchronized folder'
+            cand unsubscribe 'Unsubscribe from a folder''s live sync loop'
             cand folders 'List managed folders'
             cand devices 'Show this device''s Iroh and Syncthing identities'
             cand config 'Show or update local configuration'
@@ -1211,9 +1245,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;join'= {
         }
-        &'syncweb;help;accept'= {
+        &'syncweb;help;leave'= {
         }
-        &'syncweb;help;drop'= {
+        &'syncweb;help;unsubscribe'= {
         }
         &'syncweb;help;folders'= {
         }

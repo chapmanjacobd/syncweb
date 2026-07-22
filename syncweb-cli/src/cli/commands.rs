@@ -16,10 +16,10 @@ pub enum Command {
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
     Join(FolderJoin),
-    #[command(about = "Accept a locally available folder")]
-    Accept { namespace: String },
-    #[command(about = "Remove a local folder replica")]
-    Drop { namespace: String },
+    #[command(about = "Leave and remove a synchronized folder")]
+    Leave(FolderSelector),
+    #[command(about = "Unsubscribe from a folder's live sync loop")]
+    Unsubscribe(FolderSelector),
     #[command(about = "List managed folders")]
     Folders,
     #[command(about = "Show this device's Iroh and Syncthing identities")]
@@ -156,6 +156,22 @@ pub struct FolderJoin {
     pub relay_fallback: bool,
     #[arg(long, help = "Add the joined folder to a named network")]
     pub network: Option<String>,
+    #[arg(long, help = "Exit after joining without entering the sync loop")]
+    pub once: bool,
+    #[arg(long, help = "Only deliver entries ingested after subscription")]
+    pub ingest_only: bool,
+    #[arg(long, help = "Ignore events emitted by this subscription session")]
+    pub ignore_self: bool,
+    #[arg(long, help = "Parent directory prepended to the path argument")]
+    pub prefix: Option<PathBuf>,
+    #[arg(long, help = "Area prefix filter for subscription entries", conflicts_with = "glob")]
+    pub sync_prefix: Option<PathBuf>,
+    #[arg(long, conflicts_with = "sync_prefix")]
+    pub glob: Option<String>,
+    #[arg(long)]
+    pub max_count: Option<u64>,
+    #[arg(long)]
+    pub max_size: Option<u64>,
 }
 
 #[derive(Debug, Args)]
@@ -179,15 +195,88 @@ pub struct FindArgs {
     pub path: PathBuf,
     #[arg(long, default_value = "glob", value_parser = ["exact", "glob", "regex"])]
     pub kind: String,
-    #[arg(long, alias = "depth")]
+    #[arg(
+        short = 'i',
+        long,
+        help = "Case insensitive search",
+        conflicts_with = "case_sensitive"
+    )]
+    pub ignore_case: bool,
+    #[arg(short = 's', long, help = "Case sensitive search", conflicts_with = "ignore_case")]
+    pub case_sensitive: bool,
+    #[arg(short = 'F', long, help = "Treat patterns as literal strings")]
+    pub fixed_strings: bool,
+    #[arg(short = 'p', long, help = "Search full path (default: filename only)")]
+    pub full_path: bool,
+    #[arg(short = 'H', long, help = "Search hidden files and directories")]
+    pub hidden: bool,
+    #[arg(short = 'L', long, help = "Follow symbolic links")]
+    pub follow_links: bool,
+    #[arg(short = 'a', long, help = "Print absolute paths")]
+    pub absolute_path: bool,
+    #[arg(
+        short = 'd',
+        long = "download",
+        alias = "dl",
+        alias = "downloadable",
+        help = "Exclude sendonly/publicreadonly folders from search"
+    )]
+    pub downloadable: bool,
+    #[arg(
+        long,
+        alias = "depth",
+        alias = "levels",
+        action = clap::ArgAction::Append,
+        help = "Depth constraints: N, +N (min), -N (max)"
+    )]
+    pub depth: Vec<String>,
+    #[arg(long, help = "Alternative min depth notation")]
+    pub min_depth: Option<usize>,
+    #[arg(long, help = "Alternative max depth notation")]
     pub max_depth: Option<usize>,
-    #[arg(long)]
-    pub min_size: Option<u64>,
-    #[arg(long)]
-    pub max_size: Option<u64>,
-    #[arg(long, alias = "ext")]
-    pub extension: Option<String>,
-    #[arg(long = "type", value_parser = ["f", "d", "l"])]
+    #[arg(
+        long,
+        alias = "size",
+        alias = "S",
+        action = clap::ArgAction::Append,
+        help = "Size constraints: N, -N, +N, N%10, +5GB, etc."
+    )]
+    pub sizes: Vec<String>,
+    #[arg(
+        long,
+        alias = "changed-within",
+        action = clap::ArgAction::Append,
+        help = "Newer than: '3 days', '2 weeks'"
+    )]
+    pub modified_within: Vec<String>,
+    #[arg(
+        long,
+        alias = "changed-before",
+        action = clap::ArgAction::Append,
+        help = "Older than: '3 years', '1 month'"
+    )]
+    pub modified_before: Vec<String>,
+    #[arg(
+        long,
+        action = clap::ArgAction::Append,
+        help = "Time modified: '-3 days' (newer), '+3 days' (older)"
+    )]
+    pub time_modified: Vec<String>,
+    #[arg(
+        short = 'e',
+        long,
+        alias = "ext",
+        alias = "exts",
+        alias = "extensions",
+        action = clap::ArgAction::Append,
+        help = "File extensions to include"
+    )]
+    pub extension: Vec<String>,
+    #[arg(
+        long = "type",
+        value_parser = ["f", "d", "l"],
+        help = "Filter by type: f=file, d=dir, l=symlink"
+    )]
     pub file_type: Option<String>,
     #[arg(
         long,
@@ -201,8 +290,40 @@ pub struct FindArgs {
 pub struct SortArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
-    #[arg(long = "by", alias = "sort", default_value = "niche", value_parser = ["niche", "frecency", "peers", "random", "folder"])]
+    #[arg(
+        long = "by",
+        alias = "sort",
+        alias = "u",
+        default_value = "niche",
+        value_parser = [
+            "niche", "frecency", "peers", "random", "folder",
+            "time", "date", "week", "month", "year", "size",
+            "folder-size", "folder-avg-size", "folder-date", "folder-time", "count"
+        ]
+    )]
     pub by: String,
+    #[arg(long, help = "Filter files with fewer than N seeders")]
+    pub min_seeders: Option<usize>,
+    #[arg(long, help = "Filter files with more than N seeders")]
+    pub max_seeders: Option<usize>,
+    #[arg(long, help = "Ideal popularity (peer count) for niche scoring")]
+    pub niche: Option<usize>,
+    #[arg(long, help = "Divisor for recency weighting in frecency calculation")]
+    pub frecency_weight: Option<u64>,
+    #[arg(long, alias = "TS", alias = "LS", help = "Quit after printing N bytes of files")]
+    pub limit_size: Option<String>,
+    #[arg(
+        long,
+        alias = "d",
+        alias = "levels",
+        action = clap::ArgAction::Append,
+        help = "Constrain folder aggregates by depth: N, +N (min), -N (max)"
+    )]
+    pub depth: Vec<String>,
+    #[arg(long, help = "Alternative min depth notation")]
+    pub min_depth: Option<usize>,
+    #[arg(long, help = "Alternative max depth notation")]
+    pub max_depth: Option<usize>,
     #[arg(
         long,
         default_value_t = 0,
@@ -224,6 +345,12 @@ pub struct StatArgs {
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct FolderSelector {
+    #[arg(help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
 }
 
 #[derive(Debug, Args)]
@@ -381,16 +508,15 @@ pub enum ScheduleCommand {
 
 #[derive(Debug, Args)]
 pub struct SubscribeArgs {
-    pub ticket: String,
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
+    #[arg(help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
     #[arg(long, help = "Only deliver entries ingested after subscription")]
     pub ingest_only: bool,
     #[arg(long, help = "Ignore events emitted by this subscription session")]
     pub ignore_self: bool,
-    #[arg(long, conflicts_with = "glob")]
-    pub prefix: Option<PathBuf>,
-    #[arg(long, conflicts_with = "prefix")]
+    #[arg(long, help = "Area prefix filter for subscription entries", conflicts_with = "glob")]
+    pub sync_prefix: Option<PathBuf>,
+    #[arg(long, conflicts_with = "sync_prefix")]
     pub glob: Option<String>,
     #[arg(long)]
     pub max_count: Option<u64>,

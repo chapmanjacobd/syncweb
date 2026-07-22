@@ -28,6 +28,7 @@ pub mod indexing;
 pub mod init;
 pub mod net;
 pub mod node;
+pub mod parsing;
 pub mod schedule;
 pub mod search;
 pub mod snapshot;
@@ -45,3 +46,4 @@ pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImport
 pub use folder::archive_verify::{
     DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
 };
+pub use sync::{ActiveSession, cancel_session, is_active};

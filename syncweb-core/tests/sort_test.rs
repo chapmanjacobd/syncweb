@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-use syncweb_core::sort::{SortCriterion, SortEntry, Sorter};
+use syncweb_core::sort::{SortConfig, SortCriterion, SortEntry, Sorter};
 
 fn entry_with(path: &str, niche: f64, frequency: u64, peers: usize, folder: &str) -> SortEntry {
     SortEntry::new(path)
@@ -10,6 +10,12 @@ fn entry_with(path: &str, niche: f64, frequency: u64, peers: usize, folder: &str
         .with_peers(peers)
 }
 
+fn sort_with(criterion: SortCriterion, entries: &mut [SortEntry]) {
+    let mut config = SortConfig::default();
+    config.criteria = vec![(criterion, true)];
+    Sorter::new(config).sort(entries);
+}
+
 #[test]
 fn test_niche_sort() {
     let mut entries = vec![
@@ -17,7 +23,7 @@ fn test_niche_sort() {
         entry_with("rare.txt", 0.9, 1, 1, "f"),
         entry_with("medium.txt", 0.5, 5, 3, "f"),
     ];
-    Sorter::new(SortCriterion::Niche).sort(&mut entries);
+    sort_with(SortCriterion::Niche, &mut entries);
 
     let paths: Vec<_> = entries.into_iter().map(|e| e.path).collect();
     assert_eq!(
@@ -36,17 +42,17 @@ fn test_frecency_sort() {
         SortEntry::new("stale.txt")
             .with_folder("f")
             .with_frequency(1)
-            .with_last_accessed(SystemTime::now() - Duration::new(2_592_000, 0)),
+            .with_modified(SystemTime::now() - Duration::new(2_592_000, 0)),
         SortEntry::new("fresh.txt")
             .with_folder("f")
             .with_frequency(1)
-            .with_last_accessed(SystemTime::now()),
+            .with_modified(SystemTime::now()),
         SortEntry::new("frequent.txt")
             .with_folder("f")
             .with_frequency(100)
-            .with_last_accessed(SystemTime::now() - Duration::new(86_400, 0)),
+            .with_modified(SystemTime::now() - Duration::new(86_400, 0)),
     ];
-    Sorter::new(SortCriterion::Frecency).sort(&mut entries);
+    sort_with(SortCriterion::Frecency, &mut entries);
 
     let paths: Vec<_> = entries.into_iter().map(|e| e.path).collect();
     assert_eq!(
@@ -66,7 +72,7 @@ fn test_peers_sort() {
         entry_with("popular.txt", 0.0, 0, 10, "f"),
         entry_with("mid.txt", 0.0, 0, 5, "f"),
     ];
-    Sorter::new(SortCriterion::Peers).sort(&mut entries);
+    sort_with(SortCriterion::Peers, &mut entries);
 
     let paths: Vec<_> = entries.into_iter().map(|e| e.path).collect();
     assert_eq!(
@@ -90,7 +96,7 @@ fn test_random_sort() {
     ];
 
     let original_order: Vec<_> = entries.iter().map(|e| e.path.clone()).collect();
-    Sorter::new(SortCriterion::Random).sort(&mut entries);
+    sort_with(SortCriterion::Random, &mut entries);
     let shuffled_order: Vec<_> = entries.iter().map(|e| e.path.clone()).collect();
 
     // Verify all entries are still present (just reordered)
@@ -112,7 +118,7 @@ fn test_folder_aggregate() {
         entry_with("c/1.txt", 0.0, 0, 0, "gamma"),
         entry_with("c/2.txt", 0.0, 0, 0, "gamma"),
     ];
-    Sorter::new(SortCriterion::FolderAggregate).sort(&mut entries);
+    sort_with(SortCriterion::FolderAggregate, &mut entries);
 
     let folders: Vec<_> = entries.iter().map(|e| e.folder.as_str()).collect();
     let alpha_count = folders.iter().filter(|&&f| f == "alpha").count();

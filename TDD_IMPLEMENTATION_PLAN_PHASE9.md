@@ -28,13 +28,38 @@ Phase 9 closes this gap using techniques inspired by the smart ban pattern from 
 | No retroactive cleanup | Stale leases survive until expiry | After success, invalidate providers that failed definitively |
 | `ReplicationResult` omits failures | Only `fetched_from` on success | `failed_from` + `invalidated_leases` fields |
 
+## Existing Implementation to Extend (Not Recreate)
+
+Phase 9 builds on the Phase 8.7 resilience implementation already present in
+`syncweb-core/src/indexing/resilience.rs`:
+
+- Extend the existing `ProviderLeaseTracker`; do not introduce a second lease
+  or provider-health registry.
+- Extend the existing `ResilienceService::ensure_replication` path; preserve
+  its health checks, consistent-hash selection, jitter, generation
+  cancellation, blob fetch, pinning, and lease gossip behavior.
+- Extend the existing `ReplicationResult` rather than creating a separate
+  repair-result type.
+- Reuse `GossipService` and the existing provider-lease gossip topic for
+  transport primitives, while keeping provider trust signals distinct from
+  lease messages.
+- Extend `syncweb-core/src/indexing/wot.rs` and reuse `TrustPolicy`,
+  `TrustDelegation`, signature verification, expiry, and delegated-trust
+  evaluation. Provider trust records are provider-specific and must not replace
+  content metadata, moderation, revocation, or attestation records.
+- Keep Phase 9 provider bans separate from the existing content/device/file
+  denylist in `syncweb-core/src/indexing/denylist.rs`.
+
+The implementation checklist and tests below are additions to these existing
+surfaces unless a new file is explicitly listed.
+
 ---
 
 ## Phase 9A: Fetch Failure Intelligence — Weeks 21-22
 
 ### 9.1 Fetch Error Taxonomy (TDD)
 
-**New types** in `syncweb-core/src/indexing/resilience.rs`:
+**New types** in the existing `syncweb-core/src/indexing/resilience.rs`:
 
 ```rust
 pub enum FetchFailureKind {
@@ -60,10 +85,13 @@ pub struct FetchFailure {
 - [ ] `test_fetch_failure_definitive_vs_transient` - `NotFound`/`Corruption` are definitive; others transient
 - [ ] `test_fetch_failure_serialization` - round-trip serialize/deserialize
 - [ ] `test_fetch_failure_timestamp` - defaults to current epoch
+- [ ] `test_fetch_rejects_data_above_expected_size` - oversized provider streams are stopped before hashing/buffering
+- [ ] `test_fetch_rejects_truncated_data` - short streams fail without being classified as valid content
+- [ ] `test_fetch_memory_usage_is_bounded` - streaming validation does not retain an unbounded provider response
 
 ### 9.2 Failure Tracking (TDD)
 
-**New type** in `resilience.rs`:
+**Extend `ProviderLeaseTracker`** in the existing `resilience.rs`:
 
 ```rust
 pub struct FailureRecord {
@@ -84,7 +112,13 @@ pub struct FailureRecord {
 - `consecutive_failures(hash, provider)` → consecutive failure count
 - `is_definitively_failed(hash, provider)` → consecutive >= threshold (default 3)
 - `clear_failures_for_provider(hash, provider)` → reset on success
-- `purge_stale_failures(now, ttl)` → remove old failure records
+- `purge_stale_failures(now, ttl)` → aggressively remove old failure records and empty hash/provider buckets
+
+Failure history must be bounded per `(hash, provider)`. Add a configurable
+`max_failures_per_provider` cap (default 128); recording a new failure evicts the
+oldest detail entries after applying the cap, while preserving the aggregate
+counts needed for reputation and ban decisions. Run stale-failure cleanup on the
+recording path and at the start of retroactive invalidation.
 
 **Unit Tests** (`tests/unit/indexing/resilience_test.rs`):
 - [ ] `test_record_failure_increments_count` - consecutive count goes up
@@ -95,6 +129,8 @@ pub struct FailureRecord {
 - [ ] `test_failure_per_provider_isolation` - failures for provider A don't affect provider B
 - [ ] `test_definitive_failure_requires_consecutive` - non-consecutive failures don't trigger definitive
 - [ ] `test_transient_failure_not_definitive` - timeout alone is never definitive
+- [ ] `test_failure_history_is_capped_per_provider` - oldest records are evicted at the configured cap
+- [ ] `test_purge_stale_failures_removes_empty_buckets` - stale cleanup leaves no empty hash/provider entries
 
 ### 9.3 ReplicationResult Failure Reporting (TDD)
 
@@ -115,7 +151,7 @@ pub invalidated_leases: Vec<PublicKey>,
 
 ### 9.4 Lease Invalidation (TDD)
 
-**New type** in `resilience.rs`:
+**New ban types** in the existing `resilience.rs`:
 
 ```rust
 pub enum BanSource {
@@ -213,6 +249,10 @@ Before fetch loop:
 
 **New file** `syncweb-core/src/indexing/reputation.rs`:
 
+This store is separate from `ProviderLeaseTracker`: leases describe current
+availability claims, while reputation stores historical fetch outcomes and
+trust observations.
+
 ```rust
 pub struct ProviderReputation {
     pub provider: PublicKey,
@@ -234,6 +274,8 @@ pub struct ReputationConfig {
     pub decay_half_life: Duration,    // score decay over time (default 24h)
     pub failure_weight: f64,          // weight of failures vs successes (default 2.0)
     pub temporary_ban_duration: Duration, // auto-ban after consecutive failures (default 1h)
+    pub auto_ban_backoff_factor: f64, // repeated bans for the same key (default 2.0)
+    pub max_auto_ban_duration: Duration, // cap repeated-ban backoff
 }
 ```
 
@@ -261,6 +303,9 @@ pub struct ReputationConfig {
 - [ ] `test_reputation_consecutive_failures` - consecutive count tracks streak
 - [ ] `test_reputation_success_resets_consecutive` - success breaks failure streak
 - [ ] `test_reputation_auto_ban_threshold` - triggers auto-ban at threshold
+- [ ] `test_reputation_auto_ban_backoff_increases_on_rejoin` - repeated bans for one public key use exponential durations
+- [ ] `test_reputation_auto_ban_backoff_is_capped` - repeated bans never exceed the configured maximum
+- [ ] `test_reputation_new_key_is_not_assumed_to_be_same_provider` - WoT remains the mitigation for identity rotation/Sybil keys
 - [ ] `test_reputation_min_samples` - low sample count returns neutral score
 - [ ] `test_reputation_store_ranking` - providers sorted by score
 - [ ] `test_reputation_store_skip_unreliable` - below threshold filtered out
@@ -288,7 +333,7 @@ pub struct ProviderTrustSignal {
 }
 ```
 
-Trust signals are published to an iroh-docs namespace (one per reporter or per community). Other nodes subscribe to trust streams from reporters they trust (via the WoT delegation chain from Phase 8.8).
+Trust signals are published to an iroh-docs namespace (one per reporter or per community). Other nodes subscribe to trust streams from reporters they trust (via the existing `TrustPolicy` delegation chain). Do not publish one gossip record for every fetch result by default: buffer/coalesce observations and publish on a configurable batch interval or when a provider crosses a reputation threshold (for example, Reliable → Unreliable). This is a new provider-trust stream; it does not replace the existing provider-lease gossip topic.
 
 **Methods**:
 - `ProviderTrustSignal::new(...)` → create unsigned signal
@@ -310,6 +355,9 @@ Trust signals are published to an iroh-docs namespace (one per reporter or per c
 - [ ] `test_reputation_store_ingest_trusted_signal` - trusted signal updates score
 - [ ] `test_reputation_store_ingest_untrusted_signal` - untrusted signal ignored
 - [ ] `test_reputation_store_ingest_delegated_signal` - delegated trust chains work
+- [ ] `test_trust_signals_batch_and_coalesce` - repeated observations produce one bounded batch
+- [ ] `test_trust_signal_emitted_on_reputation_transition` - threshold crossing emits a signal
+- [ ] `test_trust_signal_not_emitted_for_ordinary_success` - steady-state successes do not flood gossip
 
 ### 9.9 Manual Provider Trust Records (TDD)
 
@@ -414,6 +462,14 @@ When evaluating providers for `ensure_replication`:
 - [ ] `test_wot_delegation_provider_trust` - Delegated trust affects provider evaluation
 - [ ] `test_full_replication_with_smart_ban` - End-to-end: lease → fail → ban → retry other → success
 
+### 9.13 Resilience Hardening Integration Tests
+
+These tests are required before the Phase 9 gates are considered complete:
+- [ ] `test_oversized_corruption_response_is_bounded` - a malicious provider cannot exhaust memory or CPU with an infinite/random byte stream
+- [ ] `test_failure_record_retention_under_sustained_failures` - repeated failures remain within the per-provider cap
+- [ ] `test_rejoined_provider_receives_exponential_ban` - repeated bans for one public key back off instead of using a flat duration
+- [ ] `test_trust_gossip_is_batched` - high-volume fetch outcomes do not create one network message per outcome
+
 ---
 
 ## Phase 9E: Performance Benchmarks (Continuous)
@@ -442,8 +498,8 @@ Run with: `cargo bench --all-features`
 
 | File | Changes |
 |------|---------|
-| `syncweb-core/src/indexing/resilience.rs` | `FetchFailureKind`, `FetchFailure`, `FailureRecord`, `BanRecord`, `BanSource`, failure tracking + ban tracking on `ProviderLeaseTracker`, smart ban integration in `ensure_replication`, retroactive invalidation |
-| `syncweb-core/src/indexing/wot.rs` | `ProviderTrustAction`, `ProviderTrustRecord`, `ProviderTrustDecision`, provider trust evaluation in `WotService` |
+| `syncweb-core/src/indexing/resilience.rs` | Extend the existing lease tracker/service with `FetchFailureKind`, `FetchFailure`, `FailureRecord`, `BanRecord`, `BanSource`, failure tracking, provider bans, smart-ban integration, richer replication results, and retroactive invalidation |
+| `syncweb-core/src/indexing/wot.rs` | Extend the existing `WotService` with `ProviderTrustAction`, `ProviderTrustRecord`, `ProviderTrustDecision`, and provider trust evaluation |
 | `syncweb-core/src/indexing.rs` | Re-export new types from `reputation` module |
 | `syncweb-core/src/error.rs` | (Optional) `FetchFailure` variant if string-parsing approach is insufficient |
 
@@ -453,9 +509,9 @@ Run with: `cargo bench --all-features`
 
 | Sub-Phase | Gate |
 |-----------|------|
-| 9.1-9.3 | `FetchFailureKind` classifies errors, failure tracking records/counts/clears, `ReplicationResult` reports failures |
+| 9.1-9.3 | `FetchFailureKind` classifies errors, bounded fetch validation prevents tarpit streams, failure tracking records/counts/clears, `ReplicationResult` reports failures |
 | 9.4-9.6 | Lease invalidation removes leases, smart ban integration in `ensure_replication`, retroactive cleanup works |
-| 9.7-9.10 | Reputation scoring tracks history, trust signals gossip/subscribe, provider trust records evaluate correctly |
+| 9.7-9.10 | Reputation scoring tracks history with rejoin backoff, trust signals batch/threshold-gossip, provider trust records evaluate correctly |
 | 9.11-9.12 | All CLI commands work, integration tests pass, CI green |
 
 ---

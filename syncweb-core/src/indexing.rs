@@ -16,9 +16,10 @@ pub use links::{
     current_epoch_seconds, fetch_from_mirrors,
 };
 pub use resilience::{
-    AvailabilityHealth, FetchWait, LeaseUpdate, ProviderLease, ProviderLeaseTracker, ReplicationBudget,
-    ReplicationResult, ResilienceConfig, ResilienceService, consistent_hashing_selection, jitter_delay,
-    resilience_topic, xor_distance,
+    AvailabilityHealth, FailureRecord, FetchFailure, FetchFailureKind, FetchWait, LeaseUpdate, ProviderLease,
+    ProviderLeaseTracker, ReplicationBudget, ReplicationResult, ResilienceConfig, ResilienceService,
+    consistent_hashing_selection, jitter_delay, resilience_topic, validate_bounded_fetch, validate_bounded_stream,
+    validate_fetch_stream, xor_distance,
 };
 pub use wot::{
     Attestation, AttestationKind, MetadataEntry, ModerationAction, ModerationContext, ModerationDecision,

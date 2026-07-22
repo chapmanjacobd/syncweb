@@ -47,6 +47,9 @@ local observations, while `ReplicationBudget` controls the minimum provider
 count, responsible peer count, jitter window, and observation lifetime.
 `ensure_replication` uses the existing `BlobStore` fetch path and pins repaired
 content under an indexing-owned tag; it does not alter document synchronization.
+Repair results also retain provider-specific failure kinds, bounded failure
+history, and aggregate consecutive-failure state so callers can distinguish
+transient network errors from definitive missing or corrupt data.
 
 ### 3. Web of Trust (WoT) Metadata
 Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running automatically on all clients, metadata extraction is crowdsourced to trusted entities.

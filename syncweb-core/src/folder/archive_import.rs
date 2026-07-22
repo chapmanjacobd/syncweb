@@ -106,7 +106,11 @@ impl DropImporter {
     ///
     /// Returns an error if decompression, CAR parsing, signature validation,
     /// dependency validation, or blob ingestion fails.
-    pub async fn import_drop(&self, input: impl AsRef<Path>, options: DropImportOptions) -> Result<DropImportResult> {
+    pub async fn import_archive(
+        &self,
+        input: impl AsRef<Path>,
+        options: DropImportOptions,
+    ) -> Result<DropImportResult> {
         let _import_guard = self.import_lock.lock().await;
         let input_path = input.as_ref();
         let file = fs::File::open(input_path)
@@ -243,7 +247,7 @@ impl DropImporter {
 ///
 /// Returns an error if import, materialization, namespace creation, or
 /// manifest publication fails.
-pub async fn import_drop(
+pub async fn import_archive(
     node: &IrohNode,
     input: impl AsRef<Path>,
     target_dir: impl AsRef<Path>,
@@ -253,7 +257,7 @@ pub async fn import_drop(
         DropImportOptions::default().with_filter(value.clone())
     });
     let importer = DropImporter::new(node.blob_store().clone());
-    let mut result = importer.import_drop(input, options).await?;
+    let mut result = importer.import_archive(input, options).await?;
     importer.materialize(&result, target_dir).await?;
 
     let folder = FolderManager::new(node).create(SyncMode::SendReceive).await?;

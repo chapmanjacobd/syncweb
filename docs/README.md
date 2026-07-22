@@ -23,7 +23,7 @@ Focused documentation for the syncweb design and implementation.
 
 | File | Content |
 |------|---------|
-| [drop_format.md](drop_format.md) | Drop format design |
+| [archive_format.md](archive_format.md) | Archive format design |
 | [indexing.md](indexing.md) | Opt-in indexing service |
 
 ---

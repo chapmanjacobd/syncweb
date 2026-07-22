@@ -529,7 +529,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --no-color 'Disable colored output'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand drop 'Export package versions as compressed CAR drop files'
+            cand drop 'Export package versions as compressed CAR archive files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -549,7 +549,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand export 'Export one or more package directories'
-            cand import 'Import and install a compressed CAR drop file'
+            cand import 'Import and install a compressed CAR archive file'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;package;drop;export'= {
@@ -573,7 +573,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;package;drop;help'= {
             cand export 'Export one or more package directories'
-            cand import 'Import and install a compressed CAR drop file'
+            cand import 'Import and install a compressed CAR archive file'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;package;drop;help;export'= {
@@ -660,7 +660,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;help'= {
-            cand drop 'Export package versions as compressed CAR drop files'
+            cand drop 'Export package versions as compressed CAR archive files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -674,7 +674,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;package;help;drop'= {
             cand export 'Export one or more package directories'
-            cand import 'Import and install a compressed CAR drop file'
+            cand import 'Import and install a compressed CAR archive file'
         }
         &'syncweb;package;help;drop;export'= {
         }
@@ -1297,7 +1297,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;collection;publish'= {
         }
         &'syncweb;help;package'= {
-            cand drop 'Export package versions as compressed CAR drop files'
+            cand drop 'Export package versions as compressed CAR archive files'
             cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest'
             cand install 'Verify, stage, and atomically install a collection version'
@@ -1310,7 +1310,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;package;drop'= {
             cand export 'Export one or more package directories'
-            cand import 'Import and install a compressed CAR drop file'
+            cand import 'Import and install a compressed CAR archive file'
         }
         &'syncweb;help;package;drop;export'= {
         }

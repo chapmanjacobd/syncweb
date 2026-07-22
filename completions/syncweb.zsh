@@ -742,7 +742,7 @@ _arguments "${_arguments_options[@]}" : \
     (drop)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-package-drop-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-package-archive-command-$line[1]:"
         case $line[1] in
             (export)
 _arguments "${_arguments_options[@]}" : \
@@ -779,7 +779,7 @@ _arguments "${_arguments_options[@]}" : \
     (help)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-package-drop-help-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-package-archive-help-command-$line[1]:"
         case $line[1] in
             (export)
 _arguments "${_arguments_options[@]}" : \
@@ -2034,7 +2034,7 @@ _arguments "${_arguments_options[@]}" : \
     (drop)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-package-drop-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-help-package-archive-command-$line[1]:"
         case $line[1] in
             (export)
 _arguments "${_arguments_options[@]}" : \
@@ -2916,7 +2916,7 @@ _syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands() {
 (( $+functions[_syncweb__subcmd__help__subcmd__package_commands] )) ||
 _syncweb__subcmd__help__subcmd__package_commands() {
     local commands; commands=(
-'drop:Export package versions as compressed CAR drop files' \
+'drop:Export package versions as compressed CAR archive files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -2933,19 +2933,19 @@ _syncweb__subcmd__help__subcmd__package_commands() {
 _syncweb__subcmd__help__subcmd__package__subcmd__drop_commands() {
     local commands; commands=(
 'export:Export one or more package directories' \
-'import:Import and install a compressed CAR drop file' \
+'import:Import and install a compressed CAR archive file' \
     )
-    _describe -t commands 'syncweb help package drop commands' commands "$@"
+    _describe -t commands 'syncweb help package archive commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__export_commands] )) ||
 _syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb help package drop export commands' commands "$@"
+    _describe -t commands 'syncweb help package archive export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__import_commands] )) ||
 _syncweb__subcmd__help__subcmd__package__subcmd__drop__subcmd__import_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb help package drop import commands' commands "$@"
+    _describe -t commands 'syncweb help package archive import commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__info_commands] )) ||
 _syncweb__subcmd__help__subcmd__package__subcmd__info_commands() {
@@ -3563,7 +3563,7 @@ _syncweb__subcmd__network__subcmd__test-relay_commands() {
 (( $+functions[_syncweb__subcmd__package_commands] )) ||
 _syncweb__subcmd__package_commands() {
     local commands; commands=(
-'drop:Export package versions as compressed CAR drop files' \
+'drop:Export package versions as compressed CAR archive files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -3581,49 +3581,49 @@ _syncweb__subcmd__package_commands() {
 _syncweb__subcmd__package__subcmd__drop_commands() {
     local commands; commands=(
 'export:Export one or more package directories' \
-'import:Import and install a compressed CAR drop file' \
+'import:Import and install a compressed CAR archive file' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'syncweb package drop commands' commands "$@"
+    _describe -t commands 'syncweb package archive commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__export_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package drop export commands' commands "$@"
+    _describe -t commands 'syncweb package archive export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__help_commands() {
     local commands; commands=(
 'export:Export one or more package directories' \
-'import:Import and install a compressed CAR drop file' \
+'import:Import and install a compressed CAR archive file' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'syncweb package drop help commands' commands "$@"
+    _describe -t commands 'syncweb package archive help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__export_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package drop help export commands' commands "$@"
+    _describe -t commands 'syncweb package archive help export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__help_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package drop help help commands' commands "$@"
+    _describe -t commands 'syncweb package archive help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__import_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__help__subcmd__import_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package drop help import commands' commands "$@"
+    _describe -t commands 'syncweb package archive help import commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__drop__subcmd__import_commands] )) ||
 _syncweb__subcmd__package__subcmd__drop__subcmd__import_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package drop import commands' commands "$@"
+    _describe -t commands 'syncweb package archive import commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__help_commands] )) ||
 _syncweb__subcmd__package__subcmd__help_commands() {
     local commands; commands=(
-'drop:Export package versions as compressed CAR drop files' \
+'drop:Export package versions as compressed CAR archive files' \
 'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest' \
 'install:Verify, stage, and atomically install a collection version' \
@@ -3641,14 +3641,14 @@ _syncweb__subcmd__package__subcmd__help_commands() {
 _syncweb__subcmd__package__subcmd__help__subcmd__drop_commands() {
     local commands; commands=(
 'export:Export one or more package directories' \
-'import:Import and install a compressed CAR drop file' \
+'import:Import and install a compressed CAR archive file' \
     )
     _describe -t commands 'syncweb package help drop commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__export_commands] )) ||
 _syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb package help drop export commands' commands "$@"
+    _describe -t commands 'syncweb package help archive export commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__import_commands] )) ||
 _syncweb__subcmd__package__subcmd__help__subcmd__drop__subcmd__import_commands() {

@@ -127,7 +127,7 @@ async fn test_export_drop_basic_and_empty_package() -> Result<()> {
     }
     let output = directory.path().join("package.car.zst");
     let result = DropExporter::new(node.blob_store().clone())
-        .export_drop(&collection_manifest, &output)
+        .export_archive(&collection_manifest, &output)
         .await?;
     anyhow::ensure!(result.entry_count == 2);
     anyhow::ensure!(result.block_count == 3);
@@ -140,7 +140,7 @@ async fn test_export_drop_basic_and_empty_package() -> Result<()> {
     let empty_manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
     let empty_output = directory.path().join("empty.car.zst");
     let empty_result = DropExporter::new(node.blob_store().clone())
-        .export_drop(&empty_manifest, &empty_output)
+        .export_archive(&empty_manifest, &empty_output)
         .await?;
     anyhow::ensure!(empty_result.entry_count == 0);
     anyhow::ensure!(read_archive(&empty_output).await?.len() == 1);
@@ -200,8 +200,8 @@ async fn test_export_drop_concurrent_replacement_is_valid() -> Result<()> {
     let exporter = DropExporter::new(node.blob_store().clone());
     let output = directory.path().join("concurrent.car.zst");
     let (first, second) = tokio::join!(
-        exporter.export_drop(&manifest, &output),
-        exporter.export_drop(&manifest, &output)
+        exporter.export_archive(&manifest, &output),
+        exporter.export_archive(&manifest, &output)
     );
     first?;
     second?;

@@ -248,7 +248,7 @@ fn download_single_file_and_directory() -> anyhow::Result<()> {
 }
 
 #[test]
-fn package_drop_export_cli() -> anyhow::Result<()> {
+fn package_archive_export_cli() -> anyhow::Result<()> {
     let data_dir = test_dir("drop-export-data");
     let package_dir = test_dir("drop-export-package");
     fs::create_dir_all(&package_dir)?;
@@ -277,7 +277,6 @@ fn package_drop_export_cli() -> anyhow::Result<()> {
         &data_dir,
         &[
             "package",
-            "drop",
             "export",
             "--filter",
             "ext!=mp4",
@@ -285,7 +284,7 @@ fn package_drop_export_cli() -> anyhow::Result<()> {
             output.to_str().context("UTF-8 output path")?,
         ],
     )?;
-    assert_success(&export, "package drop export")?;
+    assert_success(&export, "package archive export")?;
     ensure!(output.is_file(), "drop archive should be created");
     ensure!(fs::metadata(output)?.len() > 0, "drop archive should not be empty");
 

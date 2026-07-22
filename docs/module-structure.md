@@ -74,7 +74,7 @@ syncweb/
 |   |   +-- create.rs           # syncweb create
 |   |   +-- join.rs             # syncweb join
 |   |   +-- accept.rs           # syncweb accept
-|   |   +-- drop.rs             # syncweb drop
+|   |   +-- archive.rs          # syncweb archive
 |   |   +-- ls.rs               # syncweb ls
 |   |   +-- find.rs             # syncweb find
 |   |   +-- download.rs         # syncweb download

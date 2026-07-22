@@ -452,10 +452,20 @@ pub enum CollectionCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PackageCommand {
-    #[command(about = "Export package versions as compressed CAR drop files")]
-    Drop {
-        #[command(subcommand)]
-        command: DropCommand,
+    #[command(about = "Export one or more package directories as compressed CAR archive files")]
+    Export {
+        #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_OUTPUT")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long, value_name = "EXPRESSION")]
+        filter: Vec<String>,
+    },
+    #[command(about = "Import and install a compressed CAR archive file")]
+    Import {
+        archive: PathBuf,
+        #[arg(long, value_name = "EXPRESSION")]
+        filter: Vec<String>,
     },
     #[command(about = "List locally installed packages, optionally filtering by text")]
     Search {
@@ -500,25 +510,6 @@ pub enum PackageCommand {
     Versions { collection: String },
     #[command(about = "Switch the active installed collection version")]
     Switch { collection: String, version: String },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum DropCommand {
-    #[command(about = "Export one or more package directories")]
-    Export {
-        #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_OUTPUT")]
-        paths: Vec<PathBuf>,
-        #[arg(long)]
-        version: Option<String>,
-        #[arg(long, value_name = "EXPRESSION")]
-        filter: Vec<String>,
-    },
-    #[command(about = "Import and install a compressed CAR drop file")]
-    Import {
-        archive: PathBuf,
-        #[arg(long, value_name = "EXPRESSION")]
-        filter: Vec<String>,
-    },
 }
 
 #[derive(Debug, Subcommand)]

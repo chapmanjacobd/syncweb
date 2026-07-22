@@ -88,7 +88,7 @@ impl DropVerifier {
 ///
 /// Returns an error if the archive is truncated, malformed, tampered with, or
 /// inconsistent with its manifest.
-pub async fn verify_drop(path: impl AsRef<Path>) -> Result<DropVerifyResult> {
+pub async fn verify_archive(path: impl AsRef<Path>) -> Result<DropVerifyResult> {
     DropVerifier::new().verify(path).await
 }
 

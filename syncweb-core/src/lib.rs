@@ -39,9 +39,9 @@ pub mod sync;
 pub mod verify;
 
 pub use error::{Error, Result, SyncwebError};
-pub use folder::drop_export;
-pub use folder::drop_import;
-pub use folder::drop_import::{DropImportOptions, DropImportResult, DropImporter, import_drop};
-pub use folder::drop_verify::{
-    DropVerificationResult, DropVerifier, DropVerifyResult, verify_drop, verify_drop_reader,
+pub use folder::archive_export;
+pub use folder::archive_import;
+pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImporter, import_archive};
+pub use folder::archive_verify::{
+    DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
 };

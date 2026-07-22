@@ -10,8 +10,8 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
     commands::{
-        BackupArgs, CollectionCommand, Command, ConfigCommand, DropCommand, HealthArgs, ImportArgs, NetworkCommand,
-        PackageCommand, ScheduleCommand, SnapshotCommand, StatsArgs, VerifyArgs, WatchArgs,
+        BackupArgs, CollectionCommand, Command, ConfigCommand, HealthArgs, ImportArgs, NetworkCommand, PackageCommand,
+        ScheduleCommand, SnapshotCommand, StatsArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version, run_repl},
 };
@@ -1321,8 +1321,11 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
             bootstrap: bootstrap_values,
             timeout_ms,
         } => handle_package_search(data_dir, query, bootstrap_values, timeout_ms, &packages, output_json).await?,
-        PackageCommand::Drop { command: drop_command } => {
-            handle_package_drop(data_dir, drop_command, output_json).await?;
+        PackageCommand::Export { paths, version, filter } => {
+            handle_package_archive_export(data_dir, paths, version, filter, output_json).await?;
+        }
+        PackageCommand::Import { archive, filter } => {
+            handle_package_archive_import(data_dir, archive, filter, output_json).await?;
         }
         PackageCommand::Info {
             manifest: manifest_path,
@@ -1446,20 +1449,7 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
 }
 
 #[async_recursion]
-async fn handle_package_drop(data_dir: &std::path::Path, command: DropCommand, output_json: bool) -> Result<()> {
-    match command {
-        DropCommand::Export { paths, version, filter } => {
-            handle_package_drop_export(data_dir, paths, version, filter, output_json).await?;
-        }
-        DropCommand::Import { archive, filter } => {
-            handle_package_drop_import(data_dir, archive, filter, output_json).await?;
-        }
-    }
-    Ok(())
-}
-
-#[async_recursion]
-async fn handle_package_drop_import(
+async fn handle_package_archive_import(
     data_dir: &std::path::Path,
     archive: std::path::PathBuf,
     filters: Vec<String>,
@@ -1474,7 +1464,7 @@ async fn handle_package_drop_import(
 
     let node = open_node(data_dir).await?;
     let importer = DropImporter::new(node.blob_store().clone());
-    let result = importer.import_drop(&archive, options).await?;
+    let result = importer.import_archive(&archive, options).await?;
     let collection = result.collection_id;
     let version = result.version.clone();
     if packages
@@ -1539,7 +1529,7 @@ async fn handle_package_drop_import(
 }
 
 #[async_recursion]
-async fn handle_package_drop_export(
+async fn handle_package_archive_export(
     data_dir: &std::path::Path,
     paths: Vec<std::path::PathBuf>,
     version: Option<String>,

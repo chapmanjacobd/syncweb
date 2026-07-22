@@ -61,7 +61,7 @@ impl DropExportOptions {
     }
 }
 
-/// Information about a completed drop export.
+/// Information about a completed archive export.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct DropExportResult {
@@ -96,7 +96,7 @@ impl DropExporter {
     ///
     /// Returns an error if the manifest is invalid, content is unavailable, or
     /// the archive cannot be written.
-    pub async fn export_drop(
+    pub async fn export_archive(
         &self,
         manifest: &CollectionManifest,
         output: impl AsRef<Path>,
@@ -214,7 +214,7 @@ impl DropExporter {
 ///
 /// Returns an error if the manifest or referenced content is invalid or the
 /// archive cannot be written.
-pub async fn export_drop(
+pub async fn export_archive(
     blob_store: BlobStore,
     manifest: &CollectionManifest,
     output: impl AsRef<Path>,
@@ -423,6 +423,9 @@ async fn remove_if_present(path: &Path) -> Result<()> {
     match fs::remove_file(path).await {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(SyncwebError::operation("failed to remove temporary drop file", error)),
+        Err(error) => Err(SyncwebError::operation(
+            "failed to remove temporary archive file",
+            error,
+        )),
     }
 }

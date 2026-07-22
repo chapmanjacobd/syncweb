@@ -11,7 +11,7 @@ use iroh_blobs::Hash;
 use syncweb_core::{
     DropVerifier,
     folder::{CollectionEntry, CollectionManifest},
-    verify_drop,
+    verify_archive,
 };
 use tokio::{
     fs,
@@ -124,7 +124,7 @@ async fn test_drop_verify_valid_archive_streams() -> Result<()> {
     let path = directory.path().join("valid.car.zst");
     compress(&path, &archive).await?;
 
-    let result = verify_drop(&path).await?;
+    let result = verify_archive(&path).await?;
     anyhow::ensure!(result.manifest == Hash::new(&manifest.to_bytes()?));
     anyhow::ensure!(result.entry_count == 1);
     anyhow::ensure!(result.block_count == 2);
@@ -157,7 +157,7 @@ async fn test_drop_manifest_mismatch() -> Result<()> {
     let path = directory.path().join("mismatched.car.zst");
     compress(&path, &archive).await?;
 
-    let error = verify_drop(&path).await.expect_err("wrong root must fail");
+    let error = verify_archive(&path).await.expect_err("wrong root must fail");
     anyhow::ensure!(error.to_string().contains("manifest"));
     Ok(())
 }
@@ -174,7 +174,7 @@ async fn test_drop_dos_protection_rejects_large_varint_without_allocation() -> R
     let path = directory.path().join("large-varint.car.zst");
     compress(&path, &archive).await?;
 
-    let error = verify_drop(&path).await.expect_err("large section must fail");
+    let error = verify_archive(&path).await.expect_err("large section must fail");
     anyhow::ensure!(error.to_string().contains("section"));
     Ok(())
 }

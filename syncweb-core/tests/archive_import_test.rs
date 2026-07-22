@@ -62,10 +62,10 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
     let archive = directory.path().join("package.car.zst");
 
     DropExporter::new(source.blob_store().clone())
-        .export_drop(&manifest, &archive)
+        .export_archive(&manifest, &archive)
         .await?;
     let importer = DropImporter::new(destination.blob_store().clone());
-    let result = importer.import_drop(&archive, DropImportOptions::default()).await?;
+    let result = importer.import_archive(&archive, DropImportOptions::default()).await?;
     ensure!(result.collection_manifest == manifest);
     ensure!(destination.blob_store().has(hash).await?);
 
@@ -98,7 +98,7 @@ async fn import_drop_filter_skips_rejected_content() -> Result<()> {
     )?);
     let archive = directory.path().join("package.car.zst");
     DropExporter::new(source.blob_store().clone())
-        .export_drop(&manifest, &archive)
+        .export_archive(&manifest, &archive)
         .await?;
 
     let mut criteria = MatchCriteria::default();
@@ -107,7 +107,7 @@ async fn import_drop_filter_skips_rejected_content() -> Result<()> {
     filter_config.rules = vec![FilterRule::new(FilterAction::Reject, criteria)];
     let filter = FilterEngine::new(filter_config)?;
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_drop(&archive, DropImportOptions::default().with_filter(filter))
+        .import_archive(&archive, DropImportOptions::default().with_filter(filter))
         .await?;
     ensure!(result.imported_entry_count == 1);
     ensure!(result.skipped_entry_count == 1);
@@ -127,7 +127,7 @@ async fn import_drop_corrupted_archive_fails() -> Result<()> {
     fs::write(&garbage, b"this is not a valid CAR archive")?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_drop(&garbage, DropImportOptions::default())
+        .import_archive(&garbage, DropImportOptions::default())
         .await;
     ensure!(result.is_err(), "corrupted archive must be rejected");
 
@@ -148,7 +148,7 @@ async fn import_drop_tampered_content_fails() -> Result<()> {
         .push(CollectionEntry::new(hash, "file.txt", u64::try_from(content.len())?)?);
     let archive = directory.path().join("package.car.zst");
     DropExporter::new(source.blob_store().clone())
-        .export_drop(&manifest, &archive)
+        .export_archive(&manifest, &archive)
         .await?;
 
     let bytes = fs::read(&archive)?;
@@ -159,7 +159,7 @@ async fn import_drop_tampered_content_fails() -> Result<()> {
     fs::write(&archive, &tampered)?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_drop(&archive, DropImportOptions::default())
+        .import_archive(&archive, DropImportOptions::default())
         .await;
     ensure!(result.is_err(), "tampered content must be rejected");
 
@@ -185,7 +185,7 @@ async fn import_drop_invalid_signature_fails() -> Result<()> {
 
     let archive = directory.path().join("signed.car.zst");
     DropExporter::new(source.blob_store().clone())
-        .export_drop(&manifest, &archive)
+        .export_archive(&manifest, &archive)
         .await?;
 
     let compressed = fs::read(&archive)?;
@@ -215,7 +215,7 @@ async fn import_drop_invalid_signature_fails() -> Result<()> {
     fs::write(&archive, &recompressed)?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_drop(&archive, DropImportOptions::default())
+        .import_archive(&archive, DropImportOptions::default())
         .await;
     ensure!(result.is_err(), "invalid signature must be rejected");
 
@@ -243,12 +243,12 @@ async fn import_drop_missing_dependencies_fails() -> Result<()> {
 
     let archive = directory.path().join("deps.car.zst");
     DropExporter::new(source.blob_store().clone())
-        .export_drop(&manifest, &archive)
+        .export_archive(&manifest, &archive)
         .await?;
 
     let available = BTreeMap::new();
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_drop(
+        .import_archive(
             &archive,
             DropImportOptions::default().with_available_dependencies(available),
         )

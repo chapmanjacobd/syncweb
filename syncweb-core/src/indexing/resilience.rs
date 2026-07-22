@@ -7,6 +7,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    io,
     str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -21,6 +22,7 @@ use iroh_gossip::{
 };
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::{sync::watch, task::JoinHandle};
 
 use crate::{
@@ -33,7 +35,269 @@ const PROVIDER_LEASE_SIGNATURE_CONTEXT: &[u8] = b"syncweb/provider-lease/v1\0";
 const DEFAULT_OBSERVATION_TTL: Duration = Duration::from_mins(5);
 const DEFAULT_MAX_JITTER: Duration = Duration::from_secs(30);
 const DEFAULT_RESPONSIBLE_PEERS: usize = 1;
+const DEFAULT_MAX_FAILURES_PER_PROVIDER: usize = 128;
+const DEFAULT_FAILURE_TTL: Duration = Duration::from_hours(24);
+const DEFINITIVE_FAILURE_THRESHOLD: u32 = 3;
+const STREAM_VALIDATION_CHUNK_SIZE: usize = 64 * 1024;
 const REPLICATION_PIN_PREFIX: &str = "syncweb/replication/";
+
+/// The broad cause of a failed provider fetch.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum FetchFailureKind {
+    NotFound,
+    ConnectionRefused,
+    Timeout,
+    Corruption,
+    Unknown,
+}
+
+impl FetchFailureKind {
+    /// Classify an error at the resilience boundary.
+    ///
+    /// `SyncwebError::Operation` intentionally retains the underlying
+    /// library error as display text, so classification uses stable
+    /// lower-case error phrases rather than coupling this layer to iroh's
+    /// private error types.
+    #[must_use]
+    pub fn from_syncweb_error(error: &SyncwebError) -> Self {
+        Self::from_message(error.to_string())
+    }
+
+    /// Alias for [`Self::from_syncweb_error`].
+    #[must_use]
+    pub fn classify(error: &SyncwebError) -> Self {
+        Self::from_syncweb_error(error)
+    }
+
+    /// Alias for [`Self::from_syncweb_error`].
+    #[must_use]
+    pub fn from_error(error: &SyncwebError) -> Self {
+        Self::from_syncweb_error(error)
+    }
+
+    /// Classify a displayable error message.
+    #[must_use]
+    pub fn from_message(message: impl AsRef<str>) -> Self {
+        let message_text = message.as_ref().to_ascii_lowercase();
+        if [
+            "not found",
+            "does not exist",
+            "no such file",
+            "missing blob",
+            "unknown hash",
+            "404",
+        ]
+        .iter()
+        .any(|phrase| message_text.contains(phrase))
+        {
+            return Self::NotFound;
+        }
+        if [
+            "hash mismatch",
+            "checksum mismatch",
+            "integrity",
+            "corrupt",
+            "invalid data",
+        ]
+        .iter()
+        .any(|phrase| message_text.contains(phrase))
+        {
+            return Self::Corruption;
+        }
+        if [
+            "connection refused",
+            "connection reset",
+            "network is unreachable",
+            "no route to host",
+            "unreachable",
+        ]
+        .iter()
+        .any(|phrase| message_text.contains(phrase))
+        {
+            return Self::ConnectionRefused;
+        }
+        if ["timed out", "timeout", "deadline exceeded"]
+            .iter()
+            .any(|phrase| message_text.contains(phrase))
+        {
+            return Self::Timeout;
+        }
+        Self::Unknown
+    }
+
+    #[must_use]
+    pub const fn is_definitive(self) -> bool {
+        matches!(self, Self::NotFound | Self::Corruption)
+    }
+
+    #[must_use]
+    pub const fn is_transient(self) -> bool {
+        !self.is_definitive()
+    }
+}
+
+impl From<&SyncwebError> for FetchFailureKind {
+    fn from(error: &SyncwebError) -> Self {
+        Self::from_syncweb_error(error)
+    }
+}
+
+/// A provider-specific failure observed while fetching one blob.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct FetchFailure {
+    pub kind: FetchFailureKind,
+    pub provider: PublicKey,
+    pub hash: Hash,
+    pub timestamp: u64,
+    pub error_detail: String,
+}
+
+impl FetchFailure {
+    /// Construct a failure timestamped with the current epoch time.
+    #[must_use]
+    pub fn new(kind: FetchFailureKind, provider: PublicKey, hash: Hash, error_detail: impl Into<String>) -> Self {
+        Self::new_at(kind, provider, hash, current_epoch_seconds(), error_detail)
+    }
+
+    /// Construct a failure with an explicit timestamp.
+    #[must_use]
+    pub fn new_at(
+        kind: FetchFailureKind,
+        provider: PublicKey,
+        hash: Hash,
+        timestamp: u64,
+        error_detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind,
+            provider,
+            hash,
+            timestamp,
+            error_detail: error_detail.into(),
+        }
+    }
+
+    /// Construct and classify a failure from a core error.
+    #[must_use]
+    pub fn from_syncweb_error(provider: PublicKey, hash: Hash, error: &SyncwebError) -> Self {
+        Self::new(
+            FetchFailureKind::from_syncweb_error(error),
+            provider,
+            hash,
+            error.to_string(),
+        )
+    }
+
+    /// Alias for [`Self::from_syncweb_error`].
+    #[must_use]
+    pub fn from_error(provider: PublicKey, hash: Hash, error: &SyncwebError) -> Self {
+        Self::from_syncweb_error(provider, hash, error)
+    }
+
+    /// Encode this failure as JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if JSON serialization fails.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        serde_json::to_vec(self).map_err(|error| SyncwebError::operation("failed to serialize fetch failure", error))
+    }
+
+    /// Decode a failure from JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON is malformed.
+    pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Result<Self> {
+        serde_json::from_slice(bytes.as_ref())
+            .map_err(|error| SyncwebError::operation("failed to deserialize fetch failure", error))
+    }
+}
+
+/// Validate a provider stream using bounded memory.
+///
+/// The reader is consumed in fixed-size chunks. At most one chunk is held in
+/// memory, and an extra byte is read only after the expected size to reject
+/// oversized responses before they can be accepted or buffered.
+///
+/// # Errors
+///
+/// Returns an error if the stream is too long, truncated, cannot be read, or
+/// does not hash to `expected_hash`.
+pub async fn validate_bounded_fetch<R>(mut reader: R, expected_size: u64, expected_hash: Hash) -> Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut hasher = blake3::Hasher::new();
+    let mut remaining = expected_size;
+    let mut buffer = vec![0_u8; STREAM_VALIDATION_CHUNK_SIZE];
+    while remaining > 0 {
+        let requested = usize::try_from(remaining).map_or(STREAM_VALIDATION_CHUNK_SIZE, |remaining_size| {
+            remaining_size.min(STREAM_VALIDATION_CHUNK_SIZE)
+        });
+        let read_buffer = buffer
+            .get_mut(..requested)
+            .ok_or_else(|| SyncwebError::InvalidConfig("invalid bounded fetch buffer size".to_owned()))?;
+        let read = reader.read(read_buffer).await?;
+        if read == 0 {
+            return Err(SyncwebError::operation(
+                "fetched blob validation failed",
+                io::Error::new(io::ErrorKind::UnexpectedEof, "provider stream is truncated"),
+            ));
+        }
+        let data = buffer
+            .get(..read)
+            .ok_or_else(|| SyncwebError::InvalidConfig("invalid bounded fetch read size".to_owned()))?;
+        hasher.update(data);
+        remaining = remaining.saturating_sub(u64::try_from(read).unwrap_or(u64::MAX));
+    }
+
+    let read_buffer = buffer
+        .get_mut(..1)
+        .ok_or_else(|| SyncwebError::InvalidConfig("invalid bounded fetch buffer size".to_owned()))?;
+    let read = reader.read(read_buffer).await?;
+    if read != 0 {
+        return Err(SyncwebError::operation(
+            "fetched blob validation failed",
+            io::Error::new(io::ErrorKind::InvalidData, "provider stream exceeds expected size"),
+        ));
+    }
+
+    let actual_hash = Hash::from_bytes(*hasher.finalize().as_bytes());
+    if actual_hash != expected_hash {
+        return Err(SyncwebError::operation(
+            "fetched blob validation failed",
+            io::Error::new(io::ErrorKind::InvalidData, "provider stream hash mismatch"),
+        ));
+    }
+    Ok(())
+}
+
+/// Alias for [`validate_bounded_fetch`].
+///
+/// # Errors
+///
+/// Returns an error if the stream fails bounded size or hash validation.
+pub async fn validate_fetch_stream<R>(reader: R, expected_size: u64, expected_hash: Hash) -> Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    validate_bounded_fetch(reader, expected_size, expected_hash).await
+}
+
+/// Alias for [`validate_bounded_fetch`].
+///
+/// # Errors
+///
+/// Returns an error if the stream fails bounded size or hash validation.
+pub async fn validate_bounded_stream<R>(reader: R, expected_size: u64, expected_hash: Hash) -> Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    validate_bounded_fetch(reader, expected_size, expected_hash).await
+}
 
 /// A signed claim that a provider currently serves a blob.
 ///
@@ -307,13 +571,65 @@ impl AvailabilityHealth {
 }
 
 /// In-memory tracker for signed provider leases and local observations.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ProviderLeaseTracker {
     leases: HashMap<Hash, HashMap<PublicKey, ProviderLease>>,
     observations: HashMap<Hash, HashMap<PublicKey, u64>>,
+    failures: HashMap<Hash, HashMap<PublicKey, FailureRecord>>,
+    failure_totals: HashMap<Hash, HashMap<PublicKey, u64>>,
+    definitive_streaks: HashMap<Hash, HashMap<PublicKey, u32>>,
+    max_failures_per_provider: usize,
+}
+
+impl Default for ProviderLeaseTracker {
+    fn default() -> Self {
+        Self::with_max_failures_per_provider(DEFAULT_MAX_FAILURES_PER_PROVIDER)
+    }
+}
+
+/// Bounded failure history and aggregate counters for one provider and blob.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct FailureRecord {
+    pub failures: Vec<FetchFailure>,
+    pub consecutive_failures: u32,
+    pub last_failure_at: u64,
+    pub first_failure_at: u64,
 }
 
 impl ProviderLeaseTracker {
+    /// Create an empty tracker with a bounded failure history.
+    #[must_use]
+    pub fn with_max_failures_per_provider(max_failures_per_provider: usize) -> Self {
+        Self {
+            leases: HashMap::new(),
+            observations: HashMap::new(),
+            failures: HashMap::new(),
+            failure_totals: HashMap::new(),
+            definitive_streaks: HashMap::new(),
+            max_failures_per_provider,
+        }
+    }
+
+    /// Return the failure-detail cap for each `(hash, provider)` pair.
+    #[must_use]
+    pub const fn max_failures_per_provider(&self) -> usize {
+        self.max_failures_per_provider
+    }
+
+    /// Set the failure-detail cap and evict oldest details if necessary.
+    pub fn set_max_failures_per_provider(&mut self, max_failures_per_provider: usize) {
+        self.max_failures_per_provider = max_failures_per_provider;
+        for providers in self.failures.values_mut() {
+            for record in providers.values_mut() {
+                let keep_from = record.failures.len().saturating_sub(max_failures_per_provider);
+                if keep_from > 0 {
+                    record.failures.drain(..keep_from);
+                }
+            }
+        }
+    }
+
     /// Track an active, signed lease using the current time.
     ///
     /// # Errors
@@ -361,6 +677,159 @@ impl ProviderLeaseTracker {
     /// Returns an error if the lease signature or expiry is invalid.
     pub fn add_lease(&mut self, lease: ProviderLease) -> Result<LeaseUpdate> {
         self.track(lease)
+    }
+
+    /// Record a provider failure using the current epoch time.
+    pub fn record_failure(&mut self, hash: Hash, provider: PublicKey, failure: FetchFailure) {
+        self.record_failure_at(hash, provider, failure, current_epoch_seconds());
+    }
+
+    /// Record a provider failure at an explicit time.
+    ///
+    /// Failure details are capped per provider, while aggregate counts remain
+    /// available through [`Self::failure_count`].
+    pub fn record_failure_at(&mut self, hash: Hash, provider: PublicKey, failure: FetchFailure, now: u64) {
+        self.purge_stale_failures(now, DEFAULT_FAILURE_TTL);
+        let existing_total = self
+            .failure_totals
+            .get(&hash)
+            .and_then(|providers| providers.get(&provider))
+            .copied()
+            .unwrap_or(0);
+        let previous_kind = self
+            .failures
+            .get(&hash)
+            .and_then(|providers| providers.get(&provider))
+            .and_then(|record| record.failures.last())
+            .map(|item| item.kind);
+        let previous_consecutive = self
+            .failures
+            .get(&hash)
+            .and_then(|providers| providers.get(&provider))
+            .map_or(0, |record| record.consecutive_failures);
+        let record = self
+            .failures
+            .entry(hash)
+            .or_default()
+            .entry(provider)
+            .or_insert_with(|| FailureRecord {
+                failures: Vec::new(),
+                consecutive_failures: 0,
+                last_failure_at: now,
+                first_failure_at: now,
+            });
+        if existing_total == 0 {
+            record.first_failure_at = now;
+        }
+        record.last_failure_at = now;
+        record.consecutive_failures = previous_consecutive.saturating_add(1);
+        let definitive_streak = self
+            .definitive_streaks
+            .entry(hash)
+            .or_default()
+            .entry(provider)
+            .or_default();
+        *definitive_streak = if failure.kind.is_definitive() {
+            if previous_kind.is_some_and(FetchFailureKind::is_definitive) {
+                definitive_streak.saturating_add(1)
+            } else {
+                1
+            }
+        } else {
+            0
+        };
+        record.failures.push(failure);
+        let keep_from = record.failures.len().saturating_sub(self.max_failures_per_provider);
+        if keep_from > 0 {
+            record.failures.drain(..keep_from);
+        }
+        let total = self
+            .failure_totals
+            .entry(hash)
+            .or_default()
+            .entry(provider)
+            .or_default();
+        *total = existing_total.saturating_add(1);
+    }
+
+    /// Return the bounded failure details for a provider and blob.
+    #[must_use]
+    pub fn failure_record(&self, hash: &Hash, provider: &PublicKey) -> Option<&FailureRecord> {
+        self.failures.get(hash).and_then(|providers| providers.get(provider))
+    }
+
+    /// Return the aggregate failure count for a provider and blob.
+    #[must_use]
+    pub fn failure_count(&self, hash: &Hash, provider: &PublicKey) -> usize {
+        self.failure_totals
+            .get(hash)
+            .and_then(|providers| providers.get(provider))
+            .copied()
+            .map_or(0, |count| usize::try_from(count).unwrap_or(usize::MAX))
+    }
+
+    /// Return the current consecutive definitive-failure count.
+    #[must_use]
+    pub fn consecutive_failures(&self, hash: &Hash, provider: &PublicKey) -> u32 {
+        self.failure_record(hash, provider)
+            .map_or(0, |record| record.consecutive_failures)
+    }
+
+    /// Return whether a provider has crossed the definitive-failure threshold.
+    #[must_use]
+    pub fn is_definitively_failed(&self, hash: &Hash, provider: &PublicKey) -> bool {
+        self.definitive_streaks
+            .get(hash)
+            .and_then(|providers| providers.get(provider))
+            .is_some_and(|streak| *streak >= DEFINITIVE_FAILURE_THRESHOLD)
+    }
+
+    /// Clear all failure history for a provider after a successful fetch.
+    pub fn clear_failures_for_provider(&mut self, hash: &Hash, provider: &PublicKey) {
+        if let Some(providers) = self.failures.get_mut(hash) {
+            providers.remove(provider);
+            if providers.is_empty() {
+                self.failures.remove(hash);
+            }
+        }
+        if let Some(providers) = self.failure_totals.get_mut(hash) {
+            providers.remove(provider);
+            if providers.is_empty() {
+                self.failure_totals.remove(hash);
+            }
+        }
+        if let Some(providers) = self.definitive_streaks.get_mut(hash) {
+            providers.remove(provider);
+            if providers.is_empty() {
+                self.definitive_streaks.remove(hash);
+            }
+        }
+    }
+
+    /// Remove failure records whose last observation is outside `ttl`.
+    pub fn purge_stale_failures(&mut self, now: u64, ttl: Duration) {
+        let ttl_seconds = ttl.as_secs();
+        let mut stale = Vec::new();
+        self.failures.retain(|hash, providers| {
+            providers.retain(|provider, record| {
+                let keep = now.saturating_sub(record.last_failure_at) <= ttl_seconds;
+                if !keep {
+                    stale.push((*hash, *provider));
+                }
+                keep
+            });
+            !providers.is_empty()
+        });
+        for (hash, provider) in stale {
+            if let Some(totals) = self.failure_totals.get_mut(&hash) {
+                totals.remove(&provider);
+            }
+            if let Some(streaks) = self.definitive_streaks.get_mut(&hash) {
+                streaks.remove(&provider);
+            }
+        }
+        self.failure_totals.retain(|_, providers| !providers.is_empty());
+        self.definitive_streaks.retain(|_, providers| !providers.is_empty());
     }
 
     /// Record that a provider was observed serving a blob locally.
@@ -455,6 +924,7 @@ impl ProviderLeaseTracker {
             providers.retain(|_, observed_at| now.saturating_sub(*observed_at) <= ttl);
             !providers.is_empty()
         });
+        self.purge_stale_failures(now, DEFAULT_FAILURE_TTL);
     }
 }
 
@@ -509,16 +979,33 @@ impl Default for ReplicationBudget {
 }
 
 /// Configuration for the resilience service.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct ResilienceConfig {
     pub budget: ReplicationBudget,
+    pub max_failures_per_provider: usize,
 }
 
 impl ResilienceConfig {
     #[must_use]
     pub const fn new(budget: ReplicationBudget) -> Self {
-        Self { budget }
+        Self {
+            budget,
+            max_failures_per_provider: DEFAULT_MAX_FAILURES_PER_PROVIDER,
+        }
+    }
+
+    /// Set the maximum retained failure details per provider and blob.
+    #[must_use]
+    pub const fn with_max_failures_per_provider(mut self, max_failures_per_provider: usize) -> Self {
+        self.max_failures_per_provider = max_failures_per_provider;
+        self
+    }
+}
+
+impl Default for ResilienceConfig {
+    fn default() -> Self {
+        Self::new(ReplicationBudget::default())
     }
 }
 
@@ -531,6 +1018,8 @@ pub struct ReplicationResult {
     pub health_after: AvailabilityHealth,
     pub selected_providers: Vec<PublicKey>,
     pub fetched_from: Vec<PublicKey>,
+    pub failed_from: Vec<(PublicKey, FetchFailureKind)>,
+    pub invalidated_leases: Vec<PublicKey>,
     pub pinned: bool,
     pub short_circuited: bool,
 }
@@ -564,9 +1053,10 @@ impl ResilienceService {
     /// Create a resilience service from explicit configuration.
     #[must_use]
     pub fn new(config: ResilienceConfig) -> Self {
+        let tracker = ProviderLeaseTracker::with_max_failures_per_provider(config.max_failures_per_provider);
         Self {
             config,
-            tracker: Arc::new(Mutex::new(ProviderLeaseTracker::default())),
+            tracker: Arc::new(Mutex::new(tracker)),
             generations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -674,6 +1164,41 @@ impl ResilienceService {
         ))
     }
 
+    /// Record a fetch failure in the shared provider tracker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn record_failure(&self, hash: Hash, provider: PublicKey, failure: FetchFailure) -> Result<()> {
+        self.record_failure_at(hash, provider, failure, current_epoch_seconds())
+    }
+
+    /// Record a fetch failure at an explicit time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn record_failure_at(&self, hash: Hash, provider: PublicKey, failure: FetchFailure, now: u64) -> Result<()> {
+        self.tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .record_failure_at(hash, provider, failure, now);
+        Ok(())
+    }
+
+    /// Clear a provider's recorded failures after a successful fetch.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn clear_failures_for_provider(&self, hash: &Hash, provider: &PublicKey) -> Result<()> {
+        self.tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .clear_failures_for_provider(hash, provider);
+        Ok(())
+    }
+
     /// Return the deterministic jitter assigned to one provider.
     #[must_use]
     pub fn jitter_delay(&self, hash: Hash, provider: PublicKey) -> Duration {
@@ -707,7 +1232,8 @@ impl ResilienceService {
     /// # Errors
     ///
     /// Returns an error if state cannot be read, a selected provider ticket is
-    /// invalid, all attempted fetches fail, or pinning fails.
+    /// invalid, or pinning fails. Provider fetch failures are returned in
+    /// [`ReplicationResult::failed_from`] so another provider can be tried.
     pub async fn ensure_replication(
         &self,
         endpoint: &Endpoint,
@@ -721,6 +1247,8 @@ impl ResilienceService {
             health_after: health_before.clone(),
             selected_providers: Vec::new(),
             fetched_from: Vec::new(),
+            failed_from: Vec::new(),
+            invalidated_leases: Vec::new(),
             pinned: false,
             short_circuited: false,
         };
@@ -747,9 +1275,7 @@ impl ResilienceService {
             result.health_after = self.health(&hash)?;
             return Ok(result);
         }
-
         let selected = result.selected_providers.clone();
-        let mut last_error = None;
         for provider in selected {
             match self.wait_for_fetch_slot(hash, provider).await? {
                 FetchWait::ShortCircuited => {
@@ -766,15 +1292,19 @@ impl ResilienceService {
             match blobs.fetch(endpoint, &ticket).await {
                 Ok(()) => {
                     result.fetched_from.push(provider);
+                    self.clear_failures_for_provider(&hash, &provider)?;
                     break;
                 }
-                Err(error) => last_error = Some(error),
+                Err(error) => {
+                    let kind = FetchFailureKind::from_syncweb_error(&error);
+                    let failure = FetchFailure::from_syncweb_error(provider, hash, &error);
+                    self.record_failure(hash, provider, failure)?;
+                    result.failed_from.push((provider, kind));
+                }
             }
         }
         if result.fetched_from.is_empty() {
-            if let Some(error) = last_error {
-                return Err(error);
-            }
+            result.health_after = self.health(&hash)?;
             return Ok(result);
         }
 
@@ -950,7 +1480,7 @@ fn current_epoch_seconds() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{io::Cursor, time::Duration};
 
     use anyhow::Result;
     use iroh::{EndpointAddr, SecretKey};
@@ -1131,6 +1661,157 @@ mod tests {
         tracker.purge(200, Duration::from_secs(5));
         anyhow::ensure!(tracker.leases_at(&hash, 200).is_empty(), "all expired at t=200");
 
+        Ok(())
+    }
+
+    #[test]
+    fn fetch_failure_kind_classification_and_definitiveness() {
+        let not_found = SyncwebError::operation("fetch", "provider blob not found");
+        let refused = SyncwebError::operation("fetch", "connection refused");
+        let timeout = SyncwebError::operation("fetch", "request timed out");
+        let corruption = SyncwebError::operation("fetch", "hash mismatch");
+        let unknown = SyncwebError::operation("fetch", "unexpected provider response");
+
+        assert_eq!(
+            FetchFailureKind::from_syncweb_error(&not_found),
+            FetchFailureKind::NotFound
+        );
+        assert_eq!(
+            FetchFailureKind::from_syncweb_error(&refused),
+            FetchFailureKind::ConnectionRefused
+        );
+        assert_eq!(
+            FetchFailureKind::from_syncweb_error(&timeout),
+            FetchFailureKind::Timeout
+        );
+        assert_eq!(
+            FetchFailureKind::from_syncweb_error(&corruption),
+            FetchFailureKind::Corruption
+        );
+        assert_eq!(
+            FetchFailureKind::from_syncweb_error(&unknown),
+            FetchFailureKind::Unknown
+        );
+        assert!(FetchFailureKind::NotFound.is_definitive());
+        assert!(FetchFailureKind::Corruption.is_definitive());
+        assert!(FetchFailureKind::Timeout.is_transient());
+        assert!(!FetchFailureKind::Timeout.is_definitive());
+    }
+
+    #[test]
+    fn fetch_failure_round_trip_and_timestamp() -> Result<()> {
+        let hash = Hash::from_bytes([21_u8; 32]);
+        let provider = SecretKey::from_bytes(&[21_u8; 32]).public();
+        let before = current_epoch_seconds();
+        let failure = FetchFailure::new(FetchFailureKind::Timeout, provider, hash, "timed out");
+        let after = current_epoch_seconds();
+
+        anyhow::ensure!(
+            (before..=after).contains(&failure.timestamp),
+            "failure timestamp should use the current epoch"
+        );
+        anyhow::ensure!(
+            FetchFailure::from_bytes(failure.to_bytes()?)? == failure,
+            "fetch failures should round-trip through JSON"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failure_tracking_counts_clears_and_purges() -> Result<()> {
+        let hash = Hash::from_bytes([22_u8; 32]);
+        let other_hash = Hash::from_bytes([23_u8; 32]);
+        let provider = SecretKey::from_bytes(&[22_u8; 32]).public();
+        let other_provider = SecretKey::from_bytes(&[23_u8; 32]).public();
+        let mut tracker = ProviderLeaseTracker::with_max_failures_per_provider(2);
+
+        for timestamp in 1..=3 {
+            tracker.record_failure_at(
+                hash,
+                provider,
+                FetchFailure::new_at(FetchFailureKind::NotFound, provider, hash, timestamp, "missing"),
+                timestamp,
+            );
+        }
+        tracker.record_failure_at(
+            other_hash,
+            provider,
+            FetchFailure::new_at(FetchFailureKind::NotFound, provider, other_hash, 4, "missing"),
+            4,
+        );
+        tracker.record_failure_at(
+            hash,
+            other_provider,
+            FetchFailure::new_at(FetchFailureKind::NotFound, other_provider, hash, 4, "missing"),
+            4,
+        );
+
+        let record = tracker.failure_record(&hash, &provider).expect("failure record");
+        anyhow::ensure!(record.failures.len() == 2, "failure details should be capped");
+        anyhow::ensure!(
+            record.failures.first().is_some_and(|failure| failure.timestamp == 2),
+            "oldest detail should be evicted"
+        );
+        anyhow::ensure!(
+            tracker.failure_count(&hash, &provider) == 3,
+            "aggregate count should be retained"
+        );
+        anyhow::ensure!(tracker.consecutive_failures(&hash, &provider) == 3);
+        anyhow::ensure!(tracker.is_definitively_failed(&hash, &provider));
+        anyhow::ensure!(!tracker.is_definitively_failed(&other_hash, &provider));
+        anyhow::ensure!(!tracker.is_definitively_failed(&hash, &other_provider));
+
+        tracker.clear_failures_for_provider(&hash, &provider);
+        anyhow::ensure!(tracker.failure_record(&hash, &provider).is_none());
+        anyhow::ensure!(tracker.failure_count(&hash, &provider) == 0);
+
+        tracker.purge_stale_failures(10, Duration::from_secs(1));
+        anyhow::ensure!(tracker.failure_record(&other_hash, &provider).is_none());
+        anyhow::ensure!(tracker.failure_record(&hash, &other_provider).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn transient_failures_do_not_become_definitive() {
+        let hash = Hash::from_bytes([24_u8; 32]);
+        let provider = SecretKey::from_bytes(&[24_u8; 32]).public();
+        let mut tracker = ProviderLeaseTracker::default();
+        for timestamp in 1..=3 {
+            tracker.record_failure_at(
+                hash,
+                provider,
+                FetchFailure::new_at(FetchFailureKind::Timeout, provider, hash, timestamp, "timeout"),
+                timestamp,
+            );
+        }
+        assert_eq!(tracker.consecutive_failures(&hash, &provider), 3);
+        assert!(!tracker.is_definitively_failed(&hash, &provider));
+    }
+
+    #[tokio::test]
+    async fn bounded_fetch_validation_rejects_oversized_truncated_and_corrupt_streams() -> Result<()> {
+        let data = b"bounded fetch";
+        let hash = Hash::new(data);
+        let expected_size = u64::try_from(data.len())?;
+        validate_bounded_fetch(Cursor::new(data), expected_size, hash).await?;
+        anyhow::ensure!(
+            validate_bounded_fetch(Cursor::new(b"bounded fetch!"), expected_size, hash)
+                .await
+                .is_err(),
+            "oversized streams should be rejected"
+        );
+        anyhow::ensure!(
+            validate_bounded_fetch(Cursor::new(b"bounded"), expected_size, hash)
+                .await
+                .is_err(),
+            "truncated streams should be rejected"
+        );
+        anyhow::ensure!(
+            validate_bounded_fetch(Cursor::new(b"wrong fetch"), expected_size, hash)
+                .await
+                .is_err(),
+            "hash mismatches should be rejected"
+        );
         Ok(())
     }
 }

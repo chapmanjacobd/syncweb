@@ -317,7 +317,9 @@ fn test_ls_streaming() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&source).context("cleanup")?;
 
     ensure!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?.replace("\\", "/");
+    let stdout = String::from_utf8(output.stdout)
+        .context("UTF-8 output")?
+        .replace('\\', "/");
     let lines: Vec<&str> = stdout.lines().collect();
     anyhow::ensure!(lines.len() == 2, "should list 2 files: {stdout}");
     ensure!(lines.contains(&"a.txt"));

@@ -1,13 +1,15 @@
 .PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme
 
-all: fmt lint test build manpage completions readme
+all: fmt flint test lint build manpage completions readme
 
 fmt:
 	cargo fmt --all
 
-lint:
+flint:
 	cargo fix --broken-code --allow-dirty
 	cargo clippy --fix --allow-dirty
+
+lint:
 	@bash -c 'set -o pipefail; \
 	cargo clippy --all-targets --all-features --color always 2>&1 | tee clippy.log || EXIT_CODE=$$?; \
 	EXIT_CODE=$${EXIT_CODE:-0}; \

@@ -12,6 +12,7 @@ use std::{
 };
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,7 @@ const DELEGATION_CONTEXT: &[u8] = b"syncweb/wot/delegation/v1\0";
 const REVOCATION_CONTEXT: &[u8] = b"syncweb/wot/revocation/v1\0";
 const MODERATION_CONTEXT: &[u8] = b"syncweb/wot/moderation/v1\0";
 const ATTESTATION_CONTEXT: &[u8] = b"syncweb/wot/attestation/v1\0";
+const PROVIDER_TRUST_CONTEXT: &[u8] = b"syncweb/wot/provider-trust/v1\0";
 
 /// Signed metadata appended to a content hash.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -977,11 +979,236 @@ impl Attestation {
     }
 }
 
+/// A manually authored reliability opinion about a provider.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum ProviderTrustAction {
+    Trust,
+    Distrust,
+    Vouch,
+    Warn,
+}
+
+/// A signed provider reliability record in the local Web-of-Trust.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ProviderTrustRecord {
+    pub provider: PublicKey,
+    pub action: ProviderTrustAction,
+    pub scope: Option<Hash>,
+    pub issuer: String,
+    pub sequence: u64,
+    pub issued_at: u64,
+    pub expires_at: Option<u64>,
+    pub reason: String,
+    pub signature: Option<String>,
+}
+
+impl ProviderTrustRecord {
+    /// Create and sign a provider trust record using the current time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the record is invalid or signing fails.
+    pub fn new(
+        provider: PublicKey,
+        action: ProviderTrustAction,
+        scope: Option<Hash>,
+        sequence: u64,
+        expires_at: Option<u64>,
+        reason: impl Into<String>,
+        signing_key: &SigningKey,
+    ) -> Result<Self> {
+        let mut record = Self {
+            provider,
+            action,
+            scope,
+            issuer: author_id(&signing_key.verifying_key()),
+            sequence,
+            issued_at: current_epoch_seconds(),
+            expires_at,
+            reason: reason.into(),
+            signature: None,
+        };
+        record.sign(signing_key)?;
+        Ok(record)
+    }
+
+    /// Create and sign a provider trust record with an explicit issue time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the record is invalid or signing fails.
+    pub fn new_with_time(
+        provider: PublicKey,
+        action: ProviderTrustAction,
+        scope: Option<Hash>,
+        sequence: u64,
+        issued_at: u64,
+        reason: impl Into<String>,
+        signing_key: &SigningKey,
+    ) -> Result<Self> {
+        let mut record = Self {
+            provider,
+            action,
+            scope,
+            issuer: author_id(&signing_key.verifying_key()),
+            sequence,
+            issued_at,
+            expires_at: None,
+            reason: reason.into(),
+            signature: None,
+        };
+        record.sign(signing_key)?;
+        Ok(record)
+    }
+
+    /// Add or replace an expiration time and re-sign the record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the expiration is invalid or signing fails.
+    pub fn with_expiration(mut self, expires_at: Option<u64>, signing_key: &SigningKey) -> Result<Self> {
+        self.expires_at = expires_at;
+        self.sign(signing_key)?;
+        Ok(self)
+    }
+
+    /// Sign the record with its declared issuer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the signing key does not match the issuer.
+    pub fn sign(&mut self, signing_key: &SigningKey) -> Result<()> {
+        ensure_signer(&self.issuer, &signing_key.verifying_key())?;
+        self.signature = Some(sign_text(PROVIDER_TRUST_CONTEXT, &self.unsigned_bytes()?, signing_key));
+        Ok(())
+    }
+
+    /// Verify the cryptographic signature.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is malformed or unsigned.
+    pub fn verify_signature(&self) -> Result<()> {
+        self.validate()?;
+        verify_text(
+            PROVIDER_TRUST_CONTEXT,
+            &self.unsigned_bytes()?,
+            &self.issuer,
+            self.signature.as_deref(),
+        )
+    }
+
+    /// Verify the signature and require the record to be active now.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is malformed, unsigned, or expired.
+    pub fn verify(&self) -> Result<()> {
+        self.verify_at(current_epoch_seconds())
+    }
+
+    /// Verify the signature and reject expired records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is malformed, unsigned, or expired.
+    pub fn verify_at(&self, now: u64) -> Result<()> {
+        self.verify_signature()?;
+        if self.expires_at.is_some_and(|expires_at| expires_at <= now) {
+            return Err(SyncwebError::InvalidConfig(
+                "provider trust record has expired".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate non-cryptographic record fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an identity, sequence, reason, or timestamp is invalid.
+    pub fn validate(&self) -> Result<()> {
+        if self.sequence == 0 {
+            return Err(SyncwebError::InvalidConfig(
+                "provider trust record sequence must be greater than zero".to_owned(),
+            ));
+        }
+        if self.reason.trim().is_empty() {
+            return Err(SyncwebError::InvalidConfig(
+                "provider trust record reason cannot be empty".to_owned(),
+            ));
+        }
+        if self.expires_at.is_some_and(|expires_at| expires_at <= self.issued_at) {
+            return Err(SyncwebError::InvalidConfig(
+                "provider trust record expiration must be after issue time".to_owned(),
+            ));
+        }
+        VerifyingKey::from_bytes(self.provider.as_bytes())
+            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid provider identity: {error}")))?;
+        parse_author(&self.issuer)?;
+        Ok(())
+    }
+
+    /// Encode the record as JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is invalid or cannot be serialized.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        serde_json::to_vec(self)
+            .map_err(|error| SyncwebError::operation("failed to serialize provider trust record", error))
+    }
+
+    /// Decode a record from JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the bytes do not contain a valid record.
+    pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Result<Self> {
+        let record: Self = serde_json::from_slice(bytes.as_ref())
+            .map_err(|error| SyncwebError::operation("failed to deserialize provider trust record", error))?;
+        record.validate()?;
+        Ok(record)
+    }
+
+    fn unsigned_bytes(&self) -> Result<Vec<u8>> {
+        let mut unsigned = self.clone();
+        unsigned.signature = None;
+        signed_bytes(PROVIDER_TRUST_CONTEXT, &unsigned)
+    }
+}
+
+/// Result of evaluating manual provider trust records.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ProviderTrustDecision {
+    Trusted,
+    Distrusted,
+    Unknown,
+    Conflicting,
+}
+
+impl ProviderTrustDecision {
+    #[must_use]
+    pub const fn is_trusted(self) -> bool {
+        matches!(self, Self::Trusted)
+    }
+
+    #[must_use]
+    pub const fn is_distrusted(self) -> bool {
+        matches!(self, Self::Distrusted)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 struct WotState {
     revocations: HashMap<Hash, RevocationRecord>,
     moderation: HashMap<Hash, Vec<ModerationRecord>>,
     attestations: HashMap<(Hash, String, u64), Attestation>,
+    provider_trust: HashMap<PublicKey, Vec<ProviderTrustRecord>>,
 }
 
 /// Indexing-layer service for trusted metadata and local governance records.
@@ -1076,6 +1303,135 @@ impl WotService {
             .lock()
             .map_err(|error| SyncwebError::operation("Web-of-Trust policy lock poisoned", error))?
             .add_delegation_at(delegation, now)
+    }
+
+    /// Apply a signed manual provider trust record from a trusted issuer.
+    ///
+    /// A provider may always publish a signed self-distrust, which allows a
+    /// compromised or retiring provider to withdraw its own availability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is invalid or its issuer is untrusted.
+    pub fn apply_provider_trust(&self, record: ProviderTrustRecord) -> Result<bool> {
+        let now = current_epoch_seconds();
+        record.verify_at(now)?;
+        let issuer_key = parse_author(&record.issuer)?;
+        let is_self_distrust =
+            issuer_key.as_bytes() == record.provider.as_bytes() && record.action == ProviderTrustAction::Distrust;
+        if !is_self_distrust
+            && !self
+                .policy()?
+                .is_trusted_for_at(&record.issuer, record.scope.as_ref(), now)
+        {
+            return Err(SyncwebError::InvalidIdentity(
+                "provider trust record issuer is not trusted for its scope".to_owned(),
+            ));
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|error| SyncwebError::operation("Web-of-Trust state lock poisoned", error))?;
+        let records = state.provider_trust.entry(record.provider).or_default();
+        if records.iter().any(|existing| {
+            existing.issuer == record.issuer && existing.scope == record.scope && existing.sequence >= record.sequence
+        }) {
+            return Ok(false);
+        }
+        records.retain(|existing| {
+            !(existing.issuer == record.issuer && existing.scope == record.scope && existing.sequence < record.sequence)
+        });
+        records.push(record);
+        drop(state);
+        Ok(true)
+    }
+
+    /// Evaluate the newest applicable provider trust records.
+    /// # Errors
+    ///
+    /// Returns an error when the `WoT` state lock is poisoned.
+    pub fn evaluate_provider_trust(
+        &self,
+        provider: PublicKey,
+        hash: Option<&Hash>,
+        now: u64,
+    ) -> Result<ProviderTrustDecision> {
+        let records = self
+            .state
+            .lock()
+            .map_err(|error| SyncwebError::operation("Web-of-Trust state lock poisoned", error))?
+            .provider_trust
+            .get(&provider)
+            .cloned()
+            .unwrap_or_default();
+        let maybe_latest_sequence = records
+            .iter()
+            .filter(|record| {
+                record.expires_at.is_none_or(|expires_at| expires_at > now)
+                    && record.scope.as_ref().is_none_or(|scope| Some(scope) == hash)
+            })
+            .map(|record| record.sequence)
+            .max();
+        let Some(latest_sequence) = maybe_latest_sequence else {
+            return Ok(ProviderTrustDecision::Unknown);
+        };
+        let latest = records
+            .iter()
+            .filter(|record| {
+                record.sequence == latest_sequence
+                    && record.expires_at.is_none_or(|expires_at| expires_at > now)
+                    && record.scope.as_ref().is_none_or(|scope| Some(scope) == hash)
+            })
+            .collect::<Vec<_>>();
+        let trusted = latest
+            .iter()
+            .any(|record| matches!(record.action, ProviderTrustAction::Trust | ProviderTrustAction::Vouch));
+        let distrusted = latest
+            .iter()
+            .any(|record| matches!(record.action, ProviderTrustAction::Distrust));
+        Ok(match (trusted, distrusted) {
+            (true, true) => ProviderTrustDecision::Conflicting,
+            (true, false) => ProviderTrustDecision::Trusted,
+            (false, true) => ProviderTrustDecision::Distrusted,
+            (false, false) => ProviderTrustDecision::Unknown,
+        })
+    }
+
+    /// Evaluate a provider trust decision for a concrete content hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the `WoT` state lock is poisoned.
+    pub fn evaluate_provider_trust_for_hash(
+        &self,
+        provider: PublicKey,
+        hash: Hash,
+        now: u64,
+    ) -> Result<ProviderTrustDecision> {
+        self.evaluate_provider_trust(provider, Some(&hash), now)
+    }
+
+    /// Return all records for a provider, newest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the `WoT` state lock is poisoned.
+    pub fn provider_trust_records(&self, provider: PublicKey) -> Result<Vec<ProviderTrustRecord>> {
+        let mut records = self
+            .state
+            .lock()
+            .map_err(|error| SyncwebError::operation("Web-of-Trust state lock poisoned", error))?
+            .provider_trust
+            .get(&provider)
+            .cloned()
+            .unwrap_or_default();
+        records.sort_by(|left, right| {
+            right
+                .sequence
+                .cmp(&left.sequence)
+                .then_with(|| right.issued_at.cmp(&left.issued_at))
+        });
+        Ok(records)
     }
 
     /// Append metadata after signature and local trust checks.

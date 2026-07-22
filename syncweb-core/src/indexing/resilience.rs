@@ -27,6 +27,10 @@ use tokio::{sync::watch, task::JoinHandle};
 
 use crate::{
     error::{Result, SyncwebError},
+    indexing::{
+        reputation::{ProviderReputationStore, ReputationConfig},
+        wot::{ProviderTrustDecision, WotService},
+    },
     node::{blob_store::BlobStore, gossip_service::GossipService},
 };
 
@@ -1234,6 +1238,8 @@ pub struct ResilienceService {
     config: ResilienceConfig,
     tracker: Arc<Mutex<ProviderLeaseTracker>>,
     generations: Arc<Mutex<HashMap<Hash, watch::Sender<u64>>>>,
+    reputation: Arc<Mutex<ProviderReputationStore>>,
+    wot: Option<WotService>,
 }
 
 impl std::fmt::Debug for ResilienceService {
@@ -1254,6 +1260,8 @@ impl ResilienceService {
             config,
             tracker: Arc::new(Mutex::new(tracker)),
             generations: Arc::new(Mutex::new(HashMap::new())),
+            reputation: Arc::new(Mutex::new(ProviderReputationStore::default())),
+            wot: None,
         }
     }
 
@@ -1263,9 +1271,43 @@ impl ResilienceService {
         Self::new(ResilienceConfig::new(budget))
     }
 
+    /// Create a resilience service which filters providers through local `WoT`.
+    #[must_use]
+    pub fn with_wot(config: ResilienceConfig, wot: WotService) -> Self {
+        let mut service = Self::new(config);
+        service.wot = Some(wot);
+        service
+    }
+
+    /// Create a service with explicit reputation and `WoT` policy state.
+    #[must_use]
+    pub fn with_reputation(
+        config: ResilienceConfig,
+        reputation_config: ReputationConfig,
+        wot: Option<WotService>,
+    ) -> Self {
+        let mut service = Self::new(config);
+        service.reputation = Arc::new(Mutex::new(ProviderReputationStore::new(reputation_config)));
+        service.wot = wot;
+        service
+    }
+
     #[must_use]
     pub const fn config(&self) -> &ResilienceConfig {
         &self.config
+    }
+
+    /// Return the shared historical provider reputation store.
+    #[must_use]
+    pub fn reputation_store(&self) -> Arc<Mutex<ProviderReputationStore>> {
+        Arc::clone(&self.reputation)
+    }
+
+    /// Replace the local `WoT` service used for provider filtering.
+    #[must_use]
+    pub fn with_trust_policy(mut self, wot: WotService) -> Self {
+        self.wot = Some(wot);
+        self
     }
 
     /// Track a verified lease and wake pending fetches when it is new.
@@ -1436,11 +1478,11 @@ impl ResilienceService {
             .lock()
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
             .providers(hash);
-        Ok(consistent_hashing_selection(
-            *hash,
-            &providers,
-            self.config.budget.responsible_peers,
-        ))
+        Ok(self
+            .rank_provider_candidates(*hash, &providers, current_epoch_seconds())?
+            .into_iter()
+            .take(self.config.budget.responsible_peers)
+            .collect())
     }
 
     /// Record a fetch failure in the shared provider tracker.
@@ -1458,10 +1500,15 @@ impl ResilienceService {
     ///
     /// Returns an error if the service state lock is poisoned.
     pub fn record_failure_at(&self, hash: Hash, provider: PublicKey, failure: FetchFailure, now: u64) -> Result<()> {
+        let kind = failure.kind;
         self.tracker
             .lock()
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
             .record_failure_at(hash, provider, failure, now);
+        self.reputation
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+            .record_failure(provider, kind, now);
         Ok(())
     }
 
@@ -1476,6 +1523,34 @@ impl ResilienceService {
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
             .clear_failures_for_provider(hash, provider);
         Ok(())
+    }
+
+    /// Record a successful provider fetch and clear its transient failure
+    /// history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provider state is poisoned.
+    pub fn record_success(&self, hash: &Hash, provider: &PublicKey) -> Result<()> {
+        self.clear_failures_for_provider(hash, provider)?;
+        self.reputation
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+            .record_success(*provider, current_epoch_seconds());
+        Ok(())
+    }
+
+    /// Return the current historical score for a provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provider state is poisoned.
+    pub fn reputation_score(&self, provider: PublicKey) -> Result<f64> {
+        Ok(self
+            .reputation
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+            .score(provider, current_epoch_seconds()))
     }
 
     /// Return the deterministic jitter assigned to one provider.
@@ -1542,8 +1617,8 @@ impl ResilienceService {
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
             .leases_at(&hash, now);
         let providers = leases.iter().map(|lease| lease.provider).collect::<Vec<_>>();
-        result.selected_providers =
-            consistent_hashing_selection(hash, &providers, self.config.budget.responsible_peers);
+        result.selected_providers = self.rank_provider_candidates(hash, &providers, now)?;
+        result.selected_providers.truncate(self.config.budget.responsible_peers);
         if result.selected_providers.is_empty() {
             return Ok(result);
         }
@@ -1565,6 +1640,14 @@ impl ResilienceService {
             {
                 continue;
             }
+            if self
+                .reputation
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+                .is_banned(provider, current_epoch_seconds())
+            {
+                continue;
+            }
             match self.wait_for_fetch_slot(hash, provider).await? {
                 FetchWait::ShortCircuited => {
                     result.short_circuited = true;
@@ -1580,6 +1663,10 @@ impl ResilienceService {
             match blobs.fetch(endpoint, &ticket).await {
                 Ok(()) => {
                     result.fetched_from.push(provider);
+                    self.reputation
+                        .lock()
+                        .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+                        .record_success(provider, current_epoch_seconds());
                     self.clear_failures_for_provider(&hash, &provider)?;
                     result
                         .invalidated_leases
@@ -1607,6 +1694,48 @@ impl ResilienceService {
         self.observe_provider(hash, endpoint.secret_key().public())?;
         result.health_after = self.health(&hash)?;
         Ok(result)
+    }
+
+    fn rank_provider_candidates(&self, hash: Hash, providers: &[PublicKey], now: u64) -> Result<Vec<PublicKey>> {
+        let mut candidates = {
+            let reputation = self
+                .reputation
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?;
+            reputation
+                .rank_provider_list(now, hash, providers)
+                .into_iter()
+                .filter(|provider| !reputation.is_banned(*provider, now))
+                .map(|provider| (reputation.score(provider, now), provider))
+                .collect::<Vec<_>>()
+        };
+        if let Some(wot) = &self.wot {
+            let mut trusted = Vec::with_capacity(candidates.len());
+            for (score, provider) in candidates {
+                let decision = wot.evaluate_provider_trust(provider, Some(&hash), now)?;
+                if decision == ProviderTrustDecision::Distrusted {
+                    continue;
+                }
+                trusted.push((matches!(decision, ProviderTrustDecision::Trusted), score, provider));
+            }
+            trusted.sort_by(|left, right| {
+                right
+                    .0
+                    .cmp(&left.0)
+                    .then_with(|| right.1.total_cmp(&left.1))
+                    .then_with(|| xor_distance(hash, left.2).cmp(&xor_distance(hash, right.2)))
+                    .then_with(|| left.2.as_bytes().cmp(right.2.as_bytes()))
+            });
+            return Ok(trusted.into_iter().map(|(_, _, provider)| provider).collect());
+        }
+        candidates.sort_by(|left, right| {
+            right
+                .0
+                .total_cmp(&left.0)
+                .then_with(|| xor_distance(hash, left.1).cmp(&xor_distance(hash, right.1)))
+                .then_with(|| left.1.as_bytes().cmp(right.1.as_bytes()))
+        });
+        Ok(candidates.into_iter().map(|(_, provider)| provider).collect())
     }
 
     /// Alias for [`Self::ensure_replication`].

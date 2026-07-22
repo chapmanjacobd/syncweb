@@ -54,6 +54,13 @@ failures invalidate the affected lease and create an expiring hash-scoped
 automated ban; manual global or hash-scoped bans are also excluded from health
 and provider selection.
 
+`ProviderReputationStore` keeps longer-lived fetch history separate from
+leases. It applies minimum-sample scoring, time decay, failure weighting, and
+exponential temporary-ban backoff. `ProviderTrustSignal` carries a
+domain-separated reporter signature and can be coalesced into bounded trust
+stream batches; only reporters trusted through the local `TrustPolicy` affect
+reputation.
+
 ### 3. Web of Trust (WoT) Metadata
 Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running automatically on all clients, metadata extraction is crowdsourced to trusted entities.
 *   Action: Trusted authors in a Web of Trust (WoT)--whether humans or automated bots—can manually append metadata, tags, or derivatives to a file's record.
@@ -72,6 +79,14 @@ metadata is written to the SQLite FTS index, and local revocation or
 moderation decisions filter search results without deleting immutable content.
 `ModerationScope` can restrict a decision to a network, folder, or file, and
 `moderation_decision` evaluates the applicable record locally.
+
+`ProviderTrustRecord` adds signed manual `Trust`, `Distrust`, `Vouch`, and
+`Warn` opinions about providers. Records may be global or content-scoped,
+expire independently, and are evaluated by sequence into `Trusted`,
+`Distrusted`, `Unknown`, or `Conflicting`. `ResilienceService::with_wot`
+filters distrusted providers and prioritizes trusted providers before applying
+reputation-weighted selection; without a WoT service it continues using local
+reputation and lease state.
 
 ### 4. Stable Links, Resolvers, and Mirrors
 A direct blob ticket is useful for immediate transfer, but it is not a durable public reference. It lacks a stable name and provides no standard way to resolve a newer version or alternate mirror. The indexing service manages stable references, resolution, and mirrors.

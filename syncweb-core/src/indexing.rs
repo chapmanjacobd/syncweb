@@ -6,6 +6,7 @@
 pub mod catalog;
 pub mod denylist;
 pub mod links;
+pub mod reputation;
 pub mod resilience;
 pub mod wot;
 pub use catalog::{Catalog, CatalogMetadata, CatalogRecord, CatalogService};
@@ -15,6 +16,10 @@ pub use links::{
     MutablePointer, NameLink, PrivateLink, ResolveOptions, ResolvedLink, SignedMutablePointer, SyncwebLink,
     current_epoch_seconds, fetch_from_mirrors,
 };
+pub use reputation::{
+    ProviderReputation, ProviderReputationStore, ProviderTrustSignal, ReputationConfig, TrustSignalKind,
+    trust_stream_topic,
+};
 pub use resilience::{
     AvailabilityHealth, BanRecord, BanSource, FailureRecord, FetchFailure, FetchFailureKind, FetchWait, LeaseUpdate,
     ProviderLease, ProviderLeaseTracker, ReplicationBudget, ReplicationResult, ResilienceConfig, ResilienceService,
@@ -23,8 +28,8 @@ pub use resilience::{
 };
 pub use wot::{
     Attestation, AttestationKind, MetadataEntry, ModerationAction, ModerationContext, ModerationDecision,
-    ModerationRecord, ModerationScope, RevocationRecord, TrustDecision, TrustDelegation, TrustPolicy, WotMetadata,
-    WotService,
+    ModerationRecord, ModerationScope, ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord,
+    RevocationRecord, TrustDecision, TrustDelegation, TrustPolicy, WotMetadata, WotService,
 };
 
 use std::{
@@ -945,6 +950,16 @@ impl IndexingService {
     #[must_use]
     pub fn resilience_service(&self, config: resilience::ResilienceConfig) -> resilience::ResilienceService {
         resilience::ResilienceService::new(config)
+    }
+
+    /// Create a resilience service using this indexer's local `WoT` policy.
+    #[must_use]
+    pub fn resilience_service_with_wot(
+        &self,
+        config: resilience::ResilienceConfig,
+        wot: wot::WotService,
+    ) -> resilience::ResilienceService {
+        resilience::ResilienceService::with_wot(config, wot)
     }
 
     /// Create a local Web-of-Trust metadata service for this indexer.

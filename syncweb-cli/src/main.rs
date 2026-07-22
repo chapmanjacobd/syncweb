@@ -1810,7 +1810,7 @@ async fn handle_package_archive_import(
 
     let node = open_node(data_dir).await?;
     let importer = DropImporter::new(node.blob_store().clone());
-    let result = importer.import_archive(&archive, options).await?;
+    let result = importer.import_archive(&archive, options, None).await?;
     let collection = result.collection_id;
     let version = result.version.clone();
     if packages

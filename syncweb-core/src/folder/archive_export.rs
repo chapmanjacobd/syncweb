@@ -16,6 +16,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
+    daemon::ManagedPool,
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     node::blob_store::BlobStore,
@@ -102,8 +103,13 @@ impl DropExporter {
         manifest: &CollectionManifest,
         output: impl AsRef<Path>,
     ) -> Result<DropExportResult> {
-        self.export_drop_with_options(std::slice::from_ref(manifest), output, DropExportOptions::default())
-            .await
+        self.export_drop_with_options(
+            std::slice::from_ref(manifest),
+            output,
+            DropExportOptions::default(),
+            None,
+        )
+        .await
     }
 
     /// Export one or more versions, selecting the requested version or latest
@@ -119,7 +125,7 @@ impl DropExporter {
         output: impl AsRef<Path>,
         options: DropExportOptions,
     ) -> Result<DropExportResult> {
-        self.export_drop_with_options(manifests, output, options).await
+        self.export_drop_with_options(manifests, output, options, None).await
     }
 
     /// Export a manifest using filtering and version-selection options.
@@ -137,13 +143,17 @@ impl DropExporter {
         manifests: &[CollectionManifest],
         output: impl AsRef<Path>,
         options: DropExportOptions,
+        pool: Option<&ManagedPool>,
     ) -> Result<DropExportResult> {
         let _export_guard = self.export_lock.lock().await;
-        let selected = select_manifest(manifests, options.version())?;
-        let filtered = filter_manifest(selected, options.filter())?;
-        let manifest_bytes = filtered.to_bytes()?;
-        let manifest_hash = Hash::new(&manifest_bytes);
-        let entries = unique_entries(&filtered.entries);
+        let selected = in_pool(pool, || select_manifest(manifests, options.version()))?;
+        let filtered = in_pool(pool, || filter_manifest(selected, options.filter()))?;
+        let (manifest_bytes, manifest_hash, entries) = in_pool(pool, || -> Result<_> {
+            let manifest_bytes = filtered.to_bytes()?;
+            let manifest_hash = Hash::new(&manifest_bytes);
+            let entries = unique_entries(&filtered.entries);
+            Ok((manifest_bytes, manifest_hash, entries))
+        })?;
         for entry in &entries {
             if !self.blob_store.has(entry.content_id).await? {
                 return Err(SyncwebError::InvalidConfig(format!(
@@ -158,7 +168,7 @@ impl DropExporter {
         fs::create_dir_all(parent).await?;
         let staging = parent.join(format!(".syncweb-drop-{}", Uuid::new_v4()));
         let write_result = self
-            .write_archive(&staging, &manifest_bytes, manifest_hash, &entries)
+            .write_archive(&staging, &manifest_bytes, manifest_hash, &entries, pool)
             .await;
         if let Err(error) = write_result {
             remove_if_present(&staging).await?;
@@ -189,6 +199,7 @@ impl DropExporter {
         manifest_bytes: &[u8],
         manifest_hash: Hash,
         entries: &[CollectionEntry],
+        pool: Option<&ManagedPool>,
     ) -> Result<()> {
         let file = fs::File::create(staging)
             .await
@@ -199,7 +210,7 @@ impl DropExporter {
         write_section(&mut encoder, manifest_hash, manifest_bytes).await?;
         let temporary_dir = staging.parent().unwrap_or_else(|| Path::new("."));
         for entry in entries {
-            write_blob_section(&self.blob_store, &mut encoder, entry, temporary_dir).await?;
+            write_blob_section(&self.blob_store, &mut encoder, entry, temporary_dir, pool).await?;
         }
         encoder
             .shutdown()
@@ -225,8 +236,19 @@ pub async fn export_archive(
         DropExportOptions::default().with_filter(value.clone())
     });
     DropExporter::new(blob_store)
-        .export_drop_with_options(std::slice::from_ref(manifest), output, options)
+        .export_drop_with_options(std::slice::from_ref(manifest), output, options, None)
         .await
+}
+
+fn in_pool<F, R>(pool: Option<&ManagedPool>, operation: F) -> R
+where
+    F: FnOnce() -> R + Send,
+    R: Send,
+{
+    match pool {
+        Some(managed_pool) => managed_pool.install(operation),
+        None => operation(),
+    }
 }
 
 fn select_manifest(manifests: &[CollectionManifest], requested: Option<&str>) -> Result<CollectionManifest> {
@@ -298,9 +320,10 @@ async fn write_blob_section(
     encoder: &mut ZstdEncoder<fs::File>,
     entry: &CollectionEntry,
     temporary_dir: &Path,
+    pool: Option<&ManagedPool>,
 ) -> Result<()> {
     let temporary_path = temporary_dir.join(format!(".syncweb-drop-blob-{}", Uuid::new_v4()));
-    let result = stream_blob(blob_store, encoder, entry, &temporary_path).await;
+    let result = stream_blob(blob_store, encoder, entry, &temporary_path, pool).await;
     let cleanup = remove_if_present(&temporary_path).await;
     match (result, cleanup) {
         (Ok(()), Ok(())) => Ok(()),
@@ -317,6 +340,7 @@ async fn stream_blob(
     encoder: &mut ZstdEncoder<fs::File>,
     entry: &CollectionEntry,
     temporary_path: &Path,
+    pool: Option<&ManagedPool>,
 ) -> Result<()> {
     blob_store.export_to_path(entry.content_id, temporary_path).await?;
     let metadata = fs::metadata(temporary_path)
@@ -344,12 +368,12 @@ async fn stream_blob(
             .get(..read)
             .ok_or_else(|| SyncwebError::operation("blob reader returned an invalid chunk", read))?;
         encoder.write_all(chunk).await?;
-        hasher.update(chunk);
+        in_pool(pool, || hasher.update(chunk));
         copied = copied
             .checked_add(u64::try_from(read).map_err(|error| SyncwebError::operation("drop blob is too large", error))?)
             .ok_or_else(|| SyncwebError::operation("drop blob size overflow", "u64 limit exceeded"))?;
     }
-    let actual = Hash::from_bytes(*hasher.finalize().as_bytes());
+    let actual = in_pool(pool, || Hash::from_bytes(*hasher.finalize().as_bytes()));
     if copied != entry.size || actual != entry.content_id {
         return Err(SyncwebError::InvalidConfig(format!(
             "drop blob hash does not match manifest for {}",

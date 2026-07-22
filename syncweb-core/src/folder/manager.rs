@@ -70,8 +70,7 @@ impl FolderManager {
                 ticket_raw = rest;
             }
         }
-        let ticket =
-            DocTicket::from_str(ticket_raw).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+        let ticket = DocTicket::from_str(ticket_raw).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());

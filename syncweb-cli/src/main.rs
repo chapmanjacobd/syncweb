@@ -10,8 +10,8 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
     commands::{
-        BackupArgs, CollectionCommand, Command, ConfigCommand, HealthArgs, ImportArgs, NetworkCommand, PackageCommand,
-        ScheduleCommand, SnapshotCommand, StatsArgs, VerifyArgs, WatchArgs,
+        CollectionCommand, Command, ConfigCommand, HealthArgs, ImportArgs, NetworkCommand, PackageCommand,
+        ScheduleCommand, SnapshotCommand, SnapshotCreateArgs, StatsArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version, run_repl},
 };
@@ -79,10 +79,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Stat(command) => handle_stat(command, output_json)?,
         Command::Download(command) => handle_download(&cli.data_dir, command, output_json).await?,
         Command::Import(command) => handle_import(&cli.data_dir, command, output_json).await?,
-        Command::Backup(command) => handle_backup(&cli.data_dir, command, output_json).await?,
-        Command::Restore(command) => handle_restore(&cli.data_dir, command, output_json).await?,
-        Command::Snapshots(command) => {
-            handle_snapshots(&cli.data_dir, command.path, command.command, output_json).await?;
+        Command::Snapshot { command } => {
+            handle_snapshot(&cli.data_dir, command, output_json).await?;
         }
         Command::Health(command) => handle_health(&cli.data_dir, command, output_json).await?,
         Command::Init(command) => {
@@ -421,7 +419,11 @@ async fn handle_download(
 }
 
 #[async_recursion]
-async fn handle_backup(data_dir: &std::path::Path, command: BackupArgs, output_json: bool) -> Result<()> {
+async fn handle_snapshot_create(
+    data_dir: &std::path::Path,
+    command: SnapshotCreateArgs,
+    output_json: bool,
+) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
@@ -454,9 +456,9 @@ async fn handle_backup(data_dir: &std::path::Path, command: BackupArgs, output_j
 }
 
 #[async_recursion]
-async fn handle_restore(
+async fn handle_snapshot_restore(
     data_dir: &std::path::Path,
-    command: crate::cli::commands::RestoreArgs,
+    command: crate::cli::commands::SnapshotRestoreArgs,
     output_json: bool,
 ) -> Result<()> {
     let node = open_node(data_dir).await?;
@@ -488,16 +490,13 @@ async fn handle_restore(
 }
 
 #[async_recursion]
-async fn handle_snapshots(
-    data_dir: &std::path::Path,
-    path: std::path::PathBuf,
-    command: Option<SnapshotCommand>,
-    output_json: bool,
-) -> Result<()> {
-    let node = open_node(data_dir).await?;
-    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+async fn handle_snapshot(data_dir: &std::path::Path, command: SnapshotCommand, output_json: bool) -> Result<()> {
     match command {
-        None => {
+        SnapshotCommand::Create(args) => handle_snapshot_create(data_dir, args, output_json).await,
+        SnapshotCommand::Restore(args) => handle_snapshot_restore(data_dir, args, output_json).await,
+        SnapshotCommand::List { path } => {
+            let node = open_node(data_dir).await?;
+            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
             let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
             let mut matching = Vec::new();
             for snapshot in snapshots.list().await? {
@@ -533,8 +532,12 @@ async fn handle_snapshots(
                 }
                 println!("{table}");
             }
+            node.stop().await?;
+            Ok(())
         }
-        Some(SnapshotCommand::Diff { path: _, first, second }) => {
+        SnapshotCommand::Diff { path: _, first, second } => {
+            let node = open_node(data_dir).await?;
+            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
             let left = snapshots.load(first.parse()?).await?;
             let right = snapshots.load(second.parse()?).await?;
             let diff = left.diff(&right)?;
@@ -562,8 +565,12 @@ async fn handle_snapshots(
                     println!("modified\t{}\t{}\t{}", old.path.display(), old.hash, new.hash);
                 }
             }
+            node.stop().await?;
+            Ok(())
         }
-        Some(SnapshotCommand::Delete { path: _, snapshot }) => {
+        SnapshotCommand::Delete { path: _, snapshot } => {
+            let node = open_node(data_dir).await?;
+            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
             let id = snapshot.parse()?;
             snapshots.delete(id).await?;
             if output_json {
@@ -574,10 +581,10 @@ async fn handle_snapshots(
             } else {
                 println!("deleted: {id}");
             }
+            node.stop().await?;
+            Ok(())
         }
     }
-    node.stop().await?;
-    Ok(())
 }
 
 #[async_recursion]
@@ -1332,24 +1339,7 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
         PackageCommand::Info {
             manifest: manifest_path,
             ticket: ticket_value,
-        } => {
-            let collection_manifest = load_package_manifest(data_dir, manifest_path, ticket_value).await?;
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&collection_manifest)?);
-            } else {
-                let mut table = Table::new();
-                table.add_row(["Collection", &collection_manifest.collection_id.to_string()]);
-                if let Some(package) = &collection_manifest.package {
-                    table.add_row(["Name", &package.name]);
-                }
-                table.add_row(["Version", &collection_manifest.version]);
-                if let Some(parent) = &collection_manifest.parent {
-                    table.add_row(["Parent", &parent.to_string()]);
-                }
-                table.add_row(["Entries", &collection_manifest.entries.len().to_string()]);
-                println!("{table}");
-            }
-        }
+        } => handle_package_info(data_dir, manifest_path, ticket_value, output_json).await?,
         PackageCommand::Install {
             manifest: manifest_path,
             source,
@@ -1359,93 +1349,150 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
             manifest: manifest_path,
             source,
             ticket: ticket_value,
-        } => {
-            let collection_manifest = install_package(data_dir, &packages, manifest_path, source, ticket_value).await?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "status": "installed",
-                        "collection": collection_manifest.collection_id.to_string(),
-                        "version": collection_manifest.version,
-                    })
-                );
-            } else {
-                println!(
-                    "installed: {} {}",
-                    collection_manifest.collection_id, collection_manifest.version
-                );
-            }
-        }
+        } => handle_package_install(data_dir, &packages, manifest_path, source, ticket_value, output_json).await?,
         PackageCommand::Remove {
             collection: collection_id,
             version,
-        } => {
-            let collection = collection_id.parse()?;
-            packages.remove(collection, &version)?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"status": "removed", "collection": collection_id, "version": version})
-                );
-            } else {
-                println!("removed: {collection} {version}");
-            }
-        }
+        } => handle_package_remove(&packages, &collection_id, &version, output_json)?,
         PackageCommand::Verify {
             manifest: manifest_path,
-        } => {
-            let collection_manifest = load_manifest_file(&manifest_path)?;
-            packages.verify(&collection_manifest)?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "status": "verified",
-                        "collection": collection_manifest.collection_id.to_string(),
-                        "version": collection_manifest.version,
-                    })
-                );
-            } else {
-                println!(
-                    "verified: {} {}",
-                    collection_manifest.collection_id, collection_manifest.version
-                );
-            }
-        }
+        } => handle_package_verify(&packages, &manifest_path, output_json)?,
         PackageCommand::List => handle_package_list(&packages, output_json)?,
         PackageCommand::Versions {
             collection: collection_id,
-        } => {
-            let collection = collection_id.parse()?;
-            let state = packages.state()?;
-            let installed = state
-                .current(collection)
-                .ok_or_else(|| anyhow::anyhow!("collection is not installed: {collection}"))?;
-            if output_json {
-                let versions = installed.versions.keys().cloned().collect::<Vec<_>>();
-                println!("{}", serde_json::to_string_pretty(&versions)?);
-            } else {
-                for version in installed.versions.keys() {
-                    println!("{version}");
-                }
-            }
-        }
+        } => handle_package_versions(&packages, &collection_id, output_json)?,
         PackageCommand::Switch {
             collection: collection_id,
             version,
-        } => {
-            let collection = collection_id.parse()?;
-            packages.switch(collection, &version)?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"status": "current", "collection": collection_id, "version": version})
-                );
-            } else {
-                println!("current: {collection} {version}");
-            }
+        } => handle_package_switch(&packages, &collection_id, &version, output_json)?,
+    }
+    Ok(())
+}
+
+async fn handle_package_info(
+    data_dir: &std::path::Path,
+    manifest_path: Option<std::path::PathBuf>,
+    ticket_value: Option<String>,
+    output_json: bool,
+) -> Result<()> {
+    let collection_manifest = load_package_manifest(data_dir, manifest_path, ticket_value).await?;
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&collection_manifest)?);
+    } else {
+        let mut table = Table::new();
+        table.add_row(["Collection", &collection_manifest.collection_id.to_string()]);
+        if let Some(package) = &collection_manifest.package {
+            table.add_row(["Name", &package.name]);
         }
+        table.add_row(["Version", &collection_manifest.version]);
+        if let Some(parent) = &collection_manifest.parent {
+            table.add_row(["Parent", &parent.to_string()]);
+        }
+        table.add_row(["Entries", &collection_manifest.entries.len().to_string()]);
+        println!("{table}");
+    }
+    Ok(())
+}
+
+async fn handle_package_install(
+    data_dir: &std::path::Path,
+    packages: &PackageManager,
+    manifest_path: Option<std::path::PathBuf>,
+    source: Option<std::path::PathBuf>,
+    ticket_value: Option<String>,
+    output_json: bool,
+) -> Result<()> {
+    let collection_manifest = install_package(data_dir, packages, manifest_path, source, ticket_value).await?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "installed",
+                "collection": collection_manifest.collection_id.to_string(),
+                "version": collection_manifest.version,
+            })
+        );
+    } else {
+        println!(
+            "installed: {} {}",
+            collection_manifest.collection_id, collection_manifest.version
+        );
+    }
+    Ok(())
+}
+
+fn handle_package_remove(
+    packages: &PackageManager,
+    collection_id: &str,
+    version: &str,
+    output_json: bool,
+) -> Result<()> {
+    let collection = collection_id.parse()?;
+    packages.remove(collection, version)?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({"status": "removed", "collection": collection_id, "version": version})
+        );
+    } else {
+        println!("removed: {collection} {version}");
+    }
+    Ok(())
+}
+
+fn handle_package_verify(packages: &PackageManager, manifest_path: &std::path::Path, output_json: bool) -> Result<()> {
+    let collection_manifest = load_manifest_file(manifest_path)?;
+    packages.verify(&collection_manifest)?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "verified",
+                "collection": collection_manifest.collection_id.to_string(),
+                "version": collection_manifest.version,
+            })
+        );
+    } else {
+        println!(
+            "verified: {} {}",
+            collection_manifest.collection_id, collection_manifest.version
+        );
+    }
+    Ok(())
+}
+
+fn handle_package_versions(packages: &PackageManager, collection_id: &str, output_json: bool) -> Result<()> {
+    let collection = collection_id.parse()?;
+    let state = packages.state()?;
+    let installed = state
+        .current(collection)
+        .ok_or_else(|| anyhow::anyhow!("collection is not installed: {collection}"))?;
+    if output_json {
+        let versions = installed.versions.keys().cloned().collect::<Vec<_>>();
+        println!("{}", serde_json::to_string_pretty(&versions)?);
+    } else {
+        for version in installed.versions.keys() {
+            println!("{version}");
+        }
+    }
+    Ok(())
+}
+
+fn handle_package_switch(
+    packages: &PackageManager,
+    collection_id: &str,
+    version: &str,
+    output_json: bool,
+) -> Result<()> {
+    let collection = collection_id.parse()?;
+    packages.switch(collection, version)?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({"status": "current", "collection": collection_id, "version": version})
+        );
+    } else {
+        println!("current: {collection} {version}");
     }
     Ok(())
 }

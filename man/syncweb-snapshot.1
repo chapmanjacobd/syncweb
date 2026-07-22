@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH snapshot 1  "snapshot " 
+.SH NAME
+snapshot \- Manage content\-addressed snapshots
+.SH SYNOPSIS
+\fBsnapshot\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Manage content\-addressed snapshots
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+snapshot\-create(1)
+Create a content\-addressed snapshot
+.TP
+snapshot\-restore(1)
+Restore a snapshot to a folder or directory
+.TP
+snapshot\-list(1)
+List local snapshots
+.TP
+snapshot\-diff(1)
+Compare two snapshots
+.TP
+snapshot\-delete(1)
+Delete a snapshot and release its pins
+.TP
+snapshot\-help(1)
+Print this message or the help of the given subcommand(s)

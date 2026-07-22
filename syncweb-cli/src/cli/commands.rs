@@ -41,12 +41,11 @@ pub enum Command {
     Download(DownloadArgs),
     #[command(about = "Import local files into a synchronized folder")]
     Import(ImportArgs),
-    #[command(about = "Create a content-addressed snapshot")]
-    Backup(BackupArgs),
-    #[command(about = "Restore a snapshot to a folder or directory")]
-    Restore(RestoreArgs),
-    #[command(about = "List, diff, or delete snapshots")]
-    Snapshots(SnapshotsArgs),
+    #[command(about = "Manage content-addressed snapshots")]
+    Snapshot {
+        #[command(subcommand)]
+        command: SnapshotCommand,
+    },
     #[command(about = "Show seeding status per folder blob")]
     Health(HealthArgs),
     #[command(about = "Initialize a folder and print a shareable URL")]
@@ -261,7 +260,7 @@ pub struct ImportArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct BackupArgs {
+pub struct SnapshotCreateArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
     #[arg(long)]
@@ -275,7 +274,7 @@ pub struct BackupArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RestoreArgs {
+pub struct SnapshotRestoreArgs {
     pub path: PathBuf,
     pub snapshot: String,
 }
@@ -286,16 +285,17 @@ pub struct HealthArgs {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Args)]
-pub struct SnapshotsArgs {
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
-    #[command(subcommand)]
-    pub command: Option<SnapshotCommand>,
-}
-
 #[derive(Debug, Subcommand)]
 pub enum SnapshotCommand {
+    #[command(about = "Create a content-addressed snapshot")]
+    Create(SnapshotCreateArgs),
+    #[command(about = "Restore a snapshot to a folder or directory")]
+    Restore(SnapshotRestoreArgs),
+    #[command(name = "list", about = "List local snapshots")]
+    List {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     #[command(about = "Compare two snapshots")]
     Diff {
         path: PathBuf,

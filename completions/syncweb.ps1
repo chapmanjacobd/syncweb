@@ -44,9 +44,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
             [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download folder content or copy a local file')
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
-            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
-            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
-            [CompletionResult]::new('snapshots', 'snapshots', [CompletionResultType]::ParameterValue, 'List, diff, or delete snapshots')
+            [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
@@ -109,6 +107,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;create' {
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the created folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -121,6 +120,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;join' {
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the joined folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -288,7 +288,22 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;backup' {
+        'syncweb;snapshot' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
+            [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
+            [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;snapshot;create' {
             [CompletionResult]::new('--description', '--description', [CompletionResultType]::ParameterName, 'description')
             [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -299,7 +314,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;restore' {
+        'syncweb;snapshot;restore' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -308,49 +323,58 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;snapshots' {
+        'syncweb;snapshot;list' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;snapshot;diff' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;snapshot;delete' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;snapshot;help' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
             [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
             [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
-        'syncweb;snapshots;diff' {
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+        'syncweb;snapshot;help;create' {
             break
         }
-        'syncweb;snapshots;delete' {
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+        'syncweb;snapshot;help;restore' {
             break
         }
-        'syncweb;snapshots;help' {
-            [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
-            [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+        'syncweb;snapshot;help;list' {
             break
         }
-        'syncweb;snapshots;help;diff' {
+        'syncweb;snapshot;help;diff' {
             break
         }
-        'syncweb;snapshots;help;delete' {
+        'syncweb;snapshot;help;delete' {
             break
         }
-        'syncweb;snapshots;help;help' {
+        'syncweb;snapshot;help;help' {
             break
         }
         'syncweb;health' {
@@ -363,6 +387,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;init' {
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -592,7 +617,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Export package versions as compressed CAR archive files')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'List locally installed packages, optionally filtering by text')
             [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
@@ -605,19 +631,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
-        'syncweb;package;drop' {
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;package;drop;export' {
+        'syncweb;package;export' {
             [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
             [CompletionResult]::new('--filter', '--filter', [CompletionResultType]::ParameterName, 'filter')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -628,7 +642,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;package;drop;import' {
+        'syncweb;package;import' {
             [CompletionResult]::new('--filter', '--filter', [CompletionResultType]::ParameterName, 'filter')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -636,21 +650,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;package;drop;help' {
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;package;drop;help;export' {
-            break
-        }
-        'syncweb;package;drop;help;import' {
-            break
-        }
-        'syncweb;package;drop;help;help' {
             break
         }
         'syncweb;package;search' {
@@ -740,7 +739,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;package;help' {
-            [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Export package versions as compressed CAR archive files')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'List locally installed packages, optionally filtering by text')
             [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
@@ -753,15 +753,10 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
-        'syncweb;package;help;drop' {
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
+        'syncweb;package;help;export' {
             break
         }
-        'syncweb;package;help;drop;export' {
-            break
-        }
-        'syncweb;package;help;drop;import' {
+        'syncweb;package;help;import' {
             break
         }
         'syncweb;package;help;search' {
@@ -1350,9 +1345,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
             [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download folder content or copy a local file')
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
-            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
-            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
-            [CompletionResult]::new('snapshots', 'snapshots', [CompletionResultType]::ParameterValue, 'List, diff, or delete snapshots')
+            [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
@@ -1437,21 +1430,27 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;help;import' {
             break
         }
-        'syncweb;help;backup' {
-            break
-        }
-        'syncweb;help;restore' {
-            break
-        }
-        'syncweb;help;snapshots' {
+        'syncweb;help;snapshot' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
             [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
             [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
             break
         }
-        'syncweb;help;snapshots;diff' {
+        'syncweb;help;snapshot;create' {
             break
         }
-        'syncweb;help;snapshots;delete' {
+        'syncweb;help;snapshot;restore' {
+            break
+        }
+        'syncweb;help;snapshot;list' {
+            break
+        }
+        'syncweb;help;snapshot;diff' {
+            break
+        }
+        'syncweb;help;snapshot;delete' {
             break
         }
         'syncweb;help;health' {
@@ -1512,7 +1511,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;package' {
-            [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Export package versions as compressed CAR archive files')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'List locally installed packages, optionally filtering by text')
             [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
@@ -1524,15 +1524,10 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('switch', 'switch', [CompletionResultType]::ParameterValue, 'Switch the active installed collection version')
             break
         }
-        'syncweb;help;package;drop' {
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
+        'syncweb;help;package;export' {
             break
         }
-        'syncweb;help;package;drop;export' {
-            break
-        }
-        'syncweb;help;package;drop;import' {
+        'syncweb;help;package;import' {
             break
         }
         'syncweb;help;package;search' {

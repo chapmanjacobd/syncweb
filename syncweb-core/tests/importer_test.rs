@@ -168,3 +168,33 @@ async fn test_import_idempotent() -> anyhow::Result<()> {
     node.stop().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_import_rejects_stale_scanned_entry() -> anyhow::Result<()> {
+    let dir = TestDirectory::new()?;
+    let node = test_node(&dir, "node").await?;
+    let doc = node.docs_engine().create_namespace().await?;
+    let author = node.docs_engine().author().await?;
+
+    let source = dir.path().join("source");
+    fs::create_dir_all(&source)?;
+    let path = source.join("file.txt");
+    fs::write(&path, b"before")?;
+
+    let scanner = syncweb_core::fs::Scanner::new(&source, Vec::<String>::new());
+    let mut entries = scanner.scan()?;
+    fs::write(&path, b"after")?;
+
+    let importer = Importer::new(
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        doc.clone(),
+        author,
+    );
+    let error = importer.import_entries(std::mem::take(&mut entries)).await.unwrap_err();
+    anyhow::ensure!(error.to_string().contains("file changed during import"));
+    anyhow::ensure!(node.docs_engine().get(&doc, author, b"file.txt").await?.is_none());
+
+    node.stop().await?;
+    Ok(())
+}

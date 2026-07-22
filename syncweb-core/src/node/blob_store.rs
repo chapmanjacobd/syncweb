@@ -1,7 +1,13 @@
 use bytes::Bytes;
 use iroh::{EndpointAddr, address_lookup::memory::MemoryLookup, endpoint::Endpoint};
-use iroh_blobs::api::Store as BlobApi;
-use iroh_blobs::{BlobsProtocol, Hash, ticket::BlobTicket};
+use iroh_blobs::{
+    BlobFormat, BlobsProtocol, Hash,
+    api::{
+        Store as BlobApi,
+        blobs::{AddPathOptions, ImportMode},
+    },
+    ticket::BlobTicket,
+};
 use n0_future::StreamExt;
 use std::path::Path;
 
@@ -53,6 +59,28 @@ impl BlobStore {
             .add_path(path)
             .await
             .map_err(|error| SyncwebError::operation("failed to add blob file", error))?
+            .hash)
+    }
+
+    /// Add a file using a reference to its original path instead of copying
+    /// its contents into the blob store.
+    ///
+    /// The source file must remain available and unchanged for as long as the
+    /// blob store may need to read this blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file fails to be read or added to the store.
+    pub async fn add_file_ref(&self, path: impl AsRef<Path>) -> Result<Hash> {
+        Ok(self
+            .store
+            .add_path_with_opts(AddPathOptions {
+                path: path.as_ref().to_owned(),
+                mode: ImportMode::TryReference,
+                format: BlobFormat::Raw,
+            })
+            .await
+            .map_err(|error| SyncwebError::operation("failed to add blob file (reference)", error))?
             .hash)
     }
 

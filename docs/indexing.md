@@ -49,7 +49,10 @@ count, responsible peer count, jitter window, and observation lifetime.
 content under an indexing-owned tag; it does not alter document synchronization.
 Repair results also retain provider-specific failure kinds, bounded failure
 history, and aggregate consecutive-failure state so callers can distinguish
-transient network errors from definitive missing or corrupt data.
+transient network errors from definitive missing or corrupt data. Definitive
+failures invalidate the affected lease and create an expiring hash-scoped
+automated ban; manual global or hash-scoped bans are also excluded from health
+and provider selection.
 
 ### 3. Web of Trust (WoT) Metadata
 Instead of formal, heavy compute pipelines (like OCR and PDF extractors) running automatically on all clients, metadata extraction is crowdsourced to trusted entities.

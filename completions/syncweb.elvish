@@ -28,6 +28,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand repl 'Start an interactive command shell'
             cand start 'Start the local syncweb node for one command invocation'
             cand shutdown 'Stop the local syncweb node'
+            cand daemon 'Start and manage the local syncweb daemon'
+            cand status 'Show the local daemon status'
+            cand daemon-shutdown 'Ask the local daemon to stop'
+            cand daemon-reload 'Ask the local daemon to reload configuration'
+            cand daemon-sync 'Ask the local daemon to trigger synchronization'
+            cand daemon-add 'Add a folder to the running daemon'
+            cand daemon-remove 'Remove a folder from the running daemon'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave and remove a synchronized folder'
@@ -91,6 +98,69 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;shutdown'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon'= {
+            cand --data-dir 'Override the global persistent data directory'
+            cand --log-file 'Write daemon logs to this file'
+            cand --max-threads 'max-threads'
+            cand --sync-interval 'sync-interval'
+            cand -f 'Run in the foreground'
+            cand --foreground 'Run in the foreground'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;status'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon-shutdown'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --force 'Skip graceful shutdown'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon-reload'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon-sync'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon-add'= {
+            cand --namespace 'namespace'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;daemon-remove'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1364,6 +1434,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand repl 'Start an interactive command shell'
             cand start 'Start the local syncweb node for one command invocation'
             cand shutdown 'Stop the local syncweb node'
+            cand daemon 'Start and manage the local syncweb daemon'
+            cand status 'Show the local daemon status'
+            cand daemon-shutdown 'Ask the local daemon to stop'
+            cand daemon-reload 'Ask the local daemon to reload configuration'
+            cand daemon-sync 'Ask the local daemon to trigger synchronization'
+            cand daemon-add 'Add a folder to the running daemon'
+            cand daemon-remove 'Remove a folder from the running daemon'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave and remove a synchronized folder'
@@ -1409,6 +1486,20 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;start'= {
         }
         &'syncweb;help;shutdown'= {
+        }
+        &'syncweb;help;daemon'= {
+        }
+        &'syncweb;help;status'= {
+        }
+        &'syncweb;help;daemon-shutdown'= {
+        }
+        &'syncweb;help;daemon-reload'= {
+        }
+        &'syncweb;help;daemon-sync'= {
+        }
+        &'syncweb;help;daemon-add'= {
+        }
+        &'syncweb;help;daemon-remove'= {
         }
         &'syncweb;help;create'= {
         }

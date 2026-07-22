@@ -398,10 +398,17 @@ syncweb config show filter
 | `sort` | `sort` | Sort results (uses peer tracker) |
 | `stat` | `stat` | File metadata from doc + blob store |
 | `automatic` | `automatic` | Auto-accept/join with filter engine |
-| `shutdown` | `shutdown` | Gracefully stop the node |
+| `shutdown` | `shutdown` | Gracefully stop the daemon |
+| NEW | `daemon` | Start the single-writer daemon (`--foreground` keeps it attached) |
+| NEW | `status` | Show daemon status |
+| NEW | `daemon-shutdown` | Ask the daemon to stop |
+| NEW | `daemon-reload` | Ask the daemon to reload configuration |
+| NEW | `daemon-sync` | Ask the daemon to trigger synchronization |
+| NEW | `daemon-add` | Add a folder to the running daemon |
+| NEW | `daemon-remove` | Remove a folder from the running daemon |
 | `init` | `init` | Create folder + output shareable sync:// URL |
 | `config` | `config` | Show/modify local configuration |
-| `start` | `start` | Start the node (or log that it started) |
+| `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |
 | `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |

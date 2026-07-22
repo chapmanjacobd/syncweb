@@ -31,6 +31,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('repl', 'repl', [CompletionResultType]::ParameterValue, 'Start an interactive command shell')
             [CompletionResult]::new('start', 'start', [CompletionResultType]::ParameterValue, 'Start the local syncweb node for one command invocation')
             [CompletionResult]::new('shutdown', 'shutdown', [CompletionResultType]::ParameterValue, 'Stop the local syncweb node')
+            [CompletionResult]::new('daemon', 'daemon', [CompletionResultType]::ParameterValue, 'Start and manage the local syncweb daemon')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Show the local daemon status')
+            [CompletionResult]::new('daemon-shutdown', 'daemon-shutdown', [CompletionResultType]::ParameterValue, 'Ask the local daemon to stop')
+            [CompletionResult]::new('daemon-reload', 'daemon-reload', [CompletionResultType]::ParameterValue, 'Ask the local daemon to reload configuration')
+            [CompletionResult]::new('daemon-sync', 'daemon-sync', [CompletionResultType]::ParameterValue, 'Ask the local daemon to trigger synchronization')
+            [CompletionResult]::new('daemon-add', 'daemon-add', [CompletionResultType]::ParameterValue, 'Add a folder to the running daemon')
+            [CompletionResult]::new('daemon-remove', 'daemon-remove', [CompletionResultType]::ParameterValue, 'Remove a folder from the running daemon')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder')
             [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
             [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave and remove a synchronized folder')
@@ -98,6 +105,76 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;shutdown' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Override the global persistent data directory')
+            [CompletionResult]::new('--log-file', '--log-file', [CompletionResultType]::ParameterName, 'Write daemon logs to this file')
+            [CompletionResult]::new('--max-threads', '--max-threads', [CompletionResultType]::ParameterName, 'max-threads')
+            [CompletionResult]::new('--sync-interval', '--sync-interval', [CompletionResultType]::ParameterName, 'sync-interval')
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Run in the foreground')
+            [CompletionResult]::new('--foreground', '--foreground', [CompletionResultType]::ParameterName, 'Run in the foreground')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;status' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon-shutdown' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--force', '--force', [CompletionResultType]::ParameterName, 'Skip graceful shutdown')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon-reload' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon-sync' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon-add' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'namespace')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;daemon-remove' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -1567,6 +1644,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('repl', 'repl', [CompletionResultType]::ParameterValue, 'Start an interactive command shell')
             [CompletionResult]::new('start', 'start', [CompletionResultType]::ParameterValue, 'Start the local syncweb node for one command invocation')
             [CompletionResult]::new('shutdown', 'shutdown', [CompletionResultType]::ParameterValue, 'Stop the local syncweb node')
+            [CompletionResult]::new('daemon', 'daemon', [CompletionResultType]::ParameterValue, 'Start and manage the local syncweb daemon')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Show the local daemon status')
+            [CompletionResult]::new('daemon-shutdown', 'daemon-shutdown', [CompletionResultType]::ParameterValue, 'Ask the local daemon to stop')
+            [CompletionResult]::new('daemon-reload', 'daemon-reload', [CompletionResultType]::ParameterValue, 'Ask the local daemon to reload configuration')
+            [CompletionResult]::new('daemon-sync', 'daemon-sync', [CompletionResultType]::ParameterValue, 'Ask the local daemon to trigger synchronization')
+            [CompletionResult]::new('daemon-add', 'daemon-add', [CompletionResultType]::ParameterValue, 'Add a folder to the running daemon')
+            [CompletionResult]::new('daemon-remove', 'daemon-remove', [CompletionResultType]::ParameterValue, 'Remove a folder from the running daemon')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder')
             [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
             [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave and remove a synchronized folder')
@@ -1616,6 +1700,27 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;shutdown' {
+            break
+        }
+        'syncweb;help;daemon' {
+            break
+        }
+        'syncweb;help;status' {
+            break
+        }
+        'syncweb;help;daemon-shutdown' {
+            break
+        }
+        'syncweb;help;daemon-reload' {
+            break
+        }
+        'syncweb;help;daemon-sync' {
+            break
+        }
+        'syncweb;help;daemon-add' {
+            break
+        }
+        'syncweb;help;daemon-remove' {
             break
         }
         'syncweb;help;create' {

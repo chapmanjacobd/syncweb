@@ -1,0 +1,16 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH daemon-shutdown 1  "daemon-shutdown " 
+.SH NAME
+daemon\-shutdown \- Ask the local daemon to stop
+.SH SYNOPSIS
+\fBdaemon\-shutdown\fR [\fB\-\-force\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Ask the local daemon to stop
+.SH OPTIONS
+.TP
+\fB\-\-force\fR
+Skip graceful shutdown
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

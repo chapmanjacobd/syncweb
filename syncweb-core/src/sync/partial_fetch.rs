@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use iroh_blobs::Hash;
+use serde::{Deserialize, Serialize};
 
 /// A document blob considered for a partial fetch.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -27,7 +28,7 @@ impl FetchCandidate {
 }
 
 /// Constraints for selecting a subset of folder content.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct FetchFilter {
     pub paths: Option<Vec<PathBuf>>,
@@ -132,7 +133,7 @@ impl FetchFilter {
 }
 
 /// Controls whether a fetch reconciles all content or only matching content.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub enum FetchStrategy {
     #[default]

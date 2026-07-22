@@ -8,6 +8,7 @@ use async_compression::tokio::bufread::ZstdDecoder;
 use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -65,7 +66,7 @@ impl DropImportOptions {
 }
 
 /// Information about a successfully imported drop.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct DropImportResult {
     pub manifest: Hash,

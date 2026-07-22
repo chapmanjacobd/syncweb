@@ -124,6 +124,8 @@ pub struct FolderStatus {
     pub session_active: bool,
     pub last_sync_at: Option<u64>,
     pub sync_count: u64,
+    pub entries_synced: u64,
+    pub errors: Vec<String>,
 }
 
 /// A folder managed by the daemon.
@@ -134,6 +136,8 @@ pub struct FolderEntry {
     pub session: Option<ActiveSession>,
     pub last_sync_at: Option<u64>,
     pub sync_count: u64,
+    pub entries_synced: u64,
+    pub errors: Vec<String>,
 }
 
 impl FolderEntry {
@@ -145,6 +149,8 @@ impl FolderEntry {
             session: None,
             last_sync_at: None,
             sync_count: 0,
+            entries_synced: 0,
+            errors: Vec::new(),
         }
     }
 
@@ -156,6 +162,8 @@ impl FolderEntry {
             session_active: self.session.is_some() || crate::sync::is_active(self.namespace),
             last_sync_at: self.last_sync_at,
             sync_count: self.sync_count,
+            entries_synced: self.entries_synced,
+            errors: self.errors.clone(),
         }
     }
 }
@@ -205,6 +213,25 @@ impl FolderRegistry {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.folders.is_empty()
+    }
+
+    pub fn record_import(&mut self, namespace: iroh_docs::NamespaceId, entries: u64, timestamp: u64) {
+        if let Some(folder) = self.folders.get_mut(&namespace.to_string()) {
+            folder.entries_synced = folder.entries_synced.saturating_add(entries);
+            folder.sync_count = folder.sync_count.saturating_add(1);
+            folder.last_sync_at = Some(timestamp);
+            folder.errors.clear();
+        }
+    }
+
+    pub fn record_error(&mut self, namespace: iroh_docs::NamespaceId, error: impl Into<String>) {
+        if let Some(folder) = self.folders.get_mut(&namespace.to_string()) {
+            folder.errors.push(error.into());
+            if folder.errors.len() > 16 {
+                let remove_count = folder.errors.len().saturating_sub(16);
+                folder.errors.drain(..remove_count);
+            }
+        }
     }
 }
 

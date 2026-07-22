@@ -31,6 +31,41 @@ pub enum SyncEvent {
     Failed(String),
 }
 
+/// Control channel for a running synchronization intent.
+#[derive(Clone, Debug)]
+pub struct IntentControl {
+    commands: mpsc::UnboundedSender<SyncCommand>,
+}
+
+impl IntentControl {
+    /// Request that the intent pause network synchronization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the intent has already stopped.
+    pub fn pause(&self) -> Result<(), mpsc::error::SendError<SyncCommand>> {
+        self.commands.send(SyncCommand::Pause)
+    }
+
+    /// Request that the intent resume network synchronization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the intent has already stopped.
+    pub fn resume(&self) -> Result<(), mpsc::error::SendError<SyncCommand>> {
+        self.commands.send(SyncCommand::Resume)
+    }
+
+    /// Request that the intent stop.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the intent has already stopped.
+    pub fn cancel(&self) -> Result<(), mpsc::error::SendError<SyncCommand>> {
+        self.commands.send(SyncCommand::Cancel)
+    }
+}
+
 /// Bidirectional handle for a synchronization operation.
 ///
 /// It implements both halves of the futures API: callers can consume
@@ -86,6 +121,13 @@ impl IntentHandle {
     #[must_use]
     pub fn cancel_sender(&self) -> mpsc::UnboundedSender<SyncCommand> {
         self.commands.clone()
+    }
+
+    #[must_use]
+    pub fn control(&self) -> IntentControl {
+        IntentControl {
+            commands: self.commands.clone(),
+        }
     }
 }
 

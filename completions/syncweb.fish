@@ -127,7 +127,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l verbose 
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l no-color -d 'Disable colored output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-add" -l namespace -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-add" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-add" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-add" -l json -d 'Emit machine-readable JSON where supported'

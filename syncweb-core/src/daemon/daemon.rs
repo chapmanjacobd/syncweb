@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use iroh_docs::NamespaceId;
@@ -13,19 +13,24 @@ use tokio::{
 
 use crate::{
     error::{Result, SyncwebError},
+    filter::{FilterAction, FilterEngine, FilterEntry},
     folder::FolderManager,
+    fs::{FsWatcher, Importer},
     node::{
         identity::IdentityManager,
         iroh_node::{IrohNode, RelayMode},
     },
     schedule::ScheduleManager,
+    stats::BandwidthStats,
     storage::Config as AppConfig,
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
 };
 
 use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, StateFile,
-    current_timestamp, daemon_socket_path, supervisor::IntentSupervisor,
+    current_timestamp, daemon_socket_path,
+    state::{BandwidthSnapshot, DaemonStatusReport, FolderStatusReport, ScheduleStatus},
+    supervisor::{IntentControls, IntentSupervisor},
 };
 
 /// Configuration used to construct and run a daemon.
@@ -42,6 +47,7 @@ pub struct DaemonConfig {
     pub rayon_threads: usize,
     pub log_level: String,
     pub log_file: Option<PathBuf>,
+    pub watch_debounce: Duration,
 }
 
 impl Default for DaemonConfig {
@@ -57,6 +63,7 @@ impl Default for DaemonConfig {
             rayon_threads: std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
             log_level: "info".to_owned(),
             log_file: None,
+            watch_debounce: Duration::from_millis(500),
         }
     }
 }
@@ -86,7 +93,16 @@ pub struct Daemon {
     handle: DaemonHandle,
     sync_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Option<String>>>,
     intent_tasks: Mutex<HashMap<NamespaceId, JoinHandle<()>>>,
+    intent_controls: IntentControls,
+    watchers: Mutex<HashMap<String, FsWatcher>>,
+    pending_watch_events: Mutex<HashMap<String, PendingWatch>>,
+    filter_engine: tokio::sync::RwLock<Option<FilterEngine>>,
     archive_pool: Arc<ManagedPool>,
+}
+
+struct PendingWatch {
+    paths: HashMap<PathBuf, bool>,
+    ready_at: Instant,
 }
 
 impl Daemon {
@@ -116,7 +132,15 @@ impl Daemon {
             }
         };
         let schedule_manager = match ScheduleManager::from_config(&app_config.schedule) {
-            Ok(value) => Some(value),
+            Ok(value) if app_config.schedule != crate::schedule::ScheduleConfig::default() => Some(value),
+            Ok(_) => None,
+            Err(error) => {
+                pid_lock.release()?;
+                return Err(error);
+            }
+        };
+        let filter_engine = match load_filter(&config.data_dir) {
+            Ok(value) => value,
             Err(error) => {
                 pid_lock.release()?;
                 return Err(error);
@@ -210,6 +234,10 @@ impl Daemon {
             handle,
             sync_receiver: tokio::sync::Mutex::new(sync_receiver),
             intent_tasks: Mutex::new(HashMap::new()),
+            intent_controls: Arc::new(Mutex::new(HashMap::new())),
+            watchers: Mutex::new(HashMap::new()),
+            pending_watch_events: Mutex::new(HashMap::new()),
+            filter_engine: tokio::sync::RwLock::new(filter_engine),
             archive_pool,
         })
     }
@@ -249,6 +277,8 @@ impl Daemon {
             "daemon runtime initialized"
         );
         self.load_folders().await?;
+        self.start_watching().await?;
+        self.run_cycle().await?;
         let server = self.ipc_server.clone();
         let mut server_task = tokio::spawn(async move { server.serve().await });
         let mut shutdown = self.handle.shutdown_sender.subscribe();
@@ -256,6 +286,7 @@ impl Daemon {
         let mut signal_task = Box::pin(self.handle_signals(shutdown_sender.clone()));
         let interval_duration = self.config.sync_interval.max(Duration::from_millis(1));
         let mut interval = tokio::time::interval(interval_duration);
+        let mut watch_interval = tokio::time::interval(Duration::from_millis(100));
         let result = loop {
             tokio::select! {
                 signal_result = &mut signal_task => {
@@ -281,6 +312,7 @@ impl Daemon {
                         None => break Ok(()),
                     }
                 }
+                _ = watch_interval.tick() => self.handle_watch_events().await?,
                 _ = interval.tick() => self.run_cycle().await?,
             }
         };
@@ -298,26 +330,28 @@ impl Daemon {
     async fn run_cycle(&self) -> Result<()> {
         self.reload_if_requested().await?;
         self.load_folders().await?;
+        self.start_watching().await?;
         let statuses = self.handle.folder_registry.read().await.statuses();
         for folder in statuses {
             let namespace = folder
                 .namespace
                 .parse::<NamespaceId>()
                 .map_err(|error| SyncwebError::operation("invalid managed folder namespace", error))?;
+            let folder_name = (!folder.path.as_os_str().is_empty()).then(|| folder.path.to_string_lossy().into_owned());
             let active = {
                 let schedule_manager = self.schedule_manager.read().await;
                 schedule_manager
                     .as_ref()
-                    .is_none_or(|manager| manager.is_active(folder.path.to_str()))
+                    .is_none_or(|manager| manager.is_active(folder_name.as_deref()))
             };
+            self.start_supervision(namespace).await?;
             if active {
-                self.start_supervision(namespace)?;
+                self.set_intent_active(namespace, true)?;
             } else {
-                if is_active(namespace) && !cancel_session(namespace) {
-                    tracing::warn!(%namespace, "scheduled folder session could not be cancelled");
-                }
+                self.set_intent_active(namespace, false)?;
             }
         }
+        self.save_status_report().await?;
         Ok(())
     }
 
@@ -327,13 +361,15 @@ impl Daemon {
                 let parsed_namespace = value
                     .parse::<NamespaceId>()
                     .map_err(|error| SyncwebError::operation("invalid sync namespace", error))?;
-                self.start_supervision(parsed_namespace)
+                self.start_supervision(parsed_namespace).await?;
+                self.set_intent_active(parsed_namespace, true)?;
+                Ok(())
             }
             None => self.run_cycle().await,
         }
     }
 
-    fn start_supervision(&self, namespace: NamespaceId) -> Result<()> {
+    async fn start_supervision(&self, namespace: NamespaceId) -> Result<()> {
         if is_active(namespace) {
             return Ok(());
         }
@@ -346,25 +382,317 @@ impl Daemon {
             if tasks.contains_key(&namespace) {
                 return Ok(());
             }
-            let sync = self.sync_engine.clone();
-            let supervisor = self.intent_supervisor;
-            let shutdown = self.handle.shutdown_sender.subscribe();
-            let task = tokio::spawn(async move {
-                match supervisor
-                    .supervise(&sync, namespace, SubscribeParams::default(), shutdown)
-                    .await
-                {
-                    Ok(result) => {
-                        if let Some(error) = result.last_error {
-                            tracing::warn!(%namespace, retry_count = result.retry_count, %error, "supervised intent stopped");
+        }
+        let sync = self.sync_engine.clone();
+        let supervisor = self.intent_supervisor;
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let controls = self.intent_controls.clone();
+        let filter = self.filter_engine.read().await.clone();
+        let folder_name = self
+            .handle
+            .folder_registry
+            .read()
+            .await
+            .statuses()
+            .into_iter()
+            .find(|status| status.namespace == namespace.to_string())
+            .and_then(|status| {
+                (!status.path.as_os_str().is_empty()).then(|| status.path.to_string_lossy().into_owned())
+            });
+        let bandwidth = self
+            .schedule_manager
+            .read()
+            .await
+            .as_ref()
+            .map(|manager| manager.current_limits(folder_name.as_deref()));
+        let params = bandwidth.map_or_else(SubscribeParams::default, |limits| {
+            SubscribeParams::default().with_bandwidth_limits(limits)
+        });
+        let task = tokio::spawn(async move {
+            match supervisor
+                .supervise_with_controls(&sync, namespace, params, shutdown, controls, filter)
+                .await
+            {
+                Ok(result) => {
+                    if let Some(error) = result.last_error {
+                        tracing::warn!(%namespace, retry_count = result.retry_count, %error, "supervised intent stopped");
+                    }
+                }
+                Err(error) => tracing::error!(%namespace, %error, "supervised intent failed"),
+            }
+        });
+        self.intent_tasks
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon intent task mutex is poisoned", error))?
+            .insert(namespace, task);
+        Ok(())
+    }
+
+    fn set_intent_active(&self, namespace: NamespaceId, active: bool) -> Result<()> {
+        let control = self
+            .intent_controls
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon intent control mutex is poisoned", error))?
+            .get(&namespace)
+            .cloned();
+        let Some(intent_control) = control else {
+            return Ok(());
+        };
+        let result = if active {
+            intent_control.resume()
+        } else {
+            intent_control.pause()
+        };
+        result.map_err(|error| SyncwebError::operation("failed to update scheduled intent", error))
+    }
+
+    /// Return whether the global schedule is currently active.
+    pub async fn is_in_active_window(&self) -> bool {
+        self.schedule_manager
+            .read()
+            .await
+            .as_ref()
+            .is_none_or(|manager| manager.is_active(None))
+    }
+
+    /// Return the configured download limit at the current wall-clock time.
+    pub async fn current_bandwidth_limit(&self) -> Option<u64> {
+        self.schedule_manager.read().await.as_ref().and_then(|manager| {
+            let limits = manager.current_limits(None);
+            limits.max_download.or(limits.max_upload)
+        })
+    }
+
+    async fn start_watching(&self) -> Result<()> {
+        let statuses = self.handle.folder_registry.read().await.statuses();
+        let wanted: HashMap<_, _> = statuses
+            .iter()
+            .filter(|status| !status.path.as_os_str().is_empty())
+            .map(|status| (status.namespace.clone(), status.path.clone()))
+            .collect();
+        let mut watchers = self
+            .watchers
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon watcher mutex is poisoned", error))?;
+        watchers.retain(|namespace, _| wanted.contains_key(namespace));
+        for (namespace, path) in wanted {
+            if watchers.contains_key(&namespace) {
+                continue;
+            }
+            if !path.exists() {
+                tracing::warn!(%namespace, path = %path.display(), "managed folder path does not exist; watcher deferred");
+                continue;
+            }
+            watchers.insert(namespace, FsWatcher::new(&path)?);
+        }
+        drop(watchers);
+        Ok(())
+    }
+
+    async fn handle_watch_events(&self) -> Result<()> {
+        let mut observed = Vec::new();
+        {
+            let mut watchers = self
+                .watchers
+                .lock()
+                .map_err(|error| SyncwebError::operation("daemon watcher mutex is poisoned", error))?;
+            for (namespace, watcher) in watchers.iter_mut() {
+                loop {
+                    match watcher.try_recv() {
+                        Ok(Some(event)) => observed.push((namespace.clone(), event)),
+                        Ok(None) => break,
+                        Err(error) => {
+                            tracing::warn!(%namespace, %error, "filesystem watcher event channel failed");
+                            break;
                         }
                     }
-                    Err(error) => tracing::error!(%namespace, %error, "supervised intent failed"),
                 }
-            });
-            tasks.insert(namespace, task);
+            }
+        }
+
+        if !observed.is_empty() {
+            let mut pending = self
+                .pending_watch_events
+                .lock()
+                .map_err(|error| SyncwebError::operation("daemon watch queue mutex is poisoned", error))?;
+            let ready_at = Instant::now()
+                .checked_add(self.config.watch_debounce)
+                .unwrap_or_else(Instant::now);
+            for (namespace, event) in observed {
+                let removed = matches!(event.event.kind, notify::EventKind::Remove(_));
+                let entry = pending.entry(namespace).or_insert_with(|| PendingWatch {
+                    paths: HashMap::new(),
+                    ready_at,
+                });
+                entry.ready_at = ready_at;
+                for path in event.paths {
+                    entry.paths.insert(path, removed);
+                }
+            }
+            drop(pending);
+        }
+
+        let ready = {
+            let mut pending = self
+                .pending_watch_events
+                .lock()
+                .map_err(|error| SyncwebError::operation("daemon watch queue mutex is poisoned", error))?;
+            let now = Instant::now();
+            pending
+                .iter_mut()
+                .filter_map(|(namespace, batch)| {
+                    (batch.ready_at <= now).then(|| (namespace.clone(), std::mem::take(&mut batch.paths)))
+                })
+                .filter(|(_, paths)| !paths.is_empty())
+                .collect::<Vec<_>>()
+        };
+        if ready.is_empty() {
+            return Ok(());
+        }
+
+        let roots: HashMap<_, _> = self
+            .handle
+            .folder_registry
+            .read()
+            .await
+            .statuses()
+            .into_iter()
+            .map(|status| (status.namespace, status.path))
+            .collect();
+        for (namespace, paths) in ready {
+            let Some(root) = roots.get(&namespace) else {
+                continue;
+            };
+            let namespace_id = namespace
+                .parse::<NamespaceId>()
+                .map_err(|error| SyncwebError::operation("invalid watched folder namespace", error))?;
+            for (path, removed) in paths {
+                self.process_watch_event(namespace_id, root, &path, removed).await?;
+            }
+        }
+        self.save_status_report().await?;
+        Ok(())
+    }
+
+    async fn process_watch_event(&self, namespace: NamespaceId, root: &Path, path: &Path, removed: bool) -> Result<()> {
+        let relative = path.strip_prefix(root).unwrap_or(path);
+        if relative.as_os_str().is_empty() {
+            return Ok(());
+        }
+        let size = std::fs::metadata(path).map_or(0, |metadata| metadata.len());
+        let accepted = self.filter_engine.read().await.as_ref().is_none_or(|filter| {
+            filter.evaluate_for_folder(&namespace.to_string(), &FilterEntry::new(relative.to_path_buf(), size))
+                != FilterAction::Reject
+        });
+        if !accepted {
+            return Ok(());
+        }
+
+        let folder = self.folder_manager.get(namespace).await?;
+        let result = if removed || !path.exists() {
+            folder
+                .delete_entry(relative.as_os_str().as_encoded_bytes())
+                .await
+                .map(|()| 1_u64)
+        } else if path.is_file() {
+            let importer = Importer::new(
+                self.node.blob_store().clone(),
+                self.node.docs_engine().clone(),
+                folder.doc().clone(),
+                folder.author(),
+            )
+            .with_root(root);
+            importer
+                .import_path(path)
+                .await
+                .map(|entries| u64::try_from(entries.len()).unwrap_or(u64::MAX))
+        } else {
+            Ok(0)
+        };
+        match result {
+            Ok(entries) if entries > 0 => {
+                self.handle
+                    .folder_registry
+                    .write()
+                    .await
+                    .record_import(namespace, entries, current_timestamp());
+                self.start_supervision(namespace).await?;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                self.handle
+                    .folder_registry
+                    .write()
+                    .await
+                    .record_error(namespace, error.to_string());
+                tracing::warn!(%namespace, path = %path.display(), %error, "filesystem change will be retried");
+                if !removed && is_recoverable_watch_error(&error) {
+                    let mut pending = self.pending_watch_events.lock().map_err(|poisoned| {
+                        SyncwebError::operation("daemon watch queue mutex is poisoned", poisoned)
+                    })?;
+                    let ready_at = Instant::now()
+                        .checked_add(self.config.watch_debounce)
+                        .unwrap_or_else(Instant::now);
+                    let entry = pending.entry(namespace.to_string()).or_insert_with(|| PendingWatch {
+                        paths: HashMap::new(),
+                        ready_at,
+                    });
+                    entry.ready_at = ready_at;
+                    entry.paths.insert(path.to_path_buf(), false);
+                    drop(pending);
+                }
+            }
         }
         Ok(())
+    }
+
+    async fn save_status_report(&self) -> Result<()> {
+        let state = self.handle.state.read().await.clone();
+        let statuses = self.handle.folder_registry.read().await.statuses();
+        let schedule = self.schedule_manager.read().await.clone();
+        let schedule_report = schedule.as_ref().map(|manager| {
+            let minute = current_minute();
+            let next = manager.next_active_window_start_at(None, minute);
+            let next_window_start = next.map(|next_minute| {
+                let offset = if next_minute >= minute {
+                    next_minute.saturating_sub(minute)
+                } else {
+                    1_440_u16.saturating_sub(minute).saturating_add(next_minute)
+                };
+                current_timestamp().saturating_add(u64::from(offset).saturating_mul(60))
+            });
+            ScheduleStatus {
+                in_active_window: manager.is_active(None),
+                next_window_start,
+            }
+        });
+        let bandwidth_stats = BandwidthStats::load(self.config.data_dir.join("stats.json"))?;
+        let report = DaemonStatusReport {
+            pid: state.pid,
+            node_id: state.node_id,
+            started_at: state.started_at,
+            uptime_seconds: current_timestamp().saturating_sub(state.started_at),
+            folders: statuses
+                .into_iter()
+                .map(|folder| FolderStatusReport {
+                    namespace: folder.namespace,
+                    path: folder.path,
+                    session_active: folder.session_active,
+                    last_sync_at: folder.last_sync_at,
+                    entries_synced: folder.entries_synced,
+                    errors: folder.errors,
+                })
+                .collect(),
+            bandwidth: BandwidthSnapshot {
+                upload_total: bandwidth_stats.total_upload,
+                download_total: bandwidth_stats.total_download,
+                upload_rate: 0,
+                download_rate: 0,
+            },
+            schedule: schedule_report,
+            rayon_threads: self.archive_pool.thread_count(),
+        };
+        self.state_file.save_status(&report)
     }
 
     async fn load_folders(&self) -> Result<()> {
@@ -393,8 +721,21 @@ impl Daemon {
             return Ok(());
         }
         let app_config = AppConfig::load(self.config.data_dir.join("config.toml"))?;
-        let schedule = ScheduleManager::from_config(&app_config.schedule)?;
-        *self.schedule_manager.write().await = Some(schedule);
+        let parsed_schedule = ScheduleManager::from_config(&app_config.schedule)?;
+        let schedule_manager =
+            (app_config.schedule != crate::schedule::ScheduleConfig::default()).then_some(parsed_schedule);
+        let filter = load_filter(&self.config.data_dir)?;
+        *self.schedule_manager.write().await = schedule_manager;
+        *self.filter_engine.write().await = filter;
+        let statuses = self.handle.folder_registry.read().await.statuses();
+        for status in statuses {
+            if let Ok(namespace) = status.namespace.parse::<NamespaceId>()
+                && is_active(namespace)
+                && !cancel_session(namespace)
+            {
+                tracing::warn!(%namespace, "reloaded intent did not accept cancellation");
+            }
+        }
         tracing::info!("daemon configuration reloaded");
         Ok(())
     }
@@ -407,6 +748,7 @@ impl Daemon {
         self.handle.set_status(DaemonStatus::Stopping).await;
         let stopping_state = self.handle.state.read().await.clone();
         self.state_file.save(&stopping_state)?;
+        self.save_status_report().await?;
 
         let namespaces: Vec<_> = self
             .handle
@@ -438,9 +780,11 @@ impl Daemon {
         let node_result = self.node.stop().await;
         self.handle.set_status(DaemonStatus::Stopped).await;
         let remove_result = self.state_file.remove();
+        let remove_status_result = self.state_file.remove_status();
         let release_result = self.pid_lock.release();
         node_result?;
         remove_result?;
+        remove_status_result?;
         release_result?;
         Ok(())
     }
@@ -470,6 +814,9 @@ impl Drop for Daemon {
         {
             tracing::warn!(path = %self.state_file.path().display(), %error, "failed to remove daemon state");
         }
+        if let Err(error) = self.state_file.remove_status() {
+            tracing::warn!(path = %self.state_file.status_path().display(), %error, "failed to remove daemon status");
+        }
     }
 }
 
@@ -477,4 +824,25 @@ fn send_shutdown(sender: &broadcast::Sender<()>) {
     match sender.send(()) {
         Ok(_) | Err(broadcast::error::SendError(())) => {}
     }
+}
+
+fn load_filter(data_dir: &Path) -> Result<Option<FilterEngine>> {
+    let path = data_dir.join("filters.toml");
+    if path.exists() {
+        FilterEngine::load(path).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+fn current_minute() -> u16 {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    u16::try_from((seconds % 86_400).div_euclid(60)).unwrap_or(0)
+}
+
+fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
+    let message = error.to_string();
+    message.contains("file changed during import") || message.contains("input path does not exist")
 }

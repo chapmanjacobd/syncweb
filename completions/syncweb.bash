@@ -1429,16 +1429,12 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__daemon__subcmd__add)
-            opts="-h --namespace --verbose --json --no-color --data-dir --help"
+            opts="-h --verbose --json --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --namespace)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

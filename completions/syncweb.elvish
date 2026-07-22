@@ -152,7 +152,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;daemon-add'= {
-            cand --namespace 'namespace'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

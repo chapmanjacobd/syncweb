@@ -261,6 +261,17 @@ async fn run_intent(
                             return;
                         }
                     }
+                    if let Some(rate) = config
+                        .params
+                        .bandwidth
+                        .as_ref()
+                        .and_then(|limits| limits.max_download)
+                        && rate > 0
+                    {
+                        let bytes = state.sizes.get(hash).copied().unwrap_or(0);
+                        let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
+                        tokio::time::sleep(Duration::from_millis(milliseconds)).await;
+                    }
                 }
                 if let Err(error) = state.apply(live_event, &config.params, config.filter.as_ref()) {
                     let _result = events.send(SyncEvent::Failed(error));

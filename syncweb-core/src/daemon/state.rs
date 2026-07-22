@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, SyncwebError};
 
 const STATE_FILE_NAME: &str = "daemon.state";
+const STATUS_FILE_NAME: &str = "daemon.status";
 const LOCK_FILE_NAME: &str = "daemon.lock";
 const SOCKET_FILE_NAME: &str = "daemon.sock";
 const RUNTIME_SOCKET_FILE_NAME: &str = "syncweb.sock";
@@ -36,6 +37,50 @@ pub struct DaemonState {
     pub started_at: u64,
     pub data_dir: PathBuf,
     pub status: DaemonStatus,
+}
+
+/// A persisted snapshot of daemon activity and synchronization progress.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct DaemonStatusReport {
+    pub pid: u32,
+    pub node_id: String,
+    pub started_at: u64,
+    pub uptime_seconds: u64,
+    pub folders: Vec<FolderStatusReport>,
+    pub bandwidth: BandwidthSnapshot,
+    pub schedule: Option<ScheduleStatus>,
+    pub rayon_threads: usize,
+}
+
+/// Activity and error information for one managed folder.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct FolderStatusReport {
+    pub namespace: String,
+    pub path: PathBuf,
+    pub session_active: bool,
+    pub last_sync_at: Option<u64>,
+    pub entries_synced: u64,
+    pub errors: Vec<String>,
+}
+
+/// Aggregate transfer counters included in a daemon status report.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct BandwidthSnapshot {
+    pub upload_total: u64,
+    pub download_total: u64,
+    pub upload_rate: u64,
+    pub download_rate: u64,
+}
+
+/// The current schedule state included in a daemon status report.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct ScheduleStatus {
+    pub in_active_window: bool,
+    pub next_window_start: Option<u64>,
 }
 
 impl DaemonState {
@@ -77,19 +122,9 @@ impl StateFile {
     ///
     /// Returns an error when the directory or state file cannot be written.
     pub fn save(&self, state: &DaemonState) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let bytes = serde_json::to_vec_pretty(state)
             .map_err(|error| SyncwebError::operation("failed to serialize daemon state", error))?;
-        let temporary = self
-            .path
-            .with_file_name(format!("{}.tmp-{}", STATE_FILE_NAME, std::process::id()));
-        let mut file = File::create(&temporary)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        fs::rename(&temporary, &self.path)?;
-        Ok(())
+        Self::save_json(&self.path, STATE_FILE_NAME, &bytes)
     }
 
     /// Load the state, returning `None` when no state file exists.
@@ -98,14 +133,27 @@ impl StateFile {
     ///
     /// Returns an error when the state file cannot be read or contains invalid JSON.
     pub fn load(&self) -> Result<Option<DaemonState>> {
-        let contents = match fs::read_to_string(&self.path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.into()),
-        };
-        serde_json::from_str(&contents)
-            .map(Some)
-            .map_err(|error| SyncwebError::operation("failed to deserialize daemon state", error))
+        Self::load_json(&self.path, "daemon state")
+    }
+
+    /// Persist the current daemon activity report atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the report cannot be serialized or written.
+    pub fn save_status(&self, report: &DaemonStatusReport) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(report)
+            .map_err(|error| SyncwebError::operation("failed to serialize daemon status", error))?;
+        Self::save_json(&self.status_path(), STATUS_FILE_NAME, &bytes)
+    }
+
+    /// Load the last daemon activity report.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the report cannot be read or contains invalid JSON.
+    pub fn load_status(&self) -> Result<Option<DaemonStatusReport>> {
+        Self::load_json(&self.status_path(), "daemon status")
     }
 
     #[must_use]
@@ -126,6 +174,15 @@ impl StateFile {
         }
     }
 
+    /// Remove the status report if it exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the status report cannot be removed.
+    pub fn remove_status(&self) -> Result<()> {
+        remove_if_exists(&self.status_path())
+    }
+
     /// Return the initial PID liveness hint stored in the state file.
     ///
     /// A positive result does not prove that the process is the syncweb
@@ -143,6 +200,42 @@ impl StateFile {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    #[must_use]
+    pub fn status_path(&self) -> PathBuf {
+        self.path.with_file_name(STATUS_FILE_NAME)
+    }
+
+    fn save_json(path: &Path, file_name: &str, bytes: &[u8]) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let temporary = path.with_file_name(format!("{file_name}.tmp-{}", std::process::id()));
+        let mut file = File::create(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        fs::rename(&temporary, path)?;
+        Ok(())
+    }
+
+    fn load_json<T: for<'de> Deserialize<'de>>(path: &Path, label: &str) -> Result<Option<T>> {
+        let contents = match fs::read_to_string(path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        serde_json::from_str(&contents).map(Some).map_err(|error| {
+            SyncwebError::operation("failed to deserialize daemon report", format!("{label}: {error}"))
+        })
+    }
+}
+
+fn remove_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }
 

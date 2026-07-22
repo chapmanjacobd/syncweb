@@ -28,13 +28,38 @@ Phase 9 closes this gap using techniques inspired by the smart ban pattern from 
 | No retroactive cleanup | Stale leases survive until expiry | After success, invalidate providers that failed definitively |
 | `ReplicationResult` omits failures | Only `fetched_from` on success | `failed_from` + `invalidated_leases` fields |
 
+## Existing Implementation to Extend (Not Recreate)
+
+Phase 9 builds on the Phase 8.7 resilience implementation already present in
+`syncweb-core/src/indexing/resilience.rs`:
+
+- Extend the existing `ProviderLeaseTracker`; do not introduce a second lease
+  or provider-health registry.
+- Extend the existing `ResilienceService::ensure_replication` path; preserve
+  its health checks, consistent-hash selection, jitter, generation
+  cancellation, blob fetch, pinning, and lease gossip behavior.
+- Extend the existing `ReplicationResult` rather than creating a separate
+  repair-result type.
+- Reuse `GossipService` and the existing provider-lease gossip topic for
+  transport primitives, while keeping provider trust signals distinct from
+  lease messages.
+- Extend `syncweb-core/src/indexing/wot.rs` and reuse `TrustPolicy`,
+  `TrustDelegation`, signature verification, expiry, and delegated-trust
+  evaluation. Provider trust records are provider-specific and must not replace
+  content metadata, moderation, revocation, or attestation records.
+- Keep Phase 9 provider bans separate from the existing content/device/file
+  denylist in `syncweb-core/src/indexing/denylist.rs`.
+
+The implementation checklist and tests below are additions to these existing
+surfaces unless a new file is explicitly listed.
+
 ---
 
 ## Phase 9A: Fetch Failure Intelligence — Weeks 21-22
 
 ### 9.1 Fetch Error Taxonomy (TDD)
 
-**New types** in `syncweb-core/src/indexing/resilience.rs`:
+**New types** in the existing `syncweb-core/src/indexing/resilience.rs`:
 
 ```rust
 pub enum FetchFailureKind {
@@ -66,7 +91,7 @@ pub struct FetchFailure {
 
 ### 9.2 Failure Tracking (TDD)
 
-**New type** in `resilience.rs`:
+**Extend `ProviderLeaseTracker`** in the existing `resilience.rs`:
 
 ```rust
 pub struct FailureRecord {
@@ -126,7 +151,7 @@ pub invalidated_leases: Vec<PublicKey>,
 
 ### 9.4 Lease Invalidation (TDD)
 
-**New type** in `resilience.rs`:
+**New ban types** in the existing `resilience.rs`:
 
 ```rust
 pub enum BanSource {
@@ -224,6 +249,10 @@ Before fetch loop:
 
 **New file** `syncweb-core/src/indexing/reputation.rs`:
 
+This store is separate from `ProviderLeaseTracker`: leases describe current
+availability claims, while reputation stores historical fetch outcomes and
+trust observations.
+
 ```rust
 pub struct ProviderReputation {
     pub provider: PublicKey,
@@ -304,7 +333,7 @@ pub struct ProviderTrustSignal {
 }
 ```
 
-Trust signals are published to an iroh-docs namespace (one per reporter or per community). Other nodes subscribe to trust streams from reporters they trust (via the WoT delegation chain from Phase 8.8). Do not publish one gossip record for every fetch result by default: buffer/coalesce observations and publish on a configurable batch interval or when a provider crosses a reputation threshold (for example, Reliable → Unreliable).
+Trust signals are published to an iroh-docs namespace (one per reporter or per community). Other nodes subscribe to trust streams from reporters they trust (via the existing `TrustPolicy` delegation chain). Do not publish one gossip record for every fetch result by default: buffer/coalesce observations and publish on a configurable batch interval or when a provider crosses a reputation threshold (for example, Reliable → Unreliable). This is a new provider-trust stream; it does not replace the existing provider-lease gossip topic.
 
 **Methods**:
 - `ProviderTrustSignal::new(...)` → create unsigned signal
@@ -469,8 +498,8 @@ Run with: `cargo bench --all-features`
 
 | File | Changes |
 |------|---------|
-| `syncweb-core/src/indexing/resilience.rs` | `FetchFailureKind`, `FetchFailure`, `FailureRecord`, `BanRecord`, `BanSource`, failure tracking + ban tracking on `ProviderLeaseTracker`, smart ban integration in `ensure_replication`, retroactive invalidation |
-| `syncweb-core/src/indexing/wot.rs` | `ProviderTrustAction`, `ProviderTrustRecord`, `ProviderTrustDecision`, provider trust evaluation in `WotService` |
+| `syncweb-core/src/indexing/resilience.rs` | Extend the existing lease tracker/service with `FetchFailureKind`, `FetchFailure`, `FailureRecord`, `BanRecord`, `BanSource`, failure tracking, provider bans, smart-ban integration, richer replication results, and retroactive invalidation |
+| `syncweb-core/src/indexing/wot.rs` | Extend the existing `WotService` with `ProviderTrustAction`, `ProviderTrustRecord`, `ProviderTrustDecision`, and provider trust evaluation |
 | `syncweb-core/src/indexing.rs` | Re-export new types from `reputation` module |
 | `syncweb-core/src/error.rs` | (Optional) `FetchFailure` variant if string-parsing approach is insufficient |
 

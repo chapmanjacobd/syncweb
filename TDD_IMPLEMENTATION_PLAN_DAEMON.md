@@ -52,12 +52,41 @@ Phase 10 (this plan) solves this by making the daemon the **sole owner** of the 
 | **No process lifecycle** | `Automatic` runs in foreground, Ctrl-C exits | PID file + lock file + `--daemon`/`--foreground` flag |
 | **No IPC control** | Once started, no external control | Unix socket listener accepting JSON commands |
 | **No status reporting** | No structured status output | Status JSON file + `syncweb status` command |
-| Watch not integrated | `Watch` and `Automatic` are separate commands | FsWatcher runs inside the daemon loop |
-| No retry on failure | Failed sync intents stay dead | Supervision loop restarts crashed intents with backoff |
-| Schedule ignored | `ScheduleManager` only used for display | Daemon pauses sync during inactive hours |
+| Watch not integrated | `Watch` and `Automatic` are separate commands | Existing `FsWatcher` runs inside the daemon loop |
+| No retry on failure | Failed sync intents stay dead | Supervision loop wraps the existing sync intents and restarts them with backoff |
+| Schedule not applied to sync | `ScheduleManager` parses and displays configuration but does not control running intents | Daemon applies the existing schedule evaluation to pause/resume sync |
 | No graceful signal handling | Only Ctrl-C | SIGINT/SIGTERM for shutdown; IPC commands for reload and force sync |
 | Archive ops block CLI | Import/export are foreground-only | Rayon thread pool for CPU-bound archive work via IPC |
 | No dynamic folder add/remove | Folders fixed at startup | IPC commands to add/remove folders at runtime |
+
+## Existing Implementation to Reuse (Not Recreate)
+
+Phase 10 integrates the following existing components:
+
+- `SyncEngine` and `IntentHandle` remain the synchronization primitives. The
+  daemon adds ownership, supervision, and IPC around them; it does not create a
+  second sync engine.
+- `Automatic` already starts continuous filtered sync intents. Its daemon
+  implementation should move that behavior into the daemon loop.
+- `FsWatcher` in `syncweb-core/src/fs/watcher.rs` and the existing `Watch`
+  command provide filesystem event primitives, debounce inputs, and exclusion
+  handling. The daemon owns their lifecycle and connects events to importing
+  and sync.
+- `ScheduleManager` already parses global/per-folder active windows and
+  bandwidth limits. Phase 10 adds runtime application of those limits rather
+  than another schedule parser.
+- `ActiveSession` in `syncweb-core/src/sync/sessions.rs` already provides
+  registration, cancellation, and activity tracking. `IntentSupervisor` must
+  reuse it.
+- `ParallelScanner`, `ParallelImporter`, and `ParallelExporter` already
+  provide bounded filesystem parallelism. `ManagedPool` is only for the
+  daemon's shared archive CPU work and must not duplicate or replace these
+  utilities.
+- Existing CLI commands currently call `open_node()` directly. Daemon routing
+  must replace those call sites; it must not add a second node-opening path.
+
+The daemon state, PID lock, IPC protocol, supervision layer, shared archive
+pool, and `TryReference` import mode remain new functionality.
 
 ---
 
@@ -152,7 +181,7 @@ The lock protocol:
 
 ### 10.3 Daemon Command & Args (TDD)
 
-**Extend `Command` enum** in `syncweb-cli/src/cli/commands.rs`:
+**Modify the existing `Command` enum** in `syncweb-cli/src/cli/commands.rs`:
 
 ```rust
 Command::Daemon(DaemonArgs),
@@ -161,6 +190,12 @@ Command::DaemonShutdown(DaemonShutdownArgs),
 Command::DaemonReload,
 Command::DaemonSync,
 ```
+
+`Start`, `Shutdown`, `Automatic`, and `Watch` already exist. Decide their
+compatibility behavior as part of this change: `Start`/`Automatic` should
+delegate to daemon startup where applicable, `Watch` should delegate to the
+daemon watcher, and `Shutdown` should become the daemon shutdown command
+without creating duplicate lifecycle handlers.
 
 **New types** in `syncweb-cli/src/cli/commands.rs`:
 
@@ -441,7 +476,7 @@ pub struct Daemon {
     folder_manager: FolderManager,
     sync_engine: SyncEngine,
     schedule_manager: Option<ScheduleManager>,
-    rayon_pool: Arc<rayon::ThreadPool>,
+    archive_pool: Arc<ManagedPool>,
 }
 
 pub struct DaemonConfig {
@@ -490,6 +525,10 @@ The main loop:
 ### 10.10 Managed Thread Pool (TDD)
 
 **New file** `syncweb-core/src/daemon/pool.rs`:
+
+The repository already uses Rayon in `ParallelScanner`, `ParallelImporter`,
+and `ParallelExporter`, but those are per-operation filesystem utilities. This
+pool is a daemon-owned archive pool shared by IPC export/import requests.
 
 ```rust
 pub struct ManagedPool {
@@ -647,7 +686,7 @@ with its normal retry path rather than crashing.
 
 ### 10.24 Watch Integration Uses TryReference (TDD)
 
-The daemon's filesystem watch handler (Phase 10E.14) calls `Importer::import_one` which now uses TryReference. No additional changes needed — it inherits the behavior.
+The daemon's filesystem watch handler (Phase 10.28) calls `Importer::import_one` which now uses TryReference. No additional changes needed — it inherits the behavior.
 
 **Unit Tests** (`tests/unit/daemon/watch_test.rs`):
 - [ ] `test_daemon_watch_import_uses_reference` - files detected by FsWatcher are referenced
@@ -899,12 +938,14 @@ Run with: `cargo bench --all-features`
 
 | File | Changes |
 |------|---------|
-| `syncweb-cli/src/main.rs` | Replace `open_node()` calls with IPC routing in `download`, `import`, `subscribe`, `publish`, `join`, `automatic`; wire new daemon commands into dispatch |
+| `syncweb-cli/src/main.rs` | Replace existing `open_node()` call sites with IPC routing in `download`, `import`, `subscribe`, `publish`, `join`, `automatic`, and related node-access handlers; wire new daemon commands into dispatch |
 | `syncweb-cli/src/cli/commands.rs` | Add `Daemon`, `Status`, `DaemonShutdown`, `DaemonReload`, `DaemonSync`, `DaemonAdd`, `DaemonRemove` variants + arg structs; modify `Download`, `Import`, `Export` to support IPC mode |
 | `syncweb-core/src/lib.rs` | Add `pub mod daemon;` |
 | `syncweb-core/src/folder/archive_export.rs` | Accept optional `&ManagedPool` for CPU-bound work |
 | `syncweb-core/src/folder/archive_import.rs` | Accept optional `&ManagedPool` for CPU-bound work |
 | `syncweb-core/src/sync/sessions.rs` | (No structural changes — reused as-is via `ActiveSession::register()`) |
+| `syncweb-core/src/fs/watcher.rs` | (Reuse existing watcher; only modify if daemon-specific event/debounce support cannot be composed at the daemon layer) |
+| `syncweb-core/src/schedule.rs` | (Reuse existing parsing/evaluation; only add runtime integration hooks if required) |
 
 ---
 

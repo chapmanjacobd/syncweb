@@ -37,6 +37,7 @@ const DEFAULT_MAX_JITTER: Duration = Duration::from_secs(30);
 const DEFAULT_RESPONSIBLE_PEERS: usize = 1;
 const DEFAULT_MAX_FAILURES_PER_PROVIDER: usize = 128;
 const DEFAULT_FAILURE_TTL: Duration = Duration::from_hours(24);
+const AUTOMATED_BAN_DURATION: Duration = Duration::from_hours(1);
 const DEFINITIVE_FAILURE_THRESHOLD: u32 = 3;
 const STREAM_VALIDATION_CHUNK_SIZE: usize = 64 * 1024;
 const REPLICATION_PIN_PREFIX: &str = "syncweb/replication/";
@@ -538,6 +539,27 @@ impl LeaseUpdate {
     }
 }
 
+/// The source of a provider ban.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum BanSource {
+    Manual,
+    Automated,
+    WoT,
+}
+
+/// A global or hash-scoped provider ban.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct BanRecord {
+    pub provider: PublicKey,
+    pub hash: Option<Hash>,
+    pub banned_at: u64,
+    pub expires_at: Option<u64>,
+    pub reason: String,
+    pub source: BanSource,
+}
+
 /// Verified and locally observed providers for one blob.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -578,6 +600,8 @@ pub struct ProviderLeaseTracker {
     failures: HashMap<Hash, HashMap<PublicKey, FailureRecord>>,
     failure_totals: HashMap<Hash, HashMap<PublicKey, u64>>,
     definitive_streaks: HashMap<Hash, HashMap<PublicKey, u32>>,
+    bans: HashMap<PublicKey, BanRecord>,
+    hash_bans: HashMap<Hash, HashMap<PublicKey, BanRecord>>,
     max_failures_per_provider: usize,
 }
 
@@ -607,6 +631,8 @@ impl ProviderLeaseTracker {
             failures: HashMap::new(),
             failure_totals: HashMap::new(),
             definitive_streaks: HashMap::new(),
+            bans: HashMap::new(),
+            hash_bans: HashMap::new(),
             max_failures_per_provider,
         }
     }
@@ -677,6 +703,155 @@ impl ProviderLeaseTracker {
     /// Returns an error if the lease signature or expiry is invalid.
     pub fn add_lease(&mut self, lease: ProviderLease) -> Result<LeaseUpdate> {
         self.track(lease)
+    }
+
+    /// Remove a provider's lease for a blob and record an automated,
+    /// hash-scoped ban.
+    pub fn invalidate_lease(&mut self, hash: Hash, provider: PublicKey) -> bool {
+        self.invalidate_lease_at(hash, provider, current_epoch_seconds())
+    }
+
+    /// Remove a provider's lease and record an automated ban at an explicit
+    /// time.
+    pub fn invalidate_lease_at(&mut self, hash: Hash, provider: PublicKey, now: u64) -> bool {
+        let removed = self
+            .leases
+            .get_mut(&hash)
+            .is_some_and(|providers| providers.remove(&provider).is_some());
+        if let Some(providers) = self.leases.get(&hash)
+            && providers.is_empty()
+        {
+            self.leases.remove(&hash);
+        }
+        self.ban_provider(
+            provider,
+            Some(hash),
+            "provider failed to serve the leased blob".to_owned(),
+            BanSource::Automated,
+            Some(AUTOMATED_BAN_DURATION),
+            now,
+        );
+        removed
+    }
+
+    /// Return whether a provider is covered by an active global or
+    /// hash-scoped ban.
+    #[must_use]
+    pub fn is_banned(&self, provider: PublicKey, hash: &Hash, now: u64) -> bool {
+        self.bans.get(&provider).is_some_and(|ban| ban_is_active(ban, now))
+            || self
+                .hash_bans
+                .get(hash)
+                .and_then(|providers| providers.get(&provider))
+                .is_some_and(|ban| ban_is_active(ban, now))
+    }
+
+    /// Add or update a global or hash-scoped provider ban.
+    pub fn ban_provider(
+        &mut self,
+        provider: PublicKey,
+        scope: Option<Hash>,
+        reason: impl Into<String>,
+        source: BanSource,
+        duration: Option<Duration>,
+        now: u64,
+    ) -> BanRecord {
+        let record = BanRecord {
+            provider,
+            hash: scope,
+            banned_at: now,
+            expires_at: duration.map(|value| now.saturating_add(value.as_secs())),
+            reason: reason.into(),
+            source,
+        };
+        match scope {
+            Some(scope_hash) => {
+                let bans = self.hash_bans.entry(scope_hash).or_default();
+                insert_ban(bans, record.clone());
+            }
+            None => {
+                insert_ban(&mut self.bans, record.clone());
+            }
+        }
+        record
+    }
+
+    /// Remove a global or hash-scoped ban.
+    pub fn unban_provider(&mut self, provider: PublicKey, scope: Option<Hash>) -> bool {
+        match scope {
+            Some(scope_hash) => {
+                let removed = self
+                    .hash_bans
+                    .get_mut(&scope_hash)
+                    .is_some_and(|providers| providers.remove(&provider).is_some());
+                if self.hash_bans.get(&scope_hash).is_some_and(HashMap::is_empty) {
+                    self.hash_bans.remove(&scope_hash);
+                }
+                removed
+            }
+            None => self.bans.remove(&provider).is_some(),
+        }
+    }
+
+    /// Return active provider identities covered by global and hash-scoped
+    /// bans for a blob.
+    #[must_use]
+    pub fn banned_providers(&self, hash: &Hash, now: u64) -> Vec<PublicKey> {
+        let mut providers = self
+            .bans
+            .values()
+            .filter(|ban| ban_is_active(ban, now))
+            .map(|ban| ban.provider)
+            .collect::<Vec<_>>();
+        if let Some(scoped) = self.hash_bans.get(hash) {
+            providers.extend(
+                scoped
+                    .values()
+                    .filter(|ban| ban_is_active(ban, now))
+                    .map(|ban| ban.provider),
+            );
+        }
+        providers.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        providers.dedup();
+        providers
+    }
+
+    /// Return active ban records applying to a blob.
+    #[must_use]
+    pub fn ban_records(&self, hash: &Hash, now: u64) -> Vec<BanRecord> {
+        let mut records = Vec::new();
+        records.extend(self.bans.values().filter(|ban| ban_is_active(ban, now)).cloned());
+        if let Some(scoped) = self.hash_bans.get(hash) {
+            records.extend(scoped.values().filter(|ban| ban_is_active(ban, now)).cloned());
+        }
+        records.sort_by(|left, right| left.provider.as_bytes().cmp(right.provider.as_bytes()));
+        records
+    }
+
+    /// Invalidate all providers with definitive failures for a blob except
+    /// the provider that successfully supplied it.
+    pub fn retroactive_invalidate(&mut self, hash: Hash, successful_provider: PublicKey, now: u64) -> Vec<PublicKey> {
+        self.purge_stale_failures(now, DEFAULT_FAILURE_TTL);
+        let failed_providers = self
+            .failures
+            .get(&hash)
+            .map(|providers| {
+                providers
+                    .iter()
+                    .filter(|(provider, record)| {
+                        **provider != successful_provider
+                            && record.failures.iter().any(|failure| failure.kind.is_definitive())
+                    })
+                    .map(|(provider, _)| *provider)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut invalidated = failed_providers
+            .into_iter()
+            .filter(|provider| self.invalidate_lease_at(hash, *provider, now))
+            .collect::<Vec<_>>();
+        invalidated.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        invalidated
     }
 
     /// Record a provider failure using the current epoch time.
@@ -857,7 +1032,7 @@ impl ProviderLeaseTracker {
             .map(|providers| {
                 providers
                     .values()
-                    .filter(|lease| !lease.is_expired_at(now))
+                    .filter(|lease| !lease.is_expired_at(now) && !self.is_banned(lease.provider, hash, now))
                     .cloned()
                     .collect::<Vec<_>>()
             })
@@ -925,6 +1100,27 @@ impl ProviderLeaseTracker {
             !providers.is_empty()
         });
         self.purge_stale_failures(now, DEFAULT_FAILURE_TTL);
+    }
+}
+
+fn ban_is_active(ban: &BanRecord, now: u64) -> bool {
+    ban.expires_at.is_none_or(|expires_at| expires_at > now)
+}
+
+const fn ban_priority(source: BanSource) -> u8 {
+    match source {
+        BanSource::Automated => 0,
+        BanSource::WoT => 1,
+        BanSource::Manual => 2,
+    }
+}
+
+fn insert_ban(bans: &mut HashMap<PublicKey, BanRecord>, record: BanRecord) {
+    let should_replace = bans.get(&record.provider).is_none_or(|existing| {
+        ban_priority(record.source) >= ban_priority(existing.source) || !ban_is_active(existing, record.banned_at)
+    });
+    if should_replace {
+        bans.insert(record.provider, record);
     }
 }
 
@@ -1111,6 +1307,89 @@ impl ResilienceService {
         self.record_lease(lease)
     }
 
+    /// Invalidate a provider's lease and cancel pending fetches for its blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider lease tracker or generation state is
+    /// poisoned.
+    pub fn invalidate_provider(&self, hash: Hash, provider: PublicKey) -> Result<bool> {
+        let invalidated = self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .invalidate_lease(hash, provider);
+        if invalidated {
+            self.bump_generation(hash)?;
+        }
+        Ok(invalidated)
+    }
+
+    /// Add a manual global or hash-scoped provider ban.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provider state or generation state is poisoned.
+    pub fn ban_provider(
+        &self,
+        provider: PublicKey,
+        reason: impl Into<String>,
+        scope: Option<Hash>,
+        duration: Option<Duration>,
+    ) -> Result<BanRecord> {
+        let record = self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .ban_provider(
+                provider,
+                scope,
+                reason,
+                BanSource::Manual,
+                duration,
+                current_epoch_seconds(),
+            );
+        if let Some(scope_hash) = scope {
+            self.bump_generation(scope_hash)?;
+        }
+        Ok(record)
+    }
+
+    /// Remove a manual global or hash-scoped provider ban.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provider state or generation state is poisoned.
+    pub fn unban_provider(&self, provider: PublicKey, scope: Option<Hash>) -> Result<bool> {
+        let removed = self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .unban_provider(provider, scope);
+        if removed && let Some(scope_hash) = scope {
+            self.bump_generation(scope_hash)?;
+        }
+        Ok(removed)
+    }
+
+    /// Retroactively invalidate providers that definitively failed after a
+    /// successful fetch.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provider state or generation state is poisoned.
+    pub fn retroactive_invalidate(&self, hash: Hash, successful_provider: PublicKey) -> Result<Vec<PublicKey>> {
+        let invalidated = self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .retroactive_invalidate(hash, successful_provider, current_epoch_seconds());
+        if !invalidated.is_empty() {
+            self.bump_generation(hash)?;
+        }
+        Ok(invalidated)
+    }
+
     /// Record a locally observed provider.
     ///
     /// # Errors
@@ -1256,11 +1535,12 @@ impl ResilienceService {
             return Ok(result);
         }
 
+        let now = current_epoch_seconds();
         let leases = self
             .tracker
             .lock()
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
-            .leases(&hash);
+            .leases_at(&hash, now);
         let providers = leases.iter().map(|lease| lease.provider).collect::<Vec<_>>();
         result.selected_providers =
             consistent_hashing_selection(hash, &providers, self.config.budget.responsible_peers);
@@ -1277,6 +1557,14 @@ impl ResilienceService {
         }
         let selected = result.selected_providers.clone();
         for provider in selected {
+            if self
+                .tracker
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+                .is_banned(provider, &hash, current_epoch_seconds())
+            {
+                continue;
+            }
             match self.wait_for_fetch_slot(hash, provider).await? {
                 FetchWait::ShortCircuited => {
                     result.short_circuited = true;
@@ -1293,6 +1581,9 @@ impl ResilienceService {
                 Ok(()) => {
                     result.fetched_from.push(provider);
                     self.clear_failures_for_provider(&hash, &provider)?;
+                    result
+                        .invalidated_leases
+                        .extend(self.retroactive_invalidate(hash, provider)?);
                     break;
                 }
                 Err(error) => {
@@ -1300,6 +1591,9 @@ impl ResilienceService {
                     let failure = FetchFailure::from_syncweb_error(provider, hash, &error);
                     self.record_failure(hash, provider, failure)?;
                     result.failed_from.push((provider, kind));
+                    if kind.is_definitive() && self.invalidate_provider(hash, provider)? {
+                        result.invalidated_leases.push(provider);
+                    }
                 }
             }
         }
@@ -1786,6 +2080,89 @@ mod tests {
         }
         assert_eq!(tracker.consecutive_failures(&hash, &provider), 3);
         assert!(!tracker.is_definitively_failed(&hash, &provider));
+    }
+
+    #[test]
+    fn bans_invalidate_health_and_expire() -> Result<()> {
+        let hash = Hash::from_bytes([25_u8; 32]);
+        let (lease, provider_key) = signed_lease(25, hash, 1)?;
+        let provider = provider_key.public();
+        let mut tracker = ProviderLeaseTracker::default();
+        tracker.track_at(lease, 10)?;
+
+        tracker.ban_provider(
+            provider,
+            None,
+            "manual test ban",
+            BanSource::Manual,
+            Some(Duration::from_secs(10)),
+            10,
+        );
+        anyhow::ensure!(tracker.is_banned(provider, &hash, 19));
+        anyhow::ensure!(!tracker.is_banned(provider, &hash, 20));
+        anyhow::ensure!(tracker.health_at(&hash, 19, Duration::from_secs(30)).verified == 0);
+        anyhow::ensure!(tracker.health_at(&hash, 20, Duration::from_secs(30)).verified == 1);
+        anyhow::ensure!(tracker.unban_provider(provider, None));
+        anyhow::ensure!(!tracker.is_banned(provider, &hash, 20));
+        Ok(())
+    }
+
+    #[test]
+    fn invalidation_records_scoped_automated_ban() -> Result<()> {
+        let hash = Hash::from_bytes([26_u8; 32]);
+        let other_hash = Hash::from_bytes([27_u8; 32]);
+        let (lease, provider_key) = signed_lease(26, hash, 1)?;
+        let provider = provider_key.public();
+        let mut tracker = ProviderLeaseTracker::default();
+        tracker.track_at(lease, 10)?;
+
+        anyhow::ensure!(tracker.invalidate_lease_at(hash, provider, 10));
+        anyhow::ensure!(tracker.leases_at(&hash, 10).is_empty());
+        anyhow::ensure!(tracker.is_banned(provider, &hash, 10));
+        anyhow::ensure!(!tracker.is_banned(provider, &other_hash, 10));
+        anyhow::ensure!(tracker.banned_providers(&hash, 10) == vec![provider]);
+        Ok(())
+    }
+
+    #[test]
+    fn retroactive_invalidation_preserves_success_and_transient_failures() -> Result<()> {
+        let hash = Hash::from_bytes([28_u8; 32]);
+        let (failed_lease, failed_key) = signed_lease(28, hash, 1)?;
+        let (successful_lease, successful_key) = signed_lease(29, hash, 1)?;
+        let (transient_lease, transient_key) = signed_lease(30, hash, 1)?;
+        let mut tracker = ProviderLeaseTracker::default();
+        tracker.track_at(failed_lease, 10)?;
+        tracker.track_at(successful_lease, 10)?;
+        tracker.track_at(transient_lease, 10)?;
+        tracker.record_failure_at(
+            hash,
+            failed_key.public(),
+            FetchFailure::new_at(FetchFailureKind::NotFound, failed_key.public(), hash, 10, "missing"),
+            10,
+        );
+        tracker.record_failure_at(
+            hash,
+            transient_key.public(),
+            FetchFailure::new_at(FetchFailureKind::Timeout, transient_key.public(), hash, 10, "timeout"),
+            10,
+        );
+
+        let invalidated = tracker.retroactive_invalidate(hash, successful_key.public(), 10);
+        anyhow::ensure!(invalidated == vec![failed_key.public()]);
+        anyhow::ensure!(tracker.health_at(&hash, 10, Duration::from_secs(30)).verified == 2);
+        anyhow::ensure!(
+            tracker
+                .leases_at(&hash, 10)
+                .iter()
+                .any(|lease| lease.provider == successful_key.public())
+        );
+        anyhow::ensure!(
+            tracker
+                .leases_at(&hash, 10)
+                .iter()
+                .any(|lease| lease.provider == transient_key.public())
+        );
+        Ok(())
     }
 
     #[tokio::test]

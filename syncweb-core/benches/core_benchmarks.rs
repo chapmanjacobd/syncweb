@@ -26,14 +26,27 @@
     clippy::unseparated_literal_suffix
 )]
 
-use std::time::{Duration, SystemTime};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use iroh::SecretKey;
 use iroh_blobs::Hash;
 use syncweb_core::{
+    daemon::{
+        BandwidthSnapshot, DaemonHandle, DaemonState, DaemonStatus, DaemonStatusReport, FolderStatusReport, IpcClient,
+        IpcCommand, IpcRequest, IpcServer, ManagedPool, StateFile,
+    },
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
+    folder::{CollectionEntry, CollectionManifest, DropExportOptions, DropExporter},
     indexing::{FetchFailure, FetchFailureKind, ProviderLeaseTracker, ProviderReputationStore, ReputationConfig},
+    node::{
+        identity::IdentityManager,
+        iroh_node::{IrohNode, RelayMode},
+    },
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
     sort::{SortConfig, SortCriterion, SortEntry, Sorter},
@@ -433,6 +446,219 @@ fn bench_reputation(c: &mut Criterion) {
     group.finish();
 }
 
+fn benchmark_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("benchmark runtime should build")
+}
+
+fn bench_ipc_round_trip(c: &mut Criterion) {
+    let runtime = benchmark_runtime();
+    let socket_path = std::env::temp_dir().join(format!("syncweb-bench-{}.sock", uuid::Uuid::new_v4()));
+    let (client, server_task) = runtime.block_on(async {
+        let handle = DaemonHandle::new(DaemonState::new(
+            std::process::id(),
+            "benchmark-node",
+            1,
+            std::env::temp_dir(),
+            DaemonStatus::Running,
+        ));
+        let server = IpcServer::new(socket_path.clone(), handle);
+        let task = tokio::spawn(async move { server.serve().await });
+        for _ in 0..100 {
+            if socket_path.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        (IpcClient::from_socket_path(socket_path.clone()), task)
+    });
+
+    let mut group = c.benchmark_group("daemon_ipc");
+    group.bench_function("round_trip", |b| {
+        b.iter(|| {
+            let response = runtime.block_on(client.send(IpcRequest::new(IpcCommand::Status)));
+            std::hint::black_box(response);
+        });
+    });
+    group.finish();
+
+    runtime.block_on(async {
+        let _ = client
+            .send(IpcRequest::new(IpcCommand::Shutdown { force: false }))
+            .await;
+        let _ = server_task.await;
+    });
+}
+
+fn bench_supervisor_restart_latency(c: &mut Criterion) {
+    let supervisor =
+        syncweb_core::daemon::IntentSupervisor::new(3, Duration::from_millis(1), Duration::from_millis(500));
+    let mut group = c.benchmark_group("daemon_supervisor");
+    group.bench_function("restart_latency", |b| {
+        b.iter(|| std::hint::black_box(supervisor.backoff_delay(1)));
+    });
+    group.finish();
+}
+
+fn bench_state_file_write_read(c: &mut Criterion) {
+    let directory = std::env::temp_dir().join(format!("syncweb-state-bench-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).expect("state benchmark directory should be created");
+    let state_file = StateFile::new(&directory);
+    let report = DaemonStatusReport {
+        pid: std::process::id(),
+        node_id: "benchmark-node".to_owned(),
+        started_at: 1,
+        uptime_seconds: 2,
+        folders: vec![FolderStatusReport {
+            namespace: "benchmark-folder".to_owned(),
+            path: PathBuf::from("/tmp/benchmark-folder"),
+            session_active: true,
+            last_sync_at: Some(2),
+            entries_synced: 10,
+            errors: Vec::new(),
+        }],
+        bandwidth: BandwidthSnapshot::default(),
+        schedule: None,
+        rayon_threads: 1,
+    };
+
+    let mut group = c.benchmark_group("daemon_state");
+    group.bench_function("write_read", |b| {
+        b.iter(|| {
+            state_file.save_status(&report).expect("state write should succeed");
+            let loaded = state_file.load_status().expect("state read should succeed");
+            std::hint::black_box(loaded);
+        });
+    });
+    group.finish();
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+struct ArchiveBenchmarkFixture {
+    runtime: tokio::runtime::Runtime,
+    node: Arc<IrohNode>,
+    manifest: CollectionManifest,
+    archive: PathBuf,
+    output: PathBuf,
+    pool: ManagedPool,
+    directory: PathBuf,
+}
+
+fn archive_benchmark_fixture() -> ArchiveBenchmarkFixture {
+    let runtime = benchmark_runtime();
+    let directory = std::env::temp_dir().join(format!("syncweb-archive-bench-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).expect("archive benchmark directory should be created");
+    let (node, manifest, archive, output, pool) = runtime.block_on(async {
+        let identity = IdentityManager::new(directory.join("identity.key")).expect("benchmark identity should open");
+        let node = Arc::new(
+            IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                .await
+                .expect("benchmark node should start"),
+        );
+        let content = b"archive benchmark content";
+        let content_hash = node
+            .blob_store()
+            .add_bytes(content)
+            .await
+            .expect("benchmark content should be stored");
+        let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
+        manifest.entries.push(
+            CollectionEntry::new(content_hash, "benchmark.txt", content.len() as u64)
+                .expect("benchmark entry should be valid"),
+        );
+        let archive = directory.join("input.car.zst");
+        DropExporter::new(node.blob_store().clone())
+            .export_drop_with_options(
+                std::slice::from_ref(&manifest),
+                &archive,
+                DropExportOptions::default(),
+                None,
+            )
+            .await
+            .expect("benchmark archive should be exported");
+        let output = directory.join("output.car.zst");
+        let pool = ManagedPool::new("syncweb-benchmark", 1).expect("benchmark pool should start");
+        (node, manifest, archive, output, pool)
+    });
+    ArchiveBenchmarkFixture {
+        runtime,
+        node,
+        manifest,
+        archive,
+        output,
+        pool,
+        directory,
+    }
+}
+
+fn bench_archive_export_with_pool(c: &mut Criterion) {
+    let fixture = archive_benchmark_fixture();
+    let exporter = DropExporter::new(fixture.node.blob_store().clone());
+    let mut group = c.benchmark_group("daemon_archive_export");
+    group.bench_function("without_pool", |b| {
+        b.iter(|| {
+            let result = fixture.runtime.block_on(exporter.export_drop_with_options(
+                std::slice::from_ref(&fixture.manifest),
+                &fixture.output,
+                DropExportOptions::default(),
+                None,
+            ));
+            std::hint::black_box(result);
+        });
+    });
+    group.bench_function("with_pool", |b| {
+        b.iter(|| {
+            let result = fixture.runtime.block_on(exporter.export_drop_with_options(
+                std::slice::from_ref(&fixture.manifest),
+                &fixture.output,
+                DropExportOptions::default(),
+                Some(&fixture.pool),
+            ));
+            std::hint::black_box(result);
+        });
+    });
+    group.finish();
+    fixture
+        .runtime
+        .block_on(fixture.node.stop())
+        .expect("benchmark node should stop");
+    let _ = std::fs::remove_dir_all(fixture.directory);
+}
+
+fn bench_archive_import_with_pool(c: &mut Criterion) {
+    let fixture = archive_benchmark_fixture();
+    let importer = syncweb_core::DropImporter::new(fixture.node.blob_store().clone());
+    let mut group = c.benchmark_group("daemon_archive_import");
+    group.bench_function("without_pool", |b| {
+        b.iter(|| {
+            let result = fixture.runtime.block_on(importer.import_archive(
+                &fixture.archive,
+                syncweb_core::DropImportOptions::default(),
+                None,
+            ));
+            std::hint::black_box(result);
+        });
+    });
+    group.bench_function("with_pool", |b| {
+        b.iter(|| {
+            let result = fixture.runtime.block_on(importer.import_archive(
+                &fixture.archive,
+                syncweb_core::DropImportOptions::default(),
+                Some(&fixture.pool),
+            ));
+            std::hint::black_box(result);
+        });
+    });
+    group.finish();
+    fixture
+        .runtime
+        .block_on(fixture.node.stop())
+        .expect("benchmark node should stop");
+    let _ = std::fs::remove_dir_all(fixture.directory);
+}
+
 criterion_group!(
     benches,
     bench_filter,
@@ -443,5 +669,10 @@ criterion_group!(
     bench_search,
     bench_failure_tracking,
     bench_reputation,
+    bench_ipc_round_trip,
+    bench_supervisor_restart_latency,
+    bench_state_file_write_read,
+    bench_archive_export_with_pool,
+    bench_archive_import_with_pool,
 );
 criterion_main!(benches);

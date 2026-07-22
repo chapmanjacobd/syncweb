@@ -454,8 +454,38 @@ _syncweb() {
             syncweb__subcmd__help__subcmd__trust,delegate)
                 cmd="syncweb__subcmd__help__subcmd__trust__subcmd__delegate"
                 ;;
+            syncweb__subcmd__help__subcmd__trust,provider)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider"
+                ;;
             syncweb__subcmd__help__subcmd__trust,show)
                 cmd="syncweb__subcmd__help__subcmd__trust__subcmd__show"
+                ;;
+            syncweb__subcmd__help__subcmd__trust,stream)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__stream"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,ban)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,distrust)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,list)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,show)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,unban)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__provider,vouch)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__stream,publish)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish"
+                ;;
+            syncweb__subcmd__help__subcmd__trust__subcmd__stream,subscribe)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe"
                 ;;
             syncweb__subcmd__indexing,disable)
                 cmd="syncweb__subcmd__indexing__subcmd__disable"
@@ -778,8 +808,14 @@ _syncweb() {
             syncweb__subcmd__trust,help)
                 cmd="syncweb__subcmd__trust__subcmd__help"
                 ;;
+            syncweb__subcmd__trust,provider)
+                cmd="syncweb__subcmd__trust__subcmd__provider"
+                ;;
             syncweb__subcmd__trust,show)
                 cmd="syncweb__subcmd__trust__subcmd__show"
+                ;;
+            syncweb__subcmd__trust,stream)
+                cmd="syncweb__subcmd__trust__subcmd__stream"
                 ;;
             syncweb__subcmd__trust__subcmd__help,delegate)
                 cmd="syncweb__subcmd__trust__subcmd__help__subcmd__delegate"
@@ -787,8 +823,98 @@ _syncweb() {
             syncweb__subcmd__trust__subcmd__help,help)
                 cmd="syncweb__subcmd__trust__subcmd__help__subcmd__help"
                 ;;
+            syncweb__subcmd__trust__subcmd__help,provider)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider"
+                ;;
             syncweb__subcmd__trust__subcmd__help,show)
                 cmd="syncweb__subcmd__trust__subcmd__help__subcmd__show"
+                ;;
+            syncweb__subcmd__trust__subcmd__help,stream)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__stream"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,ban)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,distrust)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,list)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,show)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,unban)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__provider,vouch)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__stream,publish)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish"
+                ;;
+            syncweb__subcmd__trust__subcmd__help__subcmd__stream,subscribe)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,ban)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__ban"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,distrust)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__distrust"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,help)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,list)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__list"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,show)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__show"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,unban)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__unban"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider,vouch)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__vouch"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,ban)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,distrust)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,help)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,list)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,show)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,unban)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban"
+                ;;
+            syncweb__subcmd__trust__subcmd__provider__subcmd__help,vouch)
+                cmd="syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream,help)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__help"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream,publish)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__publish"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream,subscribe)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream__subcmd__help,help)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream__subcmd__help,publish)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish"
+                ;;
+            syncweb__subcmd__trust__subcmd__stream__subcmd__help,subscribe)
+                cmd="syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe"
                 ;;
             *)
                 ;;
@@ -2551,7 +2677,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__trust)
-            opts="show delegate"
+            opts="show delegate provider stream"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2578,9 +2704,149 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider)
+            opts="show list ban unban vouch distrust"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__help__subcmd__trust__subcmd__show)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__stream)
+            opts="subscribe publish"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -4955,7 +5221,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust)
-            opts="-h --verbose --json --no-color --data-dir --help show delegate help"
+            opts="-h --verbose --json --no-color --data-dir --help show delegate provider stream help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5003,7 +5269,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__help)
-            opts="show delegate help"
+            opts="show delegate provider stream help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5044,6 +5310,104 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider)
+            opts="show list ban unban vouch distrust"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__trust__subcmd__help__subcmd__show)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
@@ -5058,9 +5422,451 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__stream)
+            opts="subscribe publish"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider)
+            opts="-h --verbose --json --no-color --data-dir --help show list ban unban vouch distrust help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__ban)
+            opts="-h --hash --reason --duration --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --reason)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --duration)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__distrust)
+            opts="-h --scope --reason --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --scope)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --reason)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help)
+            opts="show list ban unban vouch distrust help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__list)
+            opts="-h --hash --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__show)
+            opts="-h --hash --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__unban)
+            opts="-h --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__provider__subcmd__vouch)
+            opts="-h --scope --reason --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --scope)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --reason)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__trust__subcmd__show)
             opts="-h --verbose --json --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream)
+            opts="-h --verbose --json --no-color --data-dir --help subscribe publish help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__help)
+            opts="subscribe publish help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__publish)
+            opts="-h --provider --signal --hash --sequence --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --provider)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --signal)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --sequence)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe)
+            opts="-h --verbose --json --no-color --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

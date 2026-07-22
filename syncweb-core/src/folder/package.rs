@@ -284,6 +284,6 @@ fn create_current_link(version: &str, path: &Path) -> Result<()> {
 
 #[cfg(not(unix))]
 fn create_current_link(version: &str, path: &Path) -> Result<()> {
-    fs::write(path, version)
-        .map_err(|error| SyncwebError::operation("failed to create current collection marker", error))
+    std::os::windows::fs::symlink_dir(version, path)
+        .map_err(|error| SyncwebError::operation("failed to create current collection link", error))
 }

@@ -774,6 +774,76 @@ pub enum TrustCommand {
         #[arg(long, default_value_t = 1)]
         sequence: u64,
     },
+    #[command(about = "Manage provider trust and bans")]
+    Provider {
+        #[command(subcommand)]
+        command: ProviderTrustCommand,
+    },
+    #[command(about = "Publish or subscribe to provider trust signals")]
+    Stream {
+        #[command(subcommand)]
+        command: TrustStreamCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProviderTrustCommand {
+    #[command(about = "Show provider reputation, bans, and trust records")]
+    Show {
+        provider: String,
+        #[arg(long, help = "Evaluate content-scoped trust for this hash")]
+        hash: Option<String>,
+    },
+    #[command(name = "list", about = "List providers known to the local index")]
+    List {
+        #[arg(long, help = "Evaluate content-scoped trust for this hash")]
+        hash: Option<String>,
+    },
+    #[command(about = "Ban a provider globally or for one content hash")]
+    Ban {
+        provider: String,
+        #[arg(long)]
+        hash: Option<String>,
+        #[arg(long, default_value = "manual provider ban")]
+        reason: String,
+        #[arg(long, help = "Ban duration in seconds")]
+        duration: Option<u64>,
+    },
+    #[command(about = "Remove a provider's global and scoped bans")]
+    Unban { provider: String },
+    #[command(about = "Vouch for a provider")]
+    Vouch {
+        provider: String,
+        #[arg(long)]
+        scope: Option<String>,
+        #[arg(long, default_value = "locally vouched provider")]
+        reason: String,
+    },
+    #[command(about = "Distrust a provider")]
+    Distrust {
+        provider: String,
+        #[arg(long)]
+        scope: Option<String>,
+        #[arg(long, default_value = "locally distrusted provider")]
+        reason: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TrustStreamCommand {
+    #[command(about = "Subscribe to a provider trust stream ticket or file")]
+    Subscribe { ticket: String },
+    #[command(about = "Publish a signed provider trust signal")]
+    Publish {
+        #[arg(long)]
+        provider: String,
+        #[arg(long)]
+        signal: String,
+        #[arg(long)]
+        hash: Option<String>,
+        #[arg(long)]
+        sequence: Option<u64>,
+    },
 }
 
 #[derive(Debug, Args)]

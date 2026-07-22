@@ -1,9 +1,12 @@
 use anyhow::Result;
 use ed25519_dalek::SigningKey;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use iroh_blobs::Hash;
 use syncweb_core::indexing::{
     Attestation, AttestationKind, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord,
-    ModerationScope, RevocationRecord, TrustDecision, TrustDelegation, TrustPolicy, WotService,
+    ModerationScope, ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord, RevocationRecord, TrustDecision,
+    TrustDelegation, TrustPolicy, WotService,
 };
 
 fn key(seed: u8) -> SigningKey {
@@ -185,6 +188,87 @@ fn wot_attestations_verify_and_require_trust() -> Result<()> {
     anyhow::ensure!(
         service.verify_attestation(&tampered).is_err(),
         "tampered attestation should fail verification"
+    );
+    Ok(())
+}
+
+fn pk(seed: u8) -> iroh::PublicKey {
+    iroh::SecretKey::from_bytes(&[seed; 32]).public()
+}
+
+#[test]
+fn provider_trust_record_expires_and_is_ignored() -> Result<()> {
+    let root = key(20);
+    let provider = pk(21);
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let service = WotService::in_memory(TrustPolicy::with_root(&root))?;
+    let record = ProviderTrustRecord::new_with_time(
+        provider,
+        ProviderTrustAction::Trust,
+        None,
+        1,
+        now - 100,
+        "expires soon",
+        &root,
+    )?
+    .with_expiration(Some(now + 100), &root)?;
+    service.apply_provider_trust(record)?;
+    anyhow::ensure!(
+        service.evaluate_provider_trust(provider, None, now)? == ProviderTrustDecision::Trusted,
+        "should be trusted before expiry"
+    );
+    anyhow::ensure!(
+        service.evaluate_provider_trust(provider, None, now + 200)? == ProviderTrustDecision::Unknown,
+        "should be unknown after expiry"
+    );
+    Ok(())
+}
+
+#[test]
+fn provider_trust_evaluate_conflicting_records() -> Result<()> {
+    let root = key(22);
+    let other = key(23);
+    let provider = pk(24);
+    let service = WotService::in_memory(TrustPolicy::with_root(&root))?;
+    service.trust_author(&root.verifying_key())?;
+    service.trust_author(&other.verifying_key())?;
+    let trust = ProviderTrustRecord::new_with_time(provider, ProviderTrustAction::Trust, None, 1, 10, "vouch", &root)?;
+    service.apply_provider_trust(trust)?;
+    let distrust = ProviderTrustRecord::new_with_time(
+        provider,
+        ProviderTrustAction::Distrust,
+        None,
+        1,
+        10,
+        "bad provider",
+        &other,
+    )?;
+    service.apply_provider_trust(distrust)?;
+    anyhow::ensure!(
+        service.evaluate_provider_trust(provider, None, 10)? == ProviderTrustDecision::Conflicting,
+        "mixed trust/distrust at same sequence should be Conflicting"
+    );
+    Ok(())
+}
+
+#[test]
+fn provider_trust_untrusted_issuer_is_rejected() -> Result<()> {
+    let root = key(25);
+    let untrusted = key(26);
+    let provider = pk(27);
+    let service = WotService::in_memory(TrustPolicy::with_root(&root))?;
+    let record = ProviderTrustRecord::new_with_time(
+        provider,
+        ProviderTrustAction::Trust,
+        None,
+        1,
+        10,
+        "from untrusted",
+        &untrusted,
+    )?;
+    anyhow::ensure!(
+        service.apply_provider_trust(record).is_err(),
+        "untrusted issuer should be rejected"
     );
     Ok(())
 }

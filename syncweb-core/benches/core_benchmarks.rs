@@ -29,8 +29,11 @@
 use std::time::{Duration, SystemTime};
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use iroh::SecretKey;
+use iroh_blobs::Hash;
 use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
+    indexing::{FetchFailure, FetchFailureKind, ProviderLeaseTracker, ProviderReputationStore, ReputationConfig},
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
     sort::{SortConfig, SortCriterion, SortEntry, Sorter},
@@ -294,6 +297,142 @@ fn bench_search(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_failure_tracking(c: &mut Criterion) {
+    let mut group = c.benchmark_group("phase9_failure_tracking");
+
+    group.bench_function("track_1000_hashes", |b| {
+        b.iter_batched(
+            ProviderLeaseTracker::default,
+            |mut tracker| {
+                for hash_idx in 0u8..255 {
+                    let hash = Hash::from_bytes([hash_idx; 32]);
+                    for provider_idx in 0u8..4 {
+                        let key = SecretKey::from_bytes(&[provider_idx; 32]).public();
+                        let failure = FetchFailure::new_at(FetchFailureKind::NotFound, key, hash, 100, "missing");
+                        tracker.record_failure_at(hash, key, failure, 100);
+                    }
+                }
+                std::hint::black_box(&tracker);
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+
+    group.bench_function("ban_lookup", |b| {
+        b.iter_batched(
+            || {
+                let mut tracker = ProviderLeaseTracker::default();
+                for i in 0u8..100 {
+                    let key = SecretKey::from_bytes(&[i; 32]).public();
+                    let hash = Hash::from_bytes([i; 32]);
+                    tracker.ban_provider(
+                        key,
+                        Some(hash),
+                        "bench ban",
+                        syncweb_core::indexing::BanSource::Automated,
+                        Some(Duration::from_hours(1)),
+                        100,
+                    );
+                }
+                tracker
+            },
+            |tracker| {
+                for i in 0u8..100 {
+                    let key = SecretKey::from_bytes(&[i; 32]).public();
+                    let hash = Hash::from_bytes([i; 32]);
+                    let _ = std::hint::black_box(tracker.is_banned(key, &hash, 101));
+                }
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+
+    group.bench_function("retroactive_invalidate_100", |b| {
+        b.iter_batched(
+            || {
+                let mut tracker = ProviderLeaseTracker::default();
+                for i in 0u8..100 {
+                    let key = SecretKey::from_bytes(&[i; 32]).public();
+                    let hash = Hash::from_bytes([42; 32]);
+                    let failure = FetchFailure::new_at(FetchFailureKind::NotFound, key, hash, 100, "missing");
+                    tracker.record_failure_at(hash, key, failure, 100);
+                }
+                tracker
+            },
+            |mut tracker| {
+                let hash = Hash::from_bytes([42; 32]);
+                let winner = SecretKey::from_bytes(&[255; 32]).public();
+                let _ = std::hint::black_box(tracker.retroactive_invalidate(hash, winner, 200));
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_reputation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("phase9_reputation");
+
+    group.bench_function("score_calculation", |b| {
+        let mut config = ReputationConfig::default();
+        config.min_samples = 1;
+        let mut store = ProviderReputationStore::new(config);
+        for i in 0u8..50 {
+            let key = SecretKey::from_bytes(&[i; 32]).public();
+            store.record_success(key, 10);
+            store.record_failure(key, FetchFailureKind::Timeout, 11);
+        }
+        let keys: Vec<_> = (0u8..50).map(|i| SecretKey::from_bytes(&[i; 32]).public()).collect();
+        b.iter(|| {
+            for key in &keys {
+                let _ = std::hint::black_box(store.score(*key, 20));
+            }
+        });
+    });
+
+    group.bench_function("rank_1000_providers", |b| {
+        let mut config = ReputationConfig::default();
+        config.min_samples = 1;
+        let mut store = ProviderReputationStore::new(config);
+        let hash = Hash::from_bytes([42; 32]);
+        let keys: Vec<_> = (0u16..1000)
+            .map(|i| {
+                let mut seed = [0_u8; 32];
+                seed[0] = (i >> 8) as u8;
+                seed[1] = (i & 0xFF) as u8;
+                let key = SecretKey::from_bytes(&seed).public();
+                store.record_success(key, 10);
+                key
+            })
+            .collect();
+        b.iter(|| {
+            let _ = std::hint::black_box(store.rank_provider_list(20, hash, &keys));
+        });
+    });
+
+    group.bench_function("signal_verification", |b| {
+        let mut config = ReputationConfig::default();
+        config.min_samples = 1;
+        let _store = ProviderReputationStore::new(config);
+        let reporter_key = ed25519_dalek::SigningKey::from_bytes(&[99; 32]);
+        let provider = SecretKey::from_bytes(&[1; 32]).public();
+        let signal = syncweb_core::indexing::ProviderTrustSignal::new_with_time(
+            provider,
+            syncweb_core::indexing::TrustSignalKind::ObservedSuccess,
+            None,
+            1,
+            &reporter_key,
+        )
+        .unwrap();
+        b.iter(|| {
+            let _ = std::hint::black_box(signal.verify_at(100));
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_filter,
@@ -302,5 +441,7 @@ criterion_group!(
     bench_schedule,
     bench_stats,
     bench_search,
+    bench_failure_tracking,
+    bench_reputation,
 );
 criterion_main!(benches);

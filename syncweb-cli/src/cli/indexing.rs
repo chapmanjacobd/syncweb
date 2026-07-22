@@ -2,7 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -11,15 +11,17 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use super::commands::{
-    AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, MirrorCommand, ModerationCommand, ReportArgs,
-    TrustCommand,
+    AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, MirrorCommand, ModerationCommand,
+    ProviderTrustCommand, ReportArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
     folder::{FolderManager, SyncwebFolder},
     indexing::{
-        Attestation, AttestationKind, CatalogRecord, ContentLink, DenylistRule, FilterList, IndexingService, Link,
-        LinkResolver, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord, MutablePointer,
-        PrivateLink, ReplicationBudget, ResilienceConfig, TrustDecision, TrustDelegation, TrustPolicy, WotService,
+        Attestation, AttestationKind, BanRecord, CatalogRecord, ContentLink, DenylistRule, FilterList, IndexingService,
+        Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord, MutablePointer,
+        PrivateLink, ProviderReputationStore, ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord,
+        ProviderTrustSignal, ReplicationBudget, ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision,
+        TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
     },
     node::{
         identity::IdentityManager,
@@ -30,8 +32,11 @@ use syncweb_core::{
 use iroh::PublicKey;
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::NamespaceId;
+use iroh_gossip::api::Event;
+use n0_future::StreamExt;
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
+const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct IndexingState {
@@ -53,6 +58,14 @@ struct IndexingState {
     attestations: Vec<Attestation>,
     #[serde(default)]
     reports: Vec<ReportRecord>,
+    #[serde(default)]
+    provider_bans: Vec<BanRecord>,
+    #[serde(default)]
+    provider_trust: Vec<ProviderTrustRecord>,
+    #[serde(default)]
+    trust_signals: Vec<ProviderTrustSignal>,
+    #[serde(default)]
+    trust_streams: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -341,7 +354,8 @@ pub fn handle_mirror(data_dir: &Path, command: MirrorCommand, output_json: bool)
     Ok(())
 }
 
-pub fn handle_trust(data_dir: &Path, command: TrustCommand, output_json: bool) -> Result<()> {
+#[async_recursion]
+pub async fn handle_trust(data_dir: &Path, command: TrustCommand, output_json: bool) -> Result<()> {
     match command {
         TrustCommand::Show { subject } => {
             let state = load_state(data_dir)?;
@@ -431,8 +445,395 @@ pub fn handle_trust(data_dir: &Path, command: TrustCommand, output_json: bool) -
                 ),
             )?;
         }
+        TrustCommand::Provider {
+            command: provider_command,
+        } => handle_provider_trust(data_dir, provider_command, output_json)?,
+        TrustCommand::Stream {
+            command: stream_command,
+        } => handle_trust_stream(data_dir, stream_command, output_json).await?,
     }
     Ok(())
+}
+
+fn handle_provider_trust(data_dir: &Path, command: ProviderTrustCommand, output_json: bool) -> Result<()> {
+    match command {
+        ProviderTrustCommand::Show { provider, hash } => {
+            handle_provider_show(data_dir, &provider, hash.as_deref(), output_json)?;
+        }
+        ProviderTrustCommand::List { hash } => {
+            handle_provider_list(data_dir, hash.as_deref(), output_json)?;
+        }
+        ProviderTrustCommand::Ban {
+            provider,
+            hash,
+            reason,
+            duration,
+        } => handle_provider_ban(data_dir, &provider, hash.as_deref(), reason, duration, output_json)?,
+        ProviderTrustCommand::Unban { provider } => {
+            handle_provider_unban(data_dir, &provider, output_json)?;
+        }
+        ProviderTrustCommand::Vouch {
+            provider,
+            scope,
+            reason,
+        } => handle_provider_trust_record(
+            data_dir,
+            &provider,
+            scope.as_deref(),
+            reason,
+            ProviderTrustAction::Vouch,
+            output_json,
+        )?,
+        ProviderTrustCommand::Distrust {
+            provider,
+            scope,
+            reason,
+        } => handle_provider_trust_record(
+            data_dir,
+            &provider,
+            scope.as_deref(),
+            reason,
+            ProviderTrustAction::Distrust,
+            output_json,
+        )?,
+    }
+    Ok(())
+}
+
+fn handle_provider_show(data_dir: &Path, provider: &str, hash: Option<&str>, output_json: bool) -> Result<()> {
+    let provider_key = parse_provider(provider)?;
+    let scope = hash.map(parse_hash).transpose()?;
+    let state = load_state(data_dir)?;
+    let indexing = open_indexing(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let reputation = load_reputation(&wot, &state)?;
+    let resilience = load_resilience(&state)?;
+    let now = epoch_seconds();
+    let records = wot.provider_trust_records(provider_key)?;
+    let bans = active_provider_bans(&state, provider_key, scope.as_ref(), now);
+    let decision = wot.evaluate_provider_trust(provider_key, scope.as_ref(), now)?;
+    let health = scope
+        .as_ref()
+        .map(|content_hash| resilience.health(content_hash))
+        .transpose()?
+        .map(|health| {
+            serde_json::json!({
+                "verified": health.verified,
+                "local": health.local,
+                "verified_providers": health.verified_providers,
+                "local_providers": health.local_providers,
+            })
+        });
+    let report = serde_json::json!({
+        "provider": provider_key,
+        "trust": provider_trust_label(decision),
+        "score": reputation.score(provider_key, now),
+        "reputation": reputation.reputation(provider_key),
+        "bans": bans,
+        "records": records,
+        "health": health,
+    });
+    print_status(
+        output_json,
+        report,
+        format!(
+            "provider: {provider_key}\ntrust: {}\nscore: {:.3}\nbans: {}",
+            provider_trust_label(decision),
+            reputation.score(provider_key, now),
+            bans.len()
+        ),
+    )
+}
+
+fn handle_provider_list(data_dir: &Path, hash: Option<&str>, output_json: bool) -> Result<()> {
+    let scope = hash.map(parse_hash).transpose()?;
+    let state = load_state(data_dir)?;
+    let indexing = open_indexing(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let reputation = load_reputation(&wot, &state)?;
+    let now = epoch_seconds();
+    let mut providers = state
+        .leases
+        .iter()
+        .map(|lease| lease.provider)
+        .chain(state.provider_bans.iter().map(|ban| ban.provider))
+        .chain(state.provider_trust.iter().map(|record| record.provider))
+        .chain(state.trust_signals.iter().map(|signal| signal.provider))
+        .collect::<Vec<_>>();
+    providers.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+    providers.dedup();
+    let reports = providers
+        .into_iter()
+        .map(|provider_key| {
+            let decision = wot.evaluate_provider_trust(provider_key, scope.as_ref(), now)?;
+            let records = wot.provider_trust_records(provider_key)?;
+            Ok(serde_json::json!({
+                "provider": provider_key,
+                "trust": provider_trust_label(decision),
+                "score": reputation.score(provider_key, now),
+                "bans": active_provider_bans(&state, provider_key, scope.as_ref(), now),
+                "records": records.len(),
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&reports)?);
+    } else {
+        for report in reports {
+            let provider = report
+                .get("provider")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("-");
+            let trust = report.get("trust").and_then(serde_json::Value::as_str).unwrap_or("-");
+            let provider_score = report.get("score").and_then(serde_json::Value::as_f64).unwrap_or(0.5);
+            let bans = report
+                .get("bans")
+                .and_then(serde_json::Value::as_array)
+                .map_or(0, Vec::len);
+            println!("{provider}\t{trust}\t{provider_score:.3}\t{bans}");
+        }
+    }
+    Ok(())
+}
+
+fn handle_provider_ban(
+    data_dir: &Path,
+    provider: &str,
+    hash: Option<&str>,
+    reason: String,
+    duration: Option<u64>,
+    output_json: bool,
+) -> Result<()> {
+    let provider_key = parse_provider(provider)?;
+    let scope = hash.map(parse_hash).transpose()?;
+    let ban_duration = duration.map(Duration::from_secs);
+    let mut state = load_state(data_dir)?;
+    let resilience = load_resilience(&state)?;
+    let ban = resilience.ban_provider(provider_key, reason, scope, ban_duration)?;
+    state
+        .provider_bans
+        .retain(|existing| !(existing.provider == provider_key && existing.hash == ban.hash));
+    state.provider_bans.push(ban.clone());
+    save_state(data_dir, &state)?;
+    print_status(
+        output_json,
+        serde_json::json!({"status": "banned", "ban": ban}),
+        format!("banned: {provider_key}"),
+    )
+}
+
+fn handle_provider_unban(data_dir: &Path, provider: &str, output_json: bool) -> Result<()> {
+    let provider_key = parse_provider(provider)?;
+    let mut state = load_state(data_dir)?;
+    let removed = state.provider_bans.iter().any(|ban| ban.provider == provider_key);
+    state.provider_bans.retain(|ban| ban.provider != provider_key);
+    if removed {
+        save_state(data_dir, &state)?;
+    }
+    print_status(
+        output_json,
+        serde_json::json!({"status": if removed { "unbanned" } else { "unchanged" }, "provider": provider_key}),
+        format!("{}: {provider_key}", if removed { "unbanned" } else { "unchanged" }),
+    )
+}
+
+fn handle_provider_trust_record(
+    data_dir: &Path,
+    provider: &str,
+    scope: Option<&str>,
+    reason: String,
+    action: ProviderTrustAction,
+    output_json: bool,
+) -> Result<()> {
+    let provider_key = parse_provider(provider)?;
+    let scope_hash = scope.map(parse_hash).transpose()?;
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let signing = signing_key(&identity);
+    let issuer = author_id(&signing.verifying_key());
+    let mut state = load_state(data_dir)?;
+    let sequence = state
+        .provider_trust
+        .iter()
+        .filter(|record| record.provider == provider_key && record.issuer == issuer && record.scope == scope_hash)
+        .map(|record| record.sequence)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    let record = ProviderTrustRecord::new(provider_key, action, scope_hash, sequence, None, reason, &signing)?;
+    let indexing = open_indexing(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let inserted = wot.apply_provider_trust(record.clone())?;
+    if inserted {
+        state.provider_trust.push(record.clone());
+        save_state(data_dir, &state)?;
+    }
+    print_status(
+        output_json,
+        serde_json::json!({
+            "status": if inserted { "updated" } else { "unchanged" },
+            "provider": provider_key,
+            "action": provider_trust_action_label(&record.action),
+            "scope": record.scope.map(|value| value.to_string()),
+            "sequence": record.sequence,
+        }),
+        format!("{}: {provider_key}", provider_trust_action_label(&record.action)),
+    )
+}
+
+#[async_recursion]
+async fn handle_trust_stream(data_dir: &Path, command: TrustStreamCommand, output_json: bool) -> Result<()> {
+    match command {
+        TrustStreamCommand::Publish {
+            provider,
+            signal,
+            hash,
+            sequence,
+        } => {
+            let provider_key = parse_provider(&provider)?;
+            let signal_kind = parse_signal_kind(&signal)?;
+            let scope = hash.map(|value| parse_hash(&value)).transpose()?;
+            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+            let signing = signing_key(&identity);
+            let reporter = PublicKey::from_bytes(&signing.verifying_key().to_bytes())?;
+            let mut state = load_state(data_dir)?;
+            let next_sequence = sequence.unwrap_or_else(|| {
+                state
+                    .trust_signals
+                    .iter()
+                    .filter(|existing| existing.provider == provider_key && existing.reporter == reporter)
+                    .map(|existing| existing.sequence)
+                    .max()
+                    .unwrap_or(0)
+                    .saturating_add(1)
+            });
+            let trust_signal =
+                ProviderTrustSignal::new_with_time(provider_key, signal_kind, scope, next_sequence, &signing)?;
+
+            let node = open_node(data_dir).await?;
+            let gossip_store = ProviderReputationStore::default();
+            let result = async {
+                let topic = gossip_store
+                    .subscribe_trust_stream(node.gossip_service(), Vec::new())
+                    .await?;
+                let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+                gossip_store
+                    .publish_signal(node.gossip_service(), &sender, &trust_signal)
+                    .await
+            }
+            .await;
+            node.stop().await?;
+            result?;
+
+            if !state.trust_signals.contains(&trust_signal) {
+                state.trust_signals.push(trust_signal.clone());
+            }
+            let stream_path = data_dir.join("trust-stream.json");
+            fs::write(&stream_path, serde_json::to_vec_pretty(&state.trust_signals)?)?;
+            save_state(data_dir, &state)?;
+            print_status(
+                output_json,
+                serde_json::json!({
+                    "status": "published",
+                    "provider": provider_key,
+                    "signal": trust_signal_label(signal_kind),
+                    "sequence": trust_signal.sequence,
+                    "ticket": format!("file://{}", stream_path.display()),
+                    "bootstrap": node.endpoint().addr().id,
+                }),
+                format!(
+                    "published: {}\nprovider: {provider_key}\nticket: file://{}",
+                    trust_signal_label(signal_kind),
+                    stream_path.display()
+                ),
+            )?;
+        }
+        TrustStreamCommand::Subscribe { ticket } => {
+            let imported = if let Some(bytes) = read_trust_stream_source(&ticket)? {
+                parse_trust_signals(&bytes)?
+            } else if let Ok(bootstrap) = parse_provider(&ticket) {
+                receive_trust_signals(data_dir, bootstrap).await?
+            } else {
+                anyhow::bail!("invalid trust stream ticket or source: {ticket}");
+            };
+            let mut state = load_state(data_dir)?;
+            let indexing = open_indexing(data_dir)?;
+            let wot = load_wot(&indexing, &state)?;
+            let mut reputation = load_reputation(&wot, &state)?;
+            let mut accepted = 0_usize;
+            for signal in imported {
+                if state.trust_signals.contains(&signal) {
+                    continue;
+                }
+                if reputation.ingest_trust_signal(signal.clone())? {
+                    state.trust_signals.push(signal);
+                    accepted = accepted.saturating_add(1);
+                }
+            }
+            if !state.trust_streams.contains(&ticket) {
+                state.trust_streams.push(ticket.clone());
+            }
+            save_state(data_dir, &state)?;
+            print_status(
+                output_json,
+                serde_json::json!({
+                    "status": "subscribed",
+                    "ticket": ticket,
+                    "accepted": accepted,
+                    "signals": state.trust_signals.len(),
+                }),
+                format!("subscribed: {ticket}\naccepted: {accepted}"),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+async fn receive_trust_signals(data_dir: &Path, bootstrap: PublicKey) -> Result<Vec<ProviderTrustSignal>> {
+    let state = load_state(data_dir)?;
+    let indexing = open_indexing(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let reputation = load_reputation(&wot, &state)?;
+    let node = open_node(data_dir).await?;
+    let mut topic = reputation
+        .subscribe_trust_stream(node.gossip_service(), vec![bootstrap])
+        .await?;
+    let mut signals = Vec::new();
+    loop {
+        let timed_event = tokio::time::timeout(Duration::from_millis(250), topic.next()).await;
+        let Ok(Some(event)) = timed_event else {
+            break;
+        };
+        if let Event::Received(message) =
+            event.map_err(|error| anyhow::anyhow!("trust stream event failed: {error}"))?
+        {
+            let signal = ProviderTrustSignal::from_bytes(message.content)?;
+            signal.verify()?;
+            signals.push(signal);
+        }
+    }
+    node.stop().await?;
+    Ok(signals)
+}
+
+fn parse_trust_signals(bytes: &[u8]) -> Result<Vec<ProviderTrustSignal>> {
+    let signals = serde_json::from_slice::<Vec<ProviderTrustSignal>>(bytes)
+        .or_else(|_| serde_json::from_slice::<ProviderTrustSignal>(bytes).map(|signal| vec![signal]))
+        .context("trust stream must contain a signed signal or signal array")?;
+    for signal in &signals {
+        signal.verify()?;
+    }
+    Ok(signals)
+}
+
+fn read_trust_stream_source(source: &str) -> Result<Option<Vec<u8>>> {
+    let path = source.strip_prefix("file://").unwrap_or(source);
+    if Path::new(path).is_file() {
+        return Ok(Some(fs::read(path)?));
+    }
+    if source.trim_start().starts_with('{') || source.trim_start().starts_with('[') {
+        return Ok(Some(source.as_bytes().to_vec()));
+    }
+    Ok(None)
 }
 
 pub fn handle_attest(data_dir: &Path, command: AttestArgs, output_json: bool) -> Result<()> {
@@ -670,7 +1071,64 @@ fn load_wot(indexing: &IndexingService, state: &IndexingState) -> Result<WotServ
     for moderation in &state.moderation {
         wot.apply_moderation(moderation.clone())?;
     }
+    let now = epoch_seconds();
+    for record in &state.provider_trust {
+        if record.expires_at.is_none_or(|expires_at| expires_at > now) {
+            wot.apply_provider_trust(record.clone())?;
+        }
+    }
     Ok(wot)
+}
+
+fn load_resilience(state: &IndexingState) -> Result<ResilienceService> {
+    let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::default()));
+    let now = epoch_seconds();
+    for lease in &state.leases {
+        if !lease.is_expired_at(now) {
+            resilience.record_lease(lease.clone())?;
+        }
+    }
+    for ban in &state.provider_bans {
+        let Some(expires_at) = ban.expires_at else {
+            resilience.ban_provider(ban.provider, ban.reason.clone(), ban.hash, None)?;
+            continue;
+        };
+        if expires_at > now {
+            resilience.ban_provider(
+                ban.provider,
+                ban.reason.clone(),
+                ban.hash,
+                Some(Duration::from_secs(expires_at.saturating_sub(now))),
+            )?;
+        }
+    }
+    Ok(resilience)
+}
+
+fn load_reputation(wot: &WotService, state: &IndexingState) -> Result<ProviderReputationStore> {
+    let mut reputation = ProviderReputationStore::with_policy(ReputationConfig::default(), wot.policy()?);
+    let now = epoch_seconds();
+    for signal in &state.trust_signals {
+        if signal.timestamp <= now && now.saturating_sub(signal.timestamp) > TRUST_SIGNAL_TTL_SECONDS {
+            continue;
+        }
+        signal.verify()?;
+        reputation.ingest_trust_signal(signal.clone())?;
+    }
+    Ok(reputation)
+}
+
+fn active_provider_bans(state: &IndexingState, provider: PublicKey, scope: Option<&Hash>, now: u64) -> Vec<BanRecord> {
+    state
+        .provider_bans
+        .iter()
+        .filter(|ban| {
+            ban.provider == provider
+                && ban.expires_at.is_none_or(|expires_at| expires_at > now)
+                && ban.hash.as_ref().is_none_or(|hash| Some(hash) == scope)
+        })
+        .cloned()
+        .collect()
 }
 
 fn load_resolver(state: &IndexingState) -> Result<LinkResolver> {
@@ -733,6 +1191,15 @@ fn parse_verifying_key(value: &str) -> Result<VerifyingKey> {
         .map_err(|error| anyhow::anyhow!("invalid publisher identity: {error}"))?;
     VerifyingKey::from_bytes(public_key.as_bytes())
         .map_err(|error| anyhow::anyhow!("invalid publisher identity: {error}"))
+}
+
+fn parse_provider(value: &str) -> Result<PublicKey> {
+    if let Ok(provider) = value.parse::<PublicKey>() {
+        return Ok(provider);
+    }
+    let verifying_key = parse_verifying_key(value)?;
+    PublicKey::from_bytes(&verifying_key.to_bytes())
+        .map_err(|error| anyhow::anyhow!("invalid provider identity: {error}"))
 }
 
 fn parse_hash(value: &str) -> Result<Hash> {
@@ -880,6 +1347,43 @@ fn epoch_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
+}
+
+fn parse_signal_kind(value: &str) -> Result<TrustSignalKind> {
+    match value.to_ascii_lowercase().replace('_', "-").as_str() {
+        "success" | "observed-success" => Ok(TrustSignalKind::ObservedSuccess),
+        "failure" | "observed-failure" => Ok(TrustSignalKind::ObservedFailure),
+        "corruption" | "observed-corruption" => Ok(TrustSignalKind::ObservedCorruption),
+        _ => anyhow::bail!("unsupported trust signal {value:?}; use success, failure, or corruption"),
+    }
+}
+
+const fn trust_signal_label(signal: TrustSignalKind) -> &'static str {
+    match signal {
+        TrustSignalKind::ObservedSuccess => "success",
+        TrustSignalKind::ObservedFailure => "failure",
+        TrustSignalKind::ObservedCorruption => "corruption",
+        _ => "unknown",
+    }
+}
+
+const fn provider_trust_action_label(action: &ProviderTrustAction) -> &'static str {
+    match action {
+        ProviderTrustAction::Trust => "trust",
+        ProviderTrustAction::Distrust => "distrust",
+        ProviderTrustAction::Vouch => "vouch",
+        ProviderTrustAction::Warn => "warn",
+        _ => "unknown",
+    }
+}
+
+const fn provider_trust_label(decision: ProviderTrustDecision) -> &'static str {
+    match decision {
+        ProviderTrustDecision::Trusted => "trusted",
+        ProviderTrustDecision::Distrusted => "distrusted",
+        ProviderTrustDecision::Conflicting => "conflicting",
+        ProviderTrustDecision::Unknown | _ => "unknown",
+    }
 }
 
 const fn trust_label(decision: TrustDecision) -> &'static str {

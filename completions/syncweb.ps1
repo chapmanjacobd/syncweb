@@ -1235,6 +1235,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
+            [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -1259,9 +1261,170 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'syncweb;trust;provider' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
+            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
+            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
+            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
+            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;provider;show' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Evaluate content-scoped trust for this hash')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;list' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Evaluate content-scoped trust for this hash')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;ban' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'hash')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Ban duration in seconds')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;unban' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;vouch' {
+            [CompletionResult]::new('--scope', '--scope', [CompletionResultType]::ParameterName, 'scope')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;distrust' {
+            [CompletionResult]::new('--scope', '--scope', [CompletionResultType]::ParameterName, 'scope')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;provider;help' {
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
+            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
+            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
+            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
+            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;provider;help;show' {
+            break
+        }
+        'syncweb;trust;provider;help;list' {
+            break
+        }
+        'syncweb;trust;provider;help;ban' {
+            break
+        }
+        'syncweb;trust;provider;help;unban' {
+            break
+        }
+        'syncweb;trust;provider;help;vouch' {
+            break
+        }
+        'syncweb;trust;provider;help;distrust' {
+            break
+        }
+        'syncweb;trust;provider;help;help' {
+            break
+        }
+        'syncweb;trust;stream' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;stream;subscribe' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;stream;publish' {
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'provider')
+            [CompletionResult]::new('--signal', '--signal', [CompletionResultType]::ParameterName, 'signal')
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'hash')
+            [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;stream;help' {
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;trust;stream;help;subscribe' {
+            break
+        }
+        'syncweb;trust;stream;help;publish' {
+            break
+        }
+        'syncweb;trust;stream;help;help' {
+            break
+        }
         'syncweb;trust;help' {
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
+            [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -1269,6 +1432,44 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;trust;help;delegate' {
+            break
+        }
+        'syncweb;trust;help;provider' {
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
+            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
+            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
+            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
+            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
+            break
+        }
+        'syncweb;trust;help;provider;show' {
+            break
+        }
+        'syncweb;trust;help;provider;list' {
+            break
+        }
+        'syncweb;trust;help;provider;ban' {
+            break
+        }
+        'syncweb;trust;help;provider;unban' {
+            break
+        }
+        'syncweb;trust;help;provider;vouch' {
+            break
+        }
+        'syncweb;trust;help;provider;distrust' {
+            break
+        }
+        'syncweb;trust;help;stream' {
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
+            break
+        }
+        'syncweb;trust;help;stream;subscribe' {
+            break
+        }
+        'syncweb;trust;help;stream;publish' {
             break
         }
         'syncweb;trust;help;help' {
@@ -1690,12 +1891,52 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;help;trust' {
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
+            [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             break
         }
         'syncweb;help;trust;show' {
             break
         }
         'syncweb;help;trust;delegate' {
+            break
+        }
+        'syncweb;help;trust;provider' {
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
+            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
+            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
+            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
+            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
+            break
+        }
+        'syncweb;help;trust;provider;show' {
+            break
+        }
+        'syncweb;help;trust;provider;list' {
+            break
+        }
+        'syncweb;help;trust;provider;ban' {
+            break
+        }
+        'syncweb;help;trust;provider;unban' {
+            break
+        }
+        'syncweb;help;trust;provider;vouch' {
+            break
+        }
+        'syncweb;help;trust;provider;distrust' {
+            break
+        }
+        'syncweb;help;trust;stream' {
+            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
+            break
+        }
+        'syncweb;help;trust;stream;subscribe' {
+            break
+        }
+        'syncweb;help;trust;stream;publish' {
             break
         }
         'syncweb;help;attest' {

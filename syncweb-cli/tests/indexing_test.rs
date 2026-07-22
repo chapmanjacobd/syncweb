@@ -268,3 +268,93 @@ fn indexing_meta_add_persists_metadata() -> Result<()> {
     fs::remove_dir_all(data_dir)?;
     Ok(())
 }
+
+#[test]
+fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
+    let data_dir = data_dir("provider-trust");
+    let provider = iroh::SecretKey::generate().public().to_string();
+
+    let vouched = run(&data_dir, &["trust", "provider", "vouch", &provider])?;
+    assert_success(&vouched, "trust provider vouch")?;
+    let shown = run(&data_dir, &["--json", "trust", "provider", "show", &provider])?;
+    assert_success(&shown, "trust provider show")?;
+    ensure!(json_output(&shown)?.get("trust") == Some(&Value::from("trusted")));
+
+    let banned = run(
+        &data_dir,
+        &["trust", "provider", "ban", &provider, "--reason", "test ban"],
+    )?;
+    assert_success(&banned, "trust provider ban")?;
+    let listed = run(&data_dir, &["--json", "trust", "provider", "list"])?;
+    assert_success(&listed, "trust provider list")?;
+    ensure!(
+        json_output(&listed)?
+            .as_array()
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("bans"))
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.len() == 1)
+    );
+
+    let distrusted = run(&data_dir, &["trust", "provider", "distrust", &provider])?;
+    assert_success(&distrusted, "trust provider distrust")?;
+    let unbanned = run(&data_dir, &["trust", "provider", "unban", &provider])?;
+    assert_success(&unbanned, "trust provider unban")?;
+    let final_state = run(&data_dir, &["--json", "trust", "provider", "show", &provider])?;
+    assert_success(&final_state, "trust provider final show")?;
+    let final_state_json = json_output(&final_state)?;
+    ensure!(final_state_json.get("trust") == Some(&Value::from("distrusted")));
+    ensure!(
+        final_state_json
+            .get("bans")
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
+    let publisher_dir = data_dir("trust-stream-publisher");
+    let subscriber_dir = data_dir("trust-stream-subscriber");
+    let provider = iroh::SecretKey::generate().public().to_string();
+    let devices = run(&publisher_dir, &["devices"])?;
+    assert_success(&devices, "publisher devices")?;
+    let reporter = String::from_utf8(devices.stdout)?
+        .lines()
+        .find_map(|line| line.strip_prefix("iroh: "))
+        .context("publisher identity missing")?
+        .to_owned();
+
+    let published = run(
+        &publisher_dir,
+        &[
+            "--json",
+            "trust",
+            "stream",
+            "publish",
+            "--provider",
+            &provider,
+            "--signal",
+            "failure",
+        ],
+    )?;
+    assert_success(&published, "trust stream publish")?;
+    let ticket = json_output(&published)?
+        .get("ticket")
+        .and_then(Value::as_str)
+        .context("trust stream ticket missing")?
+        .to_owned();
+
+    let delegated = run(&subscriber_dir, &["trust", "delegate", &reporter])?;
+    assert_success(&delegated, "delegate trust stream reporter")?;
+    let subscribed = run(&subscriber_dir, &["--json", "trust", "stream", "subscribe", &ticket])?;
+    assert_success(&subscribed, "trust stream subscribe")?;
+    ensure!(json_output(&subscribed)?.get("accepted") == Some(&Value::from(1)));
+
+    fs::remove_dir_all(publisher_dir)?;
+    fs::remove_dir_all(subscriber_dir)?;
+    Ok(())
+}

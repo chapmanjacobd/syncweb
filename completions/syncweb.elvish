@@ -1082,6 +1082,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand provider 'Manage provider trust and bans'
+            cand stream 'Publish or subscribe to provider trust signals'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;trust;show'= {
@@ -1103,14 +1105,181 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;trust;provider'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand show 'Show provider reputation, bans, and trust records'
+            cand list 'List providers known to the local index'
+            cand ban 'Ban a provider globally or for one content hash'
+            cand unban 'Remove a provider''s global and scoped bans'
+            cand vouch 'Vouch for a provider'
+            cand distrust 'Distrust a provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;provider;show'= {
+            cand --hash 'Evaluate content-scoped trust for this hash'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;list'= {
+            cand --hash 'Evaluate content-scoped trust for this hash'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;ban'= {
+            cand --hash 'hash'
+            cand --reason 'reason'
+            cand --duration 'Ban duration in seconds'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;unban'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;vouch'= {
+            cand --scope 'scope'
+            cand --reason 'reason'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;distrust'= {
+            cand --scope 'scope'
+            cand --reason 'reason'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;provider;help'= {
+            cand show 'Show provider reputation, bans, and trust records'
+            cand list 'List providers known to the local index'
+            cand ban 'Ban a provider globally or for one content hash'
+            cand unban 'Remove a provider''s global and scoped bans'
+            cand vouch 'Vouch for a provider'
+            cand distrust 'Distrust a provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;provider;help;show'= {
+        }
+        &'syncweb;trust;provider;help;list'= {
+        }
+        &'syncweb;trust;provider;help;ban'= {
+        }
+        &'syncweb;trust;provider;help;unban'= {
+        }
+        &'syncweb;trust;provider;help;vouch'= {
+        }
+        &'syncweb;trust;provider;help;distrust'= {
+        }
+        &'syncweb;trust;provider;help;help'= {
+        }
+        &'syncweb;trust;stream'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand subscribe 'Subscribe to a provider trust stream ticket or file'
+            cand publish 'Publish a signed provider trust signal'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;stream;subscribe'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;stream;publish'= {
+            cand --provider 'provider'
+            cand --signal 'signal'
+            cand --hash 'hash'
+            cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-color 'Disable colored output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;stream;help'= {
+            cand subscribe 'Subscribe to a provider trust stream ticket or file'
+            cand publish 'Publish a signed provider trust signal'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;trust;stream;help;subscribe'= {
+        }
+        &'syncweb;trust;stream;help;publish'= {
+        }
+        &'syncweb;trust;stream;help;help'= {
+        }
         &'syncweb;trust;help'= {
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand provider 'Manage provider trust and bans'
+            cand stream 'Publish or subscribe to provider trust signals'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;trust;help;show'= {
         }
         &'syncweb;trust;help;delegate'= {
+        }
+        &'syncweb;trust;help;provider'= {
+            cand show 'Show provider reputation, bans, and trust records'
+            cand list 'List providers known to the local index'
+            cand ban 'Ban a provider globally or for one content hash'
+            cand unban 'Remove a provider''s global and scoped bans'
+            cand vouch 'Vouch for a provider'
+            cand distrust 'Distrust a provider'
+        }
+        &'syncweb;trust;help;provider;show'= {
+        }
+        &'syncweb;trust;help;provider;list'= {
+        }
+        &'syncweb;trust;help;provider;ban'= {
+        }
+        &'syncweb;trust;help;provider;unban'= {
+        }
+        &'syncweb;trust;help;provider;vouch'= {
+        }
+        &'syncweb;trust;help;provider;distrust'= {
+        }
+        &'syncweb;trust;help;stream'= {
+            cand subscribe 'Subscribe to a provider trust stream ticket or file'
+            cand publish 'Publish a signed provider trust signal'
+        }
+        &'syncweb;trust;help;stream;subscribe'= {
+        }
+        &'syncweb;trust;help;stream;publish'= {
         }
         &'syncweb;trust;help;help'= {
         }
@@ -1439,10 +1608,40 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;trust'= {
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand provider 'Manage provider trust and bans'
+            cand stream 'Publish or subscribe to provider trust signals'
         }
         &'syncweb;help;trust;show'= {
         }
         &'syncweb;help;trust;delegate'= {
+        }
+        &'syncweb;help;trust;provider'= {
+            cand show 'Show provider reputation, bans, and trust records'
+            cand list 'List providers known to the local index'
+            cand ban 'Ban a provider globally or for one content hash'
+            cand unban 'Remove a provider''s global and scoped bans'
+            cand vouch 'Vouch for a provider'
+            cand distrust 'Distrust a provider'
+        }
+        &'syncweb;help;trust;provider;show'= {
+        }
+        &'syncweb;help;trust;provider;list'= {
+        }
+        &'syncweb;help;trust;provider;ban'= {
+        }
+        &'syncweb;help;trust;provider;unban'= {
+        }
+        &'syncweb;help;trust;provider;vouch'= {
+        }
+        &'syncweb;help;trust;provider;distrust'= {
+        }
+        &'syncweb;help;trust;stream'= {
+            cand subscribe 'Subscribe to a provider trust stream ticket or file'
+            cand publish 'Publish a signed provider trust signal'
+        }
+        &'syncweb;help;trust;stream;subscribe'= {
+        }
+        &'syncweb;help;trust;stream;publish'= {
         }
         &'syncweb;help;attest'= {
         }

@@ -119,7 +119,9 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Indexing { command } => cli::indexing::handle_indexing(&cli.data_dir, command, output_json).await?,
         Command::Link { command } => cli::indexing::handle_link(&cli.data_dir, command, output_json)?,
         Command::Mirror { command } => cli::indexing::handle_mirror(&cli.data_dir, command, output_json)?,
-        Command::Trust { command } => cli::indexing::handle_trust(&cli.data_dir, command, output_json)?,
+        Command::Trust { command: trust_command } => {
+            cli::indexing::handle_trust(&cli.data_dir, trust_command, output_json).await?;
+        }
         Command::Attest(command) => cli::indexing::handle_attest(&cli.data_dir, command, output_json)?,
         Command::Report(command) => cli::indexing::handle_report(&cli.data_dir, command, output_json)?,
         Command::Moderation { command } => cli::indexing::handle_moderation(&cli.data_dir, command, output_json)?,

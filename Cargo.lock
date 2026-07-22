@@ -4861,6 +4861,7 @@ dependencies = [
  "iroh",
  "iroh-blobs",
  "iroh-docs",
+ "iroh-gossip",
  "n0-future",
  "notify",
  "rayon",

@@ -133,3 +133,213 @@ fn manual_provider_trust_respects_scope_sequence_and_self_revocation() -> Result
     );
     Ok(())
 }
+
+#[test]
+fn reputation_score_zero_all_failures() {
+    let mut reputation = ProviderReputation::new(provider(10));
+    for _ in 0..10 {
+        reputation.record_failure(FetchFailureKind::NotFound, 10);
+    }
+    let score = reputation.reliability_score(10);
+    assert!(score < 0.1, "all failures should produce a low score, got {score}");
+}
+
+#[test]
+fn reputation_score_mixed_proportional() {
+    let mut reputation = ProviderReputation::new(provider(11));
+    for _ in 0..7 {
+        reputation.record_success(10);
+    }
+    for _ in 0..3 {
+        reputation.record_failure(FetchFailureKind::Timeout, 10);
+    }
+    let score = reputation.reliability_score(10);
+    assert!(
+        score > 0.3 && score < 0.9,
+        "mixed results should produce a mid-range score, got {score}"
+    );
+}
+
+#[test]
+fn reputation_store_ranking_orders_by_score() -> Result<()> {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    let good = provider(12);
+    let bad = provider(13);
+    let neutral = provider(14);
+    store.record_success(good, 10);
+    store.record_success(good, 11);
+    store.record_failure(bad, FetchFailureKind::NotFound, 10);
+    store.record_failure(bad, FetchFailureKind::NotFound, 11);
+    let ranked = store.rank_provider_list(11, hash(1), &[good, bad, neutral]);
+    ensure!(ranked.first() == Some(&good), "good provider should rank first");
+    ensure!(ranked.last() == Some(&bad), "bad provider should rank last");
+    Ok(())
+}
+
+#[test]
+fn reputation_store_skip_unreliable() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    let unreliable = provider(15);
+    store.record_failure(unreliable, FetchFailureKind::NotFound, 10);
+    store.record_failure(unreliable, FetchFailureKind::NotFound, 11);
+    assert!(
+        store.should_skip_provider(unreliable, 11, 0.5),
+        "provider below threshold should be skipped"
+    );
+    let reliable = provider(16);
+    store.record_success(reliable, 10);
+    store.record_success(reliable, 11);
+    assert!(
+        !store.should_skip_provider(reliable, 11, 0.5),
+        "provider above threshold should not be skipped"
+    );
+}
+
+#[test]
+fn reputation_store_purge_removes_stale_entries() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    let key = provider(17);
+    store.record_success(key, 10);
+    store.record_success(key, 11);
+    assert!(store.reputation(key).total_fetches > 0);
+    store.purge_stale(100, Duration::from_mins(1));
+    let rep = store.reputation(key);
+    assert_eq!(rep.total_fetches, 0, "purged reputation should return to default");
+}
+
+#[test]
+fn trust_signal_verify_rejects_invalid_signature() -> Result<()> {
+    let reporter = signing_key(20);
+    let provider_key = provider(21);
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let mut signal = ProviderTrustSignal::new(
+        provider_key,
+        TrustSignalKind::ObservedSuccess,
+        None,
+        provider(20),
+        now,
+        1,
+    )?;
+    signal.sign(&reporter)?;
+    let mut tampered = signal.clone();
+    tampered.signature = Some("deadbeef".repeat(8));
+    ensure!(
+        tampered.verify_at(now).is_err(),
+        "invalid signature should fail verification"
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_signal_verify_rejects_expired() -> Result<()> {
+    let reporter = signing_key(22);
+    let provider_key = provider(23);
+    let mut signal = ProviderTrustSignal::new(
+        provider_key,
+        TrustSignalKind::ObservedFailure,
+        None,
+        provider(22),
+        100,
+        1,
+    )?;
+    signal.sign(&reporter)?;
+    let far_future = 100 + 168 * 3600 + 1;
+    ensure!(
+        signal.verify_at(far_future).is_err(),
+        "expired signal should fail verification"
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_signal_not_emitted_for_ordinary_success() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    store.set_reporter(provider(30));
+    let key = provider(31);
+    for t in 1..=5 {
+        store.record_success(key, t);
+    }
+    assert!(
+        store.pending_trust_signals().is_empty(),
+        "steady-state successes should not emit a signal"
+    );
+}
+
+#[test]
+fn trust_signals_coalesce_duplicate_observations() -> Result<()> {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    store.set_reporter(provider(40));
+    let key = provider(41);
+    store.record_fetch_result(key, true, FetchFailureKind::Unknown, 10);
+    store.record_fetch_result(key, false, FetchFailureKind::NotFound, 11);
+    store.record_fetch_result(key, false, FetchFailureKind::NotFound, 12);
+    let signals = store.take_pending_trust_signals();
+    ensure!(
+        signals.len() <= 2,
+        "duplicate observations should be coalesced, got {}",
+        signals.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_signal_emitted_on_reputation_transition() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    let mut store = ProviderReputationStore::new(config);
+    store.set_reporter(provider(50));
+    let key = provider(51);
+    for t in 1..=5 {
+        store.record_success(key, t);
+    }
+    assert!(store.score(key, 5) > 0.5);
+    store.record_failure(key, FetchFailureKind::NotFound, 1000);
+    store.record_failure(key, FetchFailureKind::NotFound, 1001);
+    store.record_failure(key, FetchFailureKind::NotFound, 1002);
+    assert!(store.score(key, 1002) < 0.5);
+    assert!(
+        !store.pending_trust_signals().is_empty(),
+        "reliable→unreliable transition should emit a signal"
+    );
+}
+
+#[test]
+fn reputation_auto_ban_backoff_never_exceeds_maximum() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    config.temporary_ban_duration = Duration::from_secs(10);
+    config.auto_ban_backoff_factor = 100.0;
+    config.max_auto_ban_duration = Duration::from_mins(1);
+    let mut store = ProviderReputationStore::new(config);
+    let key = provider(60);
+    for t in 1..=20 {
+        store.record_failure(key, FetchFailureKind::NotFound, t);
+    }
+    let until = store.auto_ban_until(key).expect("should be banned");
+    assert!(
+        until <= 80,
+        "ban should not exceed max_auto_ban_duration (60s from last failure at t=20), got until={until}"
+    );
+}
+
+#[test]
+fn reputation_new_key_returns_neutral_score() {
+    let config = ReputationConfig::default();
+    let store = ProviderReputationStore::new(config);
+    let key = provider(70);
+    let result = store.score(key, 100);
+    assert!(
+        (result - 0.5).abs() < f64::EPSILON,
+        "unknown key should have neutral 0.5 score"
+    );
+}

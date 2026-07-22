@@ -6,6 +6,7 @@ use comfy_table::Table;
 use std::{
     process::{Command as ProcessCommand, Stdio},
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -25,7 +26,7 @@ use rayon::prelude::*;
 use syncweb_core::{
     cancel_session,
     daemon::{
-        DaemonState, DaemonStatus, IpcCommand, IpcListener, IpcRequest, IpcResponse, PidLock, StateFile,
+        DaemonHandle, DaemonState, DaemonStatus, IpcCommand, IpcRequest, IpcResponse, IpcServer, PidLock, StateFile,
         current_timestamp,
     },
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
@@ -53,10 +54,7 @@ use syncweb_core::{
     },
     verify::IntegrityChecker,
 };
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixStream,
-};
+use tokio::sync::{RwLock, broadcast, mpsc};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -364,14 +362,22 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
     }
 
     let state_file = StateFile::new(data_dir);
-    let mut state = DaemonState::new(
+    let initial_state = DaemonState::new(
         std::process::id(),
         String::new(),
         current_timestamp(),
         data_dir,
         DaemonStatus::Starting,
     );
-    state_file.save(&state)?;
+    let (sync_trigger, _sync_receiver) = mpsc::unbounded_channel();
+    let daemon_handle = DaemonHandle::with_channels(
+        Arc::new(RwLock::new(initial_state)),
+        Arc::new(RwLock::new(syncweb_core::daemon::FolderRegistry::new())),
+        broadcast::channel(16).0,
+        sync_trigger,
+    );
+    let starting_state = daemon_handle.state.read().await.clone();
+    state_file.save(&starting_state)?;
     let node = match open_node(data_dir).await {
         Ok(node) => node,
         Err(error) => {
@@ -380,53 +386,47 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
             return Err(error);
         }
     };
-    state.node_id = node.endpoint().id().to_string();
-    state.status = DaemonStatus::Running;
-    state_file.save(&state)?;
-
-    let listener_config = IpcListener::for_data_dir(data_dir);
-    let listener_path = listener_config.socket_path().to_path_buf();
-    let listener = match listener_config.bind() {
-        Ok(listener) => listener,
-        Err(error) => {
-            let _ = node.stop().await;
-            state_file.remove()?;
-            lock.release()?;
-            return Err(error.into());
-        }
+    let running_state = {
+        let mut shared_state = daemon_handle.state.write().await;
+        shared_state.node_id = node.endpoint().id().to_string();
+        shared_state.status = DaemonStatus::Running;
+        shared_state.clone()
     };
+    state_file.save(&running_state)?;
+    let listener_path = syncweb_core::daemon::daemon_socket_path(data_dir);
+    let ipc_server = IpcServer::new(listener_path, daemon_handle.clone());
     if output_json {
-        println!("{}", serde_json::to_string_pretty(&state)?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&daemon_handle.state.read().await.clone())?
+        );
     } else {
-        println!("daemon started: {}", state.node_id);
+        println!("daemon started: {}", daemon_handle.state.read().await.node_id);
     }
 
+    let mut server_task = tokio::spawn(async move { ipc_server.serve().await });
     let mut shutdown_signal = Box::pin(wait_for_shutdown_signal());
-    loop {
-        tokio::select! {
-            signal = &mut shutdown_signal => {
-                signal?;
-                break;
-            }
-            accepted = listener.accept() => {
-                let (stream, _) = accepted?;
-                if handle_daemon_connection(stream, &state).await? {
-                    break;
-                }
-            }
+    tokio::select! {
+        signal = &mut shutdown_signal => {
+            signal?;
+            let _ = daemon_handle.shutdown_sender.send(());
+            (&mut server_task).await??;
+        }
+        server_result = &mut server_task => {
+            server_result??;
         }
     }
 
-    state.status = DaemonStatus::Stopping;
-    state_file.save(&state)?;
+    daemon_handle.set_status(DaemonStatus::Stopping).await;
+    let stopping_state = daemon_handle.state.read().await.clone();
+    state_file.save(&stopping_state)?;
     let stop_result = node.stop().await;
-    state.status = DaemonStatus::Stopped;
+    daemon_handle.set_status(DaemonStatus::Stopped).await;
     let remove_result = state_file.remove();
     let release_result = lock.release();
     stop_result?;
     remove_result?;
     release_result?;
-    let _ = std::fs::remove_file(listener_path);
     if output_json {
         println!("{}", serde_json::json!({"status": "stopped"}));
     } else {
@@ -448,67 +448,6 @@ async fn wait_for_shutdown_signal() -> Result<()> {
     {
         tokio::signal::ctrl_c().await?;
     }
-    Ok(())
-}
-
-#[async_recursion]
-async fn handle_daemon_connection(stream: UnixStream, state: &DaemonState) -> Result<bool> {
-    let (read_half, mut write_half) = stream.into_split();
-    let mut line = Vec::new();
-    BufReader::new(read_half).read_until(b'\n', &mut line).await?;
-    let request = match serde_json::from_slice::<IpcRequest>(line.trim_ascii()) {
-        Ok(request) => request,
-        Err(error) => {
-            write_ipc_response(
-                &mut write_half,
-                IpcResponse::Error {
-                    message: format!("invalid daemon request: {error}"),
-                },
-            )
-            .await?;
-            return Ok(false);
-        }
-    };
-    let should_stop = matches!(request.command, IpcCommand::Shutdown { .. });
-    let response = match request.command {
-        IpcCommand::Status => IpcResponse::Status(state.status),
-        IpcCommand::Shutdown { .. } => IpcResponse::Ok {
-            message: "shutdown requested".to_owned(),
-        },
-        IpcCommand::ReloadConfig => IpcResponse::Ok {
-            message: "configuration reload requested".to_owned(),
-        },
-        IpcCommand::TriggerSync { .. } => IpcResponse::Ok {
-            message: "synchronization requested".to_owned(),
-        },
-        IpcCommand::ListFolders => IpcResponse::FolderList(Vec::new()),
-        IpcCommand::AddFolder { .. } => IpcResponse::Ok {
-            message: "folder add requested".to_owned(),
-        },
-        IpcCommand::RemoveFolder { .. } => IpcResponse::Ok {
-            message: "folder removal requested".to_owned(),
-        },
-        IpcCommand::SetLogLevel { .. }
-        | IpcCommand::Download { .. }
-        | IpcCommand::ImportArchive { .. }
-        | IpcCommand::ExportArchive { .. }
-        | IpcCommand::Join { .. }
-        | IpcCommand::Publish { .. }
-        | IpcCommand::Subscribe { .. } => IpcResponse::Error {
-            message: "IPC command is not available in this daemon lifecycle phase".to_owned(),
-        },
-        _ => IpcResponse::Error {
-            message: "unsupported daemon IPC command".to_owned(),
-        },
-    };
-    write_ipc_response(&mut write_half, response).await?;
-    Ok(should_stop)
-}
-
-async fn write_ipc_response(stream: &mut tokio::net::unix::OwnedWriteHalf, response: IpcResponse) -> Result<()> {
-    let mut bytes = serde_json::to_vec(&response)?;
-    bytes.push(b'\n');
-    stream.write_all(&bytes).await?;
     Ok(())
 }
 

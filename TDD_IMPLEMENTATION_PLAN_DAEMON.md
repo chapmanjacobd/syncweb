@@ -43,6 +43,11 @@ Phase 10 (this plan) solves this by making the daemon the **sole owner** of the 
 └──────────┴───────────┴──────────┴───────────────┘
 ```
 
+**Default Daemon Mode (New Behavior):**
+- **All `syncweb` commands now run in daemon mode by default** — they route through the daemon's IPC socket
+- **`--no-daemon` / `--embedded` flag** bypasses the daemon and opens the node directly (for embedded/one-shot use cases)
+- This is a behavioral change from earlier phases (10.1-10.7) which were committed with the old routing logic. The modifications to CLI routing (originally in 10.3-10.4) will be implemented as **rework in Phase 10C (10.8+)** since phases 10.1-10.7 are already committed.
+
 ## Identified Gaps (Current State → Daemon Mode)
 
 | Gap | Current State | Daemon Mode Fix |
@@ -189,6 +194,8 @@ Command::Status,
 Command::DaemonShutdown(DaemonShutdownArgs),
 Command::DaemonReload,
 Command::DaemonSync,
+Command::DaemonAdd(DaemonAddArgs),
+Command::DaemonRemove(DaemonRemoveArgs),
 ```
 
 `Start`, `Shutdown`, `Automatic`, and `Watch` already exist. Decide their
@@ -196,6 +203,16 @@ compatibility behavior as part of this change: `Start`/`Automatic` should
 delegate to daemon startup where applicable, `Watch` should delegate to the
 daemon watcher, and `Shutdown` should become the daemon shutdown command
 without creating duplicate lifecycle handlers.
+
+**Global CLI flags** (new file `syncweb-cli/src/cli/args.rs`):
+
+```rust
+pub struct GlobalArgs {
+    pub data_dir: Option<PathBuf>,
+    pub no_daemon: bool,        // --no-daemon / --embedded: bypass daemon, open node directly
+    // ... other global flags
+}
+```
 
 **New types** in `syncweb-cli/src/cli/commands.rs`:
 
@@ -219,6 +236,8 @@ pub struct DaemonShutdownArgs {
 - [ ] `test_daemon_args_log_file` - --log-file path parsed
 - [ ] `test_daemon_args_max_threads` - --max-threads parsed
 - [ ] `test_daemon_shutdown_args_force` - --force flag parsed
+- [ ] `test_global_args_no_daemon` - --no-daemon flag parsed
+- [ ] `test_global_args_embedded_alias` - --embedded flag parsed as alias for --no-daemon
 
 ### 10.4 CLI Node Access Routing (TDD)
 
@@ -236,18 +255,17 @@ where
     F: FnOnce(IpcClient) -> R;
 
 /// For one-shot commands: check if daemon is running, send IPC request.
-/// If no daemon is running, return None so the caller can fall back to
-/// opening the node directly (for the case where the user runs a
-/// one-shot command without a daemon).
-pub fn try_daemon(data_dir: &Path) -> Result<Option<IpcClient>>;
+/// If no daemon is running and --no-daemon/--embedded is NOT specified, auto-start the daemon.
+/// If --no-daemon/--embedded IS specified, return None so the caller opens the node directly.
+pub fn try_daemon(data_dir: &Path, no_daemon: bool) -> Result<Option<IpcClient>>;
 ```
 
 **Routing logic in every CLI handler:**
-1. Check `PidLock::try_acquire()` — if the daemon is holding the lock, verify it with an IPC `Status` ping
-2. If running: construct `IpcClient` and send the command as `IpcCommand`
-3. If not running: two options depending on the command:
-   - **Daemon-aware commands** (`daemon`, `status`, `daemon-add`, `daemon-remove`): operate on the daemon directly
-   - **Node-access commands** (`download`, `import`, `export`, `join`, `publish`, `subscribe`): either auto-start the daemon and then send IPC, or fail with "daemon not running; start with `syncweb daemon`"
+1. Check for `--no-daemon` / `--embedded` flag (global flag, defaults to false → daemon mode enabled)
+2. If `--no-daemon` / `--embedded` is NOT set: check `PidLock::try_acquire()` — if daemon is holding the lock, verify with IPC `Status` ping; if running, construct `IpcClient` and send command as `IpcCommand`; if not running, auto-start daemon then send IPC
+3. If `--no-daemon` / `--embedded` IS set: return None so caller opens node directly (legacy one-shot mode)
+4. **Daemon-aware commands** (`daemon`, `status`, `daemon-add`, `daemon-remove`, `daemon-shutdown`, `daemon-reload`, `daemon-sync`): operate on the daemon directly (never use `--no-daemon`)
+5. **Node-access commands** (`download`, `import`, `export`, `join`, `publish`, `subscribe`, `automatic`, `watch`, `start`): default to daemon mode; only bypass with `--no-daemon`/`--embedded`
 
 **New CLI commands** in `syncweb-cli/src/cli/commands.rs`:
 
@@ -261,12 +279,26 @@ Command::DaemonAdd(DaemonAddArgs),  // add folder to daemon
 Command::DaemonRemove(DaemonRemoveArgs), // remove folder from daemon
 ```
 
-**Modify existing commands** to route through IPC:
-- `Command::Download` → send `IpcCommand::Download { ... }` if daemon running
-- `Command::Import` → send `IpcCommand::ImportArchive { ... }` if daemon running
-- `Command::Automatic` → replaced by `Command::Daemon`
-- `Command::Watch` → folded into daemon's built-in watcher
-- `Command::Start` → renamed/replaced by `Command::Daemon`
+**Global CLI flag** (in `syncweb-cli/src/cli/args.rs`):
+
+```rust
+pub struct GlobalArgs {
+    pub data_dir: Option<PathBuf>,
+    pub no_daemon: bool,        // --no-daemon / --embedded: bypass daemon, open node directly
+    // ... other global flags
+}
+```
+
+**Modify existing commands** to route through IPC (default) with `--no-daemon`/`--embedded` bypass:
+- `Command::Download` → send `IpcCommand::Download { ... }` (default); `--no-daemon` opens node directly
+- `Command::Import` → send `IpcCommand::ImportArchive { ... }` (default); `--no-daemon` opens node directly
+- `Command::Export` → send `IpcCommand::ExportArchive { ... }` (default); `--no-daemon` opens node directly
+- `Command::Join` → send `IpcCommand::Join { ... }` (default); `--no-daemon` opens node directly
+- `Command::Publish` → send `IpcCommand::Publish { ... }` (default); `--no-daemon` opens node directly
+- `Command::Subscribe` → send `IpcCommand::Subscribe { ... }` (default); `--no-daemon` opens node directly
+- `Command::Automatic` → replaced by `Command::Daemon` (deprecated)
+- `Command::Watch` → folded into daemon's built-in watcher (deprecated)
+- `Command::Start` → replaced by `Command::Daemon` (deprecated)
 
 **Unit Tests** (`tests/unit/cli/daemon_args_test.rs`):
 - [ ] `test_daemon_args_defaults` - all optional fields are None/false
@@ -280,6 +312,10 @@ Command::DaemonRemove(DaemonRemoveArgs), // remove folder from daemon
 - [ ] `test_import_routes_through_ipc` - import sends IPC when daemon running
 - [ ] `test_one_shot_without_daemon_fails_clearly` - "daemon not running" message
 - [ ] `test_routing_requires_responsive_daemon` - a live PID without a responsive status endpoint is not treated as a running daemon
+- [ ] `test_global_no_daemon_flag_bypasses_daemon` - --no-daemon flag makes commands open node directly
+- [ ] `test_global_embedded_alias_bypasses_daemon` - --embedded flag is alias for --no-daemon
+- [ ] `test_default_behavior_is_daemon_mode` - commands route to daemon by default without flags
+- [ ] `test_daemon_commands_ignore_no_daemon` - daemon/status commands always use daemon
 
 ---
 
@@ -940,6 +976,7 @@ Run with: `cargo bench --all-features`
 |------|---------|
 | `syncweb-cli/src/main.rs` | Replace existing `open_node()` call sites with IPC routing in `download`, `import`, `subscribe`, `publish`, `join`, `automatic`, and related node-access handlers; wire new daemon commands into dispatch |
 | `syncweb-cli/src/cli/commands.rs` | Add `Daemon`, `Status`, `DaemonShutdown`, `DaemonReload`, `DaemonSync`, `DaemonAdd`, `DaemonRemove` variants + arg structs; modify `Download`, `Import`, `Export` to support IPC mode |
+| `syncweb-cli/src/cli/args.rs` | **NEW** - Add `GlobalArgs` struct with `no_daemon`/`embedded` flag for daemon bypass |
 | `syncweb-core/src/lib.rs` | Add `pub mod daemon;` |
 | `syncweb-core/src/folder/archive_export.rs` | Accept optional `&ManagedPool` for CPU-bound work |
 | `syncweb-core/src/folder/archive_import.rs` | Accept optional `&ManagedPool` for CPU-bound work |

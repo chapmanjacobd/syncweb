@@ -4,7 +4,7 @@
 .SH NAME
 find \- Search local files
 .SH SYNOPSIS
-\fBfind\fR [\fB\-\-kind\fR] [\fB\-\-max\-depth\fR] [\fB\-\-min\-size\fR] [\fB\-\-max\-size\fR] [\fB\-\-extension\fR] [\fB\-\-type\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPATTERN\fR> [\fIPATH\fR] 
+\fBfind\fR [\fB\-\-kind\fR] [\fB\-i\fR|\fB\-\-ignore\-case\fR] [\fB\-s\fR|\fB\-\-case\-sensitive\fR] [\fB\-F\fR|\fB\-\-fixed\-strings\fR] [\fB\-p\fR|\fB\-\-full\-path\fR] [\fB\-H\fR|\fB\-\-hidden\fR] [\fB\-L\fR|\fB\-\-follow\-links\fR] [\fB\-a\fR|\fB\-\-absolute\-path\fR] [\fB\-d\fR|\fB\-\-download\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-sizes\fR] [\fB\-\-modified\-within\fR] [\fB\-\-modified\-before\fR] [\fB\-\-time\-modified\fR] [\fB\-e\fR|\fB\-\-extension\fR] [\fB\-\-type\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPATTERN\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Search local files
 .SH OPTIONS
@@ -22,19 +22,57 @@ glob
 regex
 .RE
 .TP
+\fB\-i\fR, \fB\-\-ignore\-case\fR
+Case insensitive search
+.TP
+\fB\-s\fR, \fB\-\-case\-sensitive\fR
+Case sensitive search
+.TP
+\fB\-F\fR, \fB\-\-fixed\-strings\fR
+Treat patterns as literal strings
+.TP
+\fB\-p\fR, \fB\-\-full\-path\fR
+Search full path (default: filename only)
+.TP
+\fB\-H\fR, \fB\-\-hidden\fR
+Search hidden files and directories
+.TP
+\fB\-L\fR, \fB\-\-follow\-links\fR
+Follow symbolic links
+.TP
+\fB\-a\fR, \fB\-\-absolute\-path\fR
+Print absolute paths
+.TP
+\fB\-d\fR, \fB\-\-download\fR
+Exclude sendonly/publicreadonly folders from search
+.TP
+\fB\-\-depth\fR \fI<DEPTH>\fR
+Depth constraints: N, +N (min), \-N (max)
+.TP
+\fB\-\-min\-depth\fR \fI<MIN_DEPTH>\fR
+Alternative min depth notation
+.TP
 \fB\-\-max\-depth\fR \fI<MAX_DEPTH>\fR
-
+Alternative max depth notation
 .TP
-\fB\-\-min\-size\fR \fI<MIN_SIZE>\fR
-
+\fB\-\-sizes\fR \fI<SIZES>\fR
+Size constraints: N, \-N, +N, N%10, +5GB, etc.
 .TP
-\fB\-\-max\-size\fR \fI<MAX_SIZE>\fR
-
+\fB\-\-modified\-within\fR \fI<MODIFIED_WITHIN>\fR
+Newer than: \*(Aq3 days\*(Aq, \*(Aq2 weeks\*(Aq
 .TP
-\fB\-\-extension\fR \fI<EXTENSION>\fR
-
+\fB\-\-modified\-before\fR \fI<MODIFIED_BEFORE>\fR
+Older than: \*(Aq3 years\*(Aq, \*(Aq1 month\*(Aq
+.TP
+\fB\-\-time\-modified\fR \fI<TIME_MODIFIED>\fR
+Time modified: \*(Aq\-3 days\*(Aq (newer), \*(Aq+3 days\*(Aq (older)
+.TP
+\fB\-e\fR, \fB\-\-extension\fR \fI<EXTENSION>\fR
+File extensions to include
 .TP
 \fB\-\-type\fR \fI<FILE_TYPE>\fR
+Filter by type: f=file, d=dir, l=symlink
+.br
 
 .br
 \fIPossible values:\fR

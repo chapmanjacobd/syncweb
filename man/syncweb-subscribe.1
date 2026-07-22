@@ -4,7 +4,7 @@
 .SH NAME
 subscribe \- Subscribe to a folder with event filters
 .SH SYNOPSIS
-\fBsubscribe\fR [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBsubscribe\fR [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFOLDER\fR> 
 .SH DESCRIPTION
 Subscribe to a folder with event filters
 .SH OPTIONS
@@ -15,8 +15,8 @@ Only deliver entries ingested after subscription
 \fB\-\-ignore\-self\fR
 Ignore events emitted by this subscription session
 .TP
-\fB\-\-prefix\fR \fI<PREFIX>\fR
-
+\fB\-\-sync\-prefix\fR \fI<SYNC_PREFIX>\fR
+Area prefix filter for subscription entries
 .TP
 \fB\-\-glob\fR \fI<GLOB>\fR
 
@@ -30,8 +30,5 @@ Ignore events emitted by this subscription session
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .TP
-<\fITICKET\fR>
-
-.TP
-[\fIPATH\fR] [default: .]
-
+<\fIFOLDER\fR>
+Namespace ID or path to a managed folder

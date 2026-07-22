@@ -6,7 +6,7 @@ use std::{
 
 use syncweb_core::{
     search::{FindEngine, FindQuery},
-    sort::{SortCriterion, SortEntry, Sorter},
+    sort::{SortConfig, SortCriterion, SortEntry, Sorter},
 };
 
 fn test_root(name: &str) -> std::io::Result<PathBuf> {
@@ -36,7 +36,9 @@ fn find_filters_and_sorter_rank_entries() -> Result<(), Box<dyn std::error::Erro
     if let Some(entry) = entries.get_mut(1) {
         entry.peers = 3;
     }
-    Sorter::new(SortCriterion::Peers).sort(&mut entries);
+    let mut config = SortConfig::default();
+    config.criteria = vec![(SortCriterion::Peers, true)];
+    Sorter::new(config).sort(&mut entries);
     if let Some(first) = entries.first() {
         let expected = PathBuf::from("rare");
         if first.path != expected {

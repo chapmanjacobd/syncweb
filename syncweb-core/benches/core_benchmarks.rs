@@ -33,7 +33,7 @@ use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
-    sort::{SortCriterion, SortEntry, Sorter},
+    sort::{SortConfig, SortCriterion, SortEntry, Sorter},
     stats::BandwidthStats,
 };
 
@@ -121,7 +121,7 @@ fn bench_sort(c: &mut Criterion) {
                     .with_folder(format!("folder-{}", i.checked_rem(10).unwrap_or(0)))
                     .with_niche(f64::from(u32::try_from(i.checked_rem(100).unwrap_or(0)).unwrap_or(0)))
                     .with_frequency(u64::try_from(i.checked_rem(50).unwrap_or(0)).unwrap_or_default())
-                    .with_last_accessed(
+                    .with_modified(
                         SystemTime::UNIX_EPOCH
                             .checked_add(Duration::from_secs(
                                 u64::try_from(i.checked_mul(3600).unwrap_or(0)).unwrap_or_default(),
@@ -147,7 +147,9 @@ fn bench_sort(c: &mut Criterion) {
                 b.iter_batched(
                     || entries_base.clone(),
                     |mut entries| {
-                        let sorter = Sorter::new(criterion_variant);
+                        let mut config = SortConfig::default();
+                        config.criteria = vec![(criterion_variant, false)];
+                        let sorter = Sorter::new(config);
                         sorter.sort(&mut entries);
                         std::hint::black_box(&entries);
                     },

@@ -18,6 +18,7 @@ use cli::{
 use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
+    cancel_session,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
@@ -33,13 +34,13 @@ use syncweb_core::{
     schedule::{BandwidthWindowConfig, ScheduleManager, parse_rate},
     search::{FindEngine, FindQuery},
     snapshot::SnapshotStore,
-    sort::{SortCriterion, SortEntry, Sorter},
+    sort::{SortConfig, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
     stats::BandwidthStats,
     storage::Config as AppConfig,
     sync::{
-        AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SessionMode,
-        SubscribeParams, SyncEngine, SyncEvent,
+        ActiveSession, AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport,
+        SessionMode, SubscribeParams, SyncEngine, SyncEvent,
     },
     verify::IntegrityChecker,
 };
@@ -69,8 +70,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Repl => run_repl()?,
         Command::Create(command) => handle_create(&cli.data_dir, command, output_json).await?,
         Command::Join(command) => handle_join(&cli.data_dir, command, output_json).await?,
-        Command::Accept { namespace } => handle_accept(&cli.data_dir, namespace, output_json).await?,
-        Command::Drop { namespace } => handle_drop(&cli.data_dir, namespace, output_json).await?,
+        Command::Leave(command) => handle_leave(&cli.data_dir, command, output_json).await?,
+        Command::Unsubscribe(command) => handle_unsubscribe(&cli.data_dir, command, output_json).await?,
         Command::Folders => handle_folders(&cli.data_dir, output_json).await?,
         Command::Devices => handle_devices(&cli.data_dir, output_json)?,
         Command::Ls(command) => handle_ls(command, output_json)?,
@@ -932,6 +933,23 @@ async fn resolve_folder(
     }
 }
 
+async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<iroh_docs::NamespaceId> {
+    if let Ok(namespace) = selector.parse() {
+        return Ok(namespace);
+    }
+    let path = std::path::Path::new(selector);
+    if path.exists() {
+        let folder = resolve_folder(manager, path).await?;
+        return Ok(folder.namespace_id());
+    }
+    let folders = manager.list().await?;
+    match folders.as_slice() {
+        [folder] => Ok(folder.namespace_id()),
+        [] => anyhow::bail!("no synchronized folders are available"),
+        _ => anyhow::bail!("'{selector}' is not a namespace ID and more than one folder is available"),
+    }
+}
+
 #[async_recursion]
 async fn handle_create(
     data_dir: &std::path::Path,
@@ -969,22 +987,81 @@ async fn handle_join(
     command: crate::cli::commands::FolderJoin,
     output_json: bool,
 ) -> Result<()> {
-    std::fs::create_dir_all(&command.path)
-        .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
+    let effective_path = if let Some(prefix) = &command.prefix {
+        prefix.join(&command.path)
+    } else {
+        command.path.clone()
+    };
+    std::fs::create_dir_all(&effective_path)
+        .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.join(command.ticket, SyncMode::from_str(&command.mode)?).await?;
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
+    if command.once {
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({"status": "joined", "namespace": folder.namespace_id().to_string()})
+            );
+        } else {
+            println!("joined: {}", folder.namespace_id());
+        }
+        node.stop().await?;
+        return Ok(());
+    }
+    let session_id = uuid::Uuid::new_v4();
+    let mut params = if command.ingest_only {
+        SubscribeParams::ingest_only()
+    } else {
+        SubscribeParams::default()
+    };
+    if command.ignore_self {
+        params.ignore_session = Some(session_id);
+    }
+    let area = command
+        .sync_prefix
+        .map(AreaFilter::Prefix)
+        .or_else(|| command.glob.map(AreaFilter::Glob));
+    if let Some(filter) = area.clone() {
+        params = params.with_area(filter);
+    }
+    if command.max_size.is_some() || command.max_count.is_some() {
+        let limit_area = area.unwrap_or(AreaFilter::All);
+        let limits = AreaOfInterest::with_limits(
+            limit_area,
+            command.max_size.unwrap_or(0),
+            command.max_count.unwrap_or(0),
+        );
+        if limits.is_limit_reached(0, 0) {
+            anyhow::bail!("subscription limits are already exhausted");
+        }
+        params = params.with_limits(limits);
+    }
+    let sync = SyncEngine::new(
+        manager,
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        node.gossip_service().clone(),
+    );
+    let intent = sync.subscribe(folder.namespace_id(), params.clone()).await?;
+    let _session = ActiveSession::register(folder.namespace_id(), intent.cancel_sender());
     if output_json {
         println!(
             "{}",
-            serde_json::json!({"status": "joined", "namespace": folder.namespace_id().to_string()})
+            serde_json::json!({
+                "status": "joined",
+                "namespace": folder.namespace_id().to_string(),
+                "ingest_only": params.ingest_only,
+            })
         );
     } else {
         println!("joined: {}", folder.namespace_id());
     }
+    tokio::signal::ctrl_c().await?;
+    let _result = intent.cancel();
     node.stop().await?;
     Ok(())
 }
@@ -1077,28 +1154,9 @@ async fn handle_subscribe(
     command: crate::cli::commands::SubscribeArgs,
     output_json: bool,
 ) -> Result<()> {
-    std::fs::create_dir_all(&command.path)?;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    if let Ok(ticket) = command.ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
-        let folder = manager.subscribe_public(&ticket).await?;
-        if output_json {
-            println!(
-                "{}",
-                serde_json::json!({
-                    "status": "subscribed",
-                    "namespace": folder.namespace_id().to_string(),
-                    "blob": ticket.hash().to_string(),
-                })
-            );
-        } else {
-            println!("subscribed: {}", folder.namespace_id());
-            println!("blob: {}", ticket.hash());
-        }
-        node.stop().await?;
-        return Ok(());
-    }
-    let folder = manager.join(command.ticket, SyncMode::ReceiveOnly).await?;
+    let namespace = resolve_namespace(&manager, &command.folder).await?;
     let session_id = uuid::Uuid::new_v4();
     let mut params = if command.ingest_only {
         SubscribeParams::ingest_only()
@@ -1109,7 +1167,7 @@ async fn handle_subscribe(
         params.ignore_session = Some(session_id);
     }
     let area = command
-        .prefix
+        .sync_prefix
         .map(AreaFilter::Prefix)
         .or_else(|| command.glob.map(AreaFilter::Glob));
     if let Some(filter) = area.clone() {
@@ -1133,18 +1191,19 @@ async fn handle_subscribe(
         node.docs_engine().clone(),
         node.gossip_service().clone(),
     );
-    let intent = sync.subscribe(folder.namespace_id(), params.clone()).await?;
+    let intent = sync.subscribe(namespace, params.clone()).await?;
+    let _session = ActiveSession::register(namespace, intent.cancel_sender());
     if output_json {
         println!(
             "{}",
             serde_json::json!({
                 "status": "subscribed",
-                "namespace": folder.namespace_id().to_string(),
+                "namespace": namespace.to_string(),
                 "ingest_only": params.ingest_only,
             })
         );
     } else {
-        println!("subscribed: {}", folder.namespace_id());
+        println!("subscribed: {namespace}");
         println!("ingest_only: {}", params.ingest_only);
     }
     tokio::signal::ctrl_c().await?;
@@ -2120,31 +2179,48 @@ fn add_folder_to_network(
 }
 
 #[async_recursion]
-async fn handle_accept(data_dir: &std::path::Path, namespace: String, output_json: bool) -> Result<()> {
+async fn handle_leave(
+    data_dir: &std::path::Path,
+    command: crate::cli::commands::FolderSelector,
+    output_json: bool,
+) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = manager.accept(namespace.parse()?).await?;
+    let namespace = resolve_namespace(&manager, &command.folder).await?;
+    let _ = cancel_session(namespace);
+    manager.drop(namespace).await?;
     if output_json {
         println!(
             "{}",
-            serde_json::json!({"status": "accepted", "namespace": folder.namespace_id().to_string()})
+            serde_json::json!({"status": "left", "namespace": namespace.to_string()})
         );
     } else {
-        println!("accepted: {}", folder.namespace_id());
+        println!("left: {namespace}");
     }
     node.stop().await?;
     Ok(())
 }
 
 #[async_recursion]
-async fn handle_drop(data_dir: &std::path::Path, namespace: String, output_json: bool) -> Result<()> {
+async fn handle_unsubscribe(
+    data_dir: &std::path::Path,
+    command: crate::cli::commands::FolderSelector,
+    output_json: bool,
+) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    manager.drop(namespace.parse()?).await?;
-    if output_json {
-        println!("{}", serde_json::json!({"status": "dropped", "namespace": namespace}));
+    let namespace = resolve_namespace(&manager, &command.folder).await?;
+    if cancel_session(namespace) {
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({"status": "unsubscribed", "namespace": namespace.to_string()})
+            );
+        } else {
+            println!("unsubscribed: {namespace}");
+        }
     } else {
-        println!("dropped: {namespace}");
+        anyhow::bail!("no active sync session for {namespace}");
     }
     node.stop().await?;
     Ok(())
@@ -2198,17 +2274,18 @@ fn handle_devices(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
 
 fn handle_ls(command: crate::cli::commands::LocalPathArgs, output_json: bool) -> Result<()> {
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
-    if let Some(criteria) = command.sort {
+    if let Some(criteria_str) = command.sort {
+        let criteria = SortConfig::parse_criteria(&[criteria_str]);
+        let mut config = SortConfig::default();
+        config.criteria = criteria;
         let mut sortable = entries.into_iter().map(sort_entry).collect::<Vec<_>>();
-        Sorter::new(parse_sort_criterion(&criteria)?).sort(&mut sortable);
+        let sorter = Sorter::new(config);
+        let result = sorter.sort(&mut sortable);
         if output_json {
-            let paths = sortable
-                .iter()
-                .map(|entry| entry.path.display().to_string())
-                .collect::<Vec<_>>();
+            let paths: Vec<_> = result.iter().map(|entry| entry.path.display().to_string()).collect();
             println!("{}", serde_json::to_string_pretty(&paths)?);
         } else {
-            for entry in sortable {
+            for entry in &result {
                 println!("{}", entry.path.display());
             }
         }
@@ -2234,27 +2311,98 @@ fn handle_find(command: crate::cli::commands::FindArgs, output_json: bool) -> Re
         "regex" => FindQuery::regex(&command.pattern),
         _ => FindQuery::glob(&command.pattern),
     };
-    query.max_depth = command.max_depth;
-    query.min_size = command.min_size;
-    query.max_size = command.max_size;
-    query.extension = command.extension;
+
+    // Case sensitivity
+    if command.ignore_case {
+        query.case_sensitive = Some(false);
+    }
+    if command.case_sensitive && !command.ignore_case {
+        query.case_sensitive = Some(true);
+    }
+    // else: None means auto-detect
+
+    // Fixed strings mode
+    query.fixed_strings = command.fixed_strings;
+
+    // Full path search
+    query.full_path = command.full_path;
+
+    // Hidden files
+    query.hidden = command.hidden;
+
+    // Follow links
+    query.follow_links = command.follow_links;
+
+    // Absolute paths
+    query.absolute_path = command.absolute_path;
+
+    // Downloadable filtering
+    query.downloadable = command.downloadable;
+
+    // Depth constraints
+    let (min_depth, max_depth) = syncweb_core::parsing::parse_depth_constraints(
+        &command.depth,
+        command.min_depth.unwrap_or(0),
+        command.max_depth,
+    );
+    query.min_depth = Some(min_depth);
+    query.max_depth = max_depth;
+
+    // Size constraints
+    let (min_size, max_size) = FindQuery::parse_size_constraints(&command.sizes)?;
+    query.min_size = min_size;
+    query.max_size = max_size;
+
+    // Time constraints
+    let (after, before) = FindQuery::parse_time_constraints(
+        &command.modified_within,
+        &command.modified_before,
+        &command.time_modified,
+    )?;
+    query.modified_after = after;
+    query.modified_before = before;
+
+    // Extensions
+    if !command.extension.is_empty() {
+        query.extensions = command.extension;
+    }
+    // Single extension (for backward compatibility)
+    if let Some(ref ext) = query.extension
+        && !ext.is_empty()
+    {
+        query.extensions.push(ext.trim_start_matches('.').to_lowercase());
+    }
+
+    // File type
     query.file_type = command.file_type.map(|kind| match kind.as_str() {
         "d" => FileType::Directory,
         "l" => FileType::Symlink,
         _ => FileType::File,
     });
+
     let entries = FindEngine::new(&command.path)
         .with_threads(command.threads)
         .find(&query)?;
+
     if output_json {
         let paths = entries
             .iter()
-            .map(|entry| entry.relative_path.display().to_string())
+            .map(|entry| {
+                if command.absolute_path {
+                    entry.path.display().to_string()
+                } else {
+                    entry.relative_path.display().to_string()
+                }
+            })
             .collect::<Vec<_>>();
         println!("{}", serde_json::to_string_pretty(&paths)?);
     } else {
         for entry in entries {
-            println!("{}", entry.relative_path.display());
+            if command.absolute_path {
+                println!("{}", entry.path.display());
+            } else {
+                println!("{}", entry.relative_path.display());
+            }
         }
     }
     Ok(())
@@ -2262,24 +2410,55 @@ fn handle_find(command: crate::cli::commands::FindArgs, output_json: bool) -> Re
 
 fn handle_sort(command: &crate::cli::commands::SortArgs, output_json: bool) -> Result<()> {
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
-    let mut sortable = entries.into_iter().map(sort_entry).collect::<Vec<_>>();
-    Sorter::new(parse_sort_criterion(&command.by)?).sort(&mut sortable);
+    let mut sortable: Vec<SortEntry> = entries.into_iter().map(sort_entry).collect();
+
+    // Build sort config from CLI args
+    let mut criteria = SortConfig::parse_criteria(std::slice::from_ref(&command.by));
+    if criteria.is_empty() {
+        criteria = SortConfig::default().criteria;
+    }
+
+    let mut config = SortConfig::default();
+    config.criteria = criteria;
+    config.niche = command.niche.unwrap_or(3);
+    config.frecency_weight = command.frecency_weight.unwrap_or(3);
+    config.min_seeders = command.min_seeders;
+    config.max_seeders = command.max_seeders;
+    config.limit_size = command
+        .limit_size
+        .as_deref()
+        .map(SortConfig::parse_limit_size)
+        .transpose()?;
+    config.min_depth = command.min_depth;
+    config.max_depth = command.max_depth;
+
+    // Parse depth constraints
+    if !command.depth.is_empty() {
+        let (min_depth, max_depth) = syncweb_core::parsing::parse_depth_constraints(
+            &command.depth,
+            config.min_depth.unwrap_or(0),
+            config.max_depth,
+        );
+        config.min_depth = Some(min_depth);
+        config.max_depth = max_depth;
+    }
+
+    let sorter = Sorter::new(config);
+
+    // Filter by seeders first
+    sortable = sorter.filter_seeders(sortable);
+
+    // Sort
+    let result = sorter.sort(&mut sortable);
+
     if output_json {
-        let paths = sortable
-            .iter()
-            .map(|entry| entry.path.display().to_string())
-            .collect::<Vec<_>>();
+        let paths: Vec<_> = result.iter().map(|entry| entry.path.display().to_string()).collect();
         println!("{}", serde_json::to_string_pretty(&paths)?);
     } else {
-        for entry in sortable {
+        for entry in &result {
             println!("{}", entry.path.display());
         }
     }
-    Ok(())
-}
-
-fn print_config(config: &AppConfig) -> Result<()> {
-    print!("{}", toml::to_string_pretty(config)?);
     Ok(())
 }
 
@@ -2288,19 +2467,15 @@ async fn open_node(data_dir: &std::path::Path) -> Result<IrohNode> {
     Ok(IrohNode::new(identity, data_dir.join("data"), RelayMode::Default).await?)
 }
 
-fn parse_sort_criterion(value: &str) -> Result<SortCriterion> {
-    Ok(match value {
-        "niche" => SortCriterion::Niche,
-        "frecency" => SortCriterion::Frecency,
-        "peers" => SortCriterion::Peers,
-        "random" => SortCriterion::Random,
-        "folder" => SortCriterion::FolderAggregate,
-        other => anyhow::bail!("unknown sort criterion: {other}"),
-    })
+fn print_config(config: &AppConfig) -> Result<()> {
+    print!("{}", toml::to_string_pretty(config)?);
+    Ok(())
 }
 
 fn sort_entry(entry: FileEntry) -> SortEntry {
-    SortEntry::new(entry.relative_path).with_last_accessed(entry.modified)
+    SortEntry::new(entry.relative_path)
+        .with_modified(entry.modified)
+        .with_size(entry.size)
 }
 
 fn copy_path(source: &std::path::Path, destination: &std::path::Path, threads: usize) -> Result<()> {

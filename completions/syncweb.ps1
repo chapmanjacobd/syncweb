@@ -33,8 +33,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('shutdown', 'shutdown', [CompletionResultType]::ParameterValue, 'Stop the local syncweb node')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder')
             [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
-            [CompletionResult]::new('accept', 'accept', [CompletionResultType]::ParameterValue, 'Accept a locally available folder')
-            [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Remove a local folder replica')
+            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave and remove a synchronized folder')
+            [CompletionResult]::new('unsubscribe', 'unsubscribe', [CompletionResultType]::ParameterValue, 'Unsubscribe from a folder''s live sync loop')
             [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
             [CompletionResult]::new('devices', 'devices', [CompletionResultType]::ParameterValue, 'Show this device''s Iroh and Syncthing identities')
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Show or update local configuration')
@@ -107,7 +107,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;create' {
-            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the created folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -120,11 +119,18 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;join' {
-            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the joined folder to a named network')
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'Parent directory prepended to the path argument')
+            [CompletionResult]::new('--sync-prefix', '--sync-prefix', [CompletionResultType]::ParameterName, 'Area prefix filter for subscription entries')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'glob')
+            [CompletionResult]::new('--max-count', '--max-count', [CompletionResultType]::ParameterName, 'max-count')
+            [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--relay-fallback', '--relay-fallback', [CompletionResultType]::ParameterName, 'Enable Syncthing relay fallback for this folder')
+            [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'Exit after joining without entering the sync loop')
+            [CompletionResult]::new('--ingest-only', '--ingest-only', [CompletionResultType]::ParameterName, 'Only deliver entries ingested after subscription')
+            [CompletionResult]::new('--ignore-self', '--ignore-self', [CompletionResultType]::ParameterName, 'Ignore events emitted by this subscription session')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
@@ -132,7 +138,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;accept' {
+        'syncweb;leave' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -141,7 +147,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;drop' {
+        'syncweb;unsubscribe' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -226,13 +232,34 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;find' {
             [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
-            [CompletionResult]::new('--max-depth', '--max-depth', [CompletionResultType]::ParameterName, 'max-depth')
-            [CompletionResult]::new('--min-size', '--min-size', [CompletionResultType]::ParameterName, 'min-size')
-            [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
-            [CompletionResult]::new('--extension', '--extension', [CompletionResultType]::ParameterName, 'extension')
-            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
+            [CompletionResult]::new('--depth', '--depth', [CompletionResultType]::ParameterName, 'Depth constraints: N, +N (min), -N (max)')
+            [CompletionResult]::new('--min-depth', '--min-depth', [CompletionResultType]::ParameterName, 'Alternative min depth notation')
+            [CompletionResult]::new('--max-depth', '--max-depth', [CompletionResultType]::ParameterName, 'Alternative max depth notation')
+            [CompletionResult]::new('--sizes', '--sizes', [CompletionResultType]::ParameterName, 'Size constraints: N, -N, +N, N%10, +5GB, etc.')
+            [CompletionResult]::new('--modified-within', '--modified-within', [CompletionResultType]::ParameterName, 'Newer than: ''3 days'', ''2 weeks''')
+            [CompletionResult]::new('--modified-before', '--modified-before', [CompletionResultType]::ParameterName, 'Older than: ''3 years'', ''1 month''')
+            [CompletionResult]::new('--time-modified', '--time-modified', [CompletionResultType]::ParameterName, 'Time modified: ''-3 days'' (newer), ''+3 days'' (older)')
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'File extensions to include')
+            [CompletionResult]::new('--extension', '--extension', [CompletionResultType]::ParameterName, 'File extensions to include')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'Filter by type: f=file, d=dir, l=symlink')
             [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Case insensitive search')
+            [CompletionResult]::new('--ignore-case', '--ignore-case', [CompletionResultType]::ParameterName, 'Case insensitive search')
+            [CompletionResult]::new('-s', '-s', [CompletionResultType]::ParameterName, 'Case sensitive search')
+            [CompletionResult]::new('--case-sensitive', '--case-sensitive', [CompletionResultType]::ParameterName, 'Case sensitive search')
+            [CompletionResult]::new('-F', '-F ', [CompletionResultType]::ParameterName, 'Treat patterns as literal strings')
+            [CompletionResult]::new('--fixed-strings', '--fixed-strings', [CompletionResultType]::ParameterName, 'Treat patterns as literal strings')
+            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Search full path (default: filename only)')
+            [CompletionResult]::new('--full-path', '--full-path', [CompletionResultType]::ParameterName, 'Search full path (default: filename only)')
+            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'Search hidden files and directories')
+            [CompletionResult]::new('--hidden', '--hidden', [CompletionResultType]::ParameterName, 'Search hidden files and directories')
+            [CompletionResult]::new('-L', '-L ', [CompletionResultType]::ParameterName, 'Follow symbolic links')
+            [CompletionResult]::new('--follow-links', '--follow-links', [CompletionResultType]::ParameterName, 'Follow symbolic links')
+            [CompletionResult]::new('-a', '-a', [CompletionResultType]::ParameterName, 'Print absolute paths')
+            [CompletionResult]::new('--absolute-path', '--absolute-path', [CompletionResultType]::ParameterName, 'Print absolute paths')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Exclude sendonly/publicreadonly folders from search')
+            [CompletionResult]::new('--download', '--download', [CompletionResultType]::ParameterName, 'Exclude sendonly/publicreadonly folders from search')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-color', '--no-color', [CompletionResultType]::ParameterName, 'Disable colored output')
@@ -242,6 +269,14 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;sort' {
             [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
+            [CompletionResult]::new('--min-seeders', '--min-seeders', [CompletionResultType]::ParameterName, 'Filter files with fewer than N seeders')
+            [CompletionResult]::new('--max-seeders', '--max-seeders', [CompletionResultType]::ParameterName, 'Filter files with more than N seeders')
+            [CompletionResult]::new('--niche', '--niche', [CompletionResultType]::ParameterName, 'Ideal popularity (peer count) for niche scoring')
+            [CompletionResult]::new('--frecency-weight', '--frecency-weight', [CompletionResultType]::ParameterName, 'Divisor for recency weighting in frecency calculation')
+            [CompletionResult]::new('--limit-size', '--limit-size', [CompletionResultType]::ParameterName, 'Quit after printing N bytes of files')
+            [CompletionResult]::new('--depth', '--depth', [CompletionResultType]::ParameterName, 'Constrain folder aggregates by depth: N, +N (min), -N (max)')
+            [CompletionResult]::new('--min-depth', '--min-depth', [CompletionResultType]::ParameterName, 'Alternative min depth notation')
+            [CompletionResult]::new('--max-depth', '--max-depth', [CompletionResultType]::ParameterName, 'Alternative max depth notation')
             [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -387,7 +422,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;init' {
-            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -496,7 +530,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;subscribe' {
-            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
+            [CompletionResult]::new('--sync-prefix', '--sync-prefix', [CompletionResultType]::ParameterName, 'Area prefix filter for subscription entries')
             [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'glob')
             [CompletionResult]::new('--max-count', '--max-count', [CompletionResultType]::ParameterName, 'max-count')
             [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
@@ -1334,8 +1368,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('shutdown', 'shutdown', [CompletionResultType]::ParameterValue, 'Stop the local syncweb node')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder')
             [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
-            [CompletionResult]::new('accept', 'accept', [CompletionResultType]::ParameterValue, 'Accept a locally available folder')
-            [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Remove a local folder replica')
+            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave and remove a synchronized folder')
+            [CompletionResult]::new('unsubscribe', 'unsubscribe', [CompletionResultType]::ParameterValue, 'Unsubscribe from a folder''s live sync loop')
             [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
             [CompletionResult]::new('devices', 'devices', [CompletionResultType]::ParameterValue, 'Show this device''s Iroh and Syncthing identities')
             [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Show or update local configuration')
@@ -1389,10 +1423,10 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;help;join' {
             break
         }
-        'syncweb;help;accept' {
+        'syncweb;help;leave' {
             break
         }
-        'syncweb;help;drop' {
+        'syncweb;help;unsubscribe' {
             break
         }
         'syncweb;help;folders' {

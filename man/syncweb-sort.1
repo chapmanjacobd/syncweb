@@ -4,7 +4,7 @@
 .SH NAME
 sort \- Sort local files by discovery criteria
 .SH SYNOPSIS
-\fBsort\fR [\fB\-\-by\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBsort\fR [\fB\-\-by\fR] [\fB\-\-min\-seeders\fR] [\fB\-\-max\-seeders\fR] [\fB\-\-niche\fR] [\fB\-\-frecency\-weight\fR] [\fB\-\-limit\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Sort local files by discovery criteria
 .SH OPTIONS
@@ -24,7 +24,53 @@ peers
 random
 .IP \(bu 2
 folder
+.IP \(bu 2
+time
+.IP \(bu 2
+date
+.IP \(bu 2
+week
+.IP \(bu 2
+month
+.IP \(bu 2
+year
+.IP \(bu 2
+size
+.IP \(bu 2
+folder\-size
+.IP \(bu 2
+folder\-avg\-size
+.IP \(bu 2
+folder\-date
+.IP \(bu 2
+folder\-time
+.IP \(bu 2
+count
 .RE
+.TP
+\fB\-\-min\-seeders\fR \fI<MIN_SEEDERS>\fR
+Filter files with fewer than N seeders
+.TP
+\fB\-\-max\-seeders\fR \fI<MAX_SEEDERS>\fR
+Filter files with more than N seeders
+.TP
+\fB\-\-niche\fR \fI<NICHE>\fR
+Ideal popularity (peer count) for niche scoring
+.TP
+\fB\-\-frecency\-weight\fR \fI<FRECENCY_WEIGHT>\fR
+Divisor for recency weighting in frecency calculation
+.TP
+\fB\-\-limit\-size\fR \fI<LIMIT_SIZE>\fR
+Quit after printing N bytes of files
+.TP
+\fB\-\-depth\fR \fI<DEPTH>\fR
+Constrain folder aggregates by depth: N, +N (min), \-N (max)
+.TP
+\fB\-\-min\-depth\fR \fI<MIN_DEPTH>\fR
+Alternative min depth notation
+.TP
+\fB\-\-max\-depth\fR \fI<MAX_DEPTH>\fR
+Alternative max depth notation
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Scanner threads (1 disables parallelism, 0 uses all available CPUs)

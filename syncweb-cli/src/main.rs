@@ -14,9 +14,9 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::Cli,
     commands::{
-        CollectionCommand, Command, ConfigCommand, DaemonAddArgs, DaemonArgs, DaemonRemoveArgs, DaemonShutdownArgs,
-        HealthArgs, ImportArgs, NetworkCommand, PackageCommand, ScheduleCommand, SnapshotCommand, SnapshotCreateArgs,
-        StatsArgs, VerifyArgs, WatchArgs,
+        CollectionCommand, Command, ConfigCommand, DaemonArgs, DaemonShutdownArgs, HealthArgs, ImportArgs,
+        NetworkCommand, PackageCommand, ScheduleCommand, SnapshotCommand, SnapshotCreateArgs, StatsArgs, VerifyArgs,
+        WatchArgs,
     },
     output::{init_tracing, print_version, run_repl},
 };
@@ -138,8 +138,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::DaemonShutdown(_)
         | Command::DaemonReload
         | Command::DaemonSync
-        | Command::DaemonAdd(_)
-        | Command::DaemonRemove(_)
+        | Command::Unwatch(_)
         | Command::Watch(_)
         | Command::Stats(_)
         | Command::Verify(_)
@@ -161,8 +160,7 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::DaemonShutdown(_)
             | Command::DaemonReload
             | Command::DaemonSync
-            | Command::DaemonAdd(_)
-            | Command::DaemonRemove(_)
+            | Command::Unwatch(_)
             | Command::Watch(_)
             | Command::Stats(_)
             | Command::Verify(_)
@@ -202,11 +200,8 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     if matches!(&command, Command::DaemonSync) {
         return handle_daemon_sync(&data_dir, output_json).await;
     }
-    if let Command::DaemonAdd(args) = command {
-        return handle_daemon_add(&data_dir, args, output_json).await;
-    }
-    if let Command::DaemonRemove(args) = command {
-        return handle_daemon_remove(&data_dir, args, output_json).await;
+    if let Command::Unwatch(args) = command {
+        return handle_unwatch(&data_dir, args, output_json).await;
     }
     if let Command::Watch(watch) = command {
         return handle_watch(&data_dir, watch, output_json).await;
@@ -457,25 +452,20 @@ async fn handle_daemon_sync(data_dir: &std::path::Path, output_json: bool) -> Re
 }
 
 #[async_recursion]
-async fn handle_daemon_add(data_dir: &std::path::Path, args: DaemonAddArgs, output_json: bool) -> Result<()> {
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
-    let response = client
-        .send(IpcRequest::new(IpcCommand::AddFolder {
-            namespace: args.namespace,
-            path: args.path,
-        }))
-        .await?;
-    print_daemon_message(response, output_json)
-}
-
-#[async_recursion]
-async fn handle_daemon_remove(data_dir: &std::path::Path, args: DaemonRemoveArgs, output_json: bool) -> Result<()> {
+async fn handle_unwatch(
+    data_dir: &std::path::Path,
+    args: crate::cli::commands::FolderSelector,
+    output_json: bool,
+) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = resolve_namespace(&manager, &args.folder).await?;
+    node.stop().await?;
     let client = syncweb_core::daemon::daemon_client(data_dir)?
         .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::RemoveFolder {
-            namespace: args.namespace,
+            namespace: namespace.to_string(),
         }))
         .await?;
     print_daemon_message(response, output_json)
@@ -1118,19 +1108,39 @@ fn handle_schedule(data_dir: &std::path::Path, command: Option<ScheduleCommand>,
 
 #[async_recursion]
 async fn handle_watch(data_dir: &std::path::Path, command: WatchArgs, output_json: bool) -> Result<()> {
-    if !command.once {
-        return handle_daemon(
-            data_dir,
-            DaemonArgs {
-                foreground: false,
-                data_dir: None,
-                log_file: None,
-                max_threads: None,
-                sync_interval: None,
-            },
-            output_json,
-        )
-        .await;
+    if !command.once && !command.no_daemon {
+        let mut client_opt = syncweb_core::daemon::daemon_client(data_dir)?;
+        if client_opt.is_none() {
+            handle_daemon(
+                data_dir,
+                DaemonArgs {
+                    foreground: false,
+                    data_dir: None,
+                    log_file: None,
+                    max_threads: None,
+                    sync_interval: None,
+                },
+                output_json,
+            )
+            .await?;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            client_opt = syncweb_core::daemon::daemon_client(data_dir)?;
+        }
+        let client = client_opt.ok_or_else(|| anyhow::anyhow!("failed to start or connect to daemon"))?;
+
+        let node = open_node(data_dir).await?;
+        let manager = FolderManager::new(&node);
+        let folder = resolve_folder(&manager, &command.path).await?;
+        let namespace = folder.namespace_id().to_string();
+        node.stop().await?;
+
+        let response = client
+            .send(IpcRequest::new(IpcCommand::AddFolder {
+                namespace,
+                path: command.path.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
     }
     let root_is_namespace = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>().is_ok();
     let root = if root_is_namespace {

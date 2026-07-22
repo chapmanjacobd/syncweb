@@ -22,10 +22,8 @@ pub enum Command {
     DaemonReload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync,
-    #[command(about = "Add a folder to the running daemon")]
-    DaemonAdd(DaemonAddArgs),
-    #[command(about = "Remove a folder from the running daemon")]
-    DaemonRemove(DaemonRemoveArgs),
+    #[command(about = "Stop watching a folder for local changes")]
+    Unwatch(FolderSelector),
     #[command(about = "Create a synchronized folder")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
@@ -488,17 +486,6 @@ pub struct DaemonShutdownArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct DaemonAddArgs {
-    pub namespace: String,
-    pub path: PathBuf,
-}
-
-#[derive(Debug, Args)]
-pub struct DaemonRemoveArgs {
-    pub namespace: String,
-}
-
-#[derive(Debug, Args)]
 pub struct WatchArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
@@ -508,6 +495,8 @@ pub struct WatchArgs {
     pub exclude: Vec<String>,
     #[arg(long, help = "Process one event and exit")]
     pub once: bool,
+    #[arg(long, help = "Run in the foreground without using a daemon")]
+    pub no_daemon: bool,
 }
 
 #[derive(Debug, Args)]

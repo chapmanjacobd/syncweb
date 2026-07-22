@@ -103,7 +103,7 @@ pub enum IpcCommand {
 
 /// A response returned by the daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "response", rename_all = "snake_case")]
+#[serde(tag = "response", content = "data", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum IpcResponse {
     Ok { message: String },
@@ -188,6 +188,19 @@ impl FolderRegistry {
     pub fn add(&mut self, entry: FolderEntry) -> Result<()> {
         let key = entry.namespace.to_string();
         if self.folders.contains_key(&key) {
+            return Err(SyncwebError::FolderAlreadyManaged);
+        }
+        self.folders.insert(key, entry);
+        Ok(())
+    }
+
+    pub fn add_or_update(&mut self, entry: FolderEntry) -> Result<()> {
+        let key = entry.namespace.to_string();
+        if let Some(existing) = self.folders.get_mut(&key) {
+            if existing.path.as_os_str().is_empty() && !entry.path.as_os_str().is_empty() {
+                existing.path = entry.path;
+                return Ok(());
+            }
             return Err(SyncwebError::FolderAlreadyManaged);
         }
         self.folders.insert(key, entry);
@@ -408,7 +421,10 @@ impl IpcServer {
                     }
                     accepted = listener.accept() => {
                         let (stream, _) = accepted?;
-                        self.handle_connection(stream).await?;
+                        if let Err(error) = self.handle_connection(stream).await {
+                            tracing::error!(%error, "daemon IPC connection failed");
+                            return Err(error);
+                        }
                     }
                 }
             };
@@ -439,7 +455,7 @@ impl IpcServer {
             IpcCommand::AddFolder { namespace, path } => match iroh_docs::NamespaceId::from_str(&namespace) {
                 Ok(namespace_id) => {
                     let mut registry = self.daemon_handle.folder_registry.write().await;
-                    match registry.add(FolderEntry::new(namespace_id, path)) {
+                    match registry.add_or_update(FolderEntry::new(namespace_id, path)) {
                         Ok(()) => IpcResponse::Ok {
                             message: "folder added".to_owned(),
                         },

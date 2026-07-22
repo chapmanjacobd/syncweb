@@ -15,7 +15,7 @@ const STATE_FILE_NAME: &str = "daemon.state";
 const STATUS_FILE_NAME: &str = "daemon.status";
 const LOCK_FILE_NAME: &str = "daemon.lock";
 const SOCKET_FILE_NAME: &str = "daemon.sock";
-const RUNTIME_SOCKET_FILE_NAME: &str = "syncweb.sock";
+const RUNTIME_SOCKET_FILE_PREFIX: &str = "syncweb-";
 
 /// The lifecycle state persisted by a running daemon.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -367,7 +367,12 @@ pub fn daemon_socket_path(data_dir: &Path) -> PathBuf {
         .filter(|value| !value.is_empty())
         .map_or_else(
             || data_dir.join(SOCKET_FILE_NAME),
-            |runtime_dir| PathBuf::from(runtime_dir).join(RUNTIME_SOCKET_FILE_NAME),
+            |runtime_dir| {
+                let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
+                let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
+                let suffix = &digest.to_hex()[..16];
+                PathBuf::from(runtime_dir).join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"))
+            },
         )
 }
 

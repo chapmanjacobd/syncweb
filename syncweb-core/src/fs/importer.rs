@@ -87,7 +87,15 @@ impl Importer {
     }
 
     async fn import_one(&self, entry: FileEntry) -> Result<ImportEntry> {
-        let hash = self.blob_store.add_file(&entry.path).await?;
+        let before = fs::metadata(&entry.path)?;
+        if !metadata_matches_entry(&before, &entry) {
+            return Err(file_changed_error(&entry.path));
+        }
+        let hash = self.blob_store.add_file_ref(&entry.path).await?;
+        let after = fs::metadata(&entry.path)?;
+        if !metadata_matches_entry(&after, &entry) || hash != Hash::from_bytes(*entry.hash.as_bytes()) {
+            return Err(file_changed_error(&entry.path));
+        }
         self.docs_engine
             .set_blob(
                 &self.doc,
@@ -131,6 +139,14 @@ impl Importer {
         }
         Ok(entries)
     }
+}
+
+fn metadata_matches_entry(metadata: &fs::Metadata, entry: &FileEntry) -> bool {
+    metadata.len() == entry.size && metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH) == entry.modified
+}
+
+fn file_changed_error(path: &Path) -> SyncwebError {
+    SyncwebError::operation("file changed during import", path.display())
 }
 
 /// Parallel import pipeline. Hashing and filesystem reads are parallelized by

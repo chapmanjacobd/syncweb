@@ -120,6 +120,22 @@ async fn test_add_file() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn test_add_file_ref() -> anyhow::Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = test_node(&directory, "node", None).await?;
+    let path = directory.path().join("input.txt");
+    std::fs::write(&path, b"referenced file")?;
+
+    let referenced_hash = node.blob_store().add_file_ref(&path).await?;
+    let copied_hash = node.blob_store().add_bytes(b"referenced file").await?;
+    anyhow::ensure!(referenced_hash == copied_hash);
+    anyhow::ensure!(node.blob_store().get(referenced_hash).await? == b"referenced file".as_slice());
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_two_nodes_sync_blob() -> anyhow::Result<()> {
     let directory = TestDirectory::new()?;
     let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await?;

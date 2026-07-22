@@ -134,6 +134,12 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 *   `syncweb mirror add <collection> <provider>` - Register an alternate mirror provider.
 *   `syncweb trust show <content-or-publisher>` - Show trust, license, provenance, and moderation state.
 *   `syncweb trust delegate <publisher>` - Cryptographically delegate trust to another publisher (Web of Trust).
+*   `syncweb trust provider show <pubkey>` - Show provider reputation, bans, and trust records.
+*   `syncweb trust provider list` - List providers known to the local indexing state.
+*   `syncweb trust provider ban <pubkey>` / `unban <pubkey>` - Manage global or scoped provider bans.
+*   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
+*   `syncweb trust stream publish --provider <pubkey> --signal <kind>` - Publish a signed provider observation.
+*   `syncweb trust stream subscribe <ticket>` - Subscribe to a trust stream and ingest trusted signals.
 *   `syncweb attest <content> --license <license>` - Sign an attestation for content.
 *   `syncweb report <record> --reason <reason>` - Submit a moderation report.
 *   `syncweb moderation ls` - List moderation records and decisions.

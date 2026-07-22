@@ -1626,6 +1626,221 @@ _arguments "${_arguments_options[@]}" : \
 ':publisher:_default' \
 && ret=0
 ;;
+(provider)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__trust__subcmd__provider_commands" \
+"*::: :->provider" \
+&& ret=0
+
+    case $state in
+    (provider)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-provider-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--hash=[Evaluate content-scoped trust for this hash]:HASH:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':provider:_default' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--hash=[Evaluate content-scoped trust for this hash]:HASH:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(ban)
+_arguments "${_arguments_options[@]}" : \
+'--hash=[]:HASH:_default' \
+'--reason=[]:REASON:_default' \
+'--duration=[Ban duration in seconds]:DURATION:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':provider:_default' \
+&& ret=0
+;;
+(unban)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':provider:_default' \
+&& ret=0
+;;
+(vouch)
+_arguments "${_arguments_options[@]}" : \
+'--scope=[]:SCOPE:_default' \
+'--reason=[]:REASON:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':provider:_default' \
+&& ret=0
+;;
+(distrust)
+_arguments "${_arguments_options[@]}" : \
+'--scope=[]:SCOPE:_default' \
+'--reason=[]:REASON:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':provider:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-provider-help-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(unban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(vouch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(distrust)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(stream)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__trust__subcmd__stream_commands" \
+"*::: :->stream" \
+&& ret=0
+
+    case $state in
+    (stream)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-stream-command-$line[1]:"
+        case $line[1] in
+            (subscribe)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':ticket:_default' \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+'--provider=[]:PROVIDER:_default' \
+'--signal=[]:SIGNAL:_default' \
+'--hash=[]:HASH:_default' \
+'--sequence=[]:SEQUENCE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-stream-help-command-$line[1]:"
+        case $line[1] in
+            (subscribe)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__trust__subcmd__help_commands" \
@@ -1645,6 +1860,70 @@ _arguments "${_arguments_options[@]}" : \
 (delegate)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
+;;
+(provider)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands" \
+"*::: :->provider" \
+&& ret=0
+
+    case $state in
+    (provider)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-help-provider-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(unban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(vouch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(distrust)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(stream)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands" \
+"*::: :->stream" \
+&& ret=0
+
+    case $state in
+    (stream)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-trust-help-stream-command-$line[1]:"
+        case $line[1] in
+            (subscribe)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
@@ -2259,6 +2538,70 @@ _arguments "${_arguments_options[@]}" : \
 (delegate)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
+;;
+(provider)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands" \
+"*::: :->provider" \
+&& ret=0
+
+    case $state in
+    (provider)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-trust-provider-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(unban)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(vouch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(distrust)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(stream)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands" \
+"*::: :->stream" \
+&& ret=0
+
+    case $state in
+    (stream)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-trust-stream-command-$line[1]:"
+        case $line[1] in
+            (subscribe)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(publish)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
         esac
     ;;
@@ -3040,6 +3383,8 @@ _syncweb__subcmd__help__subcmd__trust_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'provider:Manage provider trust and bans' \
+'stream:Publish or subscribe to provider trust signals' \
     )
     _describe -t commands 'syncweb help trust commands' commands "$@"
 }
@@ -3048,10 +3393,70 @@ _syncweb__subcmd__help__subcmd__trust__subcmd__delegate_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help trust delegate commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands() {
+    local commands; commands=(
+'show:Show provider reputation, bans, and trust records' \
+'list:List providers known to the local index' \
+'ban:Ban a provider globally or for one content hash' \
+'unban:Remove a provider'\''s global and scoped bans' \
+'vouch:Vouch for a provider' \
+'distrust:Distrust a provider' \
+    )
+    _describe -t commands 'syncweb help trust provider commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider ban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider distrust commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider unban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust provider vouch commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__show_commands] )) ||
 _syncweb__subcmd__help__subcmd__trust__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help trust show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands() {
+    local commands; commands=(
+'subscribe:Subscribe to a provider trust stream ticket or file' \
+'publish:Publish a signed provider trust signal' \
+    )
+    _describe -t commands 'syncweb help trust stream commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust stream publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust stream subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__unpublish_commands] )) ||
 _syncweb__subcmd__help__subcmd__unpublish_commands() {
@@ -3850,6 +4255,8 @@ _syncweb__subcmd__trust_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'provider:Manage provider trust and bans' \
+'stream:Publish or subscribe to provider trust signals' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb trust commands' commands "$@"
@@ -3864,6 +4271,8 @@ _syncweb__subcmd__trust__subcmd__help_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'provider:Manage provider trust and bans' \
+'stream:Publish or subscribe to provider trust signals' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb trust help commands' commands "$@"
@@ -3878,15 +4287,209 @@ _syncweb__subcmd__trust__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust help help commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands() {
+    local commands; commands=(
+'show:Show provider reputation, bans, and trust records' \
+'list:List providers known to the local index' \
+'ban:Ban a provider globally or for one content hash' \
+'unban:Remove a provider'\''s global and scoped bans' \
+'vouch:Vouch for a provider' \
+'distrust:Distrust a provider' \
+    )
+    _describe -t commands 'syncweb trust help provider commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider ban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider distrust commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider unban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help provider vouch commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__show_commands] )) ||
 _syncweb__subcmd__trust__subcmd__help__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust help show commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands() {
+    local commands; commands=(
+'subscribe:Subscribe to a provider trust stream ticket or file' \
+'publish:Publish a signed provider trust signal' \
+    )
+    _describe -t commands 'syncweb trust help stream commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help stream publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help stream subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider_commands() {
+    local commands; commands=(
+'show:Show provider reputation, bans, and trust records' \
+'list:List providers known to the local index' \
+'ban:Ban a provider globally or for one content hash' \
+'unban:Remove a provider'\''s global and scoped bans' \
+'vouch:Vouch for a provider' \
+'distrust:Distrust a provider' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb trust provider commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__ban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__ban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider ban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__distrust_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__distrust_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider distrust commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands() {
+    local commands; commands=(
+'show:Show provider reputation, bans, and trust records' \
+'list:List providers known to the local index' \
+'ban:Ban a provider globally or for one content hash' \
+'unban:Remove a provider'\''s global and scoped bans' \
+'vouch:Vouch for a provider' \
+'distrust:Distrust a provider' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb trust provider help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help ban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help distrust commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help unban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider help vouch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__show_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__unban_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__unban_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider unban commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__vouch_commands] )) ||
+_syncweb__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust provider vouch commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__trust__subcmd__show_commands] )) ||
 _syncweb__subcmd__trust__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust show commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream_commands() {
+    local commands; commands=(
+'subscribe:Subscribe to a provider trust stream ticket or file' \
+'publish:Publish a signed provider trust signal' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb trust stream commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands() {
+    local commands; commands=(
+'subscribe:Subscribe to a provider trust stream ticket or file' \
+'publish:Publish a signed provider trust signal' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb trust stream help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust stream help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust stream help publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust stream help subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust stream publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands] )) ||
+_syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust stream subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__unpublish_commands] )) ||
 _syncweb__subcmd__unpublish_commands() {

@@ -1038,3 +1038,148 @@ fn completions_generates_valid_powershell_output() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn trust_provider_list_outputs_empty_table() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-trust-{}", uuid::Uuid::new_v4()));
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "list",
+        ])
+        .output()
+        .context("run syncweb trust provider list")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        output.status.success(),
+        "trust provider list should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_ban_and_unban() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-trust-ban-{}", uuid::Uuid::new_v4()));
+    let fake_key = "aabbccdd".repeat(8);
+    let ban = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "ban",
+            &fake_key,
+            "--reason",
+            "test ban",
+        ])
+        .output()
+        .context("run syncweb trust provider ban")?;
+    ensure!(
+        ban.status.success(),
+        "trust provider ban should succeed: {:?}",
+        String::from_utf8_lossy(&ban.stderr)
+    );
+    let unban = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "unban",
+            &fake_key,
+        ])
+        .output()
+        .context("run syncweb trust provider unban")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        unban.status.success(),
+        "trust provider unban should succeed: {:?}",
+        String::from_utf8_lossy(&unban.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_show_displays_output() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-trust-show-{}", uuid::Uuid::new_v4()));
+    let fake_key = "11223344".repeat(8);
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "show",
+            &fake_key,
+        ])
+        .output()
+        .context("run syncweb trust provider show")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        output.status.success(),
+        "trust provider show should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_vouch_and_distrust() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-trust-vouch-{}", uuid::Uuid::new_v4()));
+    let key = iroh::SecretKey::generate();
+    let fake_key = hex::encode(key.public().as_bytes());
+    let vouch = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "vouch",
+            &fake_key,
+            "--reason",
+            "good provider",
+        ])
+        .output()
+        .context("run syncweb trust provider vouch")?;
+    ensure!(
+        vouch.status.success(),
+        "trust provider vouch should succeed: {:?}",
+        String::from_utf8_lossy(&vouch.stderr)
+    );
+    let distrust = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "distrust",
+            &fake_key,
+            "--reason",
+            "bad provider",
+        ])
+        .output()
+        .context("run syncweb trust provider distrust")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        distrust.status.success(),
+        "trust provider distrust should succeed: {:?}",
+        String::from_utf8_lossy(&distrust.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_stream_publish_help() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["trust", "stream", "publish", "--help"])
+        .output()
+        .context("run syncweb trust stream publish --help")?;
+    ensure!(output.status.success(), "trust stream publish --help should succeed");
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(stdout.contains("--provider"), "help should list --provider flag");
+    Ok(())
+}

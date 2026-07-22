@@ -463,7 +463,8 @@ pub enum PackageCommand {
     },
     #[command(about = "Import and install a compressed CAR archive file")]
     Import {
-        archive: PathBuf,
+        #[arg(required = true, num_args = 1.., value_name = "ARCHIVE")]
+        archives: Vec<PathBuf>,
         #[arg(long, value_name = "EXPRESSION")]
         filter: Vec<String>,
     },

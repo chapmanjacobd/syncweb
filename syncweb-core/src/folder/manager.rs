@@ -57,8 +57,21 @@ impl FolderManager {
     ///
     /// Returns an error if the folder ticket cannot be joined or parsed.
     pub async fn join(&self, ticket_str: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
+        let mut ticket_raw = ticket_str.as_ref();
+        if let Some(rest) = ticket_raw.strip_prefix("syncweb://") {
+            if let Some((_, query)) = rest.split_once('?') {
+                for param in query.split('&') {
+                    if let Some(val) = param.strip_prefix("ticket=") {
+                        ticket_raw = val;
+                        break;
+                    }
+                }
+            } else {
+                ticket_raw = rest;
+            }
+        }
         let ticket =
-            DocTicket::from_str(ticket_str.as_ref()).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+            DocTicket::from_str(ticket_raw).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());

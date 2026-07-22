@@ -1324,8 +1324,10 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
         PackageCommand::Export { paths, version, filter } => {
             handle_package_archive_export(data_dir, paths, version, filter, output_json).await?;
         }
-        PackageCommand::Import { archive, filter } => {
-            handle_package_archive_import(data_dir, archive, filter, output_json).await?;
+        PackageCommand::Import { archives, filter } => {
+            for archive in archives {
+                handle_package_archive_import(data_dir, archive, filter.clone(), output_json).await?;
+            }
         }
         PackageCommand::Info {
             manifest: manifest_path,

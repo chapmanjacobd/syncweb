@@ -2,7 +2,10 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -144,7 +147,7 @@ impl FolderEntry {
         FolderStatus {
             namespace: self.namespace.to_string(),
             path: self.path.clone(),
-            session_active: self.session.is_some(),
+            session_active: self.session.is_some() || crate::sync::is_active(self.namespace),
             last_sync_at: self.last_sync_at,
             sync_count: self.sync_count,
         }
@@ -207,6 +210,7 @@ pub struct DaemonHandle {
     pub folder_registry: Arc<RwLock<FolderRegistry>>,
     pub shutdown_sender: broadcast::Sender<()>,
     pub sync_trigger: mpsc::UnboundedSender<Option<String>>,
+    pub reload_requested: Arc<AtomicBool>,
 }
 
 impl DaemonHandle {
@@ -224,17 +228,35 @@ impl DaemonHandle {
     }
 
     #[must_use]
-    pub const fn with_channels(
+    pub fn with_channels(
         state: Arc<RwLock<super::state::DaemonState>>,
         folder_registry: Arc<RwLock<FolderRegistry>>,
         shutdown_sender: broadcast::Sender<()>,
         sync_trigger: mpsc::UnboundedSender<Option<String>>,
+    ) -> Self {
+        Self::with_channels_and_reload(
+            state,
+            folder_registry,
+            shutdown_sender,
+            sync_trigger,
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+
+    #[must_use]
+    pub const fn with_channels_and_reload(
+        state: Arc<RwLock<super::state::DaemonState>>,
+        folder_registry: Arc<RwLock<FolderRegistry>>,
+        shutdown_sender: broadcast::Sender<()>,
+        sync_trigger: mpsc::UnboundedSender<Option<String>>,
+        reload_requested: Arc<AtomicBool>,
     ) -> Self {
         Self {
             state,
             folder_registry,
             shutdown_sender,
             sync_trigger,
+            reload_requested,
         }
     }
 
@@ -399,9 +421,15 @@ impl IpcServer {
             IpcCommand::SetLogLevel { level } => IpcResponse::Ok {
                 message: format!("log level set to {level}"),
             },
-            IpcCommand::ReloadConfig => IpcResponse::Ok {
-                message: "configuration reload requested".to_owned(),
-            },
+            IpcCommand::ReloadConfig => {
+                self.daemon_handle.reload_requested.store(true, Ordering::Release);
+                if self.daemon_handle.sync_trigger.send(None).is_err() {
+                    tracing::debug!("daemon reload wake-up channel is not connected");
+                }
+                IpcResponse::Ok {
+                    message: "configuration reload requested".to_owned(),
+                }
+            }
             IpcCommand::Shutdown { force } => {
                 if let Err(error) = self.daemon_handle.shutdown_sender.send(()) {
                     return response_from_error(error);

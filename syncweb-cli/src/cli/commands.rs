@@ -489,9 +489,8 @@ pub struct DaemonShutdownArgs {
 
 #[derive(Debug, Args)]
 pub struct DaemonAddArgs {
+    pub namespace: String,
     pub path: PathBuf,
-    #[arg(long)]
-    pub namespace: Option<String>,
 }
 
 #[derive(Debug, Args)]

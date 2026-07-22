@@ -1,4 +1,8 @@
 use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use iroh_docs::NamespaceId;
 use n0_future::StreamExt;
@@ -6,8 +10,9 @@ use tokio::{sync::broadcast, time::sleep};
 
 use crate::{
     daemon::current_timestamp,
-    error::Result,
-    sync::{ActiveSession, IntentHandle, SubscribeParams, SyncEngine, SyncEvent},
+    error::{Result, SyncwebError},
+    filter::FilterEngine,
+    sync::{ActiveSession, IntentControl, IntentHandle, SubscribeParams, SyncEngine, SyncEvent},
 };
 
 /// A synchronization intent together with the information needed to restart it.
@@ -43,6 +48,9 @@ pub struct IntentSupervisor {
     backoff_max: Duration,
 }
 
+/// Shared controls for intents currently owned by the daemon.
+pub type IntentControls = Arc<Mutex<HashMap<NamespaceId, IntentControl>>>;
+
 impl IntentSupervisor {
     #[must_use]
     pub const fn new(max_retries: u32, backoff_base: Duration, backoff_max: Duration) -> Self {
@@ -60,7 +68,25 @@ impl IntentSupervisor {
         namespace: NamespaceId,
         params: SubscribeParams,
     ) -> SupervisedIntent {
-        match sync.subscribe(namespace, params).await {
+        self.run_intent_with_filter(sync, namespace, params, None).await
+    }
+
+    /// Start one filtered synchronization intent.
+    pub async fn run_intent_with_filter(
+        &self,
+        sync: &SyncEngine,
+        namespace: NamespaceId,
+        params: SubscribeParams,
+        filter_engine: Option<FilterEngine>,
+    ) -> SupervisedIntent {
+        let result = match filter_engine {
+            Some(engine) => {
+                sync.sync_with_filter(namespace, crate::sync::SessionMode::Continuous, params, engine)
+                    .await
+            }
+            None => sync.subscribe(namespace, params).await,
+        };
+        match result {
             Ok(handle) => {
                 let session = ActiveSession::register(namespace, handle.cancel_sender());
                 SupervisedIntent {
@@ -98,12 +124,47 @@ impl IntentSupervisor {
         sync: &SyncEngine,
         namespace: NamespaceId,
         params: SubscribeParams,
-        mut shutdown: broadcast::Receiver<()>,
+        shutdown: broadcast::Receiver<()>,
     ) -> Result<SupervisedIntent> {
-        let mut supervised = self.run_intent(sync, namespace, params.clone()).await;
+        self.supervise_inner(sync, namespace, params, shutdown, None, None)
+            .await
+    }
+
+    /// Supervise an intent while exposing pause/resume controls to its owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the shared control registry is poisoned or the
+    /// intent supervision infrastructure cannot wait for shutdown.
+    pub async fn supervise_with_controls(
+        &self,
+        sync: &SyncEngine,
+        namespace: NamespaceId,
+        params: SubscribeParams,
+        shutdown: broadcast::Receiver<()>,
+        controls: IntentControls,
+        filter: Option<FilterEngine>,
+    ) -> Result<SupervisedIntent> {
+        self.supervise_inner(sync, namespace, params, shutdown, Some(controls), filter)
+            .await
+    }
+
+    async fn supervise_inner(
+        &self,
+        sync: &SyncEngine,
+        namespace: NamespaceId,
+        params: SubscribeParams,
+        mut shutdown: broadcast::Receiver<()>,
+        controls: Option<IntentControls>,
+        filter: Option<FilterEngine>,
+    ) -> Result<SupervisedIntent> {
+        let mut supervised = self
+            .run_intent_with_filter(sync, namespace, params.clone(), filter.clone())
+            .await;
 
         loop {
             let Some(mut handle) = supervised.handle.take() else {
+                Self::remove_control(controls.as_ref(), namespace)?;
                 if supervised.retry_count >= self.max_retries {
                     return Ok(supervised);
                 }
@@ -115,11 +176,14 @@ impl IntentSupervisor {
                     return Ok(supervised);
                 }
                 supervised.retry_count = retry_number;
-                supervised = self.run_intent(sync, namespace, params.clone()).await;
+                supervised = self
+                    .run_intent_with_filter(sync, namespace, params.clone(), filter.clone())
+                    .await;
                 supervised.retry_count = retry_number;
                 continue;
             };
 
+            Self::insert_control(controls.as_ref(), namespace, handle.control())?;
             let session = supervised.session.take();
             let event = loop {
                 tokio::select! {
@@ -129,6 +193,7 @@ impl IntentSupervisor {
                                 if let Err(error) = handle.cancel() {
                                     supervised.last_error = Some(format!("failed to cancel intent: {error}"));
                                 }
+                                Self::remove_control(controls.as_ref(), namespace)?;
                                 drop(session);
                                 supervised.handle = None;
                                 return Ok(supervised);
@@ -140,6 +205,7 @@ impl IntentSupervisor {
                 }
             };
 
+            Self::remove_control(controls.as_ref(), namespace)?;
             match event {
                 Some(SyncEvent::Started) => {
                     supervised.retry_count = 0;
@@ -169,6 +235,28 @@ impl IntentSupervisor {
                 }
             }
         }
+    }
+
+    fn insert_control(controls: Option<&IntentControls>, namespace: NamespaceId, control: IntentControl) -> Result<()> {
+        let Some(control_registry) = controls else {
+            return Ok(());
+        };
+        control_registry
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon intent control mutex is poisoned", error))?
+            .insert(namespace, control);
+        Ok(())
+    }
+
+    fn remove_control(controls: Option<&IntentControls>, namespace: NamespaceId) -> Result<()> {
+        let Some(control_registry) = controls else {
+            return Ok(());
+        };
+        control_registry
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon intent control mutex is poisoned", error))?
+            .remove(&namespace);
+        Ok(())
     }
 
     /// Return the delay for a one-based retry number.

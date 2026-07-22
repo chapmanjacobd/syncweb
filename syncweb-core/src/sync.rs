@@ -14,7 +14,7 @@ pub mod subscribe;
 pub use actor::{Actor, ActorHandle};
 pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};
-pub use intents::{IntentHandle, SyncCommand, SyncEvent};
+pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};
 pub use lazy_fetch::LazyFetch;
 pub use partial_fetch::{BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport};
 pub use peer_tracker::{EfficientPeerCache, EvictionStrategy, PeerTracker};

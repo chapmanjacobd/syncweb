@@ -220,7 +220,7 @@ pub struct Schedule {
 }
 
 /// Effective limits at a point in time.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct BandwidthLimits {
     pub max_upload: Option<u64>,
@@ -335,6 +335,26 @@ impl ScheduleManager {
             }
         }
         limits
+    }
+
+    /// Return the next minute at which the selected schedule becomes active.
+    #[must_use]
+    pub fn next_active_window_start_at(&self, folder: Option<&str>, minute: u16) -> Option<u16> {
+        let window = folder
+            .and_then(|name| self.folders.get(name))
+            .filter(|schedule| schedule.active_hours_override)
+            .and_then(|schedule| schedule.active_hours)
+            .or(self.global.active_hours)?;
+        if window.contains(minute) {
+            return Some(minute);
+        }
+        for offset in 1_u16..=1_440 {
+            let candidate = minute.saturating_add(offset) % 1_440;
+            if window.contains(candidate) {
+                return Some(candidate);
+            }
+        }
+        None
     }
 
     #[must_use]

@@ -24,7 +24,7 @@ use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     cancel_session,
-    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse},
+    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
@@ -374,7 +374,8 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
 
 #[async_recursion]
 async fn handle_daemon_status(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
-    let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? else {
+    let state_file = StateFile::new(data_dir);
+    let Some(report) = state_file.load_status()? else {
         if output_json {
             println!("{}", serde_json::json!({"status": "stopped"}));
         } else {
@@ -382,21 +383,47 @@ async fn handle_daemon_status(data_dir: &std::path::Path, output_json: bool) -> 
         }
         return Ok(());
     };
-    match client.send(IpcRequest::new(IpcCommand::Status)).await? {
-        IpcResponse::Status(status) => {
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&status)?);
-            } else {
-                println!("daemon: {}", format!("{status:?}").to_lowercase());
-            }
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("daemon: running");
+        println!("pid: {}", report.pid);
+        println!("node: {}", report.node_id);
+        println!("uptime: {} seconds", report.uptime_seconds);
+        println!("rayon threads: {}", report.rayon_threads);
+        println!(
+            "bandwidth: {} uploaded, {} downloaded",
+            report.bandwidth.upload_total, report.bandwidth.download_total
+        );
+        if let Some(schedule) = report.schedule {
+            println!(
+                "schedule: {}",
+                if schedule.in_active_window {
+                    "active"
+                } else {
+                    "inactive"
+                }
+            );
         }
-        IpcResponse::Error { message } => anyhow::bail!("{message}"),
-        IpcResponse::Ok { .. }
-        | IpcResponse::FolderList(_)
-        | IpcResponse::DownloadComplete { .. }
-        | IpcResponse::ImportComplete(_)
-        | IpcResponse::ExportComplete(_)
-        | _ => anyhow::bail!("daemon returned an unexpected status response"),
+        let mut table = Table::new();
+        table.set_header(["Namespace", "Path", "Session", "Last sync", "Entries", "Errors"]);
+        for folder in report.folders {
+            table.add_row([
+                folder.namespace,
+                folder.path.display().to_string(),
+                if folder.session_active {
+                    "active".to_owned()
+                } else {
+                    "paused".to_owned()
+                },
+                folder
+                    .last_sync_at
+                    .map_or_else(|| "-".to_owned(), |value| value.to_string()),
+                folder.entries_synced.to_string(),
+                folder.errors.len().to_string(),
+            ]);
+        }
+        println!("{table}");
     }
     Ok(())
 }
@@ -435,7 +462,7 @@ async fn handle_daemon_add(data_dir: &std::path::Path, args: DaemonAddArgs, outp
         .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::AddFolder {
-            namespace: args.namespace.unwrap_or_default(),
+            namespace: args.namespace,
             path: args.path,
         }))
         .await?;

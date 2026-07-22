@@ -128,13 +128,13 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (daemon-add)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[]:NAMESPACE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
 '-h[Print help]' \
 '--help[Print help]' \
+':namespace:_default' \
 ':path:_files' \
 && ret=0
 ;;

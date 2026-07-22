@@ -6,7 +6,6 @@ use comfy_table::Table;
 use std::{
     process::{Command as ProcessCommand, Stdio},
     str::FromStr,
-    sync::Arc,
     time::Duration,
 };
 
@@ -25,10 +24,7 @@ use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     cancel_session,
-    daemon::{
-        DaemonHandle, DaemonState, DaemonStatus, IpcCommand, IpcRequest, IpcResponse, IpcServer, PidLock, StateFile,
-        current_timestamp,
-    },
+    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
@@ -54,7 +50,6 @@ use syncweb_core::{
     },
     verify::IntegrityChecker,
 };
-use tokio::sync::{RwLock, broadcast, mpsc};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -355,98 +350,24 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
         return Ok(());
     }
 
-    std::fs::create_dir_all(data_dir)?;
-    let lock = PidLock::new(data_dir);
-    if !lock.try_acquire()? {
-        anyhow::bail!("daemon already running for {}", data_dir.display());
-    }
-
-    let state_file = StateFile::new(data_dir);
-    let initial_state = DaemonState::new(
-        std::process::id(),
-        String::new(),
-        current_timestamp(),
-        data_dir,
-        DaemonStatus::Starting,
-    );
-    let (sync_trigger, _sync_receiver) = mpsc::unbounded_channel();
-    let daemon_handle = DaemonHandle::with_channels(
-        Arc::new(RwLock::new(initial_state)),
-        Arc::new(RwLock::new(syncweb_core::daemon::FolderRegistry::new())),
-        broadcast::channel(16).0,
-        sync_trigger,
-    );
-    let starting_state = daemon_handle.state.read().await.clone();
-    state_file.save(&starting_state)?;
-    let node = match open_node(data_dir).await {
-        Ok(node) => node,
-        Err(error) => {
-            state_file.remove()?;
-            lock.release()?;
-            return Err(error);
-        }
-    };
-    let running_state = {
-        let mut shared_state = daemon_handle.state.write().await;
-        shared_state.node_id = node.endpoint().id().to_string();
-        shared_state.status = DaemonStatus::Running;
-        shared_state.clone()
-    };
-    state_file.save(&running_state)?;
-    let listener_path = syncweb_core::daemon::daemon_socket_path(data_dir);
-    let ipc_server = IpcServer::new(listener_path, daemon_handle.clone());
+    let app_config = AppConfig::load(data_dir.join("config.toml"))?;
+    let mut daemon_config = DaemonConfig::new(data_dir);
+    daemon_config.foreground = args.foreground;
+    daemon_config.sync_interval = args.sync_interval.map_or(Duration::from_mins(1), Duration::from_secs);
+    daemon_config.rayon_threads = args.max_threads.unwrap_or(app_config.parallel.threads);
+    daemon_config.log_file = args.log_file;
+    let daemon = Daemon::new(daemon_config).await?;
+    let state = daemon.state().await;
     if output_json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&daemon_handle.state.read().await.clone())?
-        );
+        println!("{}", serde_json::to_string_pretty(&state)?);
     } else {
-        println!("daemon started: {}", daemon_handle.state.read().await.node_id);
+        println!("daemon started: {}", state.node_id);
     }
-
-    let mut server_task = tokio::spawn(async move { ipc_server.serve().await });
-    let mut shutdown_signal = Box::pin(wait_for_shutdown_signal());
-    tokio::select! {
-        signal = &mut shutdown_signal => {
-            signal?;
-            let _ = daemon_handle.shutdown_sender.send(());
-            (&mut server_task).await??;
-        }
-        server_result = &mut server_task => {
-            server_result??;
-        }
-    }
-
-    daemon_handle.set_status(DaemonStatus::Stopping).await;
-    let stopping_state = daemon_handle.state.read().await.clone();
-    state_file.save(&stopping_state)?;
-    let stop_result = node.stop().await;
-    daemon_handle.set_status(DaemonStatus::Stopped).await;
-    let remove_result = state_file.remove();
-    let release_result = lock.release();
-    stop_result?;
-    remove_result?;
-    release_result?;
+    daemon.run().await?;
     if output_json {
         println!("{}", serde_json::json!({"status": "stopped"}));
     } else {
         println!("daemon stopped");
-    }
-    Ok(())
-}
-
-async fn wait_for_shutdown_signal() -> Result<()> {
-    #[cfg(unix)]
-    {
-        let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-        tokio::select! {
-            result = tokio::signal::ctrl_c() => result?,
-            _ = terminate.recv() => {}
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        tokio::signal::ctrl_c().await?;
     }
     Ok(())
 }

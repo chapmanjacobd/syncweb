@@ -18,13 +18,19 @@ use tokio::{
 
 use crate::{
     error::{Result, SyncwebError},
-    filter::FilterConfig,
-    folder::archive_export::DropExportResult,
-    folder::archive_import::DropImportResult,
+    filter::{FilterConfig, FilterEngine},
+    folder::{
+        CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
+        DropImportOptions, DropImportResult, DropImporter, FolderManager, SyncMode,
+    },
+    node::iroh_node::IrohNode,
     sync::{ActiveSession, FetchStrategy, SessionMode, SubscribeParams, cancel_session},
 };
 
-use super::state::{DaemonStatus, daemon_socket_path};
+use super::{
+    ManagedPool,
+    state::{DaemonStatus, daemon_socket_path},
+};
 
 const IPC_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -321,6 +327,13 @@ impl IpcListener {
 pub struct IpcServer {
     listener: IpcListener,
     daemon_handle: DaemonHandle,
+    archive_context: Option<Arc<ArchiveContext>>,
+}
+
+#[derive(Clone)]
+struct ArchiveContext {
+    node: Arc<IrohNode>,
+    pool: Arc<ManagedPool>,
 }
 
 impl IpcServer {
@@ -329,6 +342,22 @@ impl IpcServer {
         Self {
             listener: IpcListener::new(socket_path),
             daemon_handle,
+            archive_context: None,
+        }
+    }
+
+    /// Create an IPC server with access to daemon-owned archive resources.
+    #[must_use]
+    pub fn with_archive_context(
+        socket_path: PathBuf,
+        daemon_handle: DaemonHandle,
+        node: Arc<IrohNode>,
+        pool: Arc<ManagedPool>,
+    ) -> Self {
+        Self {
+            listener: IpcListener::new(socket_path),
+            daemon_handle,
+            archive_context: Some(Arc::new(ArchiveContext { node, pool })),
         }
     }
 
@@ -442,15 +471,79 @@ impl IpcServer {
                     },
                 }
             }
+            IpcCommand::ImportArchive { input, target, filter } => {
+                match self.handle_import_archive(input, target, filter).await {
+                    Ok(result) => IpcResponse::ImportComplete(Box::new(result)),
+                    Err(error) => response_from_error(error),
+                }
+            }
+            IpcCommand::ExportArchive {
+                namespace,
+                version,
+                output,
+            } => match self.handle_export_archive(namespace, version, output).await {
+                Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
+                Err(error) => response_from_error(error),
+            },
             IpcCommand::Download { .. }
-            | IpcCommand::ImportArchive { .. }
-            | IpcCommand::ExportArchive { .. }
             | IpcCommand::Join { .. }
             | IpcCommand::Publish { .. }
             | IpcCommand::Subscribe { .. } => IpcResponse::Error {
                 message: "node-access IPC command is not available".to_owned(),
             },
         }
+    }
+
+    async fn handle_import_archive(
+        &self,
+        input: PathBuf,
+        target: PathBuf,
+        filter: Option<FilterConfig>,
+    ) -> Result<DropImportResult> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation("daemon archive IPC is unavailable", "server has no node context")
+        })?;
+        let filter_engine = filter.map(FilterEngine::new).transpose()?;
+        let options = filter_engine.map_or_else(DropImportOptions::default, |value| {
+            DropImportOptions::default().with_filter(value)
+        });
+        let importer = DropImporter::new(context.node.blob_store().clone());
+        let mut result = importer
+            .import_archive(&input, options, Some(context.pool.as_ref()))
+            .await?;
+        importer.materialize(&result, &target).await?;
+        let folder = FolderManager::new(&context.node).create(SyncMode::SendReceive).await?;
+        let store = CollectionStore::new(
+            folder.doc().clone(),
+            folder.author(),
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+        );
+        store.publish(&result.collection_manifest, 1).await?;
+        result.namespace_id = Some(folder.namespace_id());
+        Ok(result)
+    }
+
+    async fn handle_export_archive(
+        &self,
+        namespace: String,
+        version: Option<String>,
+        output: PathBuf,
+    ) -> Result<DropExportResult> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation("daemon archive IPC is unavailable", "server has no node context")
+        })?;
+        let namespace_id = iroh_docs::NamespaceId::from_str(&namespace)
+            .map_err(|error| SyncwebError::operation("invalid export namespace", error))?;
+        let folder = FolderManager::new(&context.node).get(namespace_id).await?;
+        let head = Self::latest_collection_head(&context.node, folder.doc()).await?;
+        let manifests = Self::collection_manifests(&context.node, folder.doc(), head).await?;
+        let options = version.map_or_else(DropExportOptions::default, |value| {
+            DropExportOptions::default().with_version(value)
+        });
+        DropExporter::new(context.node.blob_store().clone())
+            .export_drop_with_options(&manifests, output, options, Some(context.pool.as_ref()))
+            .await
     }
 
     #[cfg(unix)]
@@ -469,6 +562,42 @@ impl IpcServer {
         bytes.push(b'\n');
         write_half.write_all(&bytes).await?;
         Ok(())
+    }
+
+    async fn latest_collection_head(node: &IrohNode, doc: &iroh_docs::api::Doc) -> Result<CollectionHead> {
+        let entries = node.docs_engine().list_latest(doc).await?;
+        let head_entry = entries
+            .iter()
+            .find(|entry| entry.key().starts_with(b"collections/") && entry.key().ends_with(b"/head"))
+            .ok_or_else(|| SyncwebError::InvalidConfig("folder has no published collection head".to_owned()))?;
+        let bytes = node.blob_store().get(head_entry.content_hash()).await?;
+        let head = serde_json::from_slice(&bytes)
+            .map_err(|error| SyncwebError::operation("failed to deserialize collection head", error))?;
+        Ok(head)
+    }
+
+    async fn collection_manifests(
+        node: &IrohNode,
+        doc: &iroh_docs::api::Doc,
+        head: CollectionHead,
+    ) -> Result<Vec<CollectionManifest>> {
+        let prefix = format!("collections/{}/manifests/", head.collection_id);
+        let entries = node.docs_engine().list_latest(doc).await?;
+        let mut manifests = Vec::new();
+        for entry in entries {
+            if !entry.key().starts_with(prefix.as_bytes()) {
+                continue;
+            }
+            let bytes = node.blob_store().get(entry.content_hash()).await?;
+            let manifest = CollectionManifest::from_bytes(bytes)?;
+            manifests.push(manifest);
+        }
+        if manifests.is_empty() {
+            return Err(SyncwebError::InvalidConfig(
+                "folder has no published collection manifests".to_owned(),
+            ));
+        }
+        Ok(manifests)
     }
 }
 

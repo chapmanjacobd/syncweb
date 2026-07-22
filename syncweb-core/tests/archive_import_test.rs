@@ -8,6 +8,7 @@ use anyhow::{Result, ensure};
 use async_compression::tokio::bufread::ZstdDecoder;
 use ed25519_dalek::SigningKey;
 use syncweb_core::{
+    daemon::ManagedPool,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterRule, MatchCriteria},
     folder::{CollectionEntry, CollectionManifest, DropExporter, DropImportOptions, DropImporter},
     node::{
@@ -65,7 +66,9 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
         .export_archive(&manifest, &archive)
         .await?;
     let importer = DropImporter::new(destination.blob_store().clone());
-    let result = importer.import_archive(&archive, DropImportOptions::default()).await?;
+    let result = importer
+        .import_archive(&archive, DropImportOptions::default(), None)
+        .await?;
     ensure!(result.collection_manifest == manifest);
     ensure!(destination.blob_store().has(hash).await?);
 
@@ -107,7 +110,7 @@ async fn import_drop_filter_skips_rejected_content() -> Result<()> {
     filter_config.rules = vec![FilterRule::new(FilterAction::Reject, criteria)];
     let filter = FilterEngine::new(filter_config)?;
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_archive(&archive, DropImportOptions::default().with_filter(filter))
+        .import_archive(&archive, DropImportOptions::default().with_filter(filter), None)
         .await?;
     ensure!(result.imported_entry_count == 1);
     ensure!(result.skipped_entry_count == 1);
@@ -127,7 +130,7 @@ async fn import_drop_corrupted_archive_fails() -> Result<()> {
     fs::write(&garbage, b"this is not a valid CAR archive")?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_archive(&garbage, DropImportOptions::default())
+        .import_archive(&garbage, DropImportOptions::default(), None)
         .await;
     ensure!(result.is_err(), "corrupted archive must be rejected");
 
@@ -159,7 +162,7 @@ async fn import_drop_tampered_content_fails() -> Result<()> {
     fs::write(&archive, &tampered)?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_archive(&archive, DropImportOptions::default())
+        .import_archive(&archive, DropImportOptions::default(), None)
         .await;
     ensure!(result.is_err(), "tampered content must be rejected");
 
@@ -215,7 +218,7 @@ async fn import_drop_invalid_signature_fails() -> Result<()> {
     fs::write(&archive, &recompressed)?;
 
     let result = DropImporter::new(destination.blob_store().clone())
-        .import_archive(&archive, DropImportOptions::default())
+        .import_archive(&archive, DropImportOptions::default(), None)
         .await;
     ensure!(result.is_err(), "invalid signature must be rejected");
 
@@ -251,6 +254,7 @@ async fn import_drop_missing_dependencies_fails() -> Result<()> {
         .import_archive(
             &archive,
             DropImportOptions::default().with_available_dependencies(available),
+            None,
         )
         .await;
     ensure!(result.is_err(), "missing dependencies must cause import failure");
@@ -262,5 +266,38 @@ async fn import_drop_missing_dependencies_fails() -> Result<()> {
 
     source.stop().await?;
     destination.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn import_drop_with_pool_matches_without_pool() -> Result<()> {
+    let directory = TestDirectory::new()?;
+    let source = node(&directory, "source").await?;
+    let plain_destination = node(&directory, "plain-destination").await?;
+    let pooled_destination = node(&directory, "pooled-destination").await?;
+    let content = b"pooled import";
+    let hash = source.blob_store().add_bytes(content).await?;
+    let mut manifest = CollectionManifest::new(Uuid::new_v4(), "1.0.0");
+    manifest
+        .entries
+        .push(CollectionEntry::new(hash, "pooled.txt", u64::try_from(content.len())?)?);
+    let archive = directory.path().join("pooled.car.zst");
+    DropExporter::new(source.blob_store().clone())
+        .export_archive(&manifest, &archive)
+        .await?;
+
+    let plain = DropImporter::new(plain_destination.blob_store().clone())
+        .import_archive(&archive, DropImportOptions::default(), None)
+        .await?;
+    let pool = ManagedPool::new("archive-test", 1)?;
+    let pooled = DropImporter::new(pooled_destination.blob_store().clone())
+        .import_archive(&archive, DropImportOptions::default(), Some(&pool))
+        .await?;
+    ensure!(plain == pooled);
+    ensure!(pooled_destination.blob_store().has(hash).await?);
+
+    source.stop().await?;
+    plain_destination.stop().await?;
+    pooled_destination.stop().await?;
     Ok(())
 }

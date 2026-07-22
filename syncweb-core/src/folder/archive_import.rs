@@ -17,6 +17,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
+    daemon::ManagedPool,
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     node::iroh_node::IrohNode,
@@ -111,6 +112,7 @@ impl DropImporter {
         &self,
         input: impl AsRef<Path>,
         options: DropImportOptions,
+        pool: Option<&ManagedPool>,
     ) -> Result<DropImportResult> {
         let _import_guard = self.import_lock.lock().await;
         let input_path = input.as_ref();
@@ -123,7 +125,7 @@ impl DropImporter {
             .await
             .map_err(|error| SyncwebError::operation("failed to create drop import staging directory", error))?;
 
-        let parse_result = read_archive(ZstdDecoder::new(BufReader::new(file)), &staging, &options).await;
+        let parse_result = read_archive(ZstdDecoder::new(BufReader::new(file)), &staging, &options, pool).await;
         let parsed = match parse_result {
             Ok(parsed) => parsed,
             Err(error) => {
@@ -132,7 +134,7 @@ impl DropImporter {
             }
         };
 
-        let import_result = self.ingest(parsed).await;
+        let import_result = self.ingest(parsed, pool).await;
         let cleanup_result = remove_staging(&staging).await;
         match (import_result, cleanup_result) {
             (Ok(result), Ok(())) => Ok(result),
@@ -197,8 +199,8 @@ impl DropImporter {
         Ok(())
     }
 
-    async fn ingest(&self, parsed: ParsedDrop) -> Result<DropImportResult> {
-        let manifest_hash = Hash::new(&parsed.manifest_bytes);
+    async fn ingest(&self, parsed: ParsedDrop, pool: Option<&ManagedPool>) -> Result<DropImportResult> {
+        let manifest_hash = in_pool(pool, || Hash::new(&parsed.manifest_bytes));
         let stored_manifest = self.blob_store.add_bytes(&parsed.manifest_bytes).await?;
         if stored_manifest != manifest_hash {
             return Err(SyncwebError::InvalidConfig(
@@ -258,7 +260,7 @@ pub async fn import_archive(
         DropImportOptions::default().with_filter(value.clone())
     });
     let importer = DropImporter::new(node.blob_store().clone());
-    let mut result = importer.import_archive(input, options).await?;
+    let mut result = importer.import_archive(input, options, None).await?;
     importer.materialize(&result, target_dir).await?;
 
     let folder = FolderManager::new(node).create(SyncMode::SendReceive).await?;
@@ -291,7 +293,18 @@ struct SectionHeader {
     payload_size: u64,
 }
 
-async fn read_archive<R>(mut reader: R, staging: &Path, options: &DropImportOptions) -> Result<ParsedDrop>
+struct PreparedManifest {
+    manifest: CollectionManifest,
+    filtered_manifest: CollectionManifest,
+    expected: BTreeMap<Hash, (u64, bool)>,
+}
+
+async fn read_archive<R>(
+    mut reader: R,
+    staging: &Path,
+    options: &DropImportOptions,
+    pool: Option<&ManagedPool>,
+) -> Result<ParsedDrop>
 where
     R: AsyncRead + Unpin,
 {
@@ -321,49 +334,13 @@ where
         )));
     }
     let manifest_bytes = read_payload_to_vec(&mut reader, manifest_section.payload_size, "drop manifest").await?;
-    let manifest = CollectionManifest::from_bytes(&manifest_bytes)?;
-    manifest.verify_signature()?;
-    if Hash::new(&manifest_bytes) != root || manifest.blob_id()? != root {
-        return Err(SyncwebError::InvalidConfig(
-            "drop manifest hash does not match the CAR root".to_owned(),
-        ));
-    }
-    if !manifest.dependencies_satisfied(options.available_dependencies())? {
-        return Err(SyncwebError::InvalidConfig(
-            "drop package has missing or incompatible dependencies".to_owned(),
-        ));
-    }
-
-    let filtered_manifest = filter_manifest(manifest.clone(), options.filter())?;
-    let mut expected = BTreeMap::<Hash, (u64, bool)>::new();
-    let accepted_hashes = filtered_manifest
-        .entries
-        .iter()
-        .map(|entry| entry.content_id)
-        .collect::<BTreeSet<_>>();
-    for entry in &manifest.entries {
-        match expected.entry(entry.content_id) {
-            std::collections::btree_map::Entry::Vacant(slot) => {
-                slot.insert((entry.size, accepted_hashes.contains(&entry.content_id)));
-            }
-            std::collections::btree_map::Entry::Occupied(slot) => {
-                let (size, accepted) = slot.into_mut();
-                if *size != entry.size {
-                    return Err(SyncwebError::InvalidConfig(format!(
-                        "manifest uses content hash {} with inconsistent sizes",
-                        entry.content_id
-                    )));
-                }
-                *accepted |= accepted_hashes.contains(&entry.content_id);
-            }
-        }
-    }
+    let prepared = prepare_manifest(&manifest_bytes, root, options, pool)?;
 
     let mut seen = BTreeSet::new();
     let mut blocks = Vec::new();
     let mut block_count = 1_usize;
     while let Some(section) = read_section_header(&mut reader).await? {
-        let (expected_size, accepted) = expected.get(&section.hash).copied().ok_or_else(|| {
+        let (expected_size, accepted) = prepared.expected.get(&section.hash).copied().ok_or_else(|| {
             SyncwebError::InvalidConfig(format!(
                 "drop contains a block not referenced by the manifest: {}",
                 section.hash
@@ -383,7 +360,7 @@ where
         }
         let staged_path = accepted.then(|| staging.join(format!("block-{}.blob", blocks.len())));
         let (actual_hash, actual_size) =
-            read_payload_to_path(&mut reader, section.payload_size, staged_path.as_deref()).await?;
+            read_payload_to_path(&mut reader, section.payload_size, staged_path.as_deref(), pool).await?;
         if actual_hash != section.hash {
             return Err(SyncwebError::InvalidConfig(format!(
                 "drop content hash does not match its CID: expected {}, got {}",
@@ -407,8 +384,9 @@ where
             .ok_or_else(|| SyncwebError::operation("drop block count overflow", "usize limit exceeded"))?;
     }
 
-    if seen.len() != expected.len() {
-        let missing = expected
+    if seen.len() != prepared.expected.len() {
+        let missing = prepared
+            .expected
             .keys()
             .find(|hash| !seen.contains(*hash))
             .copied()
@@ -418,13 +396,65 @@ where
         )));
     }
 
-    let filtered_manifest_bytes = filtered_manifest.to_bytes()?;
+    let filtered_manifest_bytes = prepared.filtered_manifest.to_bytes()?;
     Ok(ParsedDrop {
-        manifest: filtered_manifest,
+        manifest: prepared.filtered_manifest,
         manifest_bytes: filtered_manifest_bytes,
         blocks,
-        entry_count: manifest.entries.len(),
+        entry_count: prepared.manifest.entries.len(),
         block_count,
+    })
+}
+
+fn prepare_manifest(
+    manifest_bytes: &[u8],
+    root: Hash,
+    options: &DropImportOptions,
+    pool: Option<&ManagedPool>,
+) -> Result<PreparedManifest> {
+    let manifest = in_pool(pool, || CollectionManifest::from_bytes(manifest_bytes))?;
+    in_pool(pool, || manifest.verify_signature())?;
+    let manifest_hash = in_pool(pool, || Hash::new(manifest_bytes));
+    let manifest_blob_id = in_pool(pool, || manifest.blob_id())?;
+    if manifest_hash != root || manifest_blob_id != root {
+        return Err(SyncwebError::InvalidConfig(
+            "drop manifest hash does not match the CAR root".to_owned(),
+        ));
+    }
+    if !manifest.dependencies_satisfied(options.available_dependencies())? {
+        return Err(SyncwebError::InvalidConfig(
+            "drop package has missing or incompatible dependencies".to_owned(),
+        ));
+    }
+
+    let filtered_manifest = in_pool(pool, || filter_manifest(manifest.clone(), options.filter()))?;
+    let mut expected = BTreeMap::<Hash, (u64, bool)>::new();
+    let accepted_hashes = filtered_manifest
+        .entries
+        .iter()
+        .map(|entry| entry.content_id)
+        .collect::<BTreeSet<_>>();
+    for entry in &manifest.entries {
+        match expected.entry(entry.content_id) {
+            std::collections::btree_map::Entry::Vacant(slot) => {
+                slot.insert((entry.size, accepted_hashes.contains(&entry.content_id)));
+            }
+            std::collections::btree_map::Entry::Occupied(slot) => {
+                let (size, accepted) = slot.into_mut();
+                if *size != entry.size {
+                    return Err(SyncwebError::InvalidConfig(format!(
+                        "manifest uses content hash {} with inconsistent sizes",
+                        entry.content_id
+                    )));
+                }
+                *accepted |= accepted_hashes.contains(&entry.content_id);
+            }
+        }
+    }
+    Ok(PreparedManifest {
+        manifest,
+        filtered_manifest,
+        expected,
     })
 }
 
@@ -477,7 +507,12 @@ where
     Ok(bytes)
 }
 
-async fn read_payload_to_path<R>(reader: &mut R, size: u64, destination: Option<&Path>) -> Result<(Hash, u64)>
+async fn read_payload_to_path<R>(
+    reader: &mut R,
+    size: u64,
+    destination: Option<&Path>,
+    pool: Option<&ManagedPool>,
+) -> Result<(Hash, u64)>
 where
     R: AsyncRead + Unpin,
 {
@@ -508,7 +543,7 @@ where
         if let Some(output_file) = &mut output {
             output_file.write_all(chunk).await?;
         }
-        hasher.update(chunk);
+        in_pool(pool, || hasher.update(chunk));
         let requested_u64 =
             u64::try_from(requested).map_err(|error| SyncwebError::operation("drop payload is too large", error))?;
         remaining = remaining
@@ -521,7 +556,19 @@ where
     if let Some(output_file) = &mut output {
         output_file.flush().await?;
     }
-    Ok((Hash::from_bytes(*hasher.finalize().as_bytes()), copied))
+    let hash = in_pool(pool, || Hash::from_bytes(*hasher.finalize().as_bytes()));
+    Ok((hash, copied))
+}
+
+fn in_pool<F, R>(pool: Option<&ManagedPool>, operation: F) -> R
+where
+    F: FnOnce() -> R + Send,
+    R: Send,
+{
+    match pool {
+        Some(managed_pool) => managed_pool.install(operation),
+        None => operation(),
+    }
 }
 
 async fn read_section_header<R>(reader: &mut R) -> Result<Option<SectionHeader>>

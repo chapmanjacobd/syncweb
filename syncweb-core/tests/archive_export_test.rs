@@ -6,6 +6,7 @@ use std::{
 use anyhow::{Context, Result};
 use async_compression::tokio::bufread::ZstdDecoder;
 use syncweb_core::{
+    daemon::ManagedPool,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterRule, MatchCriteria},
     folder::{CollectionEntry, CollectionManifest, DropExportOptions, DropExporter},
     node::{
@@ -232,6 +233,39 @@ async fn test_export_drop_multi_package_same_collection() -> Result<()> {
     let first_block = blocks.first().context("CAR has no manifest block")?;
     let exported = CollectionManifest::from_bytes(&first_block.1)?;
     anyhow::ensure!(exported.version == "2.0.0");
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_export_drop_with_pool_matches_without_pool() -> Result<()> {
+    let directory = TestDirectory::new()?;
+    let node = test_node(&directory).await?;
+    let content = b"pooled export";
+    let hash = node.blob_store().add_bytes(content).await?;
+    let manifest = manifest(uuid::Uuid::new_v4(), "1.0.0", &[("pooled.txt", content.as_slice())])?;
+    let plain_output = directory.path().join("plain.car.zst");
+    let pooled_output = directory.path().join("pooled.car.zst");
+    let exporter = DropExporter::new(node.blob_store().clone());
+    exporter
+        .export_drop_with_options(
+            std::slice::from_ref(&manifest),
+            &plain_output,
+            DropExportOptions::default(),
+            None,
+        )
+        .await?;
+    let pool = ManagedPool::new("archive-test", 1)?;
+    exporter
+        .export_drop_with_options(
+            std::slice::from_ref(&manifest),
+            &pooled_output,
+            DropExportOptions::default(),
+            Some(&pool),
+        )
+        .await?;
+    anyhow::ensure!(hash == manifest.entries.first().context("manifest has no entry")?.content_id);
+    anyhow::ensure!(fs::read(plain_output)? == fs::read(pooled_output)?);
     node.stop().await?;
     Ok(())
 }

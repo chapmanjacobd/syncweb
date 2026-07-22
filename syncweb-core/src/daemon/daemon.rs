@@ -24,8 +24,8 @@ use crate::{
 };
 
 use super::{
-    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, PidLock, StateFile, current_timestamp,
-    daemon_socket_path, supervisor::IntentSupervisor,
+    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, StateFile,
+    current_timestamp, daemon_socket_path, supervisor::IntentSupervisor,
 };
 
 /// Configuration used to construct and run a daemon.
@@ -82,11 +82,11 @@ pub struct Daemon {
     folder_manager: FolderManager,
     sync_engine: SyncEngine,
     schedule_manager: tokio::sync::RwLock<Option<ScheduleManager>>,
-    node: IrohNode,
+    node: Arc<IrohNode>,
     handle: DaemonHandle,
     sync_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Option<String>>>,
     intent_tasks: Mutex<HashMap<NamespaceId, JoinHandle<()>>>,
-    archive_pool: Arc<rayon::ThreadPool>,
+    archive_pool: Arc<ManagedPool>,
 }
 
 impl Daemon {
@@ -143,7 +143,7 @@ impl Daemon {
             }
         };
         let node = match IrohNode::new(identity, config.data_dir.join("data"), RelayMode::Default).await {
-            Ok(value) => value,
+            Ok(value) => Arc::new(value),
             Err(error) => {
                 let _cleanup_state = state_file.remove();
                 let _cleanup_lock = pid_lock.release();
@@ -157,13 +157,7 @@ impl Daemon {
             node.docs_engine().clone(),
             node.gossip_service().clone(),
         );
-        let configured_threads = config.rayon_threads.max(app_config.parallel.threads);
-        let thread_count = if configured_threads > 0 {
-            configured_threads
-        } else {
-            std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
-        };
-        let archive_pool = match rayon::ThreadPoolBuilder::new().num_threads(thread_count).build() {
+        let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
             Ok(value) => Arc::new(value),
             Err(error) => {
                 let _cleanup_node = node.stop().await;
@@ -195,7 +189,12 @@ impl Daemon {
             sync_sender,
             initial_handle.reload_requested.clone(),
         );
-        let ipc_server = IpcServer::new(daemon_socket_path(&config.data_dir), handle.clone());
+        let ipc_server = IpcServer::with_archive_context(
+            daemon_socket_path(&config.data_dir),
+            handle.clone(),
+            node.clone(),
+            archive_pool.clone(),
+        );
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
 
         Ok(Self {
@@ -238,9 +237,15 @@ impl Daemon {
         self.handle.state.read().await.clone()
     }
 
+    /// Return the daemon's fixed archive pool.
+    #[must_use]
+    pub fn archive_pool(&self) -> &ManagedPool {
+        self.archive_pool.as_ref()
+    }
+
     async fn run_inner(&self) -> Result<()> {
         tracing::debug!(
-            rayon_threads = self.archive_pool.current_num_threads(),
+            rayon_threads = self.archive_pool.thread_count(),
             "daemon runtime initialized"
         );
         self.load_folders().await?;

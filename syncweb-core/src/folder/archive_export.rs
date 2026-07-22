@@ -7,6 +7,7 @@ use std::{
 use async_compression::tokio::write::ZstdEncoder;
 use iroh_blobs::Hash;
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
     io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -62,7 +63,7 @@ impl DropExportOptions {
 }
 
 /// Information about a completed archive export.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct DropExportResult {
     pub output: PathBuf,

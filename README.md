@@ -11,7 +11,7 @@ A successor to [syncweb-py](https://github.com/chapmanjacobd/syncweb-py), rewrit
 - CRDT conflict resolution -- last-writer-wins with best-effort text diffs for concurrent edits
 - Decentralized peer discovery -- via BitTorrent DHT (`distributed-topic-tracker`); no central bootstrap server
 - NAT traversal -- QUIC transport with relay fallback
-- No separate daemon -- library-first, embeddable `IrohNode`
+- Single-writer daemon mode -- one Iroh node owner with local IPC for CLI access
 - Named networks -- multi-folder, multi-device groups under gossip topics
 - Parallel file operations -- Rayon-based parallel scanning/import/export
 - Bandwidth scheduling -- time-of-day and per-folder bandwidth limits

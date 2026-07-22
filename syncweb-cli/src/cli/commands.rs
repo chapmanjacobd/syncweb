@@ -12,6 +12,20 @@ pub enum Command {
     Start,
     #[command(about = "Stop the local syncweb node")]
     Shutdown,
+    #[command(about = "Start and manage the local syncweb daemon")]
+    Daemon(DaemonArgs),
+    #[command(about = "Show the local daemon status")]
+    Status,
+    #[command(about = "Ask the local daemon to stop")]
+    DaemonShutdown(DaemonShutdownArgs),
+    #[command(about = "Ask the local daemon to reload configuration")]
+    DaemonReload,
+    #[command(about = "Ask the local daemon to trigger synchronization")]
+    DaemonSync,
+    #[command(about = "Add a folder to the running daemon")]
+    DaemonAdd(DaemonAddArgs),
+    #[command(about = "Remove a folder from the running daemon")]
+    DaemonRemove(DaemonRemoveArgs),
     #[command(about = "Create a synchronized folder")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
@@ -451,6 +465,38 @@ pub struct AutomaticArgs {
     pub paths: Vec<PathBuf>,
     #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
     pub filters: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct DaemonArgs {
+    #[arg(short = 'f', long, help = "Run in the foreground")]
+    pub foreground: bool,
+    #[arg(long, help = "Override the global persistent data directory")]
+    pub data_dir: Option<PathBuf>,
+    #[arg(long, help = "Write daemon logs to this file")]
+    pub log_file: Option<PathBuf>,
+    #[arg(long, value_parser = clap::value_parser!(usize))]
+    pub max_threads: Option<usize>,
+    #[arg(long, value_parser = clap::value_parser!(u64))]
+    pub sync_interval: Option<u64>,
+}
+
+#[derive(Debug, Args)]
+pub struct DaemonShutdownArgs {
+    #[arg(long, help = "Skip graceful shutdown")]
+    pub force: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct DaemonAddArgs {
+    pub path: PathBuf,
+    #[arg(long)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct DaemonRemoveArgs {
+    pub namespace: String,
 }
 
 #[derive(Debug, Args)]

@@ -324,4 +324,29 @@ mod tests {
         let supervisor = IntentSupervisor::new(3, Duration::ZERO, Duration::from_mins(1));
         assert_eq!(supervisor.backoff_delay(5), Duration::ZERO);
     }
+
+    #[test]
+    fn auto_backoff_delay_respects_max_retries() {
+        let supervisor = IntentSupervisor::new(5, Duration::from_secs(2), Duration::from_secs(20));
+        let delays: Vec<_> = (1..=8).map(|n| supervisor.backoff_delay(n)).collect();
+        let expected = [
+            Duration::from_secs(2),
+            Duration::from_secs(4),
+            Duration::from_secs(8),
+            Duration::from_secs(16),
+            Duration::from_secs(20),
+            Duration::from_secs(20),
+            Duration::from_secs(20),
+            Duration::from_secs(20),
+        ];
+        for (delay, want) in delays.iter().zip(expected.iter()) {
+            assert_eq!(delay, want);
+        }
+    }
+
+    #[test]
+    fn backoff_delay_starting_value_equals_base() {
+        let supervisor = IntentSupervisor::new(1, Duration::from_millis(500), Duration::from_secs(5));
+        assert_eq!(supervisor.backoff_delay(1), Duration::from_millis(500));
+    }
 }

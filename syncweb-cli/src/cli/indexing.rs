@@ -30,7 +30,13 @@ use syncweb_core::{
 
 use dialoguer::Confirm;
 use iroh::PublicKey;
-use iroh_blobs::{Hash, api::blobs::ExportMode, ticket::BlobTicket};
+use iroh_blobs::{
+    Hash,
+    api::blobs::ExportMode,
+    get::fsm::{self, ConnectedNext, EndBlobNext},
+    protocol::GetRequest,
+    ticket::BlobTicket,
+};
 use iroh_docs::NamespaceId;
 use iroh_gossip::api::Event;
 use n0_future::StreamExt;
@@ -393,17 +399,23 @@ pub async fn download_blob(
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-
-    let node = open_node(data_dir).await?;
-
     let content_hash = tickets[0].hash();
 
     if no_sharing {
-        node.blob_store()
-            .fetch(node.endpoint(), &tickets[0])
-            .await
-            .context("failed to fetch blob")?;
+        if let Some(path) = export_path {
+            direct_fetch_to_path(data_dir, &tickets[0], content_hash, path).await?;
+        } else {
+            let node = open_node(data_dir).await?;
+            node.blob_store()
+                .fetch(node.endpoint(), &tickets[0])
+                .await
+                .context("failed to fetch blob")?;
+            let pin_name = format!("syncweb/download/{content_hash}");
+            node.blob_store().pin(&pin_name, content_hash).await?;
+            node.stop().await?;
+        }
     } else {
+        let node = open_node(data_dir).await?;
         let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(min_providers)));
         for ticket in tickets {
             let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
@@ -454,19 +466,63 @@ pub async fn download_blob(
             println!("providers before: {}", result.health_before.verified);
             println!("providers after: {}", result.health_after.verified);
         }
+
+        if let Some(path) = export_path {
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+            node.blob_store()
+                .export_to_path_with_mode(content_hash, path, ExportMode::TryReference)
+                .await?;
+        }
+
+        node.stop().await?;
     }
 
-    if let Some(path) = export_path {
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        node.blob_store()
-            .export_to_path_with_mode(content_hash, path, ExportMode::TryReference)
-            .await?;
-    } else if no_sharing {
-        let pin_name = format!("syncweb/download/{content_hash}");
-        node.blob_store().pin(&pin_name, content_hash).await?;
+    Ok(())
+}
+
+async fn direct_fetch_to_path(data_dir: &Path, ticket: &BlobTicket, hash: Hash, path: &Path) -> Result<()> {
+    let node = open_node(data_dir).await?;
+
+    let connection = node
+        .endpoint()
+        .connect(ticket.addr().clone(), iroh_blobs::ALPN)
+        .await
+        .context("failed to connect to provider")?;
+
+    let request = GetRequest::blob(hash);
+    let at_connected = fsm::start(connection, request, Default::default())
+        .next()
+        .await
+        .map_err(|e| anyhow::anyhow!("get negotiation failed: {e}"))?;
+    let ConnectedNext::StartRoot(at_start_root) = at_connected
+        .next()
+        .await
+        .map_err(|e| anyhow::anyhow!("get request failed: {e}"))?
+    else {
+        anyhow::bail!("unexpected provider response");
+    };
+    let at_blob_header = at_start_root.next();
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
     }
+    let file = std::fs::File::create(path).context("failed to create destination file")?;
+    let writer = iroh_io::File::from_std(file);
+
+    let at_end_blob = at_blob_header
+        .write_all(writer)
+        .await
+        .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
+
+    let EndBlobNext::Closing(closing) = at_end_blob.next() else {
+        anyhow::bail!("unexpected end of blob stream");
+    };
+    closing
+        .next()
+        .await
+        .map_err(|e| anyhow::anyhow!("connection close failed: {e}"))?;
 
     node.stop().await?;
     Ok(())

@@ -4908,6 +4908,7 @@ version = "0.1.1-alpha.1"
 dependencies = [
  "anyhow",
  "async-recursion",
+ "bao-tree",
  "blake3",
  "clap",
  "clap_complete",
@@ -4921,6 +4922,7 @@ dependencies = [
  "iroh-blobs",
  "iroh-docs",
  "iroh-gossip",
+ "iroh-io",
  "n0-future",
  "notify",
  "rayon",

@@ -36,6 +36,8 @@ dialoguer = "0.11"
 ed25519-dalek.workspace = true
 hex.workspace = true
 indicatif = "0.17"
+bao-tree = "0.16"
+iroh-io = "0.6"
 
 [lints]
 workspace = true

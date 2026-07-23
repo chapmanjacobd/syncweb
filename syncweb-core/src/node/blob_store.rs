@@ -102,8 +102,7 @@ impl BlobStore {
     ///
     /// Returns an error if the blob cannot be read or written.
     pub async fn export_to_path(&self, hash: Hash, destination: impl AsRef<Path>) -> Result<u64> {
-        self.export_to_path_with_mode(hash, destination, ExportMode::Copy)
-            .await
+        self.export_to_path_with_mode(hash, destination, ExportMode::Copy).await
     }
 
     /// Export a complete blob with a specific [`ExportMode`].

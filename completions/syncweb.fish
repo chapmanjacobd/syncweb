@@ -353,7 +353,12 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l verbose -d 'En
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to verify (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-filter -d 'Only verify entries whose path matches this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob-filter -d 'Only verify entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l from -l provider -d 'Blob ticket(s) for providers (can repeat, requires --fix)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l fix -d 'Attempt to repair corrupted blobs by re-downloading from peers'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

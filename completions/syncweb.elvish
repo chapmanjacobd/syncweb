@@ -497,7 +497,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;verify'= {
+            cand --hash 'Content hash(es) to verify (can repeat)'
+            cand --path-filter 'Only verify entries whose path matches this prefix'
+            cand --glob-filter 'Only verify entries whose path matches this glob pattern'
+            cand --from 'Blob ticket(s) for providers (can repeat, requires --fix)'
+            cand --provider 'Blob ticket(s) for providers (can repeat, requires --fix)'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --fix 'Attempt to repair corrupted blobs by re-downloading from peers'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

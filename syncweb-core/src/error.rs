@@ -62,7 +62,7 @@ pub enum SyncwebError {
     },
 
     #[error("{context}: {detail}")]
-    Operation { context: &'static str, detail: String },
+    Operation { context: String, detail: String },
 
     #[error("blob size exceeds u64::MAX")]
     BlobTooLarge,
@@ -82,9 +82,9 @@ impl SyncwebError {
         }
     }
 
-    pub fn operation(context: &'static str, source: impl Display) -> Self {
+    pub fn operation(context: impl Into<String>, source: impl Display) -> Self {
         Self::Operation {
-            context,
+            context: context.into(),
             detail: source.to_string(),
         }
     }

@@ -6,6 +6,7 @@ use iroh_blobs::{
         Store as BlobApi,
         blobs::{AddPathOptions, BlobReader, ExportMode, ExportOptions, ImportMode},
     },
+    protocol::GetRequest,
     ticket::BlobTicket,
 };
 use n0_future::StreamExt;
@@ -246,6 +247,46 @@ impl BlobStore {
             .download(ticket.hash_and_format(), [ticket.addr().id])
             .await
             .map_err(|error| SyncwebError::operation("failed to fetch blob", error))?;
+        Ok(())
+    }
+
+    /// Force-fetch a blob from a remote peer, re-downloading even if the blob
+    /// is already present locally. Uses `iroh-blobs`' low-level `execute_get`
+    /// API which does not check local availability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection or download fails.
+    pub async fn force_fetch(&self, endpoint: &Endpoint, ticket: &BlobTicket) -> Result<()> {
+        self.address_lookup.add_endpoint_info(ticket.addr().clone());
+        let hash = ticket.hash();
+        let conn = endpoint
+            .connect(ticket.addr().id, iroh_blobs::protocol::ALPN)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to connect to provider", error))?;
+        self.force_fetch_from_conn(conn, hash).await
+    }
+
+    /// Force-fetch a blob from a known peer, connecting by public key alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection or download fails.
+    pub async fn force_fetch_from_peer(&self, endpoint: &Endpoint, peer: &iroh::PublicKey, hash: Hash) -> Result<()> {
+        let conn = endpoint
+            .connect(*peer, iroh_blobs::protocol::ALPN)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to connect to peer", error))?;
+        self.force_fetch_from_conn(conn, hash).await
+    }
+
+    async fn force_fetch_from_conn(&self, conn: iroh::endpoint::Connection, hash: Hash) -> Result<()> {
+        let request = GetRequest::blob(hash);
+        self.store
+            .remote()
+            .execute_get(conn, request)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to force-fetch blob", error))?;
         Ok(())
     }
 }

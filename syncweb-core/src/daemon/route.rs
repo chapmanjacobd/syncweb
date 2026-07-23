@@ -73,6 +73,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn daemon_client_live_pid_with_dead_socket_returns_none() {
         let dir = std::env::temp_dir().join(format!("syncweb-route-socket-{}", uuid::Uuid::new_v4()));
@@ -86,6 +87,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn daemon_client_status_ping_timeout_returns_none() {
         let dir = std::env::temp_dir().join(format!("syncweb-route-timeout-{}", uuid::Uuid::new_v4()));

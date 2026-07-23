@@ -1126,6 +1126,11 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
         let response = client
             .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: command.path.clone(),
+                hash: command.hash.clone(),
+                path_filter: command.path_filter.clone(),
+                glob_filter: command.glob_filter.clone(),
+                fix: command.fix,
+                from: command.from.clone(),
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -1134,31 +1139,181 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.path).await?;
     let checker = IntegrityChecker::new(node.blob_store().clone(), node.docs_engine().clone());
-    let result = checker.verify_folder(&folder).await?;
+
+    let filter = build_verify_filter(&command);
+
+    if command.fix {
+        let result = checker.verify_folder_filtered(&folder, filter.as_ref()).await?;
+        let repair = try_repair(&node, &folder, &result.corrupted, &command.from).await;
+        let fixed = syncweb_core::verify::FixedVerifyResult::new(result.clone(), Some(repair.clone()));
+        if output_json {
+            println!("{}", serde_json::to_string_pretty(&fixed)?);
+        } else {
+            print_verify_result_text(&result);
+            print_repair_result_text(&repair);
+        }
+        node.stop().await?;
+        if repair.repaired != repair.attempted {
+            anyhow::bail!("repair could not fix all corrupt blobs");
+        }
+        return Ok(());
+    }
+
+    let result = checker.verify_folder_filtered(&folder, filter.as_ref()).await?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        println!("total: {}", result.total);
-        println!("verified: {}", result.verified);
-        println!("corrupted: {}", result.corrupted.len());
-        println!("missing: {}", result.missing.len());
-        for item in &result.corrupted {
-            println!(
-                "corrupted\t{}\t{}\t{}",
-                item.path.display(),
-                item.expected_hash,
-                item.actual_hash
-            );
-        }
-        for path in &result.missing {
-            println!("missing\t{}", path.display());
-        }
+        print_verify_result_text(&result);
     }
     node.stop().await?;
     if !result.is_valid() {
         anyhow::bail!("integrity verification failed");
     }
     Ok(())
+}
+
+fn build_verify_filter(command: &VerifyArgs) -> Option<syncweb_core::verify::VerifyFilter> {
+    let has_filter = !command.hash.is_empty() || command.path_filter.is_some() || command.glob_filter.is_some();
+    if !has_filter {
+        return None;
+    }
+    let mut filter = syncweb_core::verify::VerifyFilter::new();
+    if !command.hash.is_empty() {
+        let hashes: Vec<iroh_blobs::Hash> = command
+            .hash
+            .iter()
+            .filter_map(|h| h.parse::<iroh_blobs::Hash>().ok())
+            .collect();
+        if !hashes.is_empty() {
+            filter = filter.with_hashes(hashes);
+        }
+    }
+    if let Some(ref path) = command.path_filter {
+        filter = filter.with_path(std::path::PathBuf::from(path));
+    }
+    if let Some(ref glob) = command.glob_filter {
+        filter.glob = Some(glob.clone());
+    }
+    Some(filter)
+}
+
+async fn try_repair(
+    node: &IrohNode,
+    folder: &syncweb_core::folder::SyncwebFolder,
+    corrupted: &[syncweb_core::verify::CorruptionInfo],
+    tickets: &[String],
+) -> syncweb_core::verify::RepairResult {
+    let mut result = syncweb_core::verify::RepairResult::default();
+    if corrupted.is_empty() {
+        return result;
+    }
+
+    // Parse provider tickets
+    let provider_tickets: Vec<(iroh_blobs::Hash, iroh_blobs::ticket::BlobTicket)> = tickets
+        .iter()
+        .filter_map(|t| {
+            let ticket: iroh_blobs::ticket::BlobTicket = t.parse().ok()?;
+            Some((ticket.hash(), ticket))
+        })
+        .collect();
+
+    // Discover peers in the namespace
+    let namespace_peers = node
+        .topic_tracker()
+        .find_peers(folder.namespace_id())
+        .await
+        .unwrap_or_default();
+
+    for item in corrupted {
+        result.attempted = result.attempted.saturating_add(1);
+        let hash = item.expected_hash;
+        let mut repaired = false;
+
+        // Try --from tickets first
+        for (ticket_hash, ticket) in &provider_tickets {
+            if *ticket_hash != hash {
+                continue;
+            }
+            match node.blob_store().force_fetch(node.endpoint(), ticket).await {
+                Ok(()) => {
+                    repaired = true;
+                    break;
+                }
+                Err(e) => {
+                    result.failed.push(syncweb_core::verify::RepairOutcome::new(
+                        item.path.clone(),
+                        hash,
+                        false,
+                        Some(format!("ticket provider: {e}")),
+                    ));
+                }
+            }
+        }
+        if repaired {
+            result.repaired = result.repaired.saturating_add(1);
+            continue;
+        }
+
+        // Try namespace peers
+        let mut any_error = None;
+        for peer in &namespace_peers {
+            match node
+                .blob_store()
+                .force_fetch_from_peer(node.endpoint(), peer, hash)
+                .await
+            {
+                Ok(()) => {
+                    repaired = true;
+                    break;
+                }
+                Err(e) => {
+                    any_error = Some(format!("peer {peer}: {e}"));
+                }
+            }
+        }
+        if repaired {
+            result.repaired = result.repaired.saturating_add(1);
+        } else {
+            result.failed.push(syncweb_core::verify::RepairOutcome::new(
+                item.path.clone(),
+                hash,
+                false,
+                any_error.or_else(|| Some("no alternative providers available".to_owned())),
+            ));
+        }
+    }
+    result
+}
+
+fn print_verify_result_text(result: &syncweb_core::verify::VerifyResult) {
+    println!("total: {}", result.total);
+    println!("verified: {}", result.verified);
+    println!("corrupted: {}", result.corrupted.len());
+    println!("missing: {}", result.missing.len());
+    for item in &result.corrupted {
+        println!(
+            "corrupted\t{}\t{}\t{}",
+            item.path.display(),
+            item.expected_hash,
+            item.actual_hash
+        );
+    }
+    for path in &result.missing {
+        println!("missing\t{}", path.display());
+    }
+}
+
+fn print_repair_result_text(result: &syncweb_core::verify::RepairResult) {
+    println!("\nrepair:");
+    println!("attempted: {}", result.attempted);
+    println!("repaired: {}", result.repaired);
+    for item in &result.failed {
+        if let Some(ref error) = item.error {
+            println!("failed\t{}\t{}\t{}", item.path.display(), item.hash, error);
+        } else {
+            println!("failed\t{}\t{}", item.path.display(), item.hash);
+        }
+    }
 }
 
 fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {

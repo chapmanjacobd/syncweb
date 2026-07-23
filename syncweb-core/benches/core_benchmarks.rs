@@ -846,6 +846,11 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
                 let response =
                     runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
                         path: std::path::PathBuf::from(&namespace),
+                        hash: Vec::new(),
+                        path_filter: None,
+                        glob_filter: None,
+                        fix: false,
+                        from: Vec::new(),
                     })));
                 let _ = std::hint::black_box(response);
             });

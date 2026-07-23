@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use anyhow::{Context, ensure};
 use std::process::Command;
 

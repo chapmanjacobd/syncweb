@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -364,11 +364,27 @@ impl PidLock {
     /// Returns an error when the lock file cannot be read or its contents are
     /// not a decimal process ID.
     pub fn owner_pid(&self) -> Result<Option<u32>> {
+        let mut held = self
+            .lock
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon lock mutex is poisoned", error))?;
+        if let Some(file) = held.as_mut() {
+            file.seek(SeekFrom::Start(0))?;
+            let mut contents = String::new();
+            let mut reader = BufReader::new(&mut *file);
+            reader.read_to_string(&mut contents)?;
+            return Self::parse_pid_from_contents(&contents);
+        }
+        drop(held);
         let contents = match fs::read_to_string(&self.lock_path) {
             Ok(contents) => contents,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
+        Self::parse_pid_from_contents(&contents)
+    }
+
+    fn parse_pid_from_contents(contents: &str) -> Result<Option<u32>> {
         contents
             .split_whitespace()
             .next()
@@ -404,20 +420,27 @@ impl Drop for PidLock {
 /// Return the socket path used for a data directory.
 ///
 /// Runtime sockets belong in `XDG_RUNTIME_DIR`; the data directory remains
-/// the fallback for environments without an XDG runtime directory.
+/// the fallback for environments without an XDG runtime directory. On macOS
+/// the Unix socket path limit (103 chars) can be exceeded with deeply nested
+/// temp directories; in that case a hashed name in the system temp dir is
+/// used instead.
 #[must_use]
 pub fn daemon_socket_path(data_dir: &Path) -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map_or_else(
-            || data_dir.join(SOCKET_FILE_NAME),
-            |runtime_dir| {
-                let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
-                let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
-                let suffix: String = digest.to_hex().chars().take(16).collect();
-                PathBuf::from(runtime_dir).join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"))
-            },
-        )
+    if let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty()) {
+        let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
+        let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
+        let suffix: String = digest.to_hex().chars().take(16).collect();
+        return PathBuf::from(runtime_dir).join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"));
+    }
+    let socket = data_dir.join(SOCKET_FILE_NAME);
+    #[cfg(target_os = "macos")]
+    if socket.as_os_str().len() >= 100 {
+        let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
+        let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
+        let suffix: String = digest.to_hex().chars().take(16).collect();
+        return std::env::temp_dir().join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"));
+    }
+    socket
 }
 
 /// Check whether a process ID is currently present on the local system.
@@ -429,9 +452,20 @@ pub fn pid_is_alive(pid: u32) -> bool {
     if pid == std::process::id() {
         return true;
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         Path::new("/proc").join(pid.to_string()).exists()
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        use libc::kill;
+        let Ok(pid_i32) = i32::try_from(pid) else {
+            return false;
+        };
+        // SAFETY: signal 0 is a no-op that only checks if the process exists.
+        // It is safe even if the PID has been reused because we only get
+        // a boolean result (ESRCH means no such process).
+        unsafe { kill(pid_i32, 0) == 0 }
     }
     #[cfg(not(unix))]
     {
@@ -578,6 +612,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn pid_lock_acquire_conflict() {
         let dir = test_dir();
@@ -673,6 +708,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn pid_lock_concurrent_start_race() {
         let dir = test_dir();

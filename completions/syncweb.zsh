@@ -606,7 +606,13 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
+'*--hash=[Content hash(es) to verify (can repeat)]:HASH:_default' \
+'--path-filter=[Only verify entries whose path matches this prefix]:PATH_FILTER:_default' \
+'--glob-filter=[Only verify entries whose path matches this glob pattern]:GLOB_FILTER:_default' \
+'*--from=[Blob ticket(s) for providers (can repeat, requires --fix)]:FROM:_default' \
+'*--provider=[Blob ticket(s) for providers (can repeat, requires --fix)]:FROM:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--fix[Attempt to repair corrupted blobs by re-downloading from peers]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
+    fmt::Write,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
 use n0_future::StreamExt;
@@ -36,6 +36,10 @@ use super::{
     state::{DaemonStatus, daemon_socket_path},
 };
 
+#[cfg(unix)]
+use std::time::Duration;
+
+#[cfg(unix)]
 const IPC_TIMEOUT: Duration = Duration::from_millis(500); // 0.5 s
 
 /// A request sent over the local daemon control channel.
@@ -116,6 +120,16 @@ pub enum IpcCommand {
     },
     VerifyIntegrity {
         path: PathBuf,
+        #[serde(default)]
+        hash: Vec<String>,
+        #[serde(default)]
+        path_filter: Option<String>,
+        #[serde(default)]
+        glob_filter: Option<String>,
+        #[serde(default)]
+        fix: bool,
+        #[serde(default)]
+        from: Vec<String>,
     },
     Unsubscribe {
         namespace: String,
@@ -408,7 +422,12 @@ impl IpcListener {
                 Err(_) => std::fs::remove_file(&self.socket_path)?,
             }
         }
-        let listener = tokio::net::UnixListener::bind(&self.socket_path)?;
+        let listener = tokio::net::UnixListener::bind(&self.socket_path).map_err(|error| {
+            SyncwebError::operation(
+                format!("failed to bind daemon socket at {}", self.socket_path.display()),
+                error,
+            )
+        })?;
         set_owner_only_permissions(&self.socket_path)?;
         Ok(listener)
     }
@@ -417,6 +436,7 @@ impl IpcListener {
 /// A server for the daemon's local control channel.
 #[derive(Clone)]
 pub struct IpcServer {
+    #[cfg_attr(not(unix), allow(dead_code))]
     listener: IpcListener,
     daemon_handle: DaemonHandle,
     archive_context: Option<Arc<ArchiveContext>>,
@@ -472,7 +492,12 @@ impl IpcServer {
                         }
                     }
                     accepted = listener.accept() => {
-                        let (stream, _) = accepted?;
+                        let (stream, _) = accepted.map_err(|error| {
+                            SyncwebError::operation(
+                                format!("daemon socket accept failed at {}", self.listener.socket_path().display()),
+                                error,
+                            )
+                        })?;
                         if let Err(error) = self.handle_connection(stream).await {
                             tracing::error!(%error, "daemon IPC connection failed");
                             return Err(error);
@@ -533,7 +558,17 @@ impl IpcServer {
             IpcCommand::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
             IpcCommand::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
             IpcCommand::HealthCheck { path } => self.handle_health_check(path).await,
-            IpcCommand::VerifyIntegrity { path } => self.handle_verify_integrity(path).await,
+            IpcCommand::VerifyIntegrity {
+                path,
+                hash,
+                path_filter,
+                glob_filter,
+                fix,
+                from,
+            } => {
+                self.handle_verify_integrity(path, hash, path_filter, glob_filter, fix, from)
+                    .await
+            }
             IpcCommand::Unsubscribe { namespace } => Self::handle_unsubscribe(&namespace),
             IpcCommand::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
             IpcCommand::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
@@ -972,7 +1007,15 @@ impl IpcServer {
         }
     }
 
-    async fn handle_verify_integrity(&self, path: PathBuf) -> IpcResponse {
+    async fn handle_verify_integrity(
+        &self,
+        path: PathBuf,
+        hash: Vec<String>,
+        path_filter: Option<String>,
+        glob_filter: Option<String>,
+        fix: bool,
+        from: Vec<String>,
+    ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -987,21 +1030,115 @@ impl IpcServer {
             Err(error) => return error,
         };
         let checker = IntegrityChecker::new(context.node.blob_store().clone(), context.node.docs_engine().clone());
-        match checker.verify_folder(&folder).await {
+
+        let filter = build_ipc_verify_filter(&hash, path_filter.as_ref(), glob_filter.as_ref());
+
+        match checker.verify_folder_filtered(&folder, filter.as_ref()).await {
             Ok(result) => {
-                let valid = result.is_valid();
-                IpcResponse::Ok {
-                    message: format!(
-                        "total: {}, verified: {}, corrupted: {}, missing: {}, valid: {valid}",
-                        result.total,
-                        result.verified,
-                        result.corrupted.len(),
-                        result.missing.len(),
-                    ),
+                let mut message = format!(
+                    "total: {}, verified: {}, corrupted: {}, missing: {}",
+                    result.total,
+                    result.verified,
+                    result.corrupted.len(),
+                    result.missing.len(),
+                );
+                if fix {
+                    let namespace_id = folder.namespace_id();
+                    let repair = self
+                        .run_daemon_repair(&context, namespace_id, &result.corrupted, &from)
+                        .await;
+                    let _ = write!(
+                        message,
+                        ", repair: attempted {}, repaired {}",
+                        repair.attempted, repair.repaired,
+                    );
                 }
+                let valid = result.is_valid();
+                let _ = write!(message, ", valid: {valid}");
+                IpcResponse::Ok { message }
             }
             Err(error) => response_from_error(error),
         }
+    }
+
+    async fn run_daemon_repair(
+        &self,
+        context: &ArchiveContext,
+        namespace_id: iroh_docs::NamespaceId,
+        corrupted: &[crate::verify::CorruptionInfo],
+        tickets: &[String],
+    ) -> crate::verify::RepairResult {
+        let mut result = crate::verify::RepairResult::default();
+        if corrupted.is_empty() {
+            return result;
+        }
+
+        let provider_tickets: Vec<(iroh_blobs::Hash, iroh_blobs::ticket::BlobTicket)> = tickets
+            .iter()
+            .filter_map(|t| {
+                let ticket: iroh_blobs::ticket::BlobTicket = t.parse().ok()?;
+                Some((ticket.hash(), ticket))
+            })
+            .collect();
+
+        let namespace_peers = context
+            .node
+            .topic_tracker()
+            .find_peers(namespace_id)
+            .await
+            .unwrap_or_default();
+
+        for item in corrupted {
+            result.attempted = result.attempted.saturating_add(1);
+            let hash = item.expected_hash;
+            let mut repaired = false;
+
+            // Try --from tickets first
+            for (ticket_hash, ticket) in &provider_tickets {
+                if *ticket_hash != hash {
+                    continue;
+                }
+                if context
+                    .node
+                    .blob_store()
+                    .force_fetch(context.node.endpoint(), ticket)
+                    .await
+                    .is_ok()
+                {
+                    repaired = true;
+                    break;
+                }
+            }
+            if repaired {
+                result.repaired = result.repaired.saturating_add(1);
+                continue;
+            }
+
+            // Try namespace peers
+            for peer in &namespace_peers {
+                if context
+                    .node
+                    .blob_store()
+                    .force_fetch_from_peer(context.node.endpoint(), peer, hash)
+                    .await
+                    .is_ok()
+                {
+                    repaired = true;
+                    break;
+                }
+            }
+            if repaired {
+                result.repaired = result.repaired.saturating_add(1);
+            } else {
+                result.failed.push(crate::verify::RepairOutcome {
+                    path: item.path.clone(),
+                    hash,
+                    success: false,
+                    error: Some("no alternative providers available".to_owned()),
+                });
+            }
+        }
+        result
     }
 
     fn handle_unsubscribe(namespace: &str) -> IpcResponse {
@@ -1347,6 +1484,31 @@ fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
     }
 }
 
+fn build_ipc_verify_filter(
+    hash: &[String],
+    path_filter: Option<&String>,
+    glob_filter: Option<&String>,
+) -> Option<crate::verify::VerifyFilter> {
+    let has_filter = !hash.is_empty() || path_filter.is_some() || glob_filter.is_some();
+    if !has_filter {
+        return None;
+    }
+    let mut filter = crate::verify::VerifyFilter::new();
+    if !hash.is_empty() {
+        let hashes: Vec<iroh_blobs::Hash> = hash.iter().filter_map(|h| h.parse::<iroh_blobs::Hash>().ok()).collect();
+        if !hashes.is_empty() {
+            filter = filter.with_hashes(hashes);
+        }
+    }
+    if let Some(p) = path_filter {
+        filter = filter.with_path(std::path::PathBuf::from(p));
+    }
+    if let Some(g) = glob_filter {
+        filter.glob = Some(g.clone());
+    }
+    Some(filter)
+}
+
 async fn resolve_folder_for_daemon(
     manager: &FolderManager,
     selector: &Path,
@@ -1406,7 +1568,12 @@ impl IpcClient {
             let mut stream = timeout(IPC_TIMEOUT, tokio::net::UnixStream::connect(&self.socket_path))
                 .await
                 .map_err(|error| SyncwebError::operation("daemon IPC connection timed out", error))?
-                .map_err(|error| SyncwebError::operation("daemon IPC connection failed", error))?;
+                .map_err(|error| {
+                    SyncwebError::operation(
+                        format!("failed to connect to daemon socket at {}", self.socket_path.display()),
+                        error,
+                    )
+                })?;
             let mut message = serde_json::to_vec(&request)
                 .map_err(|error| SyncwebError::operation("failed to serialize IPC request", error))?;
             message.push(b'\n');
@@ -1452,7 +1619,12 @@ impl IpcClient {
                 os::unix::net::UnixStream,
             };
 
-            let stream = UnixStream::connect(&self.socket_path)?;
+            let stream = UnixStream::connect(&self.socket_path).map_err(|error| {
+                SyncwebError::operation(
+                    format!("failed to connect to daemon socket at {}", self.socket_path.display()),
+                    error,
+                )
+            })?;
             stream.set_read_timeout(Some(IPC_TIMEOUT))?;
             stream.set_write_timeout(Some(IPC_TIMEOUT))?;
             let mut writer = stream.try_clone()?;
@@ -1488,24 +1660,20 @@ impl IpcClient {
     }
 }
 
+#[cfg(unix)]
 fn set_owner_only_permissions(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = std::fs::metadata(path)?.permissions();
-        permissions.set_mode(0o600);
-        std::fs::set_permissions(path, permissions)?;
-    }
-    let _ = path;
-    Ok(())
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    permissions.set_mode(0o600);
+    Ok(std::fs::set_permissions(path, permissions)?)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Arc, time::Duration};
+    use std::{path::PathBuf, sync::Arc};
 
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
+    use std::{os::unix::fs::PermissionsExt, time::Duration};
 
     use super::*;
     use crate::daemon::{DaemonState, DaemonStatus};
@@ -1628,13 +1796,14 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(unix)]
     async fn client_reports_missing_server() {
         let path = socket_path();
         let error = IpcClient::from_socket_path(path)
             .send(IpcRequest::new(IpcCommand::Status))
             .await
             .expect_err("missing server should fail");
-        assert!(error.to_string().contains("daemon IPC connection failed"));
+        assert!(error.to_string().contains("failed to connect to daemon socket"));
     }
 
     #[test]
@@ -1876,6 +2045,11 @@ mod tests {
         let response = server
             .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: PathBuf::from("."),
+                hash: Vec::new(),
+                path_filter: None,
+                glob_filter: None,
+                fix: false,
+                from: Vec::new(),
             }))
             .await;
         assert!(matches!(
@@ -2142,6 +2316,11 @@ mod tests {
                 .server
                 .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
                     path: PathBuf::from(&ns),
+                    hash: Vec::new(),
+                    path_filter: None,
+                    glob_filter: None,
+                    fix: false,
+                    from: Vec::new(),
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -2165,6 +2344,11 @@ mod tests {
             .server
             .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+                hash: Vec::new(),
+                path_filter: None,
+                glob_filter: None,
+                fix: false,
+                from: Vec::new(),
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

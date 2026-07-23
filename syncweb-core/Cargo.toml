@@ -46,6 +46,7 @@ semver.workspace = true
 async-recursion.workspace = true
 async-compression.workspace = true
 rusqlite.workspace = true
+libc.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

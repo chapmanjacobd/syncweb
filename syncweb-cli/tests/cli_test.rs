@@ -538,6 +538,7 @@ fn test_download_selective() -> anyhow::Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("download-auto-daemon");
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
@@ -553,6 +554,15 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
         .args(["--data-dir", data_dir_arg, "shutdown", "--force"])
         .output()
         .context("stop auto-started daemon")?;
+    for _ in 0..50 {
+        let poll = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(["--data-dir", data_dir_arg, "status"])
+            .output()?;
+        if poll.status.success() && String::from_utf8_lossy(&poll.stdout).contains("daemon not running") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     std::fs::remove_dir_all(&data_dir).context("cleanup auto-started daemon")?;
 
     ensure!(!download.status.success());

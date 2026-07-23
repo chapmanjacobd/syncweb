@@ -527,6 +527,20 @@ pub struct StatsArgs {
 pub struct VerifyArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
+    #[arg(long, help = "Content hash(es) to verify (can repeat)")]
+    pub hash: Vec<String>,
+    #[arg(long, help = "Only verify entries whose path matches this prefix")]
+    pub path_filter: Option<String>,
+    #[arg(long, help = "Only verify entries whose path matches this glob pattern")]
+    pub glob_filter: Option<String>,
+    #[arg(long, help = "Attempt to repair corrupted blobs by re-downloading from peers")]
+    pub fix: bool,
+    #[arg(
+        long,
+        visible_alias = "provider",
+        help = "Blob ticket(s) for providers (can repeat, requires --fix)"
+    )]
+    pub from: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]

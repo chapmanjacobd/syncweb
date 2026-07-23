@@ -545,7 +545,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;verify' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to verify (can repeat)')
+            [CompletionResult]::new('--path-filter', '--path-filter', [CompletionResultType]::ParameterName, 'Only verify entries whose path matches this prefix')
+            [CompletionResult]::new('--glob-filter', '--glob-filter', [CompletionResultType]::ParameterName, 'Only verify entries whose path matches this glob pattern')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --fix)')
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --fix)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Attempt to repair corrupted blobs by re-downloading from peers')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

@@ -72,4 +72,30 @@ mod tests {
         assert!(result.unwrap().is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn daemon_client_live_pid_with_dead_socket_returns_none() {
+        let dir = std::env::temp_dir().join(format!("syncweb-route-socket-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        let result = daemon_client(&dir);
+        lock.release().unwrap();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn daemon_client_status_ping_timeout_returns_none() {
+        let dir = std::env::temp_dir().join(format!("syncweb-route-timeout-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        let result = daemon_client(&dir);
+        lock.release().unwrap();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

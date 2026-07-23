@@ -630,4 +630,109 @@ mod tests {
         assert!(path.file_name().unwrap().to_string_lossy().ends_with(".sock"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn pid_lock_stale_detection() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        let pid = lock.owner_pid().unwrap().expect("pid should be written");
+        assert_eq!(pid, std::process::id());
+        lock.release().unwrap();
+        assert!(!pid_is_alive(99999_u32));
+        let state_file = StateFile::new(&dir);
+        state_file
+            .save(&DaemonState::new(99999, "stale-daemon", 1, &dir, DaemonStatus::Running))
+            .unwrap();
+        assert!(!state_file.is_running().unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_state_file_consistency() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        let state_file = StateFile::new(&dir);
+        state_file
+            .save(&DaemonState::new(
+                std::process::id(),
+                "consistent",
+                current_timestamp(),
+                &dir,
+                DaemonStatus::Running,
+            ))
+            .unwrap();
+        assert!(state_file.exists());
+        assert!(lock.lock_path().exists());
+        assert_eq!(lock.owner_pid().unwrap(), Some(std::process::id()));
+        lock.release().unwrap();
+        state_file.remove().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_concurrent_start_race() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = PidLock::new(&dir);
+        assert!(first.try_acquire().unwrap());
+        let second = PidLock::new(&dir);
+        assert!(!second.try_acquire().unwrap());
+        first.release().unwrap();
+        assert!(second.try_acquire().unwrap());
+        second.release().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_report_serialization_json() {
+        let report = DaemonStatusReport::from_state(
+            &DaemonState::new(42, "ns-id", 100, PathBuf::from("/data"), DaemonStatus::Running),
+            10,
+            vec![FolderStatusReport::new(
+                "folder1",
+                PathBuf::from("/foo"),
+                true,
+                Some(200),
+                5,
+                vec![],
+            )],
+            BandwidthSnapshot::default(),
+            Some(ScheduleStatus {
+                in_active_window: true,
+                next_window_start: Some(300),
+            }),
+            4,
+        );
+        let json = serde_json::to_string_pretty(&report).unwrap();
+        assert!(json.contains("folder1"));
+        assert!(json.contains("uptime_seconds"));
+        let deserialized: DaemonStatusReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.pid, report.pid);
+        assert_eq!(deserialized.folders.len(), 1);
+        assert!(deserialized.schedule.unwrap().in_active_window);
+    }
+
+    #[test]
+    fn daemon_status_report_includes_folders() {
+        let report = DaemonStatusReport::from_state(
+            &DaemonState::new(1, "node", 1, PathBuf::from("/tmp"), DaemonStatus::Running),
+            5,
+            vec![
+                FolderStatusReport::new("ns1", PathBuf::from("/a"), true, None, 3, vec![]),
+                FolderStatusReport::new("ns2", PathBuf::from("/b"), false, Some(10), 0, vec!["error1".into()]),
+            ],
+            BandwidthSnapshot::default(),
+            None,
+            2,
+        );
+        assert_eq!(report.folders.len(), 2);
+        assert!(report.folders.iter().any(|f| f.namespace == "ns1"));
+        assert!(report.folders.iter().any(|f| f.namespace == "ns2"
+            && !f.session_active
+            && f.errors.len() == 1));
+    }
 }

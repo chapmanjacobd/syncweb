@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 
+use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -23,8 +24,9 @@ use crate::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
         DropImportOptions, DropImportResult, DropImporter, FolderManager, SyncMode,
     },
+    fs::Importer,
     node::iroh_node::IrohNode,
-    sync::{ActiveSession, FetchStrategy, SessionMode, SubscribeParams, cancel_session},
+    sync::{ActiveSession, FetchStrategy, SessionMode, SubscribeParams, SyncEngine, SyncEvent, cancel_session},
 };
 
 use super::{
@@ -76,6 +78,10 @@ pub enum IpcCommand {
         namespace: String,
         strategy: FetchStrategy,
     },
+    ImportFiles {
+        namespace: Option<String>,
+        path: PathBuf,
+    },
     ImportArchive {
         input: PathBuf,
         target: PathBuf,
@@ -110,6 +116,7 @@ pub enum IpcResponse {
     Status(DaemonStatus),
     FolderList(Vec<FolderStatus>),
     DownloadComplete { bytes_transferred: u64 },
+    ImportFilesComplete { entries: u64 },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
     Error { message: String },
@@ -194,6 +201,12 @@ impl FolderRegistry {
         Ok(())
     }
 
+    /// Add a folder, or attach a path to a folder restored without one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the namespace is already managed with a path or
+    /// when the requested update conflicts with an existing registration.
     pub fn add_or_update(&mut self, entry: FolderEntry) -> Result<()> {
         let key = entry.namespace.to_string();
         if let Some(existing) = self.folders.get_mut(&key) {
@@ -520,6 +533,7 @@ impl IpcServer {
                     Err(error) => response_from_error(error),
                 }
             }
+            IpcCommand::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
             IpcCommand::ExportArchive {
                 namespace,
                 version,
@@ -528,13 +542,93 @@ impl IpcServer {
                 Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
                 Err(error) => response_from_error(error),
             },
-            IpcCommand::Download { .. }
-            | IpcCommand::Join { .. }
-            | IpcCommand::Publish { .. }
-            | IpcCommand::Subscribe { .. } => IpcResponse::Error {
+            IpcCommand::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
+            IpcCommand::Join { .. } | IpcCommand::Publish { .. } | IpcCommand::Subscribe { .. } => IpcResponse::Error {
                 message: "node-access IPC command is not available".to_owned(),
             },
         }
+    }
+
+    async fn handle_download_response(&self, namespace: String, strategy: FetchStrategy) -> IpcResponse {
+        match self.handle_download(namespace, strategy).await {
+            Ok(bytes_transferred) => IpcResponse::DownloadComplete { bytes_transferred },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_import_files_response(&self, namespace: Option<String>, path: PathBuf) -> IpcResponse {
+        match self.handle_import_files(namespace, path).await {
+            Ok(entries) => IpcResponse::ImportFilesComplete { entries },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_download(&self, namespace: String, strategy: FetchStrategy) -> Result<u64> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation("daemon download IPC is unavailable", "server has no node context")
+        })?;
+        let namespace_id = iroh_docs::NamespaceId::from_str(&namespace)
+            .map_err(|error| SyncwebError::operation("invalid download namespace", error))?;
+        let sync = SyncEngine::new(
+            FolderManager::new(&context.node),
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            context.node.gossip_service().clone(),
+        );
+        let mut intent = sync.fetch(namespace_id, strategy).await?;
+        let mut bytes_transferred = 0_u64;
+        while let Some(event) = intent.next().await {
+            match event {
+                SyncEvent::Stats(stats) => {
+                    bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
+                }
+                SyncEvent::Failed(message) => {
+                    return Err(SyncwebError::operation("daemon download failed", message));
+                }
+                SyncEvent::Finished => break,
+                SyncEvent::Started
+                | SyncEvent::Progress { .. }
+                | SyncEvent::Paused
+                | SyncEvent::Resumed
+                | SyncEvent::Cancelled => {}
+            }
+        }
+        Ok(bytes_transferred)
+    }
+
+    async fn handle_import_files(&self, namespace: Option<String>, path: PathBuf) -> Result<u64> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation("daemon filesystem import is unavailable", "server has no node context")
+        })?;
+        let namespace_id = if let Some(value) = namespace {
+            iroh_docs::NamespaceId::from_str(&value)
+                .map_err(|error| SyncwebError::operation("invalid import namespace", error))?
+        } else {
+            let folders = self.daemon_handle.folder_registry.read().await.statuses();
+            let [folder] = folders.as_slice() else {
+                return Err(SyncwebError::operation(
+                    "cannot infer import namespace",
+                    "specify a folder when more than one folder is managed",
+                ));
+            };
+            iroh_docs::NamespaceId::from_str(&folder.namespace)
+                .map_err(|error| SyncwebError::operation("invalid managed folder namespace", error))?
+        };
+        let folder = FolderManager::new(&context.node).get(namespace_id).await?;
+        let root = if path.is_dir() {
+            path.clone()
+        } else {
+            path.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+        };
+        let importer = Importer::new(
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            folder.doc().clone(),
+            folder.author(),
+        )
+        .with_root(root);
+        let entries = importer.import_path(path).await?;
+        u64::try_from(entries.len()).map_err(|error| SyncwebError::operation("import entry count overflowed", error))
     }
 
     async fn handle_import_archive(
@@ -748,6 +842,7 @@ impl IpcClient {
                 IpcResponse::Ok { .. }
                 | IpcResponse::FolderList(_)
                 | IpcResponse::DownloadComplete { .. }
+                | IpcResponse::ImportFilesComplete { .. }
                 | IpcResponse::ImportComplete(_)
                 | IpcResponse::ExportComplete(_) => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",

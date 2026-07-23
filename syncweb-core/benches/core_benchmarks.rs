@@ -475,14 +475,16 @@ fn bench_ipc_round_trip(c: &mut Criterion) {
         (IpcClient::from_socket_path(socket_path.clone()), task)
     });
 
-    let mut group = c.benchmark_group("daemon_ipc");
-    group.bench_function("round_trip", |b| {
-        b.iter(|| {
-            let response = runtime.block_on(client.send(IpcRequest::new(IpcCommand::Status)));
-            std::hint::black_box(response);
+    {
+        let mut group = c.benchmark_group("daemon_ipc");
+        group.bench_function("round_trip", |b| {
+            b.iter(|| {
+                let response = runtime.block_on(client.send(IpcRequest::new(IpcCommand::Status)));
+                let _ = std::hint::black_box(response);
+            });
         });
-    });
-    group.finish();
+        group.finish();
+    }
 
     runtime.block_on(async {
         let _ = client
@@ -506,33 +508,40 @@ fn bench_state_file_write_read(c: &mut Criterion) {
     let directory = std::env::temp_dir().join(format!("syncweb-state-bench-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&directory).expect("state benchmark directory should be created");
     let state_file = StateFile::new(&directory);
-    let report = DaemonStatusReport {
-        pid: std::process::id(),
-        node_id: "benchmark-node".to_owned(),
-        started_at: 1,
-        uptime_seconds: 2,
-        folders: vec![FolderStatusReport {
-            namespace: "benchmark-folder".to_owned(),
-            path: PathBuf::from("/tmp/benchmark-folder"),
-            session_active: true,
-            last_sync_at: Some(2),
-            entries_synced: 10,
-            errors: Vec::new(),
-        }],
-        bandwidth: BandwidthSnapshot::default(),
-        schedule: None,
-        rayon_threads: 1,
-    };
+    let state = DaemonState::new(
+        std::process::id(),
+        "benchmark-node",
+        1,
+        &directory,
+        DaemonStatus::Running,
+    );
+    let report = DaemonStatusReport::from_state(
+        &state,
+        2,
+        vec![FolderStatusReport::new(
+            "benchmark-folder",
+            PathBuf::from("/tmp/benchmark-folder"),
+            true,
+            Some(2),
+            10,
+            Vec::new(),
+        )],
+        BandwidthSnapshot::default(),
+        None,
+        1,
+    );
 
-    let mut group = c.benchmark_group("daemon_state");
-    group.bench_function("write_read", |b| {
-        b.iter(|| {
-            state_file.save_status(&report).expect("state write should succeed");
-            let loaded = state_file.load_status().expect("state read should succeed");
-            std::hint::black_box(loaded);
+    {
+        let mut group = c.benchmark_group("daemon_state");
+        group.bench_function("write_read", |b| {
+            b.iter(|| {
+                state_file.save_status(&report).expect("state write should succeed");
+                let loaded = state_file.load_status().expect("state read should succeed");
+                std::hint::black_box(loaded);
+            });
         });
-    });
-    group.finish();
+        group.finish();
+    }
     let _ = std::fs::remove_dir_all(directory);
 }
 
@@ -596,30 +605,32 @@ fn archive_benchmark_fixture() -> ArchiveBenchmarkFixture {
 fn bench_archive_export_with_pool(c: &mut Criterion) {
     let fixture = archive_benchmark_fixture();
     let exporter = DropExporter::new(fixture.node.blob_store().clone());
-    let mut group = c.benchmark_group("daemon_archive_export");
-    group.bench_function("without_pool", |b| {
-        b.iter(|| {
-            let result = fixture.runtime.block_on(exporter.export_drop_with_options(
-                std::slice::from_ref(&fixture.manifest),
-                &fixture.output,
-                DropExportOptions::default(),
-                None,
-            ));
-            std::hint::black_box(result);
+    {
+        let mut group = c.benchmark_group("daemon_archive_export");
+        group.bench_function("without_pool", |b| {
+            b.iter(|| {
+                let result = fixture.runtime.block_on(exporter.export_drop_with_options(
+                    std::slice::from_ref(&fixture.manifest),
+                    &fixture.output,
+                    DropExportOptions::default(),
+                    None,
+                ));
+                let _ = std::hint::black_box(result);
+            });
         });
-    });
-    group.bench_function("with_pool", |b| {
-        b.iter(|| {
-            let result = fixture.runtime.block_on(exporter.export_drop_with_options(
-                std::slice::from_ref(&fixture.manifest),
-                &fixture.output,
-                DropExportOptions::default(),
-                Some(&fixture.pool),
-            ));
-            std::hint::black_box(result);
+        group.bench_function("with_pool", |b| {
+            b.iter(|| {
+                let result = fixture.runtime.block_on(exporter.export_drop_with_options(
+                    std::slice::from_ref(&fixture.manifest),
+                    &fixture.output,
+                    DropExportOptions::default(),
+                    Some(&fixture.pool),
+                ));
+                let _ = std::hint::black_box(result);
+            });
         });
-    });
-    group.finish();
+        group.finish();
+    }
     fixture
         .runtime
         .block_on(fixture.node.stop())
@@ -630,28 +641,30 @@ fn bench_archive_export_with_pool(c: &mut Criterion) {
 fn bench_archive_import_with_pool(c: &mut Criterion) {
     let fixture = archive_benchmark_fixture();
     let importer = syncweb_core::DropImporter::new(fixture.node.blob_store().clone());
-    let mut group = c.benchmark_group("daemon_archive_import");
-    group.bench_function("without_pool", |b| {
-        b.iter(|| {
-            let result = fixture.runtime.block_on(importer.import_archive(
-                &fixture.archive,
-                syncweb_core::DropImportOptions::default(),
-                None,
-            ));
-            std::hint::black_box(result);
+    {
+        let mut group = c.benchmark_group("daemon_archive_import");
+        group.bench_function("without_pool", |b| {
+            b.iter(|| {
+                let result = fixture.runtime.block_on(importer.import_archive(
+                    &fixture.archive,
+                    syncweb_core::DropImportOptions::default(),
+                    None,
+                ));
+                let _ = std::hint::black_box(result);
+            });
         });
-    });
-    group.bench_function("with_pool", |b| {
-        b.iter(|| {
-            let result = fixture.runtime.block_on(importer.import_archive(
-                &fixture.archive,
-                syncweb_core::DropImportOptions::default(),
-                Some(&fixture.pool),
-            ));
-            std::hint::black_box(result);
+        group.bench_function("with_pool", |b| {
+            b.iter(|| {
+                let result = fixture.runtime.block_on(importer.import_archive(
+                    &fixture.archive,
+                    syncweb_core::DropImportOptions::default(),
+                    Some(&fixture.pool),
+                ));
+                let _ = std::hint::black_box(result);
+            });
         });
-    });
-    group.finish();
+        group.finish();
+    }
     fixture
         .runtime
         .block_on(fixture.node.stop())

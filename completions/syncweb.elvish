@@ -22,6 +22,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand version 'Show syncweb version information'
@@ -33,8 +35,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand daemon-shutdown 'Ask the local daemon to stop'
             cand daemon-reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
-            cand daemon-add 'Add a folder to the running daemon'
-            cand daemon-remove 'Remove a folder from the running daemon'
+            cand unwatch 'Stop watching a folder for local changes'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave and remove a synchronized folder'
@@ -78,6 +79,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -86,6 +89,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -94,6 +99,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -102,6 +109,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -115,6 +124,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -123,6 +134,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -132,6 +145,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -140,6 +155,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -148,22 +165,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;daemon-add'= {
+        &'syncweb;unwatch'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;daemon-remove'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -175,6 +188,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -194,6 +209,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -202,6 +219,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -210,6 +229,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -218,6 +239,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -226,6 +249,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -234,6 +259,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand set 'Set a configuration value'
@@ -245,6 +272,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -253,6 +282,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -274,6 +305,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -310,6 +343,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -328,6 +363,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -339,6 +376,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -352,6 +391,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -362,6 +403,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -370,6 +413,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a content-addressed snapshot'
@@ -386,6 +431,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -394,6 +441,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -402,6 +451,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -410,6 +461,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -418,6 +471,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -446,6 +501,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -455,6 +512,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -467,6 +526,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -475,6 +536,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --exclude 'Ignore a path glob; may be repeated'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --once 'Process one event and exit'
+            cand --no-daemon 'Run in the foreground without using a daemon'
+            cand --embedded 'Run in the foreground without using a daemon'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
@@ -490,6 +553,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -498,6 +563,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -506,6 +573,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand set 'Update the global schedule'
@@ -520,6 +589,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -531,6 +602,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -556,6 +629,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -565,6 +640,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -574,6 +651,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -582,6 +661,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand init 'Initialize a directory as a versioned collection'
@@ -597,6 +678,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -605,6 +688,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -615,6 +700,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -626,6 +713,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -651,6 +740,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand export 'Export one or more package directories as compressed CAR archive files'
@@ -673,6 +764,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -682,6 +775,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -692,6 +787,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -701,6 +798,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -710,6 +809,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -719,6 +820,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -727,6 +830,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -735,6 +840,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -743,6 +850,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -751,6 +860,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -759,6 +870,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -805,6 +918,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a named network'
@@ -823,6 +938,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -831,6 +948,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -839,6 +958,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -847,6 +968,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -855,6 +978,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -863,6 +988,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -872,6 +999,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -906,6 +1035,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand enable 'Opt a synchronized folder into indexing'
@@ -922,6 +1053,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -930,6 +1063,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -940,6 +1075,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -949,6 +1086,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -957,6 +1096,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -965,6 +1106,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Append signed metadata to a content hash'
@@ -976,6 +1119,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -992,6 +1137,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Add a device, file, or hash denylist rule'
@@ -1003,6 +1150,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1011,6 +1160,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1065,6 +1216,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create an immutable, private, or mutable link'
@@ -1082,6 +1235,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1091,6 +1246,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1099,6 +1256,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1121,6 +1280,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Register a blob ticket as an alternate provider'
@@ -1131,6 +1292,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1147,6 +1310,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand show 'Show trust and moderation state'
@@ -1160,6 +1325,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1171,6 +1338,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1179,6 +1348,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand show 'Show provider reputation, bans, and trust records'
@@ -1195,6 +1366,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1204,6 +1377,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1215,6 +1390,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1223,6 +1400,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1233,6 +1412,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1243,6 +1424,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1274,6 +1457,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand subscribe 'Subscribe to a provider trust stream ticket or file'
@@ -1285,6 +1470,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1297,6 +1484,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1361,6 +1550,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1370,6 +1561,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1378,6 +1571,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
             cand ls 'List local moderation records'
@@ -1389,6 +1584,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1398,6 +1595,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1417,6 +1616,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1425,6 +1626,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1438,8 +1641,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand daemon-shutdown 'Ask the local daemon to stop'
             cand daemon-reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
-            cand daemon-add 'Add a folder to the running daemon'
-            cand daemon-remove 'Remove a folder from the running daemon'
+            cand unwatch 'Stop watching a folder for local changes'
             cand create 'Create a synchronized folder'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave and remove a synchronized folder'
@@ -1496,9 +1698,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;daemon-sync'= {
         }
-        &'syncweb;help;daemon-add'= {
-        }
-        &'syncweb;help;daemon-remove'= {
+        &'syncweb;help;unwatch'= {
         }
         &'syncweb;help;create'= {
         }

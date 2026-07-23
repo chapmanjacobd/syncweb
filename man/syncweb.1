@@ -4,7 +4,7 @@
 .SH NAME
 syncweb \- Delay\-tolerant web surfing
 .SH SYNOPSIS
-\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-color\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-color\fR] [\fB\-\-no\-daemon\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Delay\-tolerant web surfing
 .SH OPTIONS
@@ -17,6 +17,9 @@ Emit machine\-readable JSON where supported
 .TP
 \fB\-\-no\-color\fR
 Disable colored output
+.TP
+\fB\-\-no\-daemon\fR
+Bypass the daemon and use an embedded node for supported commands
 .TP
 \fB\-\-data\-dir\fR \fI<DATA_DIR>\fR [default: .syncweb]
 Directory used for persistent node identity and data
@@ -52,11 +55,8 @@ Ask the local daemon to reload configuration
 syncweb\-daemon\-sync(1)
 Ask the local daemon to trigger synchronization
 .TP
-syncweb\-daemon\-add(1)
-Add a folder to the running daemon
-.TP
-syncweb\-daemon\-remove(1)
-Remove a folder from the running daemon
+syncweb\-unwatch(1)
+Stop watching a folder for local changes
 .TP
 syncweb\-create(1)
 Create a synchronized folder

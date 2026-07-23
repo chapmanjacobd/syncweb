@@ -105,15 +105,6 @@ pub enum Command {
         #[command(subcommand)]
         command: ProviderCommand,
     },
-    #[command(about = "Fetch and pin a blob from provider(s) to replicate content locally")]
-    Mirror {
-        #[arg(long, help = "Content hash to mirror")]
-        hash: String,
-        #[arg(long, help = "Blob ticket(s) for providers (can repeat)")]
-        from: Vec<String>,
-        #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
-        min_providers: usize,
-    },
     #[command(about = "Inspect and delegate local trust")]
     Trust {
         #[command(subcommand)]
@@ -390,6 +381,22 @@ pub struct DownloadArgs {
         help = "Copy threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+    #[arg(long, help = "Content hash to download (single blob mode)")]
+    pub hash: Option<String>,
+    #[arg(
+        long,
+        visible_alias = "provider",
+        help = "Blob ticket(s) for providers (can repeat, requires --hash)"
+    )]
+    pub from: Vec<String>,
+    #[arg(
+        long,
+        visible_alias = "no-seeding",
+        help = "Do not share or seed the downloaded content"
+    )]
+    pub no_sharing: bool,
+    #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
+    pub min_providers: usize,
 }
 
 #[derive(Debug, Args)]

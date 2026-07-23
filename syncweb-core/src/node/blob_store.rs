@@ -4,7 +4,7 @@ use iroh_blobs::{
     BlobFormat, BlobsProtocol, Hash,
     api::{
         Store as BlobApi,
-        blobs::{AddPathOptions, ImportMode},
+        blobs::{AddPathOptions, BlobReader, ExportMode, ExportOptions, ImportMode},
     },
     ticket::BlobTicket,
 };
@@ -36,6 +36,15 @@ impl BlobStore {
     #[must_use]
     pub const fn inner(&self) -> &BlobApi {
         &self.store
+    }
+
+    /// Create a reader for the given hash.
+    ///
+    /// The reader implements [`tokio::io::AsyncRead`] and [`tokio::io::AsyncSeek`],
+    /// allowing O(1)-memory streaming to any sink.
+    #[must_use]
+    pub fn reader(&self, hash: impl Into<Hash>) -> BlobReader {
+        self.store.reader(hash)
     }
 
     /// # Errors
@@ -86,12 +95,39 @@ impl BlobStore {
 
     /// Export a complete blob to a temporary or caller-managed path.
     ///
+    /// Uses [`ExportMode::Copy`] — the blob stays in the store and a copy
+    /// (or CoW reflink) is written to `destination`.
+    ///
     /// # Errors
     ///
     /// Returns an error if the blob cannot be read or written.
     pub async fn export_to_path(&self, hash: Hash, destination: impl AsRef<Path>) -> Result<u64> {
+        self.export_to_path_with_mode(hash, destination, ExportMode::Copy)
+            .await
+    }
+
+    /// Export a complete blob with a specific [`ExportMode`].
+    ///
+    /// `ExportMode::TryReference` moves the blob's internal file to
+    /// `destination` and updates the store to track it externally,
+    /// avoiding a copy. `ExportMode::Copy` leaves the blob in the store
+    /// and writes a copy (or CoW reflink) to `destination`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob cannot be read or written.
+    pub async fn export_to_path_with_mode(
+        &self,
+        hash: Hash,
+        destination: impl AsRef<Path>,
+        mode: ExportMode,
+    ) -> Result<u64> {
         self.store
-            .export(hash, destination)
+            .export_with_opts(ExportOptions {
+                hash,
+                mode,
+                target: destination.as_ref().to_owned(),
+            })
             .await
             .map_err(|error| SyncwebError::operation("failed to export blob", error))
     }

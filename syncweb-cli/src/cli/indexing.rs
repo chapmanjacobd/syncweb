@@ -30,7 +30,7 @@ use syncweb_core::{
 
 use dialoguer::Confirm;
 use iroh::PublicKey;
-use iroh_blobs::{Hash, ticket::BlobTicket};
+use iroh_blobs::{Hash, api::blobs::ExportMode, ticket::BlobTicket};
 use iroh_docs::NamespaceId;
 use iroh_gossip::api::Event;
 use n0_future::StreamExt;
@@ -384,78 +384,88 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
     Ok(())
 }
 
-pub async fn handle_mirror(ctx: &CliContext<'_>, hash: String, from: Vec<String>, min_providers: usize) -> Result<()> {
-    handle_mirror_replication(ctx, &hash, &from, min_providers).await
-}
-
-async fn handle_mirror_replication(
+pub async fn download_blob(
     ctx: &CliContext<'_>,
-    hash: &str,
-    tickets: &[String],
+    tickets: &[BlobTicket],
     min_providers: usize,
+    no_sharing: bool,
+    export_path: Option<&Path>,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let content_hash = parse_hash(hash)?;
-    let mut blob_tickets = Vec::new();
-    for t in tickets {
-        blob_tickets.push(
-            t.parse::<BlobTicket>()
-                .map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?,
-        );
-    }
 
     let node = open_node(data_dir).await?;
 
-    let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(min_providers)));
-    for ticket in &blob_tickets {
-        let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
-        let lease = ProviderLease::new(ticket.hash(), ticket.to_string(), 0, expires_at)?;
-        resilience.record_lease(lease)?;
+    let content_hash = tickets[0].hash();
+
+    if no_sharing {
+        node.blob_store()
+            .fetch(node.endpoint(), &tickets[0])
+            .await
+            .context("failed to fetch blob")?;
+    } else {
+        let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(min_providers)));
+        for ticket in tickets {
+            let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
+            let lease = ProviderLease::new(ticket.hash(), ticket.to_string(), 0, expires_at)?;
+            resilience.record_lease(lease)?;
+        }
+
+        let result = resilience
+            .ensure_replication(node.endpoint(), node.blob_store(), content_hash)
+            .await?;
+
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "hash": result.hash.to_string(),
+                    "pinned": result.pinned,
+                    "short_circuited": result.short_circuited,
+                    "fetched_from": result.fetched_from.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    "failed_from": result.failed_from.iter().map(|(p, k)| serde_json::json!({
+                        "provider": p.to_string(),
+                        "kind": format!("{k:?}"),
+                    })).collect::<Vec<_>>(),
+                    "providers_before": result.health_before.verified,
+                    "providers_after": result.health_after.verified,
+                })
+            );
+        } else {
+            println!("hash: {}", result.hash);
+            println!("pinned: {}", result.pinned);
+            println!("short-circuited: {}", result.short_circuited);
+            if !result.fetched_from.is_empty() {
+                println!(
+                    "fetched from: {}",
+                    result
+                        .fetched_from
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            if !result.failed_from.is_empty() {
+                for (provider, kind) in &result.failed_from {
+                    println!("failed: {provider} ({kind:?})");
+                }
+            }
+            println!("providers before: {}", result.health_before.verified);
+            println!("providers after: {}", result.health_after.verified);
+        }
     }
 
-    let result = resilience
-        .ensure_replication(node.endpoint(), node.blob_store(), content_hash)
-        .await?;
-
-    if output_json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "hash": result.hash.to_string(),
-                "pinned": result.pinned,
-                "short_circuited": result.short_circuited,
-                "fetched_from": result.fetched_from.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                "failed_from": result.failed_from.iter().map(|(p, k)| serde_json::json!({
-                    "provider": p.to_string(),
-                    "kind": format!("{k:?}"),
-                })).collect::<Vec<_>>(),
-                "providers_before": result.health_before.verified,
-                "providers_after": result.health_after.verified,
-            })
-        );
-    } else {
-        println!("hash: {}", result.hash);
-        println!("pinned: {}", result.pinned);
-        println!("short-circuited: {}", result.short_circuited);
-        if !result.fetched_from.is_empty() {
-            println!(
-                "fetched from: {}",
-                result
-                    .fetched_from
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+    if let Some(path) = export_path {
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
         }
-        if !result.failed_from.is_empty() {
-            for (provider, kind) in &result.failed_from {
-                println!("failed: {provider} ({kind:?})");
-            }
-        }
-        println!("providers before: {}", result.health_before.verified);
-        println!("providers after: {}", result.health_after.verified);
+        node.blob_store()
+            .export_to_path_with_mode(content_hash, path, ExportMode::TryReference)
+            .await?;
+    } else if no_sharing {
+        let pin_name = format!("syncweb/download/{content_hash}");
+        node.blob_store().pin(&pin_name, content_hash).await?;
     }
 
     node.stop().await?;

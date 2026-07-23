@@ -89,7 +89,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "indexing",
         "link",
         "provider",
-        "mirror",
         "trust",
         "attest",
         "report",

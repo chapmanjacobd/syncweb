@@ -4,9 +4,9 @@ use async_recursion::async_recursion;
 use comfy_table::Table;
 
 use std::{
-    process::{Command as ProcessCommand, Stdio},
+    process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
@@ -24,7 +24,7 @@ use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     cancel_session,
-    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, StateFile},
+    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
@@ -84,8 +84,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Find(command) => handle_find(command, output_json)?,
         Command::Sort(command) => handle_sort(&command, output_json)?,
         Command::Stat(command) => handle_stat(command, output_json)?,
-        Command::Download(command) => handle_download(&cli.data_dir, command, output_json).await?,
-        Command::Import(command) => handle_import(&cli.data_dir, command, output_json).await?,
+        Command::Download(command) => handle_download(&cli.data_dir, command, output_json, cli.no_daemon).await?,
+        Command::Import(command) => handle_import(&cli.data_dir, command, output_json, cli.no_daemon).await?,
         Command::Snapshot { command } => {
             handle_snapshot(&cli.data_dir, command, output_json).await?;
         }
@@ -176,6 +176,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         data_dir,
         command,
         json: output_json,
+        no_daemon,
         ..
     } = cli;
     if matches!(&command, Command::Start) {
@@ -204,7 +205,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         return handle_unwatch(&data_dir, args, output_json).await;
     }
     if let Command::Watch(watch) = command {
-        return handle_watch(&data_dir, watch, output_json).await;
+        return handle_watch(&data_dir, watch, output_json, no_daemon).await;
     }
     if let Command::Stats(stats) = command {
         return handle_stats(&data_dir, stats, output_json);
@@ -317,26 +318,7 @@ async fn handle_shutdown(data_dir: &std::path::Path, output_json: bool) -> Resul
 #[async_recursion]
 async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json: bool) -> Result<()> {
     if !args.foreground {
-        let executable = std::env::current_exe().context("resolve syncweb executable")?;
-        let mut command = ProcessCommand::new(executable);
-        command
-            .arg("--data-dir")
-            .arg(data_dir)
-            .arg("daemon")
-            .arg("--foreground")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        if let Some(log_file) = args.log_file {
-            command.arg("--log-file").arg(log_file);
-        }
-        if let Some(max_threads) = args.max_threads {
-            command.arg("--max-threads").arg(max_threads.to_string());
-        }
-        if let Some(sync_interval) = args.sync_interval {
-            command.arg("--sync-interval").arg(sync_interval.to_string());
-        }
-        let child = command.spawn().context("spawn syncweb daemon")?;
+        let child = spawn_daemon_process(data_dir, &args)?;
         if output_json {
             println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
         } else {
@@ -365,6 +347,75 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
         println!("daemon stopped");
     }
     Ok(())
+}
+
+fn spawn_daemon_process(data_dir: &std::path::Path, args: &DaemonArgs) -> Result<Child> {
+    let executable = std::env::current_exe().context("resolve syncweb executable")?;
+    let mut command = ProcessCommand::new(executable);
+    command
+        .arg("--data-dir")
+        .arg(data_dir)
+        .arg("daemon")
+        .arg("--foreground")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(log_file) = &args.log_file {
+        command.arg("--log-file").arg(log_file);
+    }
+    if let Some(max_threads) = args.max_threads {
+        command.arg("--max-threads").arg(max_threads.to_string());
+    }
+    if let Some(sync_interval) = args.sync_interval {
+        command.arg("--sync-interval").arg(sync_interval.to_string());
+    }
+    command.spawn().context("spawn syncweb daemon")
+}
+
+async fn daemon_client_or_start(
+    data_dir: &std::path::Path,
+    no_daemon: bool,
+) -> Result<Option<syncweb_core::daemon::IpcClient>> {
+    if no_daemon {
+        return Ok(None);
+    }
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        return Ok(Some(client));
+    }
+
+    let lock = PidLock::new(data_dir);
+    let mut daemon_child = if lock.try_acquire()? {
+        lock.release()?;
+        Some(spawn_daemon_process(
+            data_dir,
+            &DaemonArgs {
+                foreground: false,
+                data_dir: None,
+                log_file: None,
+                max_threads: None,
+                sync_interval: None,
+            },
+        )?)
+    } else {
+        None
+    };
+    let deadline = Instant::now()
+        .checked_add(Duration::from_secs(10))
+        .ok_or_else(|| anyhow::anyhow!("failed to calculate daemon startup deadline"))?;
+    loop {
+        if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+            return Ok(Some(client));
+        }
+        if let Some(child) = daemon_child.as_mut()
+            && let Some(status) = child.try_wait()?
+        {
+            anyhow::bail!("daemon exited before becoming ready (status: {status})");
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("timed out waiting for daemon to become ready");
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 #[async_recursion]
@@ -485,6 +536,7 @@ fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> 
         IpcResponse::Status(_)
         | IpcResponse::FolderList(_)
         | IpcResponse::DownloadComplete { .. }
+        | IpcResponse::ImportFilesComplete { .. }
         | IpcResponse::ImportComplete(_)
         | IpcResponse::ExportComplete(_)
         | _ => anyhow::bail!("daemon returned an unexpected response"),
@@ -492,28 +544,28 @@ fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> 
 }
 
 #[async_recursion]
-async fn handle_import(data_dir: &std::path::Path, command: ImportArgs, output_json: bool) -> Result<()> {
+async fn handle_import(
+    data_dir: &std::path::Path,
+    command: ImportArgs,
+    output_json: bool,
+    no_daemon: bool,
+) -> Result<()> {
     if !command.path.exists() {
         anyhow::bail!("import path does not exist: {}", command.path.display());
     }
-    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-        let target = command
-            .folder
-            .as_ref()
-            .map_or_else(|| std::path::PathBuf::from("."), std::path::PathBuf::from);
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
         let response = client
-            .send(IpcRequest::new(IpcCommand::ImportArchive {
-                input: command.path.clone(),
-                target,
-                filter: None,
+            .send(IpcRequest::new(IpcCommand::ImportFiles {
+                namespace: command.folder.clone(),
+                path: command.path.clone(),
             }))
             .await?;
         match response {
-            IpcResponse::ImportComplete(result) => {
+            IpcResponse::ImportFilesComplete { entries } => {
                 if output_json {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
+                    println!("{}", serde_json::json!({"entries": entries}));
                 } else {
-                    println!("import requested: {}", result.entry_count);
+                    println!("import requested: {entries}");
                 }
                 return Ok(());
             }
@@ -570,6 +622,7 @@ async fn handle_download(
     data_dir: &std::path::Path,
     command: crate::cli::commands::DownloadArgs,
     output_json: bool,
+    no_daemon: bool,
 ) -> Result<()> {
     if let Some(destination) = command.destination {
         if command.max_peers.is_some()
@@ -610,7 +663,7 @@ async fn handle_download(
     } else {
         FetchStrategy::All
     };
-    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Download {
                 namespace: command.source.to_string_lossy().into_owned(),
@@ -634,6 +687,9 @@ async fn handle_download(
             | IpcResponse::ExportComplete(_)
             | _ => anyhow::bail!("daemon returned an unexpected download response"),
         }
+    }
+    if !no_daemon {
+        anyhow::bail!("daemon not running; start with `syncweb daemon` or pass --no-daemon");
     }
 
     let node = open_node(data_dir).await?;
@@ -1107,32 +1163,32 @@ fn handle_schedule(data_dir: &std::path::Path, command: Option<ScheduleCommand>,
 }
 
 #[async_recursion]
-async fn handle_watch(data_dir: &std::path::Path, command: WatchArgs, output_json: bool) -> Result<()> {
+async fn handle_watch(
+    data_dir: &std::path::Path,
+    command: WatchArgs,
+    output_json: bool,
+    no_daemon: bool,
+) -> Result<()> {
     if !command.once && !command.no_daemon {
-        let mut client_opt = syncweb_core::daemon::daemon_client(data_dir)?;
-        if client_opt.is_none() {
-            handle_daemon(
-                data_dir,
-                DaemonArgs {
-                    foreground: false,
-                    data_dir: None,
-                    log_file: None,
-                    max_threads: None,
-                    sync_interval: None,
-                },
-                output_json,
-            )
-            .await?;
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            client_opt = syncweb_core::daemon::daemon_client(data_dir)?;
-        }
-        let client = client_opt.ok_or_else(|| anyhow::anyhow!("failed to start or connect to daemon"))?;
+        let client = daemon_client_or_start(data_dir, no_daemon)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("daemon routing was disabled"))?;
 
-        let node = open_node(data_dir).await?;
-        let manager = FolderManager::new(&node);
-        let folder = resolve_folder(&manager, &command.path).await?;
-        let namespace = folder.namespace_id().to_string();
-        node.stop().await?;
+        let namespace = if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
+            namespace.to_string()
+        } else {
+            let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+            let IpcResponse::FolderList(folders) = response else {
+                return print_daemon_message(response, output_json);
+            };
+            match folders.as_slice() {
+                [folder] => folder.namespace.clone(),
+                [] => anyhow::bail!("no synchronized folders are available"),
+                _ => anyhow::bail!(
+                    "folder path is not a namespace ID and more than one synchronized folder is available"
+                ),
+            }
+        };
 
         let response = client
             .send(IpcRequest::new(IpcCommand::AddFolder {

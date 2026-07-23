@@ -53,6 +53,29 @@ pub struct DaemonStatusReport {
     pub rayon_threads: usize,
 }
 
+impl DaemonStatusReport {
+    #[must_use]
+    pub fn from_state(
+        state: &DaemonState,
+        uptime_seconds: u64,
+        folders: Vec<FolderStatusReport>,
+        bandwidth: BandwidthSnapshot,
+        schedule: Option<ScheduleStatus>,
+        rayon_threads: usize,
+    ) -> Self {
+        Self {
+            pid: state.pid,
+            node_id: state.node_id.clone(),
+            started_at: state.started_at,
+            uptime_seconds,
+            folders,
+            bandwidth,
+            schedule,
+            rayon_threads,
+        }
+    }
+}
+
 /// Activity and error information for one managed folder.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
@@ -63,6 +86,27 @@ pub struct FolderStatusReport {
     pub last_sync_at: Option<u64>,
     pub entries_synced: u64,
     pub errors: Vec<String>,
+}
+
+impl FolderStatusReport {
+    #[must_use]
+    pub fn new(
+        namespace: impl Into<String>,
+        path: impl Into<PathBuf>,
+        session_active: bool,
+        last_sync_at: Option<u64>,
+        entries_synced: u64,
+        errors: Vec<String>,
+    ) -> Self {
+        Self {
+            namespace: namespace.into(),
+            path: path.into(),
+            session_active,
+            last_sync_at,
+            entries_synced,
+            errors,
+        }
+    }
 }
 
 /// Aggregate transfer counters included in a daemon status report.
@@ -370,7 +414,7 @@ pub fn daemon_socket_path(data_dir: &Path) -> PathBuf {
             |runtime_dir| {
                 let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
                 let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
-                let suffix = &digest.to_hex()[..16];
+                let suffix: String = digest.to_hex().chars().take(16).collect();
                 PathBuf::from(runtime_dir).join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"))
             },
         )

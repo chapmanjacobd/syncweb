@@ -19,6 +19,8 @@ _syncweb() {
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb_commands" \
@@ -36,6 +38,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -46,6 +50,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -56,6 +62,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -66,6 +74,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -81,6 +91,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -91,6 +103,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -102,6 +116,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -112,6 +128,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -122,31 +140,23 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
 ;;
-(daemon-add)
+(unwatch)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace:_default' \
-':path:_files' \
-&& ret=0
-;;
-(daemon-remove)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':namespace:_default' \
+':folder -- Namespace ID or path to a managed folder:_default' \
 && ret=0
 ;;
 (create)
@@ -158,6 +168,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -180,6 +192,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -192,6 +206,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder -- Namespace ID or path to a managed folder:_default' \
@@ -203,6 +219,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder -- Namespace ID or path to a managed folder:_default' \
@@ -214,6 +232,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -224,6 +244,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -234,6 +256,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__config_commands" \
@@ -252,6 +276,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':key:_default' \
@@ -264,6 +290,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::section:_default' \
@@ -309,6 +337,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -348,6 +378,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':pattern:_default' \
@@ -370,6 +402,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -384,6 +418,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -400,6 +436,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
@@ -414,6 +452,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -425,6 +465,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__snapshot_commands" \
@@ -445,6 +487,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -456,6 +500,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -468,6 +514,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -479,6 +527,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -492,6 +542,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -548,6 +600,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -560,6 +614,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -575,6 +631,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -585,6 +643,8 @@ _arguments "${_arguments_options[@]}" : \
 '*--exclude=[Ignore a path glob; may be repeated]:GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--once[Process one event and exit]' \
+'--no-daemon[Run in the foreground without using a daemon]' \
+'--embedded[Run in the foreground without using a daemon]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
@@ -603,6 +663,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -613,6 +675,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -624,6 +688,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__schedule_commands" \
@@ -645,6 +711,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -658,6 +726,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -707,6 +777,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder -- Namespace ID or path to a managed folder:_default' \
@@ -719,6 +791,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -731,6 +805,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace:_default' \
@@ -742,6 +818,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__collection_commands" \
@@ -762,6 +840,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -773,6 +853,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -786,6 +868,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -800,6 +884,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -851,6 +937,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__package_commands" \
@@ -871,6 +959,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::paths:_files' \
@@ -883,6 +973,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::archives:_files' \
@@ -896,6 +988,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::query:_default' \
@@ -908,6 +1002,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -920,6 +1016,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -933,6 +1031,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::manifest:_files' \
@@ -945,6 +1045,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -957,6 +1059,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':manifest:_files' \
@@ -968,6 +1072,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -978,6 +1084,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -989,6 +1097,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -1069,6 +1179,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__network_commands" \
@@ -1089,6 +1201,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1100,6 +1214,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name:_default' \
@@ -1111,6 +1227,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -1122,6 +1240,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1133,6 +1253,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1145,6 +1267,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1158,6 +1282,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1220,6 +1346,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__indexing_commands" \
@@ -1238,6 +1366,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1249,6 +1379,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1262,6 +1394,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1274,6 +1408,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':query:_default' \
@@ -1285,6 +1421,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':hash:_default' \
@@ -1296,6 +1434,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__indexing__subcmd__meta_commands" \
@@ -1315,6 +1455,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':hash:_default' \
@@ -1356,6 +1498,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__indexing__subcmd__filter_commands" \
@@ -1374,6 +1518,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':rule_type:(device file hash)' \
@@ -1386,6 +1532,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_default' \
@@ -1517,6 +1665,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__link_commands" \
@@ -1540,6 +1690,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
@@ -1552,6 +1704,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':link:_default' \
@@ -1563,6 +1717,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':link:_default' \
@@ -1610,6 +1766,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__mirror_commands" \
@@ -1628,6 +1786,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -1668,6 +1828,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__trust_commands" \
@@ -1686,6 +1848,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':subject:_default' \
@@ -1700,6 +1864,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':publisher:_default' \
@@ -1711,6 +1877,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__trust__subcmd__provider_commands" \
@@ -1730,6 +1898,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
@@ -1742,6 +1912,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1755,6 +1927,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
@@ -1766,6 +1940,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
@@ -1779,6 +1955,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
@@ -1792,6 +1970,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
@@ -1851,6 +2031,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__trust__subcmd__stream_commands" \
@@ -1869,6 +2051,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -1884,6 +2068,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -2026,6 +2212,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':content:_default' \
@@ -2038,6 +2226,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':record:_default' \
@@ -2049,6 +2239,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__moderation_commands" \
@@ -2067,6 +2259,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::content:_default' \
@@ -2079,6 +2273,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':record:_default' \
@@ -2122,6 +2318,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':shell:(bash elvish fish powershell zsh)' \
@@ -2133,6 +2331,8 @@ _arguments "${_arguments_options[@]}" : \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::dir:_files' \
@@ -2186,11 +2386,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(daemon-add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(daemon-remove)
+(unwatch)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2779,8 +2975,7 @@ _syncweb_commands() {
 'daemon-shutdown:Ask the local daemon to stop' \
 'daemon-reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'daemon-add:Add a folder to the running daemon' \
-'daemon-remove:Remove a folder from the running daemon' \
+'unwatch:Stop watching a folder for local changes' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave and remove a synchronized folder' \
@@ -2956,20 +3151,10 @@ _syncweb__subcmd__daemon_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb daemon commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__daemon-add_commands] )) ||
-_syncweb__subcmd__daemon-add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb daemon-add commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__daemon-reload_commands] )) ||
 _syncweb__subcmd__daemon-reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb daemon-reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__daemon-remove_commands] )) ||
-_syncweb__subcmd__daemon-remove_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb daemon-remove commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__daemon-shutdown_commands] )) ||
 _syncweb__subcmd__daemon-shutdown_commands() {
@@ -3018,8 +3203,7 @@ _syncweb__subcmd__help_commands() {
 'daemon-shutdown:Ask the local daemon to stop' \
 'daemon-reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'daemon-add:Add a folder to the running daemon' \
-'daemon-remove:Remove a folder from the running daemon' \
+'unwatch:Stop watching a folder for local changes' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave and remove a synchronized folder' \
@@ -3133,20 +3317,10 @@ _syncweb__subcmd__help__subcmd__daemon_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help daemon commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon-add_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon-add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon-add commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__help__subcmd__daemon-reload_commands] )) ||
 _syncweb__subcmd__help__subcmd__daemon-reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help daemon-reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon-remove_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon-remove_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon-remove commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__daemon-shutdown_commands] )) ||
 _syncweb__subcmd__help__subcmd__daemon-shutdown_commands() {
@@ -3653,6 +3827,11 @@ _syncweb__subcmd__help__subcmd__unpublish_commands() {
 _syncweb__subcmd__help__subcmd__unsubscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help unsubscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__unwatch_commands] )) ||
+_syncweb__subcmd__help__subcmd__unwatch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help unwatch commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__verify_commands] )) ||
 _syncweb__subcmd__help__subcmd__verify_commands() {
@@ -4691,6 +4870,11 @@ _syncweb__subcmd__unpublish_commands() {
 _syncweb__subcmd__unsubscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb unsubscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__unwatch_commands] )) ||
+_syncweb__subcmd__unwatch_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb unwatch commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

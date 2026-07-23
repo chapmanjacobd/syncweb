@@ -495,7 +495,11 @@ pub struct WatchArgs {
     pub exclude: Vec<String>,
     #[arg(long, help = "Process one event and exit")]
     pub once: bool,
-    #[arg(long, help = "Run in the foreground without using a daemon")]
+    #[arg(
+        long,
+        visible_alias = "embedded",
+        help = "Run in the foreground without using a daemon"
+    )]
     pub no_daemon: bool,
 }
 

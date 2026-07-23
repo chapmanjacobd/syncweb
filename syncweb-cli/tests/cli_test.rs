@@ -531,6 +531,40 @@ fn test_download_selective() -> anyhow::Result<()> {
 }
 
 #[test]
+fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("download-auto-daemon");
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let download = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "download", "not-a-namespace"])
+        .output()
+        .context("run daemon-routed download")?;
+    let status = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "status"])
+        .output()
+        .context("query auto-started daemon")?;
+    let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "daemon-shutdown", "--force"])
+        .output()
+        .context("stop auto-started daemon")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup auto-started daemon")?;
+
+    ensure!(!download.status.success());
+    ensure!(
+        String::from_utf8(download.stderr)
+            .context("download UTF-8 error")?
+            .contains("invalid download namespace")
+    );
+    ensure!(status.status.success());
+    ensure!(
+        String::from_utf8(status.stdout)
+            .context("status UTF-8 error")?
+            .contains("daemon: running")
+    );
+    ensure!(shutdown.status.success());
+    Ok(())
+}
+
+#[test]
 fn test_init_outputs_url() -> anyhow::Result<()> {
     let directory = cli_test_dir("init-test");
     let data_dir = cli_test_dir("init-data");

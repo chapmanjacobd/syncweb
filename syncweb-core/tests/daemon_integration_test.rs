@@ -53,12 +53,8 @@ async fn create_folder(directory: &TestDirectory, root: &Path) -> Result<iroh_do
 }
 
 async fn start_daemon(directory: &TestDirectory) -> Result<(IpcClient, JoinHandle<syncweb_core::Result<()>>)> {
-    let _ = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_test_writer()
-        .try_init();
     let mut config = DaemonConfig::new(directory.path());
-    config.sync_interval = Duration::from_secs(60);
+    config.sync_interval = Duration::from_mins(1);
     config.watch_debounce = Duration::from_millis(50);
     let daemon = Daemon::new(config).await?;
     let client = IpcClient::new(directory.path());
@@ -127,19 +123,19 @@ async fn test_daemon_syncs_folder_end_to_end() -> Result<()> {
     let namespace = create_folder(&directory, &root).await?;
     let (client, task) = start_daemon(&directory).await?;
 
-    let response = client
+    let add_response = client
         .send(IpcRequest::new(IpcCommand::AddFolder {
             namespace: namespace.to_string(),
             path: root.clone(),
         }))
         .await
         .context("add folder request")?;
-    ensure!(matches!(response, IpcResponse::Ok { .. }));
-    let response = client
+    ensure!(matches!(add_response, IpcResponse::Ok { .. }));
+    let sync_response = client
         .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
         .await
         .context("trigger sync request")?;
-    ensure!(matches!(response, IpcResponse::Ok { .. }));
+    ensure!(matches!(sync_response, IpcResponse::Ok { .. }));
     ensure!(!task.is_finished(), "daemon stopped after trigger sync");
     let folders = client
         .send(IpcRequest::new(IpcCommand::ListFolders))
@@ -204,14 +200,14 @@ async fn test_daemon_concurrent_ipc_commands() -> Result<()> {
     let (client, task) = start_daemon(&directory).await?;
     let mut tasks = Vec::new();
     for _ in 0..8 {
-        let client = client.clone();
+        let request_client = client.clone();
         tasks.push(tokio::spawn(async move {
-            client.send(IpcRequest::new(IpcCommand::Status)).await
+            request_client.send(IpcRequest::new(IpcCommand::Status)).await
         }));
     }
-    for task in tasks {
+    for request_task in tasks {
         ensure!(matches!(
-            task.await.context("join IPC request")??,
+            request_task.await.context("join IPC request")??,
             IpcResponse::Status(DaemonStatus::Running)
         ));
     }
@@ -226,14 +222,14 @@ async fn test_daemon_reload_and_sync_over_ipc() -> Result<()> {
 
     let mut config = Config::default();
     config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
-    config.save(&directory.path().join("config.toml"))?;
+    config.save(directory.path().join("config.toml"))?;
 
-    let response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
-    ensure!(matches!(response, IpcResponse::Ok { .. }));
-    let response = client
+    let reload_response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
+    ensure!(matches!(reload_response, IpcResponse::Ok { .. }));
+    let sync_response = client
         .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
         .await?;
-    ensure!(matches!(response, IpcResponse::Ok { .. }));
+    ensure!(matches!(sync_response, IpcResponse::Ok { .. }));
     let report = wait_for_report(&StateFile::new(directory.path()), |report| report.schedule.is_some()).await?;
     ensure!(report.bandwidth.download_rate == 0);
 
@@ -244,14 +240,13 @@ async fn test_daemon_reload_and_sync_over_ipc() -> Result<()> {
 #[tokio::test]
 async fn test_two_daemons_cannot_start_simultaneously() -> Result<()> {
     let directory = TestDirectory::new("lock")?;
-    let first = Daemon::new(DaemonConfig::new(directory.path())).await?;
+    let (client, task) = start_daemon(&directory).await?;
     let second = Daemon::new(DaemonConfig::new(directory.path())).await;
-    let error = match second {
-        Ok(_) => anyhow::bail!("second daemon should not acquire the lock"),
-        Err(error) => error,
+    let Err(error) = second else {
+        anyhow::bail!("second daemon should not acquire the lock");
     };
     ensure!(error.to_string().contains("daemon already running"));
-    drop(first);
+    stop_daemon(&client, task).await?;
     Ok(())
 }
 

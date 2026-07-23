@@ -18,6 +18,14 @@ pub struct Cli {
 
     #[arg(
         long,
+        visible_alias = "embedded",
+        global = true,
+        help = "Bypass the daemon and use an embedded node for supported commands"
+    )]
+    pub no_daemon: bool,
+
+    #[arg(
+        long,
         global = true,
         default_value = ".syncweb",
         help = "Directory used for persistent node identity and data"

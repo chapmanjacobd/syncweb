@@ -276,7 +276,6 @@ impl Daemon {
         );
         self.load_folders().await?;
         self.start_watching().await?;
-        self.run_cycle().await?;
         let server = self.ipc_server.clone();
         let mut server_task = tokio::spawn(async move { server.serve().await });
         let mut shutdown = self.handle.shutdown_sender.subscribe();
@@ -285,6 +284,9 @@ impl Daemon {
         let interval_duration = self.config.sync_interval.max(Duration::from_millis(1));
         let mut interval = tokio::time::interval(interval_duration);
         let mut watch_interval = tokio::time::interval(Duration::from_millis(100));
+        if let Err(error) = self.run_cycle().await {
+            tracing::error!(%error, "initial daemon cycle failed");
+        }
         let result = loop {
             tokio::select! {
                 signal_result = &mut signal_task => {

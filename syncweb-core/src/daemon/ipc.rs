@@ -12,9 +12,7 @@ use std::{
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     sync::{RwLock, broadcast, mpsc},
-    time::timeout,
 };
 
 use crate::{
@@ -395,11 +393,11 @@ impl IpcListener {
     /// # Errors
     ///
     /// Returns an error when the parent directory or socket cannot be created.
+    #[cfg(unix)]
     pub fn bind(&self) -> Result<tokio::net::UnixListener> {
         if let Some(parent) = self.socket_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        #[cfg(unix)]
         if self.socket_path.exists() {
             match std::os::unix::net::UnixStream::connect(&self.socket_path) {
                 Ok(_) => {
@@ -1281,6 +1279,7 @@ impl IpcServer {
 
     #[cfg(unix)]
     async fn handle_connection(&self, stream: tokio::net::UnixStream) -> Result<()> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
         let (read_half, mut write_half) = stream.into_split();
         let mut line = Vec::new();
         BufReader::new(read_half).read_until(b'\n', &mut line).await?;
@@ -1394,6 +1393,8 @@ impl IpcClient {
     pub async fn send(&self, request: IpcRequest) -> Result<IpcResponse> {
         #[cfg(unix)]
         {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            use tokio::time::timeout;
             let mut stream = timeout(IPC_TIMEOUT, tokio::net::UnixStream::connect(&self.socket_path))
                 .await
                 .map_err(|error| SyncwebError::operation("daemon IPC connection timed out", error))?

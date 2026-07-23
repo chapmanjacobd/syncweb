@@ -37,6 +37,7 @@ iroh-docs.workspace = true
 iroh-gossip.workspace = true
 distributed-topic-tracker.workspace = true
 ed25519-dalek.workspace = true
+iroh-io.workspace = true
 n0-future.workspace = true
 globset.workspace = true
 notify.workspace = true

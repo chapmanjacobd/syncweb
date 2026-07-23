@@ -6,6 +6,7 @@
 pub mod catalog;
 pub mod denylist;
 pub mod links;
+pub mod parallel;
 pub mod reputation;
 pub mod resilience;
 pub mod wot;
@@ -20,6 +21,7 @@ pub use reputation::{
     ProviderReputation, ProviderReputationStore, ProviderTrustSignal, ReputationConfig, TrustSignalKind,
     trust_stream_topic,
 };
+pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use resilience::{
     AvailabilityHealth, BanRecord, BanSource, FailureRecord, FetchFailure, FetchFailureKind, FetchWait, LeaseUpdate,
     ProviderLease, ProviderLeaseTracker, ReplicationBudget, ReplicationResult, ResilienceConfig, ResilienceService,

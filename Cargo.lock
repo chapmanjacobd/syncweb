@@ -4957,6 +4957,7 @@ dependencies = [
  "iroh-blobs",
  "iroh-docs",
  "iroh-gossip",
+ "iroh-io",
  "n0-future",
  "notify",
  "rand 0.10.2",

@@ -1184,6 +1184,7 @@ impl Default for ReplicationBudget {
 pub struct ResilienceConfig {
     pub budget: ReplicationBudget,
     pub max_failures_per_provider: usize,
+    pub parallel: super::parallel::ParallelDownloadConfig,
 }
 
 impl ResilienceConfig {
@@ -1192,6 +1193,11 @@ impl ResilienceConfig {
         Self {
             budget,
             max_failures_per_provider: DEFAULT_MAX_FAILURES_PER_PROVIDER,
+            parallel: super::parallel::ParallelDownloadConfig {
+                min_blob_size: 16 * 1024 * 1024,
+                max_concurrent_connections: 5,
+                min_chunks_per_range: 64,
+            },
         }
     }
 
@@ -1199,6 +1205,13 @@ impl ResilienceConfig {
     #[must_use]
     pub const fn with_max_failures_per_provider(mut self, max_failures_per_provider: usize) -> Self {
         self.max_failures_per_provider = max_failures_per_provider;
+        self
+    }
+
+    /// Configure parallel multi-provider downloads.
+    #[must_use]
+    pub const fn with_parallel_config(mut self, config: super::parallel::ParallelDownloadConfig) -> Self {
+        self.parallel = config;
         self
     }
 }
@@ -1630,6 +1643,15 @@ impl ResilienceService {
             result.health_after = self.health(&hash)?;
             return Ok(result);
         }
+
+        // Attempt parallel multi-provider download for large blobs.
+        if let Some(outcome) = self
+            .try_parallel_download(endpoint, blobs, hash, &leases, &mut result, now)
+            .await?
+        {
+            return Ok(outcome);
+        }
+
         let selected = result.selected_providers.clone();
         for provider in selected {
             if self
@@ -1694,6 +1716,95 @@ impl ResilienceService {
         self.observe_provider(hash, endpoint.secret_key().public())?;
         result.health_after = self.health(&hash)?;
         Ok(result)
+    }
+
+    /// Try a parallel multi-provider download for a large blob.
+    ///
+    /// Returns `Ok(Some(result))` if the download succeeded and the caller
+    /// should return immediately; `Ok(None)` if the blob was too small or had
+    /// too few providers, so the caller should fall through to sequential.
+    #[allow(clippy::too_many_lines)]
+    async fn try_parallel_download(
+        &self,
+        endpoint: &Endpoint,
+        blobs: &BlobStore,
+        hash: Hash,
+        leases: &[ProviderLease],
+        result: &mut ReplicationResult,
+        now: u64,
+    ) -> Result<Option<ReplicationResult>> {
+        let candidates: Vec<(PublicKey, BlobTicket)> = {
+            let tracker = self
+                .tracker
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?;
+            let reputation = self
+                .reputation
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?;
+            result
+                .selected_providers
+                .iter()
+                .copied()
+                .filter(|provider| {
+                    !tracker.is_banned(*provider, &hash, now)
+                        && !reputation.is_banned(*provider, now)
+                })
+                .filter_map(|provider| {
+                    leases
+                        .iter()
+                        .find(|lease| lease.provider == provider)
+                        .and_then(|lease| parse_ticket(&lease.ticket).ok().map(|t| (provider, t)))
+                })
+                .collect()
+        };
+        if candidates.len() < 2 {
+            return Ok(None);
+        }
+        match crate::indexing::parallel::try_fetch_parallel(
+            endpoint,
+            blobs,
+            hash,
+            &candidates,
+            &self.config.parallel,
+        )
+        .await?
+        {
+            crate::indexing::parallel::TryParallelResult::Downloaded(successful) => {
+                for provider in &successful {
+                    self.reputation
+                        .lock()
+                        .map_err(|error| {
+                            SyncwebError::operation("provider reputation lock poisoned", error)
+                        })?
+                        .record_success(*provider, current_epoch_seconds());
+                    self.clear_failures_for_provider(&hash, provider)?;
+                    result.fetched_from.push(*provider);
+                }
+                result
+                    .invalidated_leases
+                    .extend(self.retroactive_invalidate(hash, endpoint.secret_key().public())?);
+                blobs.pin(replication_pin_name(hash), hash).await?;
+                result.pinned = true;
+                self.observe_provider(hash, endpoint.secret_key().public())?;
+                result.health_after = self.health(&hash)?;
+                Ok(Some(result.clone()))
+            }
+            crate::indexing::parallel::TryParallelResult::AllFailed => {
+                for (provider, _) in &candidates {
+                    let failure = FetchFailure::new(
+                        FetchFailureKind::Unknown,
+                        *provider,
+                        hash,
+                        "parallel download failed",
+                    );
+                    self.record_failure_at(hash, *provider, failure, now)?;
+                    result.failed_from.push((*provider, FetchFailureKind::Unknown));
+                }
+                Ok(None)
+            }
+            crate::indexing::parallel::TryParallelResult::Inapplicable => Ok(None),
+        }
     }
 
     fn rank_provider_candidates(&self, hash: Hash, providers: &[PublicKey], now: u64) -> Result<Vec<PublicKey>> {

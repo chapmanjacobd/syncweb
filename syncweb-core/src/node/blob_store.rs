@@ -96,7 +96,7 @@ impl BlobStore {
     /// Export a complete blob to a temporary or caller-managed path.
     ///
     /// Uses [`ExportMode::Copy`] — the blob stays in the store and a copy
-    /// (or CoW reflink) is written to `destination`.
+    /// (or `CoW` reflink) is written to `destination`.
     ///
     /// # Errors
     ///
@@ -110,7 +110,7 @@ impl BlobStore {
     /// `ExportMode::TryReference` moves the blob's internal file to
     /// `destination` and updates the store to track it externally,
     /// avoiding a copy. `ExportMode::Copy` leaves the blob in the store
-    /// and writes a copy (or CoW reflink) to `destination`.
+    /// and writes a copy (or `CoW` reflink) to `destination`.
     ///
     /// # Errors
     ///

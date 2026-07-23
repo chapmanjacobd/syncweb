@@ -4904,7 +4904,7 @@ dependencies = [
 
 [[package]]
 name = "syncweb"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -4936,7 +4936,7 @@ dependencies = [
 
 [[package]]
 name = "syncweb-core"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "anyhow",
  "async-compression",

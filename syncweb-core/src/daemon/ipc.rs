@@ -1923,4 +1923,513 @@ mod tests {
             IpcResponse::Error { message } if message.contains("no node context")
         ));
     }
+
+    struct IpcTestFixture {
+        server: IpcServer,
+        node: Arc<IrohNode>,
+        directory: PathBuf,
+    }
+
+    async fn setup_ipc_test() -> IpcTestFixture {
+        use crate::node::identity::IdentityManager;
+        use crate::node::iroh_node::RelayMode;
+
+        let directory = std::env::temp_dir().join(format!("syncweb-ipc-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("test directory should be created");
+
+        let identity = IdentityManager::new(directory.join("identity.key")).expect("test identity should open");
+        let node = Arc::new(
+            IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                .await
+                .expect("test node should start"),
+        );
+        let pool = Arc::new(ManagedPool::new("syncweb-test", 1).expect("test pool should start"));
+
+        let daemon_state = DaemonState::new(
+            std::process::id(),
+            node.endpoint().id().to_string(),
+            1,
+            &directory,
+            DaemonStatus::Running,
+        );
+        let handle = DaemonHandle::new(daemon_state);
+        let server = IpcServer::with_archive_context(socket_path(), handle, node.clone(), pool);
+
+        IpcTestFixture {
+            server,
+            node,
+            directory,
+        }
+    }
+
+    async fn cleanup_ipc_test(fixture: IpcTestFixture) {
+        let _ = fixture.node.stop().await;
+        let _ = std::fs::remove_dir_all(&fixture.directory);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_create_folder_creates_and_returns_message() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("create-folder-test");
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Ok { .. }));
+        if let IpcResponse::Ok { message } = response {
+            assert!(message.contains("namespace:"));
+            assert!(message.contains("ticket:"));
+        }
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_create_folder_invalid_mode() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("create-folder-invalid");
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "invalid-mode".to_owned(),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        if let IpcResponse::Error { message } = response {
+            assert!(message.contains("invalid sync mode"));
+        }
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_create_folder_duplicate_namespace() {
+        let fixture = setup_ipc_test().await;
+        let test_dir1 = fixture.directory.join("create-folder-dup-1");
+        let test_dir2 = fixture.directory.join("create-folder-dup-2");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir1.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        assert!(matches!(response1, IpcResponse::Ok { .. }));
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ref ns) = namespace {
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                    path: test_dir2.clone(),
+                    mode: "sendreceive".to_owned(),
+                }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+            let ns2 = if let IpcResponse::Ok { message } = &response2 {
+                message
+                    .lines()
+                    .find(|line| line.starts_with("namespace:"))
+                    .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+            } else {
+                None
+            };
+            assert_ne!(Some(ns), ns2.as_ref(), "each create should produce a unique namespace");
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir1);
+        let _ = std::fs::remove_dir_all(&test_dir2);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_health_check_returns_report() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("health-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ns) = namespace {
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+                    path: PathBuf::from(&ns),
+                }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+            if let IpcResponse::Ok { message } = response2 {
+                assert!(message.contains("total:"));
+                assert!(message.contains("well-seeded:"));
+            }
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_health_check_unknown_folder() {
+        let fixture = setup_ipc_test().await;
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+                path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_verify_integrity_returns_result() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("verify-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ns) = namespace {
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
+                    path: PathBuf::from(&ns),
+                }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+            if let IpcResponse::Ok { message } = response2 {
+                assert!(message.contains("total:"));
+                assert!(message.contains("verified:"));
+                assert!(message.contains("corrupted:"));
+                assert!(message.contains("missing:"));
+                assert!(message.contains("valid:"));
+            }
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_verify_integrity_unknown_folder() {
+        let fixture = setup_ipc_test().await;
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
+                path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_join_folder_invalid_ticket() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("join-invalid");
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::Join {
+                ticket: "not-a-valid-ticket".to_owned(),
+                path: test_dir.clone(),
+                mode: SyncMode::SendReceive,
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_publish_folder_ticket() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("publish-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ns) = namespace {
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::Publish {
+                    namespace: ns.clone(),
+                    blob: None,
+                }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+            if let IpcResponse::Ok { message } = response2 {
+                assert!(message.contains("ticket:"));
+            }
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_publish_invalid_namespace() {
+        let fixture = setup_ipc_test().await;
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::Publish {
+                namespace: "not-a-namespace".to_owned(),
+                blob: None,
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        if let IpcResponse::Error { message } = response {
+            assert!(message.contains("invalid namespace"));
+        }
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_subscribe_returns_ok() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("subscribe-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ns) = namespace {
+            let response = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+                    namespace: ns.clone(),
+                    params: SubscribeParams::ingest_only(),
+                }))
+                .await;
+            assert!(matches!(response, IpcResponse::Ok { .. }));
+            if let IpcResponse::Ok { message } = response {
+                assert!(message.contains("subscribed:"));
+            }
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_subscribe_with_params() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("subscribe-params-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response1 = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response1 {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ns) = namespace {
+            let params = SubscribeParams {
+                ingest_only: true,
+                ..SubscribeParams::default()
+            };
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+                    namespace: ns.clone(),
+                    params,
+                }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_leave_folder_removes_from_registry() {
+        let fixture = setup_ipc_test().await;
+        let test_dir = fixture.directory.join("leave-test");
+        std::fs::create_dir_all(&test_dir).expect("test dir should be created");
+
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: test_dir.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        let namespace = if let IpcResponse::Ok { message } = &response {
+            message
+                .lines()
+                .find(|line| line.starts_with("namespace:"))
+                .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(str::to_owned))
+        } else {
+            None
+        };
+
+        if let Some(ref ns) = namespace {
+            let namespace_id: iroh_docs::NamespaceId = ns.parse().expect("valid namespace");
+            fixture
+                .server
+                .daemon_handle
+                .folder_registry
+                .write()
+                .await
+                .add(FolderEntry::new(namespace_id, test_dir.clone()))
+                .expect("folder should be added");
+
+            let statuses1 = fixture.server.daemon_handle.folder_registry.read().await.statuses();
+            assert!(statuses1.iter().any(|s| s.namespace == *ns));
+
+            let response2 = fixture
+                .server
+                .handle_request(IpcRequest::new(IpcCommand::LeaveFolder { namespace: ns.clone() }))
+                .await;
+            assert!(matches!(response2, IpcResponse::Ok { .. }));
+
+            let statuses2 = fixture.server.daemon_handle.folder_registry.read().await.statuses();
+            assert!(!statuses2.iter().any(|s| s.namespace == *ns));
+        }
+
+        cleanup_ipc_test(fixture).await;
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_leave_folder_nonexistent() {
+        let fixture = setup_ipc_test().await;
+        let fake_ns = iroh_docs::NamespaceSecret::from_bytes(&[99; 32]).id().to_string();
+        let _response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
+                namespace: fake_ns.clone(),
+            }))
+            .await;
+        let registry = fixture.server.daemon_handle.folder_registry.read().await;
+        let statuses = registry.statuses();
+        assert!(!statuses.iter().any(|s| s.namespace == fake_ns));
+        drop(registry);
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_unpublish_invalid_hash() {
+        let fixture = setup_ipc_test().await;
+        let fake_ns = iroh_docs::NamespaceSecret::from_bytes(&[88; 32]).id().to_string();
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::Unpublish {
+                namespace: fake_ns,
+                blob: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_owned(),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        if let IpcResponse::Error { message } = response {
+            assert!(message.contains("invalid blob hash"));
+        }
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_snapshot_list_empty() {
+        let fixture = setup_ipc_test().await;
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::SnapshotList {
+                path: PathBuf::from("."),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Ok { .. }));
+        if let IpcResponse::Ok { message } = response {
+            assert!(message.contains("snapshots:"));
+        }
+        cleanup_ipc_test(fixture).await;
+    }
+
+    #[tokio::test]
+    async fn test_ipc_snapshot_delete_invalid_id() {
+        let fixture = setup_ipc_test().await;
+        let response = fixture
+            .server
+            .handle_request(IpcRequest::new(IpcCommand::SnapshotDelete {
+                id: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_owned(),
+            }))
+            .await;
+        assert!(matches!(response, IpcResponse::Error { .. }));
+        if let IpcResponse::Error { message } = response {
+            assert!(message.contains("invalid snapshot id"));
+        }
+        cleanup_ipc_test(fixture).await;
+    }
 }

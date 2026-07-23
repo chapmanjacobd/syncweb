@@ -38,7 +38,7 @@ use iroh_blobs::Hash;
 use syncweb_core::{
     daemon::{
         BandwidthSnapshot, DaemonHandle, DaemonState, DaemonStatus, DaemonStatusReport, FolderStatusReport, IpcClient,
-        IpcCommand, IpcRequest, IpcServer, ManagedPool, StateFile,
+        IpcCommand, IpcRequest, IpcResponse, IpcServer, ManagedPool, StateFile,
     },
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{CollectionEntry, CollectionManifest, DropExportOptions, DropExporter},
@@ -672,6 +672,217 @@ fn bench_archive_import_with_pool(c: &mut Criterion) {
     let _ = std::fs::remove_dir_all(fixture.directory);
 }
 
+fn bench_ipc_create_folder(c: &mut Criterion) {
+    let runtime = benchmark_runtime();
+    let fixture = {
+        let directory = std::env::temp_dir().join(format!("syncweb-bench-create-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("benchmark directory should be created");
+        let (node, handle, pool) = runtime.block_on(async {
+            let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
+                .expect("benchmark identity should open");
+            let node = Arc::new(
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                    .await
+                    .expect("benchmark node should start"),
+            );
+            let daemon_state = DaemonState::new(
+                std::process::id(),
+                node.endpoint().id().to_string(),
+                1,
+                &directory,
+                DaemonStatus::Running,
+            );
+            let handle = DaemonHandle::new(daemon_state);
+            let pool = Arc::new(ManagedPool::new("syncweb-bench", 1).expect("benchmark pool should start"));
+            (node, handle, pool)
+        });
+        let socket_path = std::env::temp_dir().join(format!("syncweb-bench-create-{}.sock", uuid::Uuid::new_v4()));
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        (node, server, socket_path, directory)
+    };
+
+    {
+        let mut group = c.benchmark_group("daemon_ipc");
+        let test_dir = fixture.3.join("bench-create-folder");
+        group.bench_function("create_folder", |b| {
+            b.iter(|| {
+                let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                    path: test_dir.clone(),
+                    mode: "sendreceive".to_owned(),
+                })));
+                let _ = std::hint::black_box(response);
+            });
+        });
+        group.finish();
+    }
+
+    runtime.block_on(fixture.0.stop()).expect("benchmark node should stop");
+    let _ = std::fs::remove_dir_all(fixture.3);
+}
+
+fn bench_ipc_health_check(c: &mut Criterion) {
+    let runtime = benchmark_runtime();
+    let fixture = {
+        let directory = std::env::temp_dir().join(format!("syncweb-bench-health-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("benchmark directory should be created");
+        let (node, handle, pool, namespace) = runtime.block_on(async {
+            let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
+                .expect("benchmark identity should open");
+            let node = Arc::new(
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                    .await
+                    .expect("benchmark node should start"),
+            );
+            let daemon_state = DaemonState::new(
+                std::process::id(),
+                node.endpoint().id().to_string(),
+                1,
+                &directory,
+                DaemonStatus::Running,
+            );
+            let handle = DaemonHandle::new(daemon_state);
+            let pool = Arc::new(ManagedPool::new("syncweb-bench", 1).expect("benchmark pool should start"));
+            let server = IpcServer::with_archive_context(
+                std::path::PathBuf::from(""),
+                handle.clone(),
+                node.clone(),
+                pool.clone(),
+            );
+            let test_dir = directory.join("health-bench-folder");
+            let response = server
+                .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                    path: test_dir.clone(),
+                    mode: "sendreceive".to_owned(),
+                }))
+                .await;
+            let namespace = if let IpcResponse::Ok { message } = &response {
+                message
+                    .lines()
+                    .find(|line| line.starts_with("namespace:"))
+                    .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(String::from))
+            } else {
+                None
+            };
+            (node, handle, pool, namespace)
+        });
+        let socket_path = std::env::temp_dir().join(format!("syncweb-bench-health-{}.sock", uuid::Uuid::new_v4()));
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        (node, server, socket_path, directory, namespace)
+    };
+
+    if let Some(ref ns) = fixture.4 {
+        let namespace = ns.clone();
+        let mut group = c.benchmark_group("daemon_ipc");
+        group.bench_function("health_check", |b| {
+            b.iter(|| {
+                let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+                    path: std::path::PathBuf::from(&namespace),
+                })));
+                let _ = std::hint::black_box(response);
+            });
+        });
+        group.finish();
+    }
+
+    runtime.block_on(fixture.0.stop()).expect("benchmark node should stop");
+    let _ = std::fs::remove_dir_all(fixture.3);
+}
+
+fn bench_ipc_verify_integrity(c: &mut Criterion) {
+    let runtime = benchmark_runtime();
+    let fixture = {
+        let directory = std::env::temp_dir().join(format!("syncweb-bench-verify-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("benchmark directory should be created");
+        let (node, handle, pool, namespace) = runtime.block_on(async {
+            let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
+                .expect("benchmark identity should open");
+            let node = Arc::new(
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                    .await
+                    .expect("benchmark node should start"),
+            );
+            let daemon_state = DaemonState::new(
+                std::process::id(),
+                node.endpoint().id().to_string(),
+                1,
+                &directory,
+                DaemonStatus::Running,
+            );
+            let handle = DaemonHandle::new(daemon_state);
+            let pool = Arc::new(ManagedPool::new("syncweb-bench", 1).expect("benchmark pool should start"));
+            let server = IpcServer::with_archive_context(
+                std::path::PathBuf::from(""),
+                handle.clone(),
+                node.clone(),
+                pool.clone(),
+            );
+            let test_dir = directory.join("verify-bench-folder");
+            let response = server
+                .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                    path: test_dir.clone(),
+                    mode: "sendreceive".to_owned(),
+                }))
+                .await;
+            let namespace = if let IpcResponse::Ok { message } = &response {
+                message
+                    .lines()
+                    .find(|line| line.starts_with("namespace:"))
+                    .and_then(|line| line.strip_prefix("namespace:").map(str::trim).map(String::from))
+            } else {
+                None
+            };
+            (node, handle, pool, namespace)
+        });
+        let socket_path = std::env::temp_dir().join(format!("syncweb-bench-verify-{}.sock", uuid::Uuid::new_v4()));
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        (node, server, socket_path, directory, namespace)
+    };
+
+    if let Some(ref ns) = fixture.4 {
+        let namespace = ns.clone();
+        let mut group = c.benchmark_group("daemon_ipc");
+        group.bench_function("verify_integrity", |b| {
+            b.iter(|| {
+                let response =
+                    runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
+                        path: std::path::PathBuf::from(&namespace),
+                    })));
+                let _ = std::hint::black_box(response);
+            });
+        });
+        group.finish();
+    }
+
+    runtime.block_on(fixture.0.stop()).expect("benchmark node should stop");
+    let _ = std::fs::remove_dir_all(fixture.3);
+}
+
+fn bench_daemon_start_stop(c: &mut Criterion) {
+    let runtime = benchmark_runtime();
+    let directory = std::env::temp_dir().join(format!("syncweb-bench-startstop-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).expect("benchmark directory should be created");
+
+    {
+        let mut group = c.benchmark_group("daemon_lifecycle");
+        group.bench_function("start_stop", |b| {
+            b.iter(|| {
+                let result = runtime.block_on(async {
+                    let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
+                        .expect("benchmark identity should open");
+                    let node = IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+                        .await
+                        .expect("benchmark node should start");
+                    node.stop().await
+                });
+                let _ = std::hint::black_box(result);
+            });
+        });
+        group.finish();
+    }
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
 criterion_group!(
     benches,
     bench_filter,
@@ -687,5 +898,9 @@ criterion_group!(
     bench_state_file_write_read,
     bench_archive_export_with_pool,
     bench_archive_import_with_pool,
+    bench_ipc_create_folder,
+    bench_ipc_health_check,
+    bench_ipc_verify_integrity,
+    bench_daemon_start_stop,
 );
 criterion_main!(benches);

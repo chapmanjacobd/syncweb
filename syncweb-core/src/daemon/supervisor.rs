@@ -6,7 +6,10 @@ use std::{
 
 use iroh_docs::NamespaceId;
 use n0_future::StreamExt;
-use tokio::{sync::broadcast, time::sleep};
+use tokio::{
+    sync::{broadcast, oneshot},
+    time::sleep,
+};
 
 use crate::{
     daemon::current_timestamp,
@@ -50,6 +53,27 @@ pub struct IntentSupervisor {
 
 /// Shared controls for intents currently owned by the daemon.
 pub type IntentControls = Arc<Mutex<HashMap<NamespaceId, IntentControl>>>;
+
+/// Internal startup options for a supervised daemon intent.
+pub struct SupervisionOptions {
+    controls: Option<IntentControls>,
+    filter: Option<FilterEngine>,
+    ready: Option<oneshot::Sender<()>>,
+}
+
+impl SupervisionOptions {
+    pub const fn with_ready(
+        controls: IntentControls,
+        filter: Option<FilterEngine>,
+        ready: oneshot::Sender<()>,
+    ) -> Self {
+        Self {
+            controls: Some(controls),
+            filter,
+            ready: Some(ready),
+        }
+    }
+}
 
 impl IntentSupervisor {
     #[must_use]
@@ -126,8 +150,18 @@ impl IntentSupervisor {
         params: SubscribeParams,
         shutdown: broadcast::Receiver<()>,
     ) -> Result<SupervisedIntent> {
-        self.supervise_inner(sync, namespace, params, shutdown, None, None)
-            .await
+        self.supervise_inner(
+            sync,
+            namespace,
+            params,
+            shutdown,
+            SupervisionOptions {
+                controls: None,
+                filter: None,
+                ready: None,
+            },
+        )
+        .await
     }
 
     /// Supervise an intent while exposing pause/resume controls to its owner.
@@ -145,8 +179,29 @@ impl IntentSupervisor {
         controls: IntentControls,
         filter: Option<FilterEngine>,
     ) -> Result<SupervisedIntent> {
-        self.supervise_inner(sync, namespace, params, shutdown, Some(controls), filter)
-            .await
+        self.supervise_inner(
+            sync,
+            namespace,
+            params,
+            shutdown,
+            SupervisionOptions {
+                controls: Some(controls),
+                filter,
+                ready: None,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn supervise_with_controls_and_ready(
+        &self,
+        sync: &SyncEngine,
+        namespace: NamespaceId,
+        params: SubscribeParams,
+        shutdown: broadcast::Receiver<()>,
+        options: SupervisionOptions,
+    ) -> Result<SupervisedIntent> {
+        self.supervise_inner(sync, namespace, params, shutdown, options).await
     }
 
     async fn supervise_inner(
@@ -155,16 +210,19 @@ impl IntentSupervisor {
         namespace: NamespaceId,
         params: SubscribeParams,
         mut shutdown: broadcast::Receiver<()>,
-        controls: Option<IntentControls>,
-        filter: Option<FilterEngine>,
+        mut options: SupervisionOptions,
     ) -> Result<SupervisedIntent> {
         let mut supervised = self
-            .run_intent_with_filter(sync, namespace, params.clone(), filter.clone())
+            .run_intent_with_filter(sync, namespace, params.clone(), options.filter.clone())
             .await;
+        let mut ready = options.ready.take();
 
         loop {
             let Some(mut handle) = supervised.handle.take() else {
-                Self::remove_control(controls.as_ref(), namespace)?;
+                if let Some(sender) = ready.take() {
+                    let _ = sender.send(());
+                }
+                Self::remove_control(options.controls.as_ref(), namespace)?;
                 if supervised.retry_count >= self.max_retries {
                     return Ok(supervised);
                 }
@@ -177,13 +235,16 @@ impl IntentSupervisor {
                 }
                 supervised.retry_count = retry_number;
                 supervised = self
-                    .run_intent_with_filter(sync, namespace, params.clone(), filter.clone())
+                    .run_intent_with_filter(sync, namespace, params.clone(), options.filter.clone())
                     .await;
                 supervised.retry_count = retry_number;
                 continue;
             };
 
-            Self::insert_control(controls.as_ref(), namespace, handle.control())?;
+            Self::insert_control(options.controls.as_ref(), namespace, handle.control())?;
+            if let Some(sender) = ready.take() {
+                let _ = sender.send(());
+            }
             let session = supervised.session.take();
             let event = loop {
                 tokio::select! {
@@ -193,7 +254,7 @@ impl IntentSupervisor {
                                 if let Err(error) = handle.cancel() {
                                     supervised.last_error = Some(format!("failed to cancel intent: {error}"));
                                 }
-                                Self::remove_control(controls.as_ref(), namespace)?;
+                                Self::remove_control(options.controls.as_ref(), namespace)?;
                                 drop(session);
                                 supervised.handle = None;
                                 return Ok(supervised);
@@ -205,7 +266,7 @@ impl IntentSupervisor {
                 }
             };
 
-            Self::remove_control(controls.as_ref(), namespace)?;
+            Self::remove_control(options.controls.as_ref(), namespace)?;
             match event {
                 Some(SyncEvent::Started) => {
                     supervised.retry_count = 0;

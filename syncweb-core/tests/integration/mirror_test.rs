@@ -1,5 +1,3 @@
-mod test_utils;
-
 use anyhow::{Result, ensure};
 use syncweb_core::indexing::{ProviderLease, ReplicationBudget, ResilienceConfig, ResilienceService};
 use syncweb_core::node::identity::IdentityManager;

@@ -1,5 +1,3 @@
-mod test_utils;
-
 use anyhow::ensure;
 
 use syncweb_core::node::identity::IdentityManager;

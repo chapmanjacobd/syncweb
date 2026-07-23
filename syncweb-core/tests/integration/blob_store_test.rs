@@ -1,5 +1,3 @@
-mod test_utils;
-
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 

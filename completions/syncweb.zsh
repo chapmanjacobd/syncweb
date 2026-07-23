@@ -374,7 +374,13 @@ _arguments "${_arguments_options[@]}" : \
 '--min-count=[Minimum number of blobs to fetch]:MIN_COUNT:_default' \
 '--max-count=[Maximum number of blobs to fetch]:MAX_COUNT:_default' \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--hash=[Content hash to download (single blob mode)]:HASH:_default' \
+'*--from=[Blob ticket(s) for providers (can repeat, requires --hash)]:FROM:_default' \
+'*--provider=[Blob ticket(s) for providers (can repeat, requires --hash)]:FROM:_default' \
+'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--no-sharing[Do not share or seed the downloaded content]' \
+'--no-seeding[Do not share or seed the downloaded content]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1702,20 +1708,6 @@ esac
     ;;
 esac
 ;;
-(mirror)
-_arguments "${_arguments_options[@]}" : \
-'--hash=[Content hash to mirror]:HASH:_default' \
-'*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
-'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -2684,10 +2676,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(mirror)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__trust_commands" \
@@ -2869,7 +2857,6 @@ _syncweb_commands() {
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
 'provider:Manage blob provider registrations' \
-'mirror:Fetch and pin a blob from provider(s) to replicate content locally' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
 'report:Submit a local moderation report' \
@@ -3080,7 +3067,6 @@ _syncweb__subcmd__help_commands() {
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
 'provider:Manage blob provider registrations' \
-'mirror:Fetch and pin a blob from provider(s) to replicate content locally' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
 'report:Submit a local moderation report' \
@@ -3315,11 +3301,6 @@ _syncweb__subcmd__help__subcmd__ls_commands() {
 _syncweb__subcmd__help__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help manpages commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__mirror_commands] )) ||
-_syncweb__subcmd__help__subcmd__mirror_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__help__subcmd__moderation_commands() {
@@ -3956,11 +3937,6 @@ _syncweb__subcmd__ls_commands() {
 _syncweb__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb manpages commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror_commands] )) ||
-_syncweb__subcmd__mirror_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__moderation_commands() {

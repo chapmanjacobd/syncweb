@@ -534,7 +534,7 @@ impl IpcServer {
             IpcCommand::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
             IpcCommand::HealthCheck { path } => self.handle_health_check(path).await,
             IpcCommand::VerifyIntegrity { path } => self.handle_verify_integrity(path).await,
-            IpcCommand::Unsubscribe { namespace } => self.handle_unsubscribe(&namespace),
+            IpcCommand::Unsubscribe { namespace } => Self::handle_unsubscribe(&namespace),
             IpcCommand::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
             IpcCommand::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
             IpcCommand::SnapshotCreate {
@@ -1004,8 +1004,7 @@ impl IpcServer {
         }
     }
 
-    #[allow(clippy::unused_self)]
-    fn handle_unsubscribe(&self, namespace: &str) -> IpcResponse {
+    fn handle_unsubscribe(namespace: &str) -> IpcResponse {
         match iroh_docs::NamespaceId::from_str(namespace) {
             Ok(namespace_id) => {
                 if cancel_session(namespace_id) {

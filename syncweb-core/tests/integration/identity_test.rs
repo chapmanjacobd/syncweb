@@ -1,5 +1,3 @@
-mod test_utils;
-
 use syncweb_core::node::identity::{DeviceId, IdentityManager};
 
 use crate::test_utils::TestDirectory;

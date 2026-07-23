@@ -298,8 +298,7 @@ fn test_resilience_reputation_weighted_selection() -> Result<()> {
     resilience.record_lease(lease(52, content)?)?;
     let rank_store = resilience.reputation_store();
     {
-        #[allow(clippy::unwrap_in_result)]
-        let mut store = rank_store.lock().unwrap();
+        let mut store = rank_store.lock().map_err(|e| anyhow::anyhow!("lock poisoned: {e}"))?;
         store.record_success(good, 10);
         store.record_success(good, 11);
         store.record_failure(bad, FetchFailureKind::NotFound, 10);

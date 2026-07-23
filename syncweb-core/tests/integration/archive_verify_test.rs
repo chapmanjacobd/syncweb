@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{
     io,
     path::Path,

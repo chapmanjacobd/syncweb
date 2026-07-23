@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{fs, sync::Arc};
 
 use anyhow::{Result, ensure};

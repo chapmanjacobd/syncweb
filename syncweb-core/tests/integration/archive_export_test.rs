@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};

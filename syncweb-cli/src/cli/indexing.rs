@@ -399,15 +399,16 @@ pub async fn download_blob(
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let content_hash = tickets[0].hash();
+    let first_ticket = tickets.first().context("tickets list is empty")?;
+    let content_hash = first_ticket.hash();
 
     if no_sharing {
         if let Some(path) = export_path {
-            direct_fetch_to_path(data_dir, &tickets[0], content_hash, path).await?;
+            direct_fetch_to_path(data_dir, first_ticket, content_hash, path).await?;
         } else {
             let node = open_node(data_dir).await?;
             node.blob_store()
-                .fetch(node.endpoint(), &tickets[0])
+                .fetch(node.endpoint(), first_ticket)
                 .await
                 .context("failed to fetch blob")?;
             let pin_name = format!("syncweb/download/{content_hash}");
@@ -492,7 +493,7 @@ async fn direct_fetch_to_path(data_dir: &Path, ticket: &BlobTicket, hash: Hash, 
         .context("failed to connect to provider")?;
 
     let request = GetRequest::blob(hash);
-    let at_connected = fsm::start(connection, request, Default::default())
+    let at_connected = fsm::start(connection, request, fsm::RequestCounters::default())
         .next()
         .await
         .map_err(|e| anyhow::anyhow!("get negotiation failed: {e}"))?;

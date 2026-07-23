@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{fs, path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, ensure};

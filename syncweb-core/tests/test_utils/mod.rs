@@ -38,7 +38,6 @@ impl Drop for TestDirectory {
 /// # Errors
 ///
 /// Returns an error if the identity cannot be loaded or the node cannot connect.
-#[allow(dead_code)]
 pub async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;

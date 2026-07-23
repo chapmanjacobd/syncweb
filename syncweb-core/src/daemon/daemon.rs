@@ -7,7 +7,7 @@ use std::{
 
 use iroh_docs::NamespaceId;
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
 
@@ -30,7 +30,7 @@ use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, StateFile,
     current_timestamp, daemon_socket_path,
     state::{BandwidthSnapshot, DaemonStatusReport, FolderStatusReport, ScheduleStatus},
-    supervisor::{IntentControls, IntentSupervisor},
+    supervisor::{IntentControls, IntentSupervisor, SupervisionOptions},
 };
 
 /// Configuration used to construct and run a daemon.
@@ -428,9 +428,16 @@ impl Daemon {
         let params = bandwidth.map_or_else(SubscribeParams::default, |limits| {
             SubscribeParams::default().with_bandwidth_limits(limits)
         });
+        let (ready_sender, ready_receiver) = oneshot::channel();
         let task = tokio::spawn(async move {
             match supervisor
-                .supervise_with_controls(&sync, namespace, params, shutdown, controls, filter)
+                .supervise_with_controls_and_ready(
+                    &sync,
+                    namespace,
+                    params,
+                    shutdown,
+                    SupervisionOptions::with_ready(controls, filter, ready_sender),
+                )
                 .await
             {
                 Ok(result) => {
@@ -445,6 +452,9 @@ impl Daemon {
             .lock()
             .map_err(|error| SyncwebError::operation("daemon intent task mutex is poisoned", error))?
             .insert(namespace, task);
+        ready_receiver
+            .await
+            .map_err(|error| SyncwebError::operation("daemon intent startup notification failed", error))?;
         Ok(())
     }
 

@@ -65,7 +65,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('indexing', 'indexing', [CompletionResultType]::ParameterValue, 'Manage opt-in indexing, catalogs, and metadata')
             [CompletionResult]::new('link', 'link', [CompletionResultType]::ParameterValue, 'Create and resolve stable syncweb links')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage blob provider registrations')
-            [CompletionResult]::new('mirror', 'mirror', [CompletionResultType]::ParameterValue, 'Fetch and pin a blob from provider(s) to replicate content locally')
             [CompletionResult]::new('trust', 'trust', [CompletionResultType]::ParameterValue, 'Inspect and delegate local trust')
             [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Sign content provenance attestations')
             [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Submit a local moderation report')
@@ -361,7 +360,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--min-count', '--min-count', [CompletionResultType]::ParameterName, 'Minimum number of blobs to fetch')
             [CompletionResult]::new('--max-count', '--max-count', [CompletionResultType]::ParameterName, 'Maximum number of blobs to fetch')
             [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Copy threads (1 disables parallelism, 0 uses all available CPUs)')
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash to download (single blob mode)')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --hash)')
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --hash)')
+            [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum providers for healthy replication')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed the downloaded content')
+            [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed the downloaded content')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
@@ -1345,19 +1350,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;provider;help;help' {
             break
         }
-        'syncweb;mirror' {
-            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash to mirror')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat)')
-            [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum providers for healthy replication')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
         'syncweb;trust' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1752,7 +1744,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('indexing', 'indexing', [CompletionResultType]::ParameterValue, 'Manage opt-in indexing, catalogs, and metadata')
             [CompletionResult]::new('link', 'link', [CompletionResultType]::ParameterValue, 'Create and resolve stable syncweb links')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage blob provider registrations')
-            [CompletionResult]::new('mirror', 'mirror', [CompletionResultType]::ParameterValue, 'Fetch and pin a blob from provider(s) to replicate content locally')
             [CompletionResult]::new('trust', 'trust', [CompletionResultType]::ParameterValue, 'Inspect and delegate local trust')
             [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Sign content provenance attestations')
             [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Submit a local moderation report')
@@ -2051,9 +2042,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;provider;add' {
-            break
-        }
-        'syncweb;help;mirror' {
             break
         }
         'syncweb;help;trust' {

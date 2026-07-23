@@ -1,5 +1,3 @@
-mod test_utils;
-
 use anyhow::Result;
 use syncweb_core::folder::{CollectionManifest, CollectionStore, FolderManager, SyncMode};
 

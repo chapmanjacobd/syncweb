@@ -1,5 +1,3 @@
-mod test_utils;
-
 use anyhow::Context;
 use std::{
     fs,

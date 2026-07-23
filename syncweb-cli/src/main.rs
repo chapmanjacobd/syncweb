@@ -641,78 +641,65 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     Ok(())
 }
 
-async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
+async fn download_from_ticket(
+    ctx: &CliContext<'_>,
+    command: &crate::cli::commands::DownloadArgs,
+    ticket: iroh_blobs::ticket::BlobTicket,
+) -> Result<()> {
+    cli::indexing::download_blob(
+        ctx,
+        &[ticket],
+        command.min_providers,
+        command.no_sharing,
+        command.destination.as_deref(),
+    )
+    .await
+}
 
-    if let Ok(ticket) = command
-        .source
-        .to_string_lossy()
-        .parse::<iroh_blobs::ticket::BlobTicket>()
+async fn download_with_hash(
+    ctx: &CliContext<'_>,
+    hash: &str,
+    command: &crate::cli::commands::DownloadArgs,
+) -> Result<()> {
+    if command.from.is_empty() {
+        anyhow::bail!("--from (or --provider) is required with --hash");
+    }
+    if command.max_peers.is_some()
+        || command.min_peers.is_some()
+        || command.min_count.is_some()
+        || command.max_count.is_some()
     {
-        return cli::indexing::download_blob(
-            ctx,
-            &[ticket],
-            command.min_providers,
-            command.no_sharing,
-            command.destination.as_deref(),
-        )
-        .await;
+        anyhow::bail!("fetch filters are not supported with --hash; use a blob ticket as the source instead");
     }
+    let content_hash: iroh_blobs::Hash = hash.parse().map_err(|e| anyhow::anyhow!("invalid content hash: {e}"))?;
+    let tickets: Vec<iroh_blobs::ticket::BlobTicket> = command
+        .from
+        .iter()
+        .map(|t| {
+            let ticket: iroh_blobs::ticket::BlobTicket =
+                t.parse().map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?;
+            if ticket.hash() != content_hash {
+                anyhow::bail!("blob ticket hash does not match --hash");
+            }
+            Ok(ticket)
+        })
+        .collect::<Result<_>>()?;
+    cli::indexing::download_blob(
+        ctx,
+        &tickets,
+        command.min_providers,
+        command.no_sharing,
+        command.destination.as_deref(),
+    )
+    .await
+}
 
-    if command.hash.is_some() {
-        let hash = command.hash.as_ref().unwrap();
-        if command.from.is_empty() {
-            anyhow::bail!("--from (or --provider) is required with --hash");
-        }
-        if command.max_peers.is_some()
-            || command.min_peers.is_some()
-            || command.min_count.is_some()
-            || command.max_count.is_some()
-        {
-            anyhow::bail!("fetch filters are not supported with --hash; use a blob ticket as the source instead");
-        }
-        let content_hash: iroh_blobs::Hash = hash.parse().map_err(|e| anyhow::anyhow!("invalid content hash: {e}"))?;
-        let tickets: Vec<iroh_blobs::ticket::BlobTicket> = command
-            .from
-            .iter()
-            .map(|t| {
-                let ticket: iroh_blobs::ticket::BlobTicket =
-                    t.parse().map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?;
-                if ticket.hash() != content_hash {
-                    anyhow::bail!("blob ticket hash does not match --hash");
-                }
-                Ok(ticket)
-            })
-            .collect::<Result<_>>()?;
-        return cli::indexing::download_blob(
-            ctx,
-            &tickets,
-            command.min_providers,
-            command.no_sharing,
-            command.destination.as_deref(),
-        )
-        .await;
-    }
-
-    if let Some(destination) = command.destination {
-        if command.max_peers.is_some()
-            || command.min_peers.is_some()
-            || command.min_count.is_some()
-            || command.max_count.is_some()
-        {
-            anyhow::bail!("fetch filters require a folder source without a destination");
-        }
-        copy_path(&command.source, &destination, command.threads)?;
-        if output_json {
-            println!("{}", serde_json::json!({"destination": destination}));
-        } else {
-            println!("{}", destination.display());
-        }
-        return Ok(());
-    }
-
+async fn download_via_daemon_or_node(
+    data_dir: &std::path::Path,
+    output_json: bool,
+    no_daemon: bool,
+    command: &crate::cli::commands::DownloadArgs,
+) -> Result<()> {
     let mut filter = FetchFilter::new();
     if let Some(peers) = command.min_peers {
         filter = filter.with_min_peers(peers);
@@ -761,6 +748,15 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
             | _ => return print_daemon_message(response, output_json),
         }
     }
+    download_with_node(data_dir, output_json, command, strategy).await
+}
+
+async fn download_with_node(
+    data_dir: &std::path::Path,
+    output_json: bool,
+    command: &crate::cli::commands::DownloadArgs,
+    strategy: FetchStrategy,
+) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.source).await?;
@@ -817,6 +813,39 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
     }
     node.stop().await?;
     Ok(())
+}
+
+async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    if let Ok(ticket) = command
+        .source
+        .to_string_lossy()
+        .parse::<iroh_blobs::ticket::BlobTicket>()
+    {
+        return download_from_ticket(ctx, &command, ticket).await;
+    }
+
+    if let Some(ref hash) = command.hash {
+        return download_with_hash(ctx, hash, &command).await;
+    }
+
+    if let Some(destination) = command.destination {
+        if command.max_peers.is_some()
+            || command.min_peers.is_some()
+            || command.min_count.is_some()
+            || command.max_count.is_some()
+        {
+            anyhow::bail!("fetch filters require a folder source without a destination");
+        }
+        copy_path(&command.source, &destination, command.threads)?;
+        if ctx.output_json {
+            println!("{}", serde_json::json!({"destination": destination}));
+        } else {
+            println!("{}", destination.display());
+        }
+        return Ok(());
+    }
+
+    download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, &command).await
 }
 
 #[async_recursion]

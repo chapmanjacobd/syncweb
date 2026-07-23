@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{collections::BTreeMap, fs};
 
 use anyhow::{Result, ensure};

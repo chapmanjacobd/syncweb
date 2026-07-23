@@ -1,5 +1,3 @@
-mod test_utils;
-
 use anyhow::ensure;
 use ed25519_dalek::SigningKey;
 use semver::Version;

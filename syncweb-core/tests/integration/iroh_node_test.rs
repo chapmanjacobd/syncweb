@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::time::Duration;
 
 use iroh::address_lookup::memory::MemoryLookup;

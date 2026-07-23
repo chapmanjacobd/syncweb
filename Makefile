@@ -6,8 +6,14 @@ fmt:
 	cargo fmt --all
 
 flint:
-	cargo fix --broken-code --allow-dirty
-	cargo clippy --fix --allow-dirty
+	@EXIT_CODE=0; \
+	cargo fix --broken-code --allow-dirty || EXIT_CODE=$$?; \
+	cargo clippy --fix --allow-dirty || EXIT_CODE=$$?; \
+	rg -i --no-heading --no-line-number -F '#[expect' | grep -v Makefile || true; \
+	rg -i --no-heading --no-line-number -F '#[allow' | grep -v Makefile || true; \
+	rg -i --no-heading --no-line-number -F '#![expect' | grep -v Makefile || true; \
+	rg -i --no-heading --no-line-number -F '#![allow' | grep -v Makefile | grep -v syncweb-core/benches/ || true; \
+	exit $$EXIT_CODE
 
 lint:
 	@bash -c 'set -o pipefail; \

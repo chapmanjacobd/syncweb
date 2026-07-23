@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::{fs, path::PathBuf};
 
 use syncweb_core::fs::{Importer, ParallelImporter};

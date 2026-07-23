@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::fs;
 
 use syncweb_core::fs::{ExportEntry, Exporter, ParallelExporter};

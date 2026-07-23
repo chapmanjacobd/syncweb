@@ -1718,12 +1718,54 @@ impl ResilienceService {
         Ok(result)
     }
 
+    /// Handle a successful parallel download.
+    async fn handle_parallel_success(
+        &self,
+        successful: &[PublicKey],
+        hash: Hash,
+        result: &mut ReplicationResult,
+        endpoint: &Endpoint,
+        blobs: &BlobStore,
+    ) -> Result<()> {
+        for provider in successful {
+            self.reputation
+                .lock()
+                .map_err(|error| SyncwebError::operation("provider reputation lock poisoned", error))?
+                .record_success(*provider, current_epoch_seconds());
+            self.clear_failures_for_provider(&hash, provider)?;
+            result.fetched_from.push(*provider);
+        }
+        result
+            .invalidated_leases
+            .extend(self.retroactive_invalidate(hash, endpoint.secret_key().public())?);
+        blobs.pin(replication_pin_name(hash), hash).await?;
+        result.pinned = true;
+        self.observe_provider(hash, endpoint.secret_key().public())?;
+        result.health_after = self.health(&hash)?;
+        Ok(())
+    }
+
+    /// Handle a failed parallel download (all providers failed).
+    fn handle_parallel_all_failed(
+        &self,
+        candidates: &[(PublicKey, BlobTicket)],
+        hash: Hash,
+        result: &mut ReplicationResult,
+        now: u64,
+    ) -> Result<()> {
+        for (provider, _) in candidates {
+            let failure = FetchFailure::new(FetchFailureKind::Unknown, *provider, hash, "parallel download failed");
+            self.record_failure_at(hash, *provider, failure, now)?;
+            result.failed_from.push((*provider, FetchFailureKind::Unknown));
+        }
+        Ok(())
+    }
+
     /// Try a parallel multi-provider download for a large blob.
     ///
     /// Returns `Ok(Some(result))` if the download succeeded and the caller
     /// should return immediately; `Ok(None)` if the blob was too small or had
     /// too few providers, so the caller should fall through to sequential.
-    #[allow(clippy::too_many_lines)]
     async fn try_parallel_download(
         &self,
         endpoint: &Endpoint,
@@ -1746,10 +1788,7 @@ impl ResilienceService {
                 .selected_providers
                 .iter()
                 .copied()
-                .filter(|provider| {
-                    !tracker.is_banned(*provider, &hash, now)
-                        && !reputation.is_banned(*provider, now)
-                })
+                .filter(|provider| !tracker.is_banned(*provider, &hash, now) && !reputation.is_banned(*provider, now))
                 .filter_map(|provider| {
                     leases
                         .iter()
@@ -1761,46 +1800,16 @@ impl ResilienceService {
         if candidates.len() < 2 {
             return Ok(None);
         }
-        match crate::indexing::parallel::try_fetch_parallel(
-            endpoint,
-            blobs,
-            hash,
-            &candidates,
-            &self.config.parallel,
-        )
-        .await?
+        match crate::indexing::parallel::try_fetch_parallel(endpoint, blobs, hash, &candidates, &self.config.parallel)
+            .await?
         {
             crate::indexing::parallel::TryParallelResult::Downloaded(successful) => {
-                for provider in &successful {
-                    self.reputation
-                        .lock()
-                        .map_err(|error| {
-                            SyncwebError::operation("provider reputation lock poisoned", error)
-                        })?
-                        .record_success(*provider, current_epoch_seconds());
-                    self.clear_failures_for_provider(&hash, provider)?;
-                    result.fetched_from.push(*provider);
-                }
-                result
-                    .invalidated_leases
-                    .extend(self.retroactive_invalidate(hash, endpoint.secret_key().public())?);
-                blobs.pin(replication_pin_name(hash), hash).await?;
-                result.pinned = true;
-                self.observe_provider(hash, endpoint.secret_key().public())?;
-                result.health_after = self.health(&hash)?;
+                self.handle_parallel_success(&successful, hash, result, endpoint, blobs)
+                    .await?;
                 Ok(Some(result.clone()))
             }
             crate::indexing::parallel::TryParallelResult::AllFailed => {
-                for (provider, _) in &candidates {
-                    let failure = FetchFailure::new(
-                        FetchFailureKind::Unknown,
-                        *provider,
-                        hash,
-                        "parallel download failed",
-                    );
-                    self.record_failure_at(hash, *provider, failure, now)?;
-                    result.failed_from.push((*provider, FetchFailureKind::Unknown));
-                }
+                self.handle_parallel_all_failed(&candidates, hash, result, now)?;
                 Ok(None)
             }
             crate::indexing::parallel::TryParallelResult::Inapplicable => Ok(None),

@@ -4,7 +4,7 @@
 .SH NAME
 download \- Download folder content or copy a local file
 .SH SYNOPSIS
-\fBdownload\fR [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
+\fBdownload\fR [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-\-hash\fR] [\fB\-\-from\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-min\-providers\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
 .SH DESCRIPTION
 Download folder content or copy a local file
 .SH OPTIONS
@@ -23,6 +23,18 @@ Maximum number of blobs to fetch
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Copy threads (1 disables parallelism, 0 uses all available CPUs)
+.TP
+\fB\-\-hash\fR \fI<HASH>\fR
+Content hash to download (single blob mode)
+.TP
+\fB\-\-from\fR \fI<FROM>\fR
+Blob ticket(s) for providers (can repeat, requires \-\-hash)
+.TP
+\fB\-\-no\-sharing\fR
+Do not share or seed the downloaded content
+.TP
+\fB\-\-min\-providers\fR \fI<MIN_PROVIDERS>\fR [default: 2]
+Minimum providers for healthy replication
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

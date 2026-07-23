@@ -79,9 +79,6 @@ _syncweb() {
             syncweb,manpages)
                 cmd="syncweb__subcmd__manpages"
                 ;;
-            syncweb,mirror)
-                cmd="syncweb__subcmd__mirror"
-                ;;
             syncweb,moderation)
                 cmd="syncweb__subcmd__moderation"
                 ;;
@@ -261,9 +258,6 @@ _syncweb() {
                 ;;
             syncweb__subcmd__help,manpages)
                 cmd="syncweb__subcmd__help__subcmd__manpages"
-                ;;
-            syncweb__subcmd__help,mirror)
-                cmd="syncweb__subcmd__help__subcmd__mirror"
                 ;;
             syncweb__subcmd__help,moderation)
                 cmd="syncweb__subcmd__help__subcmd__moderation"
@@ -947,7 +941,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider mirror trust attest report moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest report moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1417,7 +1411,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__download)
-            opts="-h --max-peers --min-peers --min-count --max-count --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --max-peers --min-peers --min-count --max-count --threads --hash --provider --from --no-seeding --no-sharing --min-providers --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1440,6 +1434,22 @@ _syncweb() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --from)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --provider)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-providers)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1557,7 +1567,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help)
-            opts="version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider mirror trust attest report moderation completions manpages help"
+            opts="version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest report moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2117,20 +2127,6 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__manpages)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__help__subcmd__mirror)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -3813,36 +3809,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__mirror)
-            opts="-h --hash --from --min-providers --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --hash)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --from)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --min-providers)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

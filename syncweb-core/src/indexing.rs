@@ -17,11 +17,11 @@ pub use links::{
     MutablePointer, NameLink, PrivateLink, ResolveOptions, ResolvedLink, SignedMutablePointer, SyncwebLink,
     current_epoch_seconds, fetch_from_mirrors,
 };
+pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use reputation::{
     ProviderReputation, ProviderReputationStore, ProviderTrustSignal, ReputationConfig, TrustSignalKind,
     trust_stream_topic,
 };
-pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use resilience::{
     AvailabilityHealth, BanRecord, BanSource, FailureRecord, FetchFailure, FetchFailureKind, FetchWait, LeaseUpdate,
     ProviderLease, ProviderLeaseTracker, ReplicationBudget, ReplicationResult, ResilienceConfig, ResilienceService,

@@ -4,6 +4,7 @@ use async_recursion::async_recursion;
 use comfy_table::Table;
 
 use std::{
+    io::IsTerminal,
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
     time::{Duration, Instant},
@@ -18,8 +19,10 @@ use cli::{
         PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs,
         StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
     },
-    output::{init_tracing, print_version, run_repl},
+    output::{init_tracing, print_version},
 };
+use dialoguer::Confirm;
+use indicatif::{ProgressBar, ProgressStyle};
 use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
@@ -31,11 +34,11 @@ use syncweb_core::{
         DropImporter, FolderManager, PackageAnnouncement, PackageCatalog, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
-    init::InitResult,
+    init::{InitResult, open_node},
     net::{NetworkManager, NetworkOptions, TransportFallback},
     node::{
         identity::{DeviceId, IdentityManager},
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::IrohNode,
     },
     schedule::{BandwidthWindowConfig, ScheduleManager, parse_rate},
     search::{FindEngine, FindQuery},
@@ -50,6 +53,36 @@ use syncweb_core::{
     },
     verify::IntegrityChecker,
 };
+
+const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
+const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
+const ERR_UNEXPECTED_RESPONSE: &str = "daemon returned an unexpected response";
+
+fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
+    if output_json {
+        return Ok(true);
+    }
+    if !std::io::stdin().is_terminal() {
+        return Ok(true);
+    }
+    Ok(Confirm::new()
+        .with_prompt(format!("Are you sure you want to {operation}?"))
+        .default(false)
+        .show_default(true)
+        .interact()?)
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes;
+    let mut unit = 0_usize;
+    while size >= 1024 && unit < UNITS.len().saturating_sub(1) {
+        size = size.checked_div(1024).unwrap_or(0);
+        unit = unit.wrapping_add(1);
+    }
+    let unit_label = UNITS.get(unit).copied().unwrap_or("B");
+    format!("{size} {unit_label}")
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -77,7 +110,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
                 print_version();
             }
         }
-        Command::Repl => run_repl()?,
         Command::Create(command) => handle_create(&ctx, command).await?,
         Command::Join(command) => handle_join(&ctx, command).await?,
         Command::Leave(command) => handle_leave(&ctx, command).await?,
@@ -311,8 +343,12 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
 async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    if !confirm_destructive("stop the daemon", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
+    let client =
+        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::Shutdown { force: args.force }))
         .await?;
@@ -368,22 +404,29 @@ async fn daemon_client_or_start(
     } else {
         None
     };
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner} {msg}")?);
+    pb.set_message("waiting for daemon to start...");
     let deadline = Instant::now()
         .checked_add(Duration::from_secs(10))
         .ok_or_else(|| anyhow::anyhow!("failed to calculate daemon startup deadline"))?;
     loop {
         if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+            pb.finish_and_clear();
             return Ok(Some(client));
         }
         if let Some(child) = daemon_child.as_mut()
             && let Some(status) = child.try_wait()?
         {
+            pb.finish_and_clear();
             anyhow::bail!("daemon exited before becoming ready (status: {status})");
         }
         if Instant::now() >= deadline {
+            pb.finish_and_clear();
             anyhow::bail!("timed out waiting for daemon to become ready");
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
+        pb.tick();
     }
 }
 
@@ -449,8 +492,8 @@ async fn handle_daemon_status(ctx: &CliContext<'_>) -> Result<()> {
 async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    let client =
+        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
     let response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
     print_daemon_message(response, output_json)
 }
@@ -459,8 +502,8 @@ async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
 async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    let client =
+        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
         .await?;
@@ -471,8 +514,8 @@ async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
 async fn handle_unwatch(ctx: &CliContext<'_>, args: crate::cli::commands::FolderSelector) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    let client =
+        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
     let namespace = if let Ok(ns) = args.folder.parse::<iroh_docs::NamespaceId>() {
         ns.to_string()
     } else {
@@ -490,7 +533,7 @@ async fn handle_unwatch(ctx: &CliContext<'_>, args: crate::cli::commands::Folder
             Some(f) => f.namespace.clone(),
             None => match folders.as_slice() {
                 [folder] => folder.namespace.clone(),
-                [] => anyhow::bail!("no synchronized folders are available"),
+                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
                 _ => anyhow::bail!(
                     "'{}' is not a namespace ID and more than one folder is available",
                     args.folder
@@ -521,7 +564,7 @@ fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> 
         | IpcResponse::ImportFilesComplete { .. }
         | IpcResponse::ImportComplete(_)
         | IpcResponse::ExportComplete(_)
-        | _ => anyhow::bail!("daemon returned an unexpected response"),
+        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
     }
 }
 
@@ -549,13 +592,14 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
                 }
                 return Ok(());
             }
-            IpcResponse::Error { message } => anyhow::bail!("{message}"),
             IpcResponse::Ok { .. }
             | IpcResponse::Status(_)
             | IpcResponse::FolderList(_)
             | IpcResponse::DownloadComplete { .. }
+            | IpcResponse::ImportComplete(_)
             | IpcResponse::ExportComplete(_)
-            | _ => anyhow::bail!("daemon returned an unexpected import response"),
+            | IpcResponse::Error { .. }
+            | _ => return print_daemon_message(response, output_json),
         }
     }
     let node = open_node(data_dir).await?;
@@ -657,42 +701,51 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
                 }
                 return Ok(());
             }
-            IpcResponse::Error { message } => anyhow::bail!("{message}"),
             IpcResponse::Ok { .. }
             | IpcResponse::Status(_)
             | IpcResponse::FolderList(_)
+            | IpcResponse::ImportFilesComplete { .. }
             | IpcResponse::ImportComplete(_)
             | IpcResponse::ExportComplete(_)
-            | _ => anyhow::bail!("daemon returned an unexpected download response"),
+            | IpcResponse::Error { .. }
+            | _ => return print_daemon_message(response, output_json),
         }
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.source).await?;
-    let sync = SyncEngine::new(
-        manager,
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-        node.gossip_service().clone(),
-    );
+    let sync = SyncEngine::from_node(&node, manager);
     let stats_path = data_dir.join("stats.json");
     let mut bandwidth_stats = BandwidthStats::load(&stats_path)?;
     let folder_key = folder.namespace_id().to_string();
     let mut accounted_bytes = 0_u64;
     let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+    let pb = ProgressBar::new(0);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner} {msg} {bar} {bytes}/{total} ({eta})")?
+            .progress_chars("=> "),
+    );
+    pb.set_message("downloading...");
     while let Some(event) = intent.next().await {
         match event {
             SyncEvent::Failed(message) => {
+                pb.finish_and_clear();
                 node.stop().await?;
                 anyhow::bail!("download failed: {message}");
             }
-            SyncEvent::Finished => break,
+            SyncEvent::Finished => {
+                pb.finish_and_clear();
+                break;
+            }
             SyncEvent::Stats(transfer_stats) => {
                 let delta = transfer_stats.bytes_transferred.saturating_sub(accounted_bytes);
                 if delta > 0 {
                     bandwidth_stats.record_download(delta, 0, Some(&folder_key), None);
                     accounted_bytes = transfer_stats.bytes_transferred;
                 }
+                pb.set_length(transfer_stats.bytes_total.unwrap_or(0));
+                pb.set_position(transfer_stats.bytes_transferred);
             }
             SyncEvent::Started
             | SyncEvent::Progress { .. }
@@ -702,6 +755,7 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
             | _ => {}
         }
     }
+    pb.finish_and_clear();
     bandwidth_stats.save(&stats_path)?;
     if output_json {
         println!(
@@ -721,7 +775,7 @@ async fn handle_snapshot_create(ctx: &CliContext<'_>, command: SnapshotCreateArg
     let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+    let snapshots = SnapshotStore::from_node(&node);
     let snapshot = if command.path.exists() {
         snapshots
             .create_from_path(&command.path, command.threads, command.description)
@@ -756,7 +810,7 @@ async fn handle_snapshot_restore(ctx: &CliContext<'_>, command: SnapshotRestoreA
     let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+    let snapshots = SnapshotStore::from_node(&node);
     let id = command.snapshot.parse::<iroh_blobs::Hash>()?;
     let snapshot = snapshots.load(id).await?;
     if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
@@ -810,7 +864,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
                 return print_daemon_message(response, output_json);
             }
             let node = open_node(data_dir).await?;
-            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+            let snapshots = SnapshotStore::from_node(&node);
             let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
             let mut matching = Vec::new();
             for snapshot in snapshots.list().await? {
@@ -851,7 +905,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
         }
         SnapshotCommand::Diff { path: _, first, second } => {
             let node = open_node(data_dir).await?;
-            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+            let snapshots = SnapshotStore::from_node(&node);
             let left = snapshots.load(first.parse()?).await?;
             let right = snapshots.load(second.parse()?).await?;
             let diff = left.diff(&right)?;
@@ -883,6 +937,10 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             Ok(())
         }
         SnapshotCommand::Delete { path: _, snapshot } => {
+            if !confirm_destructive("delete this snapshot", output_json)? {
+                println!("aborted");
+                return Ok(());
+            }
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
                 let response = client
                     .send(IpcRequest::new(IpcCommand::SnapshotDelete { id: snapshot.clone() }))
@@ -890,7 +948,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
                 return print_daemon_message(response, output_json);
             }
             let node = open_node(data_dir).await?;
-            let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
+            let snapshots = SnapshotStore::from_node(&node);
             let id = snapshot.parse()?;
             snapshots.delete(id).await?;
             if output_json {
@@ -1041,8 +1099,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("total_upload:  {}", stats.total_upload);
-    println!("total_download: {}", stats.total_download);
+    println!("total_upload:  {}", format_bytes(stats.total_upload));
+    println!("total_download: {}", format_bytes(stats.total_download));
     println!("period_start:   {}", stats.period_start);
     match command.folder {
         Some(folder) => {
@@ -1052,8 +1110,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
                 table.set_header(["Folder", "Upload", "Download", "Files"]);
                 table.add_row([
                     key.as_ref(),
-                    &folder_stats.upload.to_string(),
-                    &folder_stats.download.to_string(),
+                    &format_bytes(folder_stats.upload),
+                    &format_bytes(folder_stats.download),
                     &folder_stats.files_transferred.to_string(),
                 ]);
                 println!("{table}");
@@ -1066,8 +1124,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
                 for (folder, folder_stats) in &stats.per_folder {
                     table.add_row([
                         folder.as_str(),
-                        &folder_stats.upload.to_string(),
-                        &folder_stats.download.to_string(),
+                        &format_bytes(folder_stats.upload),
+                        &format_bytes(folder_stats.download),
                         &folder_stats.files_transferred.to_string(),
                     ]);
                 }
@@ -1082,8 +1140,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
                 table.set_header(["Peer", "Upload", "Download", "Connections"]);
                 table.add_row([
                     &peer,
-                    &peer_stats.upload.to_string(),
-                    &peer_stats.download.to_string(),
+                    &format_bytes(peer_stats.upload),
+                    &format_bytes(peer_stats.download),
                     &peer_stats.connection_count.to_string(),
                 ]);
                 println!("{table}");
@@ -1096,8 +1154,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
                 for (peer, peer_stats) in &stats.per_peer {
                     table.add_row([
                         peer.as_str(),
-                        &peer_stats.upload.to_string(),
-                        &peer_stats.download.to_string(),
+                        &format_bytes(peer_stats.upload),
+                        &format_bytes(peer_stats.download),
                         &peer_stats.connection_count.to_string(),
                     ]);
                 }
@@ -1204,7 +1262,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
             };
             match folders.as_slice() {
                 [folder] => folder.namespace.clone(),
-                [] => anyhow::bail!("no synchronized folders are available"),
+                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
                 _ => anyhow::bail!(
                     "folder path is not a namespace ID and more than one synchronized folder is available"
                 ),
@@ -1305,7 +1363,7 @@ async fn resolve_folder(
     let folders = manager.list().await?;
     match folders.as_slice() {
         [folder] => Ok(folder.clone()),
-        [] => anyhow::bail!("no synchronized folders are available"),
+        [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
         _ => anyhow::bail!("folder path is not a namespace ID and more than one synchronized folder is available"),
     }
 }
@@ -1322,7 +1380,7 @@ async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<ir
     let folders = manager.list().await?;
     match folders.as_slice() {
         [folder] => Ok(folder.namespace_id()),
-        [] => anyhow::bail!("no synchronized folders are available"),
+        [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
         _ => anyhow::bail!("'{selector}' is not a namespace ID and more than one folder is available"),
     }
 }
@@ -1476,12 +1534,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         }
         params = params.with_limits(limits);
     }
-    let sync = SyncEngine::new(
-        manager,
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-        node.gossip_service().clone(),
-    );
+    let sync = SyncEngine::from_node(&node, manager);
     let intent = sync.subscribe(folder.namespace_id(), params.clone()).await?;
     let _session = ActiveSession::register(folder.namespace_id(), intent.cancel_sender());
     if output_json {
@@ -1601,7 +1654,7 @@ async fn handle_subscribe(ctx: &CliContext<'_>, command: SubscribeArgs) -> Resul
             match folders.as_slice() {
                 [f] if folder_path.exists() => f.namespace.parse()?,
                 [f] => f.namespace.parse()?,
-                [] => anyhow::bail!("no synchronized folders are available"),
+                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
                 _ => anyhow::bail!(
                     "folder path is not a namespace ID and more than one synchronized folder is available"
                 ),
@@ -1629,12 +1682,7 @@ async fn handle_subscribe(ctx: &CliContext<'_>, command: SubscribeArgs) -> Resul
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &command.folder).await?;
-    let sync = SyncEngine::new(
-        manager,
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-        node.gossip_service().clone(),
-    );
+    let sync = SyncEngine::from_node(&node, manager);
     let intent = sync.subscribe(namespace, params.clone()).await?;
     let _session = ActiveSession::register(namespace, intent.cancel_sender());
     if output_json {
@@ -1698,6 +1746,10 @@ async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::U
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    if !confirm_destructive("unpublish this folder", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Unpublish {
@@ -1964,6 +2016,10 @@ fn handle_package_remove(
     version: &str,
     output_json: bool,
 ) -> Result<()> {
+    if !confirm_destructive("remove this package version", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     let collection = collection_id.parse()?;
     packages.remove(collection, version)?;
     if output_json {
@@ -2531,6 +2587,10 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Leave { name } => {
+            if !confirm_destructive("leave this network", output_json)? {
+                println!("aborted");
+                return Ok(());
+            }
             let id = network_id_by_name(&manager, &name)?;
             manager.leave(id)?;
             if output_json {
@@ -2553,6 +2613,10 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Kick { name, device } => {
+            if !confirm_destructive("kick this device from the network", output_json)? {
+                println!("aborted");
+                return Ok(());
+            }
             let id = network_id_by_name(&manager, &name)?;
             manager.kick(id, &device.parse()?)?;
             if output_json {
@@ -2666,6 +2730,10 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Folde
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    if !confirm_destructive("leave this folder", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::LeaveFolder {
@@ -2696,6 +2764,10 @@ async fn handle_unsubscribe(ctx: &CliContext<'_>, command: crate::cli::commands:
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    if !confirm_destructive("unsubscribe from this folder", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Unsubscribe {
@@ -2765,6 +2837,15 @@ async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folders = manager.list().await?;
+    if folders.is_empty() {
+        if output_json {
+            println!("[]");
+        } else {
+            println!("No folders found. Create one with `syncweb create [path]`");
+        }
+        node.stop().await?;
+        return Ok(());
+    }
     if output_json {
         let values = folders
             .iter()
@@ -2811,6 +2892,10 @@ fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
 fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
+    if entries.is_empty() && !output_json {
+        println!("No files found in {}", command.path.display());
+        return Ok(());
+    }
     if let Some(criteria_str) = command.sort {
         let criteria = SortConfig::parse_criteria(&[criteria_str]);
         let mut config = SortConfig::default();
@@ -2922,6 +3007,15 @@ fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) ->
         .with_threads(command.threads)
         .find(&query)?;
 
+    if entries.is_empty() && !output_json {
+        println!(
+            "No files matching '{}' found in {}",
+            command.pattern,
+            command.path.display()
+        );
+        return Ok(());
+    }
+
     if output_json {
         let paths = entries
             .iter()
@@ -2990,6 +3084,11 @@ fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -
     // Sort
     let result = sorter.sort(&mut sortable);
 
+    if result.iter().next().is_none() && !output_json {
+        println!("No entries match the sorting criteria");
+        return Ok(());
+    }
+
     if output_json {
         let paths: Vec<_> = result.iter().map(|entry| entry.path.display().to_string()).collect();
         println!("{}", serde_json::to_string_pretty(&paths)?);
@@ -2999,11 +3098,6 @@ fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -
         }
     }
     Ok(())
-}
-
-async fn open_node(data_dir: &std::path::Path) -> Result<IrohNode> {
-    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    Ok(IrohNode::new(identity, data_dir.join("data"), RelayMode::Default).await?)
 }
 
 fn print_config(config: &AppConfig) -> Result<()> {

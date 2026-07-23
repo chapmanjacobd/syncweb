@@ -18,7 +18,6 @@ _syncweb() {
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -37,19 +36,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(repl)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -65,7 +51,6 @@ _arguments "${_arguments_options[@]}" : \
 '--bg[Run in the background (daemon mode)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -78,7 +63,6 @@ _arguments "${_arguments_options[@]}" : \
 '--force[Skip graceful shutdown]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -90,7 +74,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -102,7 +85,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -114,7 +96,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -126,7 +107,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -136,13 +116,12 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (create)
 _arguments "${_arguments_options[@]}" : \
-'--mode=[]:MODE:_default' \
+'--mode=[Sync mode\: sendreceive, receiveonly, sendonly, or publicreadonly]:MODE:_default' \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -166,7 +145,6 @@ _arguments "${_arguments_options[@]}" : \
 '--ignore-self[Ignore events emitted by this subscription session]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -180,7 +158,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -193,7 +170,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -206,7 +182,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -218,7 +193,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -230,7 +204,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -250,7 +223,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -264,7 +236,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -311,7 +282,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -352,7 +322,6 @@ _arguments "${_arguments_options[@]}" : \
 '--download[Exclude sendonly/publicreadonly folders from search]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -376,7 +345,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -392,7 +360,6 @@ _arguments "${_arguments_options[@]}" : \
 '(--format)--terse[]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -404,13 +371,12 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--max-peers=[Fetch only blobs with at most N observed peers]:MAX_PEERS:_default' \
 '--min-peers=[Fetch only blobs with at least N observed peers]:MIN_PEERS:_default' \
-'--min-count=[]:MIN_COUNT:_default' \
-'--max-count=[]:MAX_COUNT:_default' \
+'--min-count=[Minimum number of blobs to fetch]:MIN_COUNT:_default' \
+'--max-count=[Maximum number of blobs to fetch]:MAX_COUNT:_default' \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -426,7 +392,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -439,7 +404,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -461,7 +425,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -474,7 +437,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -488,7 +450,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -501,7 +462,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -516,7 +476,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -574,7 +533,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -588,7 +546,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -605,7 +562,6 @@ _arguments "${_arguments_options[@]}" : \
 '--dry-run[Evaluate paths without starting the daemon]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -620,7 +576,6 @@ _arguments "${_arguments_options[@]}" : \
 '--once[Process one event and exit]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -637,7 +592,6 @@ _arguments "${_arguments_options[@]}" : \
 '--reset[Reset persisted counters before displaying them]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -649,7 +603,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -662,7 +615,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -680,12 +632,11 @@ _arguments "${_arguments_options[@]}" : \
             (set)
 _arguments "${_arguments_options[@]}" : \
 '--active=[]:ACTIVE:_default' \
-'--bandwidth=[]:BANDWIDTH:_default' \
-'--period=[]:PERIOD:_default' \
+'--bandwidth=[Bandwidth rate (e.g. '\''500K'\'', '\''2M'\'')]:BANDWIDTH:_default' \
+'--period=[Time window for the bandwidth limit (e.g. '\''08\:00-18\:00'\'')]:PERIOD:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -700,7 +651,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -751,7 +701,6 @@ _arguments "${_arguments_options[@]}" : \
 '--ignore-self[Ignore events emitted by this subscription session]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -765,26 +714,24 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace:_default' \
+':namespace -- Namespace ID or managed folder path:_default' \
 && ret=0
 ;;
 (unpublish)
 _arguments "${_arguments_options[@]}" : \
-'--blob=[]:BLOB:_default' \
+'--blob=[Blob content hash to unpublish]:BLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace:_default' \
+':namespace -- Namespace ID or managed folder path:_default' \
 && ret=0
 ;;
 (collection)
@@ -792,7 +739,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -814,7 +760,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -827,7 +772,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -842,7 +786,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -858,7 +801,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -911,7 +853,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -933,7 +874,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -947,7 +887,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -962,7 +901,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -976,7 +914,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -990,7 +927,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1005,7 +941,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1019,7 +954,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1033,7 +967,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1046,7 +979,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1058,7 +990,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1071,7 +1002,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1153,7 +1083,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1175,7 +1104,6 @@ _arguments "${_arguments_options[@]}" : \
 '--invite-only[]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1188,7 +1116,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1201,7 +1128,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1214,7 +1140,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1227,7 +1152,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1241,7 +1165,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1256,7 +1179,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1320,7 +1242,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1340,7 +1261,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1353,7 +1273,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1368,7 +1287,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1382,7 +1300,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1395,7 +1312,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1408,7 +1324,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1429,7 +1344,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1472,7 +1386,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1492,7 +1405,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1506,7 +1418,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1639,7 +1550,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1664,7 +1574,6 @@ _arguments "${_arguments_options[@]}" : \
 '(--name)--private[]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1678,7 +1587,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1691,7 +1599,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1740,7 +1647,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1760,7 +1666,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1802,7 +1707,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1822,7 +1726,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1838,7 +1741,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1851,7 +1753,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1872,7 +1773,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1886,7 +1786,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1901,7 +1800,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1914,7 +1812,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1929,7 +1826,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -1944,7 +1840,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2005,7 +1900,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2025,7 +1919,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2042,7 +1935,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2180,32 +2072,30 @@ esac
 (attest)
 _arguments "${_arguments_options[@]}" : \
 '(--provenance --derivative)--license=[]:LICENSE:_default' \
-'(--license --derivative)--provenance=[]:PROVENANCE:_default' \
-'(--license --provenance)--derivative=[]:DERIVATIVE:_default' \
+'(--license --derivative)--provenance=[Provenance attestation type]:PROVENANCE:_default' \
+'(--license --provenance)--derivative=[Derivative work attestation type]:DERIVATIVE:_default' \
 '--sequence=[]:SEQUENCE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':content:_default' \
+':content -- Content hash to attest:_default' \
 && ret=0
 ;;
 (report)
 _arguments "${_arguments_options[@]}" : \
-'--reason=[]:REASON:_default' \
+'--reason=[Reason for the report]:REASON:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':record:_default' \
+':record -- Content hash or record identifier:_default' \
 && ret=0
 ;;
 (moderation)
@@ -2213,7 +2103,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2233,7 +2122,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2247,7 +2135,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2292,7 +2179,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2305,7 +2191,6 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
@@ -2326,10 +2211,6 @@ _arguments "${_arguments_options[@]}" : \
         curcontext="${curcontext%:*:*}:syncweb-help-command-$line[1]:"
         case $line[1] in
             (version)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(repl)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2934,7 +2815,6 @@ esac
 _syncweb_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
-'repl:Start an interactive command shell' \
 'start:Start the local syncweb daemon' \
 'shutdown:Stop the local syncweb node' \
 'status:Show the local daemon status' \
@@ -3145,7 +3025,6 @@ _syncweb__subcmd__health_commands() {
 _syncweb__subcmd__help_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
-'repl:Start an interactive command shell' \
 'start:Start the local syncweb daemon' \
 'shutdown:Stop the local syncweb node' \
 'status:Show the local daemon status' \
@@ -3576,11 +3455,6 @@ _syncweb__subcmd__help__subcmd__publish_commands() {
 _syncweb__subcmd__help__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__repl_commands] )) ||
-_syncweb__subcmd__help__subcmd__repl_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help repl commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__report_commands] )) ||
 _syncweb__subcmd__help__subcmd__report_commands() {
@@ -4395,11 +4269,6 @@ _syncweb__subcmd__publish_commands() {
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__repl_commands] )) ||
-_syncweb__subcmd__repl_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb repl commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__report_commands] )) ||
 _syncweb__subcmd__report_commands() {

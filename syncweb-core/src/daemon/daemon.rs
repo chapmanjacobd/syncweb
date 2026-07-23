@@ -287,20 +287,48 @@ impl Daemon {
         if let Err(error) = self.run_cycle().await {
             tracing::error!(%error, "initial daemon cycle failed");
         }
-        let result = loop {
+        let result = self
+            .run_event_loop(
+                &mut server_task,
+                &mut signal_task,
+                &mut shutdown,
+                &shutdown_sender,
+                &mut interval,
+                &mut watch_interval,
+            )
+            .await;
+        send_shutdown(&shutdown_sender);
+        if !server_task.is_finished() {
+            match server_task.await {
+                Ok(server_result) => server_result?,
+                Err(error) => return Err(SyncwebError::operation("daemon IPC task failed", error)),
+            }
+        }
+        result
+    }
+
+    async fn run_event_loop(
+        &self,
+        server_task: &mut JoinHandle<Result<()>>,
+        signal_task: &mut std::pin::Pin<std::boxed::Box<impl std::future::Future<Output = Result<()>> + Send>>,
+        shutdown: &mut broadcast::Receiver<()>,
+        shutdown_sender: &broadcast::Sender<()>,
+        interval: &mut tokio::time::Interval,
+        watch_interval: &mut tokio::time::Interval,
+    ) -> Result<()> {
+        loop {
             tokio::select! {
-                signal_result = &mut signal_task => {
+                signal_result = &mut *signal_task => {
                     signal_result?;
-                    send_shutdown(&shutdown_sender);
+                    send_shutdown(shutdown_sender);
                     break Ok(());
                 }
                 shutdown_result = shutdown.recv() => {
-                    match shutdown_result {
-                        Ok(()) | Err(broadcast::error::RecvError::Closed) => break Ok(()),
-                        Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    if matches!(shutdown_result, Ok(()) | Err(broadcast::error::RecvError::Closed)) {
+                        break Ok(());
                     }
                 }
-                server_result = &mut server_task => {
+                server_result = &mut *server_task => {
                     match server_result {
                         Ok(result) => break result,
                         Err(error) => break Err(SyncwebError::operation("daemon IPC task failed", error)),
@@ -315,16 +343,7 @@ impl Daemon {
                 _ = watch_interval.tick() => self.handle_watch_events().await?,
                 _ = interval.tick() => self.run_cycle().await?,
             }
-        };
-
-        send_shutdown(&shutdown_sender);
-        if !server_task.is_finished() {
-            match server_task.await {
-                Ok(server_result) => server_result?,
-                Err(error) => return Err(SyncwebError::operation("daemon IPC task failed", error)),
-            }
         }
-        result
     }
 
     async fn run_cycle(&self) -> Result<()> {
@@ -363,6 +382,7 @@ impl Daemon {
                     .map_err(|error| SyncwebError::operation("invalid sync namespace", error))?;
                 self.start_supervision(parsed_namespace).await?;
                 self.set_intent_active(parsed_namespace, true)?;
+                self.save_status_report().await?;
                 Ok(())
             }
             None => self.run_cycle().await,

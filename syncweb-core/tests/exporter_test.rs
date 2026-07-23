@@ -1,48 +1,14 @@
-use anyhow::Result;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+mod test_utils;
 
-use syncweb_core::{
-    fs::{ExportEntry, Exporter, ParallelExporter},
-    node::{
-        identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
-    },
-};
+use std::fs;
 
-struct TestDirectory(PathBuf);
+use syncweb_core::fs::{ExportEntry, Exporter, ParallelExporter};
 
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-exporter-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
-
-async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
-}
+use crate::test_utils::{TestDirectory, test_node};
 
 #[tokio::test]
 async fn test_export_single_blob() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-exporter-test")?;
     let node = test_node(&dir, "node").await?;
 
     let hash = node.blob_store().add_bytes(b"export me").await?;
@@ -62,7 +28,7 @@ async fn test_export_single_blob() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_export_directory() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-exporter-test")?;
     let node = test_node(&dir, "node").await?;
 
     let h1 = node.blob_store().add_bytes(b"alpha").await?;
@@ -89,7 +55,7 @@ async fn test_export_directory() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_parallel_export() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-exporter-test")?;
     let node = test_node(&dir, "node").await?;
 
     let h1 = node.blob_store().add_bytes(b"one").await?;
@@ -118,7 +84,7 @@ async fn test_parallel_export() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_export_verify_hash() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-exporter-test")?;
     let node = test_node(&dir, "node").await?;
 
     let hash = node.blob_store().add_bytes(b"verify me").await?;

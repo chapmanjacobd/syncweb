@@ -1,5 +1,5 @@
-use anyhow::Result;
-use std::path::{Path, PathBuf};
+mod test_utils;
+
 use std::time::Duration;
 
 use iroh::address_lookup::memory::MemoryLookup;
@@ -7,33 +7,7 @@ use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-node-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
-
-async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
-}
+use crate::test_utils::{TestDirectory, test_node};
 
 async fn test_node_with_lookup(
     directory: &TestDirectory,
@@ -57,7 +31,7 @@ async fn test_node_with_lookup(
 
 #[tokio::test]
 async fn test_endpoint_creation() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let node = test_node(&directory, "node").await?;
 
     anyhow::ensure!(!node.endpoint().bound_sockets().is_empty());
@@ -68,7 +42,7 @@ async fn test_endpoint_creation() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_router_setup() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let node = test_node(&directory, "node").await?;
 
     anyhow::ensure!(node.is_running());
@@ -82,7 +56,7 @@ async fn test_router_setup() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_protocol_registration() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let server = test_node(&directory, "server").await?;
     let client = test_node(&directory, "client").await?;
     let server_address = server.endpoint().addr();
@@ -103,7 +77,7 @@ async fn test_protocol_registration() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_shutdown() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let node = test_node(&directory, "node").await?;
 
     node.stop().await?;
@@ -115,7 +89,7 @@ async fn test_shutdown() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_two_nodes_connect() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let first = test_node(&directory, "first").await?;
     let second = test_node(&directory, "second").await?;
 
@@ -134,7 +108,7 @@ async fn test_two_nodes_connect() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_node_discovery() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-node-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
 

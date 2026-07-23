@@ -1,9 +1,6 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+mod test_utils;
+
+use std::{fs, path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use syncweb_core::{
@@ -23,27 +20,7 @@ use syncweb_core::{
 };
 use tokio::task::JoinHandle;
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new(prefix: &str) -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-{prefix}-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn create_folder(directory: &TestDirectory, root: &Path) -> Result<iroh_docs::NamespaceId> {
     fs::create_dir_all(root)?;
@@ -338,11 +315,9 @@ async fn test_daemon_import_export_archive_via_ipc() -> Result<()> {
     let content_hash = node.blob_store().add_bytes(content).await?;
     let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
     let content_len = u64::try_from(content.len())?;
-    manifest.entries.push(CollectionEntry::new(
-        content_hash,
-        "archive-test.txt",
-        content_len,
-    )?);
+    manifest
+        .entries
+        .push(CollectionEntry::new(content_hash, "archive-test.txt", content_len)?);
     CollectionStore::new(
         folder.doc().clone(),
         folder.author(),

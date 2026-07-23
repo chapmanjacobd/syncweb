@@ -1,8 +1,6 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+mod test_utils;
+
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use iroh_blobs::Hash;
@@ -15,27 +13,7 @@ use syncweb_core::{
     },
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> anyhow::Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-indexing-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 #[test]
 fn indexing_database_initializes_fts_schema() -> anyhow::Result<()> {
@@ -109,7 +87,7 @@ fn indexing_database_serializes_concurrent_access() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn indexing_service_consumes_folder_events() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-indexing-test")?;
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let node = IrohNode::new(identity, root.join("data"), RelayMode::Default).await?;
@@ -141,7 +119,7 @@ async fn indexing_service_consumes_folder_events() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn catalog_publish_and_search_uses_global_fts() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-indexing-test")?;
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let node = IrohNode::new(identity, root.join("data"), RelayMode::Default).await?;
@@ -172,7 +150,7 @@ async fn catalog_publish_and_search_uses_global_fts() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-indexing-test")?;
     let (relay_map, _relay_url, _relay_server) = iroh::test_utils::run_relay_server().await?;
     let publisher_root = directory.path().join("publisher");
     let publisher_identity = IdentityManager::new(publisher_root.join("identity.key"))?;
@@ -245,7 +223,7 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
 
 #[tokio::test]
 async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-indexing-test")?;
     let (relay_map, _relay_url, _relay_server) = iroh::test_utils::run_relay_server().await?;
     let publisher_root = directory.path().join("resilience-publisher");
     let publisher_identity = IdentityManager::new(publisher_root.join("identity.key"))?;

@@ -1,30 +1,9 @@
-use anyhow::Result;
-use std::path::{Path, PathBuf};
+mod test_utils;
 
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-services-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn test_node(
     directory: &TestDirectory,
@@ -39,7 +18,7 @@ async fn test_node(
 
 #[tokio::test]
 async fn test_add_bytes() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"phase one blob").await?;
 
@@ -51,7 +30,7 @@ async fn test_add_bytes() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_has_blob() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"blob data").await?;
     anyhow::ensure!(node.blob_store().has(hash).await?);
@@ -65,7 +44,7 @@ async fn test_has_blob() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_get_blob() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"blob data").await?;
 
@@ -78,7 +57,7 @@ async fn test_get_blob() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_blob_ticket() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"blob data").await?;
 
@@ -92,7 +71,7 @@ async fn test_blob_ticket() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_content_pinning() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let hash = node.blob_store().add_bytes(b"pinned blob").await?;
 
@@ -107,7 +86,7 @@ async fn test_content_pinning() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_add_file() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let path = directory.path().join("input.txt");
     std::fs::write(&path, b"file blob")?;
@@ -121,7 +100,7 @@ async fn test_add_file() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_add_file_ref() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let path = directory.path().join("input.txt");
     std::fs::write(&path, b"referenced file")?;
@@ -137,7 +116,7 @@ async fn test_add_file_ref() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_two_nodes_sync_blob() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let first = test_node(&directory, "first", Some(relay_map.clone())).await?;
     let second = test_node(&directory, "second", Some(relay_map)).await?;

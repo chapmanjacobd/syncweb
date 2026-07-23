@@ -1,3 +1,5 @@
+mod test_utils;
+
 use anyhow::ensure;
 use ed25519_dalek::SigningKey;
 use semver::Version;
@@ -9,23 +11,7 @@ use syncweb_core::folder::{
 };
 use uuid::Uuid;
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> anyhow::Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-collection-{}", Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 fn manifest(collection_id: Uuid, version: &str, bytes: &[u8]) -> anyhow::Result<CollectionManifest> {
     let mut manifest = CollectionManifest::new(collection_id, version);
@@ -97,9 +83,9 @@ fn manifest_dependencies_and_version_ordering_are_validated() -> anyhow::Result<
 
 #[test]
 fn package_install_switch_and_verify_are_atomic() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
-    let source_v1 = directory.0.join("source-v1");
-    let source_v2 = directory.0.join("source-v2");
+    let directory = TestDirectory::new("syncweb-collection-test")?;
+    let source_v1 = directory.path().join("source-v1");
+    let source_v2 = directory.path().join("source-v2");
     std::fs::create_dir_all(source_v1.join("bin"))?;
     std::fs::create_dir_all(source_v2.join("bin"))?;
     std::fs::write(source_v1.join("bin/tool"), b"v1")?;
@@ -108,7 +94,7 @@ fn package_install_switch_and_verify_are_atomic() -> anyhow::Result<()> {
     let collection_id = Uuid::new_v4();
     let v1 = manifest(collection_id, "1.0.0", b"v1")?;
     let v2 = manifest(collection_id, "2.0.0", b"v2")?;
-    let packages = PackageManager::new(directory.0.join("packages"));
+    let packages = PackageManager::new(directory.path().join("packages"));
     packages.install(&v1, &source_v1)?;
     packages.install(&v2, &source_v2)?;
     packages.switch(collection_id, "1.0.0")?;

@@ -1,7 +1,6 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+mod test_utils;
+
+use std::{fs, path::Path};
 
 use anyhow::Result;
 use iroh_blobs::Hash;
@@ -14,25 +13,7 @@ use syncweb_core::{
     snapshot::{Snapshot, SnapshotEntry, SnapshotStore},
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-snapshot-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        let _result = fs::remove_dir_all(&self.0);
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
     let identity = IdentityManager::new(directory.path().join("identity.key"))?;
@@ -81,7 +62,7 @@ fn snapshot_round_trip_and_diff() -> Result<()> {
 
 #[tokio::test]
 async fn snapshot_path_restore_pins_and_removes_stale_files() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let source = directory.path().join("source");
     fs::create_dir_all(source.join("sub"))?;
     fs::write(source.join("a.txt"), b"alpha")?;
@@ -114,7 +95,7 @@ async fn snapshot_path_restore_pins_and_removes_stale_files() -> Result<()> {
 
 #[tokio::test]
 async fn test_snapshot_sharing() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let first = test_node_with_relay(&directory, "first", relay_map.clone()).await?;
     let second = test_node_with_relay(&directory, "second", relay_map).await?;
@@ -141,7 +122,7 @@ async fn test_snapshot_sharing() -> Result<()> {
 
 #[tokio::test]
 async fn folder_snapshot_restores_document_entries() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let node = test_node(&directory).await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     folder.set_blob(b"a.txt", b"old").await?;
@@ -165,7 +146,7 @@ async fn folder_snapshot_restores_document_entries() -> Result<()> {
 
 #[tokio::test]
 async fn test_create_snapshot() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let source = directory.path().join("source");
     fs::create_dir_all(source.join("sub"))?;
     fs::write(source.join("a.txt"), b"hello")?;
@@ -207,7 +188,7 @@ async fn test_create_snapshot() -> Result<()> {
 
 #[tokio::test]
 async fn test_snapshot_pin_gc() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let source = directory.path().join("source");
     fs::create_dir_all(&source)?;
     fs::write(source.join("pinned.txt"), b"keep me")?;
@@ -256,7 +237,7 @@ async fn test_snapshot_pin_gc() -> Result<()> {
 
 #[tokio::test]
 async fn test_backup_restore_cycle() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-snapshot-test")?;
     let source = directory.path().join("source");
     fs::create_dir_all(source.join("sub"))?;
     fs::write(source.join("a.txt"), b"original_a")?;

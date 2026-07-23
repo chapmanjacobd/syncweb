@@ -1,7 +1,6 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+mod test_utils;
+
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use async_compression::tokio::bufread::ZstdDecoder;
@@ -16,27 +15,7 @@ use syncweb_core::{
 };
 use tokio::io::{AsyncReadExt, BufReader};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-drop-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
     let root = directory.path().join("node");
@@ -118,7 +97,7 @@ fn read_varint(bytes: &[u8], offset: &mut usize) -> Result<u64> {
 
 #[tokio::test]
 async fn test_export_drop_basic_and_empty_package() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-test")?;
     let node = test_node(&directory).await?;
     let collection_id = uuid::Uuid::new_v4();
     let files = [("README.md", b"hello".as_slice()), ("empty", b"".as_slice())];
@@ -151,7 +130,7 @@ async fn test_export_drop_basic_and_empty_package() -> Result<()> {
 
 #[tokio::test]
 async fn test_export_drop_filter_and_version_selection() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-test")?;
     let node = test_node(&directory).await?;
     let collection_id = uuid::Uuid::new_v4();
     let v1_files = [("old.txt", b"old".as_slice())];
@@ -193,7 +172,7 @@ async fn test_export_drop_filter_and_version_selection() -> Result<()> {
 
 #[tokio::test]
 async fn test_export_drop_concurrent_replacement_is_valid() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-test")?;
     let node = test_node(&directory).await?;
     let files = [("file.txt", b"content".as_slice())];
     let manifest = manifest(uuid::Uuid::new_v4(), "1.0.0", &files)?;
@@ -217,7 +196,7 @@ async fn test_export_drop_concurrent_replacement_is_valid() -> Result<()> {
 
 #[tokio::test]
 async fn test_export_drop_multi_package_same_collection() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-test")?;
     let node = test_node(&directory).await?;
     let collection_id = uuid::Uuid::new_v4();
     let v1 = manifest(collection_id, "1.0.0", &[("old.txt", b"v1".as_slice())])?;
@@ -239,7 +218,7 @@ async fn test_export_drop_multi_package_same_collection() -> Result<()> {
 
 #[tokio::test]
 async fn test_export_drop_with_pool_matches_without_pool() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-test")?;
     let node = test_node(&directory).await?;
     let content = b"pooled export";
     let hash = node.blob_store().add_bytes(content).await?;

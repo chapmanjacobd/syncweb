@@ -1,30 +1,11 @@
-use anyhow::{Result, ensure};
-use std::path::{Path, PathBuf};
+mod test_utils;
+
+use anyhow::ensure;
 
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-services-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn test_node(
     directory: &TestDirectory,
@@ -39,7 +20,7 @@ async fn test_node(
 
 #[tokio::test]
 async fn test_announce_topic() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let doc = node.docs_engine().create_namespace().await?;
 
@@ -51,7 +32,7 @@ async fn test_announce_topic() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_find_peers() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let doc = node.docs_engine().create_namespace().await?;
 

@@ -335,23 +335,23 @@ impl Sorter {
                     }
                     SortCriterion::Time => left.modified.cmp(&right.modified),
                     SortCriterion::Date => {
-                        let left_day = days_since_epoch(left.modified);
-                        let right_day = days_since_epoch(right.modified);
+                        let left_day = time_since_epoch(left.modified, 86400);
+                        let right_day = time_since_epoch(right.modified, 86400);
                         left_day.cmp(&right_day)
                     }
                     SortCriterion::Week => {
-                        let left_week = weeks_since_epoch(left.modified);
-                        let right_week = weeks_since_epoch(right.modified);
+                        let left_week = time_since_epoch(left.modified, 604_800);
+                        let right_week = time_since_epoch(right.modified, 604_800);
                         left_week.cmp(&right_week)
                     }
                     SortCriterion::Month => {
-                        let left_month = months_since_epoch(left.modified);
-                        let right_month = months_since_epoch(right.modified);
+                        let left_month = time_since_epoch(left.modified, 2_592_000);
+                        let right_month = time_since_epoch(right.modified, 2_592_000);
                         left_month.cmp(&right_month)
                     }
                     SortCriterion::Year => {
-                        let left_year = years_since_epoch(left.modified);
-                        let right_year = years_since_epoch(right.modified);
+                        let left_year = time_since_epoch(left.modified, 31_536_000);
+                        let right_year = time_since_epoch(right.modified, 31_536_000);
                         left_year.cmp(&right_year)
                     }
                     SortCriterion::Size => left.size.cmp(&right.size),
@@ -372,8 +372,8 @@ impl Sorter {
                         let right_time = folder_aggregates
                             .get(&right.folder)
                             .map_or(std::time::SystemTime::UNIX_EPOCH, |agg| agg.modified_median);
-                        let left_day = days_since_epoch(left_time);
-                        let right_day = days_since_epoch(right_time);
+                        let left_day = time_since_epoch(left_time, 86400);
+                        let right_day = time_since_epoch(right_time, 86400);
                         left_day.cmp(&right_day)
                     }
                     SortCriterion::FolderTime => {
@@ -499,28 +499,9 @@ fn days_since_modified(time: std::time::SystemTime) -> u64 {
         .map_or(0, |d| d.as_secs().checked_div(86400).unwrap_or(0))
 }
 
-#[must_use]
-fn days_since_epoch(time: std::time::SystemTime) -> u64 {
+fn time_since_epoch(time: std::time::SystemTime, divisor: u64) -> u64 {
     time.duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs().checked_div(86400).unwrap_or(0))
-}
-
-#[must_use]
-fn weeks_since_epoch(time: std::time::SystemTime) -> u64 {
-    time.duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs().checked_div(604_800).unwrap_or(0))
-}
-
-#[must_use]
-fn months_since_epoch(time: std::time::SystemTime) -> u64 {
-    time.duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs().checked_div(2_592_000).unwrap_or(0))
-}
-
-#[must_use]
-fn years_since_epoch(time: std::time::SystemTime) -> u64 {
-    time.duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs().checked_div(31_536_000).unwrap_or(0))
+        .map_or(0, |d| d.as_secs().checked_div(divisor).unwrap_or(0))
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::IsTerminal,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -24,20 +25,34 @@ use syncweb_core::{
         ProviderTrustSignal, ReplicationBudget, ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision,
         TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
     },
-    node::{
-        identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
-    },
+    node::identity::IdentityManager,
 };
 
+use dialoguer::Confirm;
 use iroh::PublicKey;
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::NamespaceId;
 use iroh_gossip::api::Event;
 use n0_future::StreamExt;
+use syncweb_core::init::open_node;
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
 const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
+const ERR_NO_FOLDERS: &str = "no synchronized folders are available; use `syncweb folders` to list available folders";
+
+fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
+    if output_json {
+        return Ok(true);
+    }
+    if !std::io::stdin().is_terminal() {
+        return Ok(true);
+    }
+    Ok(Confirm::new()
+        .with_prompt(format!("Are you sure you want to {operation}?"))
+        .default(false)
+        .show_default(true)
+        .interact()?)
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct IndexingState {
@@ -179,6 +194,10 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
         }
         IndexingCommand::Search { query, limit } => {
             let results = open_indexing(data_dir)?.search(&query, limit)?;
+            if results.is_empty() {
+                println!("no results found for query: {query}");
+                return Ok(());
+            }
             print_catalog_results(&results, output_json)?;
         }
         IndexingCommand::Health { hash } => {
@@ -315,6 +334,10 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             )?;
         }
         LinkCommand::Revoke { link } => {
+            if !confirm_destructive("revoke this link", output_json)? {
+                println!("aborted");
+                return Ok(());
+            }
             let parsed = link.parse::<PrivateLink>()?;
             let mut state = load_state(data_dir)?;
             let resolver = load_resolver(&state)?;
@@ -604,6 +627,10 @@ fn handle_provider_ban(
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
+    if !confirm_destructive("ban this provider", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     let provider_key = parse_provider(provider)?;
     let scope = hash.map(parse_hash).transpose()?;
     let ban_duration = duration.map(Duration::from_secs);
@@ -625,6 +652,10 @@ fn handle_provider_ban(
 fn handle_provider_unban(ctx: &CliContext<'_>, provider: &str) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
+    if !confirm_destructive("unban this provider", output_json)? {
+        println!("aborted");
+        return Ok(());
+    }
     let provider_key = parse_provider(provider)?;
     let mut state = load_state(data_dir)?;
     let removed = state.provider_bans.iter().any(|ban| ban.provider == provider_key);
@@ -1310,11 +1341,6 @@ fn collect_files(root: &Path, current: &Path, output: &mut Vec<PathBuf>) -> Resu
     Ok(())
 }
 
-async fn open_node(data_dir: &Path) -> Result<IrohNode> {
-    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    Ok(IrohNode::new(identity, data_dir.join("data"), RelayMode::Default).await?)
-}
-
 async fn resolve_folder(manager: &FolderManager, selector: &Path) -> Result<SyncwebFolder> {
     if let Ok(namespace) = selector.to_string_lossy().parse::<NamespaceId>() {
         return Ok(manager.get(namespace).await?);
@@ -1322,7 +1348,7 @@ async fn resolve_folder(manager: &FolderManager, selector: &Path) -> Result<Sync
     let folders = manager.list().await?;
     match folders.as_slice() {
         [folder] => Ok(folder.clone()),
-        [] => anyhow::bail!("no synchronized folders are available"),
+        [] => anyhow::bail!(ERR_NO_FOLDERS),
         _ => anyhow::bail!("folder selector is not a namespace ID and more than one synchronized folder is available"),
     }
 }

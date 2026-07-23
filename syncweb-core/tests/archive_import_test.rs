@@ -1,8 +1,6 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+mod test_utils;
+
+use std::{collections::BTreeMap, fs};
 
 use anyhow::{Result, ensure};
 use async_compression::tokio::bufread::ZstdDecoder;
@@ -19,27 +17,7 @@ use syncweb_core::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-drop-import-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn node(directory: &TestDirectory, name: &str) -> Result<IrohNode> {
     let root = directory.path().join(name);
@@ -49,7 +27,7 @@ async fn node(directory: &TestDirectory, name: &str) -> Result<IrohNode> {
 
 #[tokio::test]
 async fn import_drop_roundtrip_and_materialization() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let destination = node(&directory, "destination").await?;
     let content = b"import me";
@@ -83,7 +61,7 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_filter_skips_rejected_content() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let destination = node(&directory, "destination").await?;
     let keep = b"keep";
@@ -124,7 +102,7 @@ async fn import_drop_filter_skips_rejected_content() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_corrupted_archive_fails() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let destination = node(&directory, "destination").await?;
     let garbage = directory.path().join("corrupted.car.zst");
     fs::write(&garbage, b"this is not a valid CAR archive")?;
@@ -140,7 +118,7 @@ async fn import_drop_corrupted_archive_fails() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_tampered_content_fails() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let destination = node(&directory, "destination").await?;
     let content = b"original content";
@@ -173,7 +151,7 @@ async fn import_drop_tampered_content_fails() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_invalid_signature_fails() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let destination = node(&directory, "destination").await?;
     let content = b"signed content";
@@ -229,7 +207,7 @@ async fn import_drop_invalid_signature_fails() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_missing_dependencies_fails() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let destination = node(&directory, "destination").await?;
     let content = b"needs deps";
@@ -271,7 +249,7 @@ async fn import_drop_missing_dependencies_fails() -> Result<()> {
 
 #[tokio::test]
 async fn import_drop_with_pool_matches_without_pool() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-import-test")?;
     let source = node(&directory, "source").await?;
     let plain_destination = node(&directory, "plain-destination").await?;
     let pooled_destination = node(&directory, "pooled-destination").await?;

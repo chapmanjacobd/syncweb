@@ -1,3 +1,5 @@
+mod test_utils;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -11,23 +13,7 @@ use syncweb_core::{
     },
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> anyhow::Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-package-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn relay_node(
     directory: &TestDirectory,
@@ -36,7 +22,7 @@ async fn relay_node(
     relay_url: iroh::RelayUrl,
     memory_lookup: MemoryLookup,
 ) -> anyhow::Result<IrohNode> {
-    let root = directory.0.join(name);
+    let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let node = IrohNode::new_with_address_lookup(
         identity,
@@ -89,16 +75,16 @@ fn write_source_files(base: &Path, files: &[(&str, &[u8])]) -> anyhow::Result<Pa
 /// init -> add -> bump -> publish -> search -> install -> upgrade -> remove
 #[tokio::test]
 async fn test_package_lifecycle() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.0.join("packages"));
+    let packages = PackageManager::new(directory.path().join("packages"));
 
     // Create v1 manifest and source
     let v1_tool: &[u8] = b"tool-v1";
     let v1_readme: &[u8] = b"readme v1";
     let v1_files = &[("bin/tool", v1_tool), ("README.md", v1_readme)];
     let v1 = make_manifest(collection_id, "1.0.0", v1_files)?;
-    let source_v1 = write_source_files(&directory.0, v1_files)?;
+    let source_v1 = write_source_files(directory.path(), v1_files)?;
 
     // Install v1
     packages.install(&v1, &source_v1)?;
@@ -114,7 +100,7 @@ async fn test_package_lifecycle() -> anyhow::Result<()> {
     let v2_readme: &[u8] = b"readme v2";
     let v2_files = &[("bin/tool", v2_tool), ("README.md", v2_readme)];
     let v2 = make_manifest(collection_id, "2.0.0", v2_files)?;
-    let source_v2 = write_source_files(&directory.0, v2_files)?;
+    let source_v2 = write_source_files(directory.path(), v2_files)?;
 
     // Install v2 (upgrade)
     packages.install(&v2, &source_v2)?;
@@ -157,22 +143,22 @@ async fn test_package_lifecycle() -> anyhow::Result<()> {
 /// 5.3 Integration Test: Install v1, install v2, switch between
 #[test]
 fn test_multi_version_coexistence() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.0.join("packages"));
+    let packages = PackageManager::new(directory.path().join("packages"));
 
     // Install v1
     let v1_content: &[u8] = b"content-v1";
     let v1_files = &[("data/file.txt", v1_content)];
     let v1 = make_manifest(collection_id, "1.0.0", v1_files)?;
-    let source_v1 = write_source_files(&directory.0, v1_files)?;
+    let source_v1 = write_source_files(directory.path(), v1_files)?;
     packages.install(&v1, &source_v1)?;
 
     // Install v2
     let v2_content: &[u8] = b"content-v2";
     let v2_files = &[("data/file.txt", v2_content)];
     let v2 = make_manifest(collection_id, "2.0.0", v2_files)?;
-    let source_v2 = write_source_files(&directory.0, v2_files)?;
+    let source_v2 = write_source_files(directory.path(), v2_files)?;
     packages.install(&v2, &source_v2)?;
 
     // Both version directories should exist
@@ -208,15 +194,15 @@ fn test_multi_version_coexistence() -> anyhow::Result<()> {
 /// 5.3 Integration Test: Stage -> verify -> symlink swap -> cleanup
 #[test]
 fn test_atomic_upgrade() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.0.join("packages"));
+    let packages = PackageManager::new(directory.path().join("packages"));
 
     // Install v1
     let v1_data: &[u8] = b"v1-binary";
     let v1_files = &[("app.bin", v1_data)];
     let v1 = make_manifest(collection_id, "1.0.0", v1_files)?;
-    let source_v1 = write_source_files(&directory.0, v1_files)?;
+    let source_v1 = write_source_files(directory.path(), v1_files)?;
     packages.install(&v1, &source_v1)?;
 
     // Record v1 state
@@ -228,7 +214,7 @@ fn test_atomic_upgrade() -> anyhow::Result<()> {
     let v2_data: &[u8] = b"v2-binary-upgraded";
     let v2_files = &[("app.bin", v2_data)];
     let v2 = make_manifest(collection_id, "2.0.0", v2_files)?;
-    let source_v2 = write_source_files(&directory.0, v2_files)?;
+    let source_v2 = write_source_files(directory.path(), v2_files)?;
     packages.install(&v2, &source_v2)?;
 
     // Verify atomic swap: current now points to v2
@@ -265,15 +251,15 @@ fn test_atomic_upgrade() -> anyhow::Result<()> {
 /// 5.3 Integration Test: Verify catches corruption
 #[test]
 fn test_package_integrity() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.0.join("packages"));
+    let packages = PackageManager::new(directory.path().join("packages"));
 
     // Install a package
     let original: &[u8] = b"original content";
     let files = &[("data.txt", original)];
     let manifest = make_manifest(collection_id, "1.0.0", files)?;
-    let source = write_source_files(&directory.0, files)?;
+    let source = write_source_files(directory.path(), files)?;
     packages.install(&manifest, &source)?;
 
     // Verify passes before corruption
@@ -306,7 +292,7 @@ fn test_package_integrity() -> anyhow::Result<()> {
 /// 5.3 Integration Test: Publish -> search -> info across nodes
 #[tokio::test]
 async fn test_package_discovery() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-package-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
 

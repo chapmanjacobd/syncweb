@@ -471,16 +471,35 @@ async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
 async fn handle_unwatch(ctx: &CliContext<'_>, args: crate::cli::commands::FolderSelector) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &args.folder).await?;
-    node.stop().await?;
     let client = syncweb_core::daemon::daemon_client(data_dir)?
         .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    let namespace = if let Ok(ns) = args.folder.parse::<iroh_docs::NamespaceId>() {
+        ns.to_string()
+    } else {
+        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        let IpcResponse::FolderList(folders) = response else {
+            return print_daemon_message(response, output_json);
+        };
+        let path = std::path::Path::new(&args.folder);
+        let matched = if path.exists() {
+            folders.iter().find(|f| f.path == path)
+        } else {
+            folders.iter().find(|f| f.namespace.starts_with(&args.folder))
+        };
+        match matched {
+            Some(f) => f.namespace.clone(),
+            None => match folders.as_slice() {
+                [folder] => folder.namespace.clone(),
+                [] => anyhow::bail!("no synchronized folders are available"),
+                _ => anyhow::bail!(
+                    "'{}' is not a namespace ID and more than one folder is available",
+                    args.folder
+                ),
+            },
+        }
+    };
     let response = client
-        .send(IpcRequest::new(IpcCommand::RemoveFolder {
-            namespace: namespace.to_string(),
-        }))
+        .send(IpcRequest::new(IpcCommand::RemoveFolder { namespace }))
         .await?;
     print_daemon_message(response, output_json)
 }

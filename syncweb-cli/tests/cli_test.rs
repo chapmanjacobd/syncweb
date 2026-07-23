@@ -141,7 +141,12 @@ fn rust_log_controls_log_level() -> anyhow::Result<()> {
 fn test_create_command() -> anyhow::Result<()> {
     let directory = std::env::temp_dir().join(format!("syncweb-cli-create-{}", uuid::Uuid::new_v4()));
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", directory.to_str().context("UTF-8 path")?, "create"])
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "create",
+        ])
         .output()
         .context("run syncweb create")?;
 
@@ -162,7 +167,12 @@ fn test_create_command() -> anyhow::Result<()> {
 fn test_folders_command_empty() -> anyhow::Result<()> {
     let directory = std::env::temp_dir().join(format!("syncweb-cli-folders-{}", uuid::Uuid::new_v4()));
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", directory.to_str().context("UTF-8 path")?, "folders"])
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "folders",
+        ])
         .output()
         .context("run syncweb folders")?;
 
@@ -183,13 +193,13 @@ fn test_folders_command_lists_created() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "create"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "create"])
         .output()
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
 
     let folders_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "folders"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "folders"])
         .output()
         .context("run syncweb folders")?;
 
@@ -210,7 +220,7 @@ fn test_join_command() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "create"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "create"])
         .output()
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
@@ -230,6 +240,7 @@ fn test_join_command() -> anyhow::Result<()> {
         .args([
             "--data-dir",
             &data_dir,
+            "--no-daemon",
             "join",
             "--once",
             &ticket,
@@ -543,7 +554,7 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
         .output()
         .context("query auto-started daemon")?;
     let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "daemon-shutdown", "--force"])
+        .args(["--data-dir", data_dir_arg, "shutdown", "--force"])
         .output()
         .context("stop auto-started daemon")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup auto-started daemon")?;
@@ -573,6 +584,7 @@ fn test_init_outputs_url() -> anyhow::Result<()> {
         .args([
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
             "init",
             directory.to_str().context("UTF-8 path")?,
         ])
@@ -878,7 +890,7 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
     ensure!(net.status.success());
 
     let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "create", "--network", "team-net"])
+        .args(["--data-dir", data_dir, "--no-daemon", "create", "--network", "team-net"])
         .output()
         .context("create with --network")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -905,7 +917,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
     ensure!(net.status.success());
 
     let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "create"])
+        .args(["--data-dir", data_dir, "--no-daemon", "create"])
         .output()
         .context("create folder for ticket")?;
     ensure!(create.status.success());
@@ -925,6 +937,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
         .args([
             "--data-dir",
             data_dir,
+            "--no-daemon",
             "join",
             "--once",
             &ticket,

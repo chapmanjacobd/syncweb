@@ -8,18 +8,14 @@ pub enum Command {
     Version,
     #[command(about = "Start an interactive command shell")]
     Repl,
-    #[command(about = "Start the local syncweb node for one command invocation")]
-    Start,
-    #[command(about = "Stop the local syncweb node")]
-    Shutdown,
-    #[command(about = "Start and manage the local syncweb daemon")]
-    Daemon(DaemonArgs),
+    #[command(about = "Start the local syncweb daemon", alias = "daemon")]
+    Start(StartArgs),
+    #[command(about = "Stop the local syncweb node", alias = "daemon-shutdown")]
+    Shutdown(ShutdownArgs),
     #[command(about = "Show the local daemon status")]
     Status,
-    #[command(about = "Ask the local daemon to stop")]
-    DaemonShutdown(DaemonShutdownArgs),
-    #[command(about = "Ask the local daemon to reload configuration")]
-    DaemonReload,
+    #[command(about = "Ask the local daemon to reload configuration", alias = "daemon-reload")]
+    Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync,
     #[command(about = "Stop watching a folder for local changes")]
@@ -466,9 +462,9 @@ pub struct AutomaticArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct DaemonArgs {
-    #[arg(short = 'f', long, help = "Run in the foreground")]
-    pub foreground: bool,
+pub struct StartArgs {
+    #[arg(long, alias = "background", help = "Run in the background (daemon mode)")]
+    pub bg: bool,
     #[arg(long, help = "Override the global persistent data directory")]
     pub data_dir: Option<PathBuf>,
     #[arg(long, help = "Write daemon logs to this file")]
@@ -480,7 +476,7 @@ pub struct DaemonArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct DaemonShutdownArgs {
+pub struct ShutdownArgs {
     #[arg(long, help = "Skip graceful shutdown")]
     pub force: bool,
 }
@@ -495,12 +491,6 @@ pub struct WatchArgs {
     pub exclude: Vec<String>,
     #[arg(long, help = "Process one event and exit")]
     pub once: bool,
-    #[arg(
-        long,
-        visible_alias = "embedded",
-        help = "Run in the foreground without using a daemon"
-    )]
-    pub no_daemon: bool,
 }
 
 #[derive(Debug, Args)]

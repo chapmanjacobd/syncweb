@@ -10,6 +10,7 @@ use async_recursion::async_recursion;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
+use super::args::CliContext;
 use super::commands::{
     AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, MirrorCommand, ModerationCommand,
     ProviderTrustCommand, ReportArgs, TrustCommand, TrustStreamCommand,
@@ -98,7 +99,9 @@ struct ReportRecord {
 }
 
 #[async_recursion]
-pub async fn handle_indexing(data_dir: &Path, command: IndexingCommand, output_json: bool) -> Result<()> {
+pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         IndexingCommand::Enable { folder } => {
             let node = open_node(data_dir).await?;
@@ -205,15 +208,17 @@ pub async fn handle_indexing(data_dir: &Path, command: IndexingCommand, output_j
                 ),
             )?;
         }
-        IndexingCommand::Meta { command: meta_command } => handle_meta(data_dir, meta_command, output_json)?,
+        IndexingCommand::Meta { command: meta_command } => handle_meta(ctx, meta_command)?,
         IndexingCommand::Filter {
             command: filter_command,
-        } => handle_filter(data_dir, filter_command, output_json)?,
+        } => handle_filter(ctx, filter_command)?,
     }
     Ok(())
 }
 
-pub fn handle_link(data_dir: &Path, command: LinkCommand, output_json: bool) -> Result<()> {
+pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         LinkCommand::Create {
             source,
@@ -328,7 +333,9 @@ pub fn handle_link(data_dir: &Path, command: LinkCommand, output_json: bool) -> 
     Ok(())
 }
 
-pub fn handle_mirror(data_dir: &Path, command: MirrorCommand, output_json: bool) -> Result<()> {
+pub fn handle_mirror(ctx: &CliContext<'_>, command: MirrorCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         MirrorCommand::Add { collection, provider } => {
             let ticket = provider.parse::<BlobTicket>()?;
@@ -355,7 +362,9 @@ pub fn handle_mirror(data_dir: &Path, command: MirrorCommand, output_json: bool)
 }
 
 #[async_recursion]
-pub async fn handle_trust(data_dir: &Path, command: TrustCommand, output_json: bool) -> Result<()> {
+pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         TrustCommand::Show { subject } => {
             let state = load_state(data_dir)?;
@@ -447,60 +456,48 @@ pub async fn handle_trust(data_dir: &Path, command: TrustCommand, output_json: b
         }
         TrustCommand::Provider {
             command: provider_command,
-        } => handle_provider_trust(data_dir, provider_command, output_json)?,
+        } => handle_provider_trust(ctx, provider_command)?,
         TrustCommand::Stream {
             command: stream_command,
-        } => handle_trust_stream(data_dir, stream_command, output_json).await?,
+        } => handle_trust_stream(ctx, stream_command).await?,
     }
     Ok(())
 }
 
-fn handle_provider_trust(data_dir: &Path, command: ProviderTrustCommand, output_json: bool) -> Result<()> {
+fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) -> Result<()> {
     match command {
         ProviderTrustCommand::Show { provider, hash } => {
-            handle_provider_show(data_dir, &provider, hash.as_deref(), output_json)?;
+            handle_provider_show(ctx, &provider, hash.as_deref())?;
         }
         ProviderTrustCommand::List { hash } => {
-            handle_provider_list(data_dir, hash.as_deref(), output_json)?;
+            handle_provider_list(ctx, hash.as_deref())?;
         }
         ProviderTrustCommand::Ban {
             provider,
             hash,
             reason,
             duration,
-        } => handle_provider_ban(data_dir, &provider, hash.as_deref(), reason, duration, output_json)?,
+        } => handle_provider_ban(ctx, &provider, hash.as_deref(), reason, duration)?,
         ProviderTrustCommand::Unban { provider } => {
-            handle_provider_unban(data_dir, &provider, output_json)?;
+            handle_provider_unban(ctx, &provider)?;
         }
         ProviderTrustCommand::Vouch {
             provider,
             scope,
             reason,
-        } => handle_provider_trust_record(
-            data_dir,
-            &provider,
-            scope.as_deref(),
-            reason,
-            ProviderTrustAction::Vouch,
-            output_json,
-        )?,
+        } => handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Vouch)?,
         ProviderTrustCommand::Distrust {
             provider,
             scope,
             reason,
-        } => handle_provider_trust_record(
-            data_dir,
-            &provider,
-            scope.as_deref(),
-            reason,
-            ProviderTrustAction::Distrust,
-            output_json,
-        )?,
+        } => handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Distrust)?,
     }
     Ok(())
 }
 
-fn handle_provider_show(data_dir: &Path, provider: &str, hash: Option<&str>, output_json: bool) -> Result<()> {
+fn handle_provider_show(ctx: &CliContext<'_>, provider: &str, hash: Option<&str>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let provider_key = parse_provider(provider)?;
     let scope = hash.map(parse_hash).transpose()?;
     let state = load_state(data_dir)?;
@@ -545,7 +542,9 @@ fn handle_provider_show(data_dir: &Path, provider: &str, hash: Option<&str>, out
     )
 }
 
-fn handle_provider_list(data_dir: &Path, hash: Option<&str>, output_json: bool) -> Result<()> {
+fn handle_provider_list(ctx: &CliContext<'_>, hash: Option<&str>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let scope = hash.map(parse_hash).transpose()?;
     let state = load_state(data_dir)?;
     let indexing = open_indexing(data_dir)?;
@@ -597,13 +596,14 @@ fn handle_provider_list(data_dir: &Path, hash: Option<&str>, output_json: bool) 
 }
 
 fn handle_provider_ban(
-    data_dir: &Path,
+    ctx: &CliContext<'_>,
     provider: &str,
     hash: Option<&str>,
     reason: String,
     duration: Option<u64>,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let provider_key = parse_provider(provider)?;
     let scope = hash.map(parse_hash).transpose()?;
     let ban_duration = duration.map(Duration::from_secs);
@@ -622,7 +622,9 @@ fn handle_provider_ban(
     )
 }
 
-fn handle_provider_unban(data_dir: &Path, provider: &str, output_json: bool) -> Result<()> {
+fn handle_provider_unban(ctx: &CliContext<'_>, provider: &str) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let provider_key = parse_provider(provider)?;
     let mut state = load_state(data_dir)?;
     let removed = state.provider_bans.iter().any(|ban| ban.provider == provider_key);
@@ -638,13 +640,14 @@ fn handle_provider_unban(data_dir: &Path, provider: &str, output_json: bool) -> 
 }
 
 fn handle_provider_trust_record(
-    data_dir: &Path,
+    ctx: &CliContext<'_>,
     provider: &str,
     scope: Option<&str>,
     reason: String,
     action: ProviderTrustAction,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let provider_key = parse_provider(provider)?;
     let scope_hash = scope.map(parse_hash).transpose()?;
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
@@ -681,7 +684,9 @@ fn handle_provider_trust_record(
 }
 
 #[async_recursion]
-async fn handle_trust_stream(data_dir: &Path, command: TrustStreamCommand, output_json: bool) -> Result<()> {
+async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         TrustStreamCommand::Publish {
             provider,
@@ -836,7 +841,9 @@ fn read_trust_stream_source(source: &str) -> Result<Option<Vec<u8>>> {
     Ok(None)
 }
 
-pub fn handle_attest(data_dir: &Path, command: AttestArgs, output_json: bool) -> Result<()> {
+pub fn handle_attest(ctx: &CliContext<'_>, command: AttestArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let value = command
         .license
         .map(|value| (AttestationKind::License, value))
@@ -874,7 +881,9 @@ pub fn handle_attest(data_dir: &Path, command: AttestArgs, output_json: bool) ->
     )
 }
 
-pub fn handle_report(data_dir: &Path, command: ReportArgs, output_json: bool) -> Result<()> {
+pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let content = parse_hash(&command.record)?;
     let mut state = load_state(data_dir)?;
     let report = ReportRecord {
@@ -891,7 +900,9 @@ pub fn handle_report(data_dir: &Path, command: ReportArgs, output_json: bool) ->
     )
 }
 
-pub fn handle_moderation(data_dir: &Path, command: ModerationCommand, output_json: bool) -> Result<()> {
+pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         ModerationCommand::List { content } => {
             let state = load_state(data_dir)?;
@@ -949,7 +960,9 @@ pub fn handle_moderation(data_dir: &Path, command: ModerationCommand, output_jso
     Ok(())
 }
 
-fn handle_meta(data_dir: &Path, command: MetaCommand, output_json: bool) -> Result<()> {
+fn handle_meta(ctx: &CliContext<'_>, command: MetaCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         MetaCommand::Add {
             hash,
@@ -976,7 +989,9 @@ fn handle_meta(data_dir: &Path, command: MetaCommand, output_json: bool) -> Resu
     Ok(())
 }
 
-fn handle_filter(data_dir: &Path, command: FilterCommand, output_json: bool) -> Result<()> {
+fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     match command {
         FilterCommand::Add { rule_type, value } => {
             let rule = parse_denylist_rule(&rule_type, &value)?;

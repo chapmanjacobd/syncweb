@@ -58,7 +58,11 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (start)
 _arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--data-dir=[Override the global persistent data directory]:DATA_DIR:_files' \
+'--log-file=[Write daemon logs to this file]:LOG_FILE:_files' \
+'--max-threads=[]:MAX_THREADS:_default' \
+'--sync-interval=[]:SYNC_INTERVAL:_default' \
+'--bg[Run in the background (daemon mode)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
@@ -71,23 +75,7 @@ _arguments "${_arguments_options[@]}" : \
 (shutdown)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(daemon)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Override the global persistent data directory]:DATA_DIR:_files' \
-'--log-file=[Write daemon logs to this file]:LOG_FILE:_files' \
-'--max-threads=[]:MAX_THREADS:_default' \
-'--sync-interval=[]:SYNC_INTERVAL:_default' \
-'-f[Run in the foreground]' \
-'--foreground[Run in the foreground]' \
+'--force[Skip graceful shutdown]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
@@ -109,20 +97,7 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(daemon-shutdown)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--force[Skip graceful shutdown]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-color[Disable colored output]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(daemon-reload)
+(reload)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -643,11 +618,11 @@ _arguments "${_arguments_options[@]}" : \
 '*--exclude=[Ignore a path glob; may be repeated]:GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--once[Process one event and exit]' \
-'--no-daemon[Run in the foreground without using a daemon]' \
-'--embedded[Run in the foreground without using a daemon]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-color[Disable colored output]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -2366,19 +2341,11 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(daemon)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (status)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(daemon-shutdown)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(daemon-reload)
+(reload)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2968,12 +2935,10 @@ _syncweb_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
 'repl:Start an interactive command shell' \
-'start:Start the local syncweb node for one command invocation' \
+'start:Start the local syncweb daemon' \
 'shutdown:Stop the local syncweb node' \
-'daemon:Start and manage the local syncweb daemon' \
 'status:Show the local daemon status' \
-'daemon-shutdown:Ask the local daemon to stop' \
-'daemon-reload:Ask the local daemon to reload configuration' \
+'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
 'unwatch:Stop watching a folder for local changes' \
 'create:Create a synchronized folder' \
@@ -3146,21 +3111,6 @@ _syncweb__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb create commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__daemon_commands] )) ||
-_syncweb__subcmd__daemon_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb daemon commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__daemon-reload_commands] )) ||
-_syncweb__subcmd__daemon-reload_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb daemon-reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__daemon-shutdown_commands] )) ||
-_syncweb__subcmd__daemon-shutdown_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb daemon-shutdown commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__daemon-sync_commands] )) ||
 _syncweb__subcmd__daemon-sync_commands() {
     local commands; commands=()
@@ -3196,12 +3146,10 @@ _syncweb__subcmd__help_commands() {
     local commands; commands=(
 'version:Show syncweb version information' \
 'repl:Start an interactive command shell' \
-'start:Start the local syncweb node for one command invocation' \
+'start:Start the local syncweb daemon' \
 'shutdown:Stop the local syncweb node' \
-'daemon:Start and manage the local syncweb daemon' \
 'status:Show the local daemon status' \
-'daemon-shutdown:Ask the local daemon to stop' \
-'daemon-reload:Ask the local daemon to reload configuration' \
+'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
 'unwatch:Stop watching a folder for local changes' \
 'create:Create a synchronized folder' \
@@ -3311,21 +3259,6 @@ _syncweb__subcmd__help__subcmd__config__subcmd__show_commands() {
 _syncweb__subcmd__help__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon-reload_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon-reload_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon-reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon-shutdown_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon-shutdown_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon-shutdown commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__daemon-sync_commands] )) ||
 _syncweb__subcmd__help__subcmd__daemon-sync_commands() {
@@ -3638,6 +3571,11 @@ _syncweb__subcmd__help__subcmd__package__subcmd__versions_commands() {
 _syncweb__subcmd__help__subcmd__publish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__reload_commands] )) ||
+_syncweb__subcmd__help__subcmd__reload_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help reload commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__repl_commands] )) ||
 _syncweb__subcmd__help__subcmd__repl_commands() {
@@ -4452,6 +4390,11 @@ _syncweb__subcmd__package__subcmd__versions_commands() {
 _syncweb__subcmd__publish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__reload_commands] )) ||
+_syncweb__subcmd__reload_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb reload commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__repl_commands] )) ||
 _syncweb__subcmd__repl_commands() {

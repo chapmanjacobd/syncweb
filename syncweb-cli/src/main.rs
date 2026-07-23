@@ -12,11 +12,11 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use cli::{
-    args::Cli,
+    args::{Cli, CliContext},
     commands::{
-        CollectionCommand, Command, ConfigCommand, DaemonArgs, DaemonShutdownArgs, HealthArgs, ImportArgs,
-        NetworkCommand, PackageCommand, ScheduleCommand, SnapshotCommand, SnapshotCreateArgs, StatsArgs, VerifyArgs,
-        WatchArgs,
+        CollectionCommand, Command, ConfigCommand, HealthArgs, ImportArgs, InitArgs, NetworkCommand, PackageCommand,
+        PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs,
+        StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version, run_repl},
 };
@@ -64,84 +64,62 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         return execute_auxiliary_command(cli).await;
     }
 
-    let output_json = cli.json;
+    let ctx = CliContext {
+        data_dir: &cli.data_dir,
+        output_json: cli.json,
+        no_daemon: cli.no_daemon,
+    };
     match cli.command {
         Command::Version => {
-            if output_json {
+            if ctx.output_json {
                 println!("{}", serde_json::json!({"version": env!("CARGO_PKG_VERSION")}));
             } else {
                 print_version();
             }
         }
         Command::Repl => run_repl()?,
-        Command::Create(command) => handle_create(&cli.data_dir, command, output_json).await?,
-        Command::Join(command) => handle_join(&cli.data_dir, command, output_json).await?,
-        Command::Leave(command) => handle_leave(&cli.data_dir, command, output_json).await?,
-        Command::Unsubscribe(command) => handle_unsubscribe(&cli.data_dir, command, output_json).await?,
-        Command::Folders => handle_folders(&cli.data_dir, output_json).await?,
-        Command::Devices => handle_devices(&cli.data_dir, output_json)?,
-        Command::Ls(command) => handle_ls(command, output_json)?,
-        Command::Find(command) => handle_find(command, output_json)?,
-        Command::Sort(command) => handle_sort(&command, output_json)?,
-        Command::Stat(command) => handle_stat(command, output_json)?,
-        Command::Download(command) => handle_download(&cli.data_dir, command, output_json, cli.no_daemon).await?,
-        Command::Import(command) => handle_import(&cli.data_dir, command, output_json, cli.no_daemon).await?,
+        Command::Create(command) => handle_create(&ctx, command).await?,
+        Command::Join(command) => handle_join(&ctx, command).await?,
+        Command::Leave(command) => handle_leave(&ctx, command).await?,
+        Command::Unsubscribe(command) => handle_unsubscribe(&ctx, command).await?,
+        Command::Folders => handle_folders(&ctx).await?,
+        Command::Devices => handle_devices(&ctx)?,
+        Command::Ls(command) => handle_ls(&ctx, command)?,
+        Command::Find(command) => handle_find(&ctx, command)?,
+        Command::Sort(command) => handle_sort(&ctx, &command)?,
+        Command::Stat(command) => handle_stat(&ctx, command)?,
+        Command::Download(command) => handle_download(&ctx, command).await?,
+        Command::Import(command) => handle_import(&ctx, command).await?,
         Command::Snapshot { command } => {
-            handle_snapshot(&cli.data_dir, command, output_json).await?;
+            handle_snapshot(&ctx, command).await?;
         }
-        Command::Health(command) => handle_health(&cli.data_dir, command, output_json).await?,
-        Command::Init(command) => {
-            std::fs::create_dir_all(&command.path)?;
-            let node = open_node(&cli.data_dir).await?;
-            let manager = FolderManager::new(&node);
-            let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
-            let ticket = folder.ticket(node.endpoint().addr(), true).await?;
-            let result = InitResult::new(&command.path, folder.namespace_id(), ticket);
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "path": result.path,
-                        "namespace": result.namespace,
-                        "ticket": result.ticket,
-                        "share_url": result.share_url,
-                    }))?
-                );
-            } else {
-                println!("path: {}", result.path.display());
-                println!("namespace: {}", result.namespace);
-                println!("ticket: {}", result.ticket);
-                println!("share_url: {}", result.share_url);
-            }
-            node.stop().await?;
-        }
-        Command::Automatic(command) => handle_automatic(&cli.data_dir, command, output_json).await?,
-        Command::Subscribe(command) => handle_subscribe(&cli.data_dir, command, output_json).await?,
-        Command::Publish(command) => handle_publish(&cli.data_dir, command, output_json).await?,
-        Command::Unpublish(command) => handle_unpublish(&cli.data_dir, command, output_json).await?,
-        Command::Collection { command } => handle_collection(&cli.data_dir, command, output_json).await?,
-        Command::Package { command } => handle_package(&cli.data_dir, command, output_json).await?,
-        Command::Network { command } => handle_network(&cli.data_dir, command, output_json).await?,
-        Command::Indexing { command } => cli::indexing::handle_indexing(&cli.data_dir, command, output_json).await?,
-        Command::Link { command } => cli::indexing::handle_link(&cli.data_dir, command, output_json)?,
-        Command::Mirror { command } => cli::indexing::handle_mirror(&cli.data_dir, command, output_json)?,
+        Command::Health(command) => handle_health(&ctx, command).await?,
+        Command::Verify(command) => handle_verify(&ctx, command).await?,
+        Command::Init(command) => handle_init(&ctx, command).await?,
+        Command::Automatic(command) => handle_automatic(&ctx, command).await?,
+        Command::Subscribe(command) => handle_subscribe(&ctx, command).await?,
+        Command::Publish(command) => handle_publish(&ctx, command).await?,
+        Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
+        Command::Collection { command } => handle_collection(&ctx, command).await?,
+        Command::Package { command } => handle_package(&ctx, command).await?,
+        Command::Network { command } => handle_network(&ctx, command).await?,
+        Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
+        Command::Link { command } => cli::indexing::handle_link(&ctx, command)?,
+        Command::Mirror { command } => cli::indexing::handle_mirror(&ctx, command)?,
         Command::Trust { command: trust_command } => {
-            cli::indexing::handle_trust(&cli.data_dir, trust_command, output_json).await?;
+            cli::indexing::handle_trust(&ctx, trust_command).await?;
         }
-        Command::Attest(command) => cli::indexing::handle_attest(&cli.data_dir, command, output_json)?,
-        Command::Report(command) => cli::indexing::handle_report(&cli.data_dir, command, output_json)?,
-        Command::Moderation { command } => cli::indexing::handle_moderation(&cli.data_dir, command, output_json)?,
-        Command::Start
-        | Command::Shutdown
-        | Command::Daemon(_)
+        Command::Attest(command) => cli::indexing::handle_attest(&ctx, command)?,
+        Command::Report(command) => cli::indexing::handle_report(&ctx, command)?,
+        Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command)?,
+        Command::Start(_)
+        | Command::Shutdown(_)
         | Command::Status
-        | Command::DaemonShutdown(_)
-        | Command::DaemonReload
+        | Command::Reload
         | Command::DaemonSync
         | Command::Unwatch(_)
         | Command::Watch(_)
         | Command::Stats(_)
-        | Command::Verify(_)
         | Command::Schedule { .. }
         | Command::Config { .. }
         | Command::Completions { .. }
@@ -153,17 +131,14 @@ async fn execute_cli(cli: Cli) -> Result<()> {
 const fn is_auxiliary_command(command: &Command) -> bool {
     matches!(
         command,
-        Command::Start
-            | Command::Shutdown
-            | Command::Daemon(_)
+        Command::Start(_)
+            | Command::Shutdown(_)
             | Command::Status
-            | Command::DaemonShutdown(_)
-            | Command::DaemonReload
+            | Command::Reload
             | Command::DaemonSync
             | Command::Unwatch(_)
             | Command::Watch(_)
             | Command::Stats(_)
-            | Command::Verify(_)
             | Command::Schedule { .. }
             | Command::Config { .. }
             | Command::Completions { .. }
@@ -179,45 +154,46 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         no_daemon,
         ..
     } = cli;
-    if matches!(&command, Command::Start) {
-        return handle_start(&data_dir, output_json).await;
-    }
-    if matches!(&command, Command::Shutdown) {
-        return handle_shutdown(&data_dir, output_json).await;
-    }
-    if let Command::Daemon(args) = command {
+    let ctx = CliContext {
+        data_dir: &data_dir,
+        output_json,
+        no_daemon,
+    };
+    if let Command::Start(args) = command {
         let effective_data_dir = args.data_dir.clone().unwrap_or(data_dir);
-        return handle_daemon(&effective_data_dir, args, output_json).await;
+        let daemon_ctx = CliContext {
+            data_dir: &effective_data_dir,
+            output_json,
+            no_daemon,
+        };
+        return handle_start(&daemon_ctx, args).await;
+    }
+    if let Command::Shutdown(args) = command {
+        return handle_shutdown(&ctx, args).await;
     }
     if matches!(&command, Command::Status) {
-        return handle_daemon_status(&data_dir, output_json).await;
+        return handle_daemon_status(&ctx).await;
     }
-    if let Command::DaemonShutdown(args) = command {
-        return handle_daemon_shutdown(&data_dir, args, output_json).await;
-    }
-    if matches!(&command, Command::DaemonReload) {
-        return handle_daemon_reload(&data_dir, output_json).await;
+    if matches!(&command, Command::Reload) {
+        return handle_reload(&ctx).await;
     }
     if matches!(&command, Command::DaemonSync) {
-        return handle_daemon_sync(&data_dir, output_json).await;
+        return handle_daemon_sync(&ctx).await;
     }
     if let Command::Unwatch(args) = command {
-        return handle_unwatch(&data_dir, args, output_json).await;
+        return handle_unwatch(&ctx, args).await;
     }
     if let Command::Watch(watch) = command {
-        return handle_watch(&data_dir, watch, output_json, no_daemon).await;
+        return handle_watch(&ctx, watch).await;
     }
     if let Command::Stats(stats) = command {
-        return handle_stats(&data_dir, stats, output_json);
-    }
-    if let Command::Verify(verify) = command {
-        return handle_verify(&data_dir, verify, output_json).await;
+        return handle_stats(&ctx, stats);
     }
     if let Command::Schedule { command: schedule } = command {
-        return handle_schedule(&data_dir, schedule, output_json);
+        return handle_schedule(&ctx, schedule);
     }
     if let Command::Config { command: config } = command {
-        return handle_config(&data_dir, config, output_json);
+        return handle_config(&ctx, config);
     }
     if let Command::Completions { shell } = command {
         clap_complete::generate(shell, &mut Cli::command(), "syncweb", &mut std::io::stdout());
@@ -229,7 +205,9 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     anyhow::bail!("unsupported auxiliary command")
 }
 
-fn handle_config(data_dir: &std::path::Path, command: Option<ConfigCommand>, output_json: bool) -> Result<()> {
+fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let config_path = data_dir.join("config.toml");
     let mut config = AppConfig::load(&config_path)?;
     match command {
@@ -295,29 +273,10 @@ fn generate_manpages(dir: &std::path::Path) -> Result<()> {
 }
 
 #[async_recursion]
-async fn handle_start(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
-    handle_daemon(
-        data_dir,
-        DaemonArgs {
-            foreground: false,
-            data_dir: None,
-            log_file: None,
-            max_threads: None,
-            sync_interval: None,
-        },
-        output_json,
-    )
-    .await
-}
-
-#[async_recursion]
-async fn handle_shutdown(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
-    handle_daemon_shutdown(data_dir, DaemonShutdownArgs { force: false }, output_json).await
-}
-
-#[async_recursion]
-async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json: bool) -> Result<()> {
-    if !args.foreground {
+async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    if args.bg {
         let child = spawn_daemon_process(data_dir, &args)?;
         if output_json {
             println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
@@ -329,7 +288,6 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
 
     let app_config = AppConfig::load(data_dir.join("config.toml"))?;
     let mut daemon_config = DaemonConfig::new(data_dir);
-    daemon_config.foreground = args.foreground;
     daemon_config.sync_interval = args.sync_interval.map_or(Duration::from_mins(1), Duration::from_secs);
     daemon_config.rayon_threads = args.max_threads.unwrap_or(app_config.parallel.threads);
     daemon_config.log_file = args.log_file;
@@ -349,14 +307,25 @@ async fn handle_daemon(data_dir: &std::path::Path, args: DaemonArgs, output_json
     Ok(())
 }
 
-fn spawn_daemon_process(data_dir: &std::path::Path, args: &DaemonArgs) -> Result<Child> {
+#[async_recursion]
+async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let client = syncweb_core::daemon::daemon_client(data_dir)?
+        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
+    let response = client
+        .send(IpcRequest::new(IpcCommand::Shutdown { force: args.force }))
+        .await?;
+    print_daemon_message(response, output_json)
+}
+
+fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs) -> Result<Child> {
     let executable = std::env::current_exe().context("resolve syncweb executable")?;
     let mut command = ProcessCommand::new(executable);
     command
         .arg("--data-dir")
         .arg(data_dir)
-        .arg("daemon")
-        .arg("--foreground")
+        .arg("start")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -388,8 +357,8 @@ async fn daemon_client_or_start(
         lock.release()?;
         Some(spawn_daemon_process(
             data_dir,
-            &DaemonArgs {
-                foreground: false,
+            &StartArgs {
+                bg: true,
                 data_dir: None,
                 log_file: None,
                 max_threads: None,
@@ -419,7 +388,9 @@ async fn daemon_client_or_start(
 }
 
 #[async_recursion]
-async fn handle_daemon_status(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
+async fn handle_daemon_status(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let state_file = StateFile::new(data_dir);
     let Some(report) = state_file.load_status()? else {
         if output_json {
@@ -475,27 +446,21 @@ async fn handle_daemon_status(data_dir: &std::path::Path, output_json: bool) -> 
 }
 
 #[async_recursion]
-async fn handle_daemon_shutdown(data_dir: &std::path::Path, args: DaemonShutdownArgs, output_json: bool) -> Result<()> {
+async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
-    let response = client
-        .send(IpcRequest::new(IpcCommand::Shutdown { force: args.force }))
-        .await?;
-    print_daemon_message(response, output_json)
-}
-
-#[async_recursion]
-async fn handle_daemon_reload(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
-    let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
+        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
     let response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
     print_daemon_message(response, output_json)
 }
 
 #[async_recursion]
-async fn handle_daemon_sync(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
+async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
+        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
         .await?;
@@ -503,17 +468,15 @@ async fn handle_daemon_sync(data_dir: &std::path::Path, output_json: bool) -> Re
 }
 
 #[async_recursion]
-async fn handle_unwatch(
-    data_dir: &std::path::Path,
-    args: crate::cli::commands::FolderSelector,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_unwatch(ctx: &CliContext<'_>, args: crate::cli::commands::FolderSelector) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &args.folder).await?;
     node.stop().await?;
     let client = syncweb_core::daemon::daemon_client(data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb daemon`"))?;
+        .ok_or_else(|| anyhow::anyhow!("daemon not running; start with `syncweb start`"))?;
     let response = client
         .send(IpcRequest::new(IpcCommand::RemoveFolder {
             namespace: namespace.to_string(),
@@ -544,12 +507,10 @@ fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> 
 }
 
 #[async_recursion]
-async fn handle_import(
-    data_dir: &std::path::Path,
-    command: ImportArgs,
-    output_json: bool,
-    no_daemon: bool,
-) -> Result<()> {
+async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     if !command.path.exists() {
         anyhow::bail!("import path does not exist: {}", command.path.display());
     }
@@ -618,12 +579,10 @@ async fn handle_import(
 }
 
 #[async_recursion]
-async fn handle_download(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::DownloadArgs,
-    output_json: bool,
-    no_daemon: bool,
-) -> Result<()> {
+async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     if let Some(destination) = command.destination {
         if command.max_peers.is_some()
             || command.min_peers.is_some()
@@ -688,10 +647,6 @@ async fn handle_download(
             | _ => anyhow::bail!("daemon returned an unexpected download response"),
         }
     }
-    if !no_daemon {
-        anyhow::bail!("daemon not running; start with `syncweb daemon` or pass --no-daemon");
-    }
-
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.source).await?;
@@ -742,11 +697,9 @@ async fn handle_download(
 }
 
 #[async_recursion]
-async fn handle_snapshot_create(
-    data_dir: &std::path::Path,
-    command: SnapshotCreateArgs,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_snapshot_create(ctx: &CliContext<'_>, command: SnapshotCreateArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
@@ -779,11 +732,9 @@ async fn handle_snapshot_create(
 }
 
 #[async_recursion]
-async fn handle_snapshot_restore(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::SnapshotRestoreArgs,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_snapshot_restore(ctx: &CliContext<'_>, command: SnapshotRestoreArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
@@ -813,11 +764,32 @@ async fn handle_snapshot_restore(
 }
 
 #[async_recursion]
-async fn handle_snapshot(data_dir: &std::path::Path, command: SnapshotCommand, output_json: bool) -> Result<()> {
+async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     match command {
-        SnapshotCommand::Create(args) => handle_snapshot_create(data_dir, args, output_json).await,
-        SnapshotCommand::Restore(args) => handle_snapshot_restore(data_dir, args, output_json).await,
+        SnapshotCommand::Create(args) => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::SnapshotCreate {
+                        path: args.path.clone(),
+                        description: args.description.clone(),
+                        threads: args.threads,
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
+            handle_snapshot_create(ctx, args).await
+        }
+        SnapshotCommand::Restore(args) => handle_snapshot_restore(ctx, args).await,
         SnapshotCommand::List { path } => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::SnapshotList { path: path.clone() }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
             let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
@@ -892,6 +864,12 @@ async fn handle_snapshot(data_dir: &std::path::Path, command: SnapshotCommand, o
             Ok(())
         }
         SnapshotCommand::Delete { path: _, snapshot } => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::SnapshotDelete { id: snapshot.clone() }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::with_docs(node.blob_store().clone(), node.docs_engine().clone());
             let id = snapshot.parse()?;
@@ -911,7 +889,18 @@ async fn handle_snapshot(data_dir: &std::path::Path, command: SnapshotCommand, o
 }
 
 #[async_recursion]
-async fn handle_health(data_dir: &std::path::Path, command: HealthArgs, output_json: bool) -> Result<()> {
+async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::HealthCheck {
+                path: command.path.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.path).await?;
@@ -973,7 +962,18 @@ async fn handle_health(data_dir: &std::path::Path, command: HealthArgs, output_j
 }
 
 #[async_recursion]
-async fn handle_verify(data_dir: &std::path::Path, command: VerifyArgs, output_json: bool) -> Result<()> {
+async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
+                path: command.path.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.path).await?;
@@ -1005,7 +1005,9 @@ async fn handle_verify(data_dir: &std::path::Path, command: VerifyArgs, output_j
     Ok(())
 }
 
-fn handle_stats(data_dir: &std::path::Path, command: StatsArgs, output_json: bool) -> Result<()> {
+fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     if let Some(period) = command.period {
         parse_period(&period)?;
     }
@@ -1087,7 +1089,9 @@ fn handle_stats(data_dir: &std::path::Path, command: StatsArgs, output_json: boo
     Ok(())
 }
 
-fn handle_schedule(data_dir: &std::path::Path, command: Option<ScheduleCommand>, output_json: bool) -> Result<()> {
+fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let path = data_dir.join("config.toml");
     let mut config = AppConfig::load(&path)?;
     match command {
@@ -1163,16 +1167,14 @@ fn handle_schedule(data_dir: &std::path::Path, command: Option<ScheduleCommand>,
 }
 
 #[async_recursion]
-async fn handle_watch(
-    data_dir: &std::path::Path,
-    command: WatchArgs,
-    output_json: bool,
-    no_daemon: bool,
-) -> Result<()> {
-    if !command.once && !command.no_daemon {
+async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if !command.once && !no_daemon {
         let client = daemon_client_or_start(data_dir, no_daemon)
             .await?
-            .ok_or_else(|| anyhow::anyhow!("daemon routing was disabled"))?;
+            .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or pass --no-daemon"))?;
 
         let namespace = if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
             namespace.to_string()
@@ -1307,13 +1309,21 @@ async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<ir
 }
 
 #[async_recursion]
-async fn handle_create(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::FolderCreate,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::FolderCreate) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::CreateFolder {
+                path: command.path.clone(),
+                mode: command.mode.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
@@ -1338,11 +1348,50 @@ async fn handle_create(
 }
 
 #[async_recursion]
-async fn handle_join(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::FolderJoin,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_init(ctx: &CliContext<'_>, command: InitArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    std::fs::create_dir_all(&command.path)?;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::CreateFolder {
+                path: command.path.clone(),
+                mode: command.mode.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
+    let ticket = folder.ticket(node.endpoint().addr(), true).await?;
+    let result = InitResult::new(&command.path, folder.namespace_id(), ticket);
+    if output_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "path": result.path,
+                "namespace": result.namespace,
+                "ticket": result.ticket,
+                "share_url": result.share_url,
+            }))?
+        );
+    } else {
+        println!("path: {}", result.path.display());
+        println!("namespace: {}", result.namespace);
+        println!("ticket: {}", result.ticket);
+        println!("share_url: {}", result.share_url);
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::FolderJoin) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     let effective_path = if let Some(prefix) = &command.prefix {
         prefix.join(&command.path)
     } else {
@@ -1350,6 +1399,18 @@ async fn handle_join(
     };
     std::fs::create_dir_all(&effective_path)
         .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
+    if command.once
+        && let Some(client) = daemon_client_or_start(data_dir, no_daemon).await?
+    {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Join {
+                ticket: command.ticket.clone(),
+                path: effective_path.clone(),
+                mode: SyncMode::from_str(&command.mode)?,
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.join(command.ticket, SyncMode::from_str(&command.mode)?).await?;
@@ -1423,11 +1484,9 @@ async fn handle_join(
 }
 
 #[async_recursion]
-async fn handle_automatic(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::AutomaticArgs,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::AutomaticArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let filter_path = command.filters.unwrap_or_else(|| data_dir.join("filters.toml"));
     let engine = if filter_path.exists() {
         FilterEngine::load(&filter_path)?
@@ -1465,29 +1524,24 @@ async fn handle_automatic(
         }
         return Ok(());
     }
-    handle_daemon(
-        data_dir,
-        DaemonArgs {
-            foreground: false,
+    handle_start(
+        ctx,
+        StartArgs {
+            bg: true,
             data_dir: None,
             log_file: None,
             max_threads: None,
             sync_interval: None,
         },
-        output_json,
     )
     .await
 }
 
 #[async_recursion]
-async fn handle_subscribe(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::SubscribeArgs,
-    output_json: bool,
-) -> Result<()> {
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &command.folder).await?;
+async fn handle_subscribe(ctx: &CliContext<'_>, command: SubscribeArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     let session_id = uuid::Uuid::new_v4();
     let mut params = if command.ingest_only {
         SubscribeParams::ingest_only()
@@ -1516,6 +1570,46 @@ async fn handle_subscribe(
         }
         params = params.with_limits(limits);
     }
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let namespace_id = if let Ok(ns) = command.folder.parse::<iroh_docs::NamespaceId>() {
+            ns
+        } else {
+            let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+            let IpcResponse::FolderList(folders) = response else {
+                return print_daemon_message(response, output_json);
+            };
+            let folder_path = std::path::Path::new(&command.folder);
+            match folders.as_slice() {
+                [f] if folder_path.exists() => f.namespace.parse()?,
+                [f] => f.namespace.parse()?,
+                [] => anyhow::bail!("no synchronized folders are available"),
+                _ => anyhow::bail!(
+                    "folder path is not a namespace ID and more than one synchronized folder is available"
+                ),
+            }
+        };
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Subscribe {
+                namespace: namespace_id.to_string(),
+                params,
+            }))
+            .await?;
+        if let IpcResponse::Ok { message } = response {
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({"status": "subscribed", "namespace": namespace_id.to_string()})
+                );
+            } else {
+                println!("{message}");
+            }
+            return Ok(());
+        }
+        return print_daemon_message(response, output_json);
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = resolve_namespace(&manager, &command.folder).await?;
     let sync = SyncEngine::new(
         manager,
         node.blob_store().clone(),
@@ -1544,11 +1638,19 @@ async fn handle_subscribe(
 }
 
 #[async_recursion]
-async fn handle_publish(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::PublishArgs,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_publish(ctx: &CliContext<'_>, command: PublishArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Publish {
+                namespace: command.namespace.clone(),
+                blob: command.blob.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.get(command.namespace.parse()?).await?;
@@ -1573,11 +1675,19 @@ async fn handle_publish(
 }
 
 #[async_recursion]
-async fn handle_unpublish(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::UnpublishArgs,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::UnpublishArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Unpublish {
+                namespace: command.namespace.clone(),
+                blob: command.blob.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.get(command.namespace.parse()?).await?;
@@ -1592,7 +1702,10 @@ async fn handle_unpublish(
 }
 
 #[async_recursion]
-async fn handle_collection(data_dir: &std::path::Path, command: CollectionCommand, output_json: bool) -> Result<()> {
+async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
     match command {
         CollectionCommand::Init {
             path,
@@ -1647,6 +1760,17 @@ async fn handle_collection(data_dir: &std::path::Path, command: CollectionComman
             sequence,
             bootstrap,
         } => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::CollectionPublish {
+                        path: path.clone(),
+                        namespace: namespace.clone(),
+                        sequence,
+                        bootstrap: bootstrap.clone(),
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             let manifest = load_manifest(&path)?;
             let node = open_node(data_dir).await?;
             for entry in &manifest.entries {
@@ -1710,26 +1834,28 @@ async fn handle_collection(data_dir: &std::path::Path, command: CollectionComman
 }
 
 #[async_recursion]
-async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, output_json: bool) -> Result<()> {
+async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let packages = PackageManager::new(data_dir.join("packages"));
     match command {
         PackageCommand::Search {
             query,
             bootstrap: bootstrap_values,
             timeout_ms,
-        } => handle_package_search(data_dir, query, bootstrap_values, timeout_ms, &packages, output_json).await?,
+        } => handle_package_search(ctx, query, bootstrap_values, timeout_ms, &packages).await?,
         PackageCommand::Export { paths, version, filter } => {
-            handle_package_archive_export(data_dir, paths, version, filter, output_json).await?;
+            handle_package_archive_export(ctx, paths, version, filter).await?;
         }
         PackageCommand::Import { archives, filter } => {
             for archive in archives {
-                handle_package_archive_import(data_dir, archive, filter.clone(), output_json).await?;
+                handle_package_archive_import(ctx, archive, filter.clone()).await?;
             }
         }
         PackageCommand::Info {
             manifest: manifest_path,
             ticket: ticket_value,
-        } => handle_package_info(data_dir, manifest_path, ticket_value, output_json).await?,
+        } => handle_package_info(ctx, manifest_path, ticket_value).await?,
         PackageCommand::Install {
             manifest: manifest_path,
             source,
@@ -1739,7 +1865,7 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
             manifest: manifest_path,
             source,
             ticket: ticket_value,
-        } => handle_package_install(data_dir, &packages, manifest_path, source, ticket_value, output_json).await?,
+        } => handle_package_install(ctx, &packages, manifest_path, source, ticket_value).await?,
         PackageCommand::Remove {
             collection: collection_id,
             version,
@@ -1760,11 +1886,12 @@ async fn handle_package(data_dir: &std::path::Path, command: PackageCommand, out
 }
 
 async fn handle_package_info(
-    data_dir: &std::path::Path,
+    ctx: &CliContext<'_>,
     manifest_path: Option<std::path::PathBuf>,
     ticket_value: Option<String>,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let collection_manifest = load_package_manifest(data_dir, manifest_path, ticket_value).await?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&collection_manifest)?);
@@ -1785,13 +1912,14 @@ async fn handle_package_info(
 }
 
 async fn handle_package_install(
-    data_dir: &std::path::Path,
+    ctx: &CliContext<'_>,
     packages: &PackageManager,
     manifest_path: Option<std::path::PathBuf>,
     source: Option<std::path::PathBuf>,
     ticket_value: Option<String>,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let collection_manifest = install_package(data_dir, packages, manifest_path, source, ticket_value).await?;
     if output_json {
         println!(
@@ -1889,11 +2017,12 @@ fn handle_package_switch(
 
 #[async_recursion]
 async fn handle_package_archive_import(
-    data_dir: &std::path::Path,
+    ctx: &CliContext<'_>,
     archive: std::path::PathBuf,
     filters: Vec<String>,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let packages = PackageManager::new(data_dir.join("packages"));
     let filter = parse_drop_filters(&filters)?;
     let mut options = DropImportOptions::default().with_available_dependencies(packages.available_versions()?);
@@ -1969,12 +2098,13 @@ async fn handle_package_archive_import(
 
 #[async_recursion]
 async fn handle_package_archive_export(
-    data_dir: &std::path::Path,
+    ctx: &CliContext<'_>,
     paths: Vec<std::path::PathBuf>,
     version: Option<String>,
     filters: Vec<String>,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let (sources, destination) = split_drop_paths(paths)?;
     let filter = parse_drop_filters(&filters)?;
     let multiple = sources.len() > 1;
@@ -2191,13 +2321,14 @@ fn handle_package_list(packages: &PackageManager, output_json: bool) -> Result<(
 
 #[async_recursion]
 async fn handle_package_search(
-    data_dir: &std::path::Path,
+    ctx: &CliContext<'_>,
     query: Option<String>,
     bootstrap_values: Vec<String>,
     timeout_ms: u64,
     packages: &PackageManager,
-    output_json: bool,
 ) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let mut all_results = Vec::new();
     for (collection, installed) in packages.state()?.installed {
         let line = format!("{collection}\t{}", installed.current);
@@ -2347,7 +2478,9 @@ fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry
 }
 
 #[async_recursion]
-async fn handle_network(data_dir: &std::path::Path, command: NetworkCommand, output_json: bool) -> Result<()> {
+async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let mut manager = open_network_manager(data_dir)?;
     match command {
         NetworkCommand::Create {
@@ -2510,11 +2643,18 @@ fn add_folder_to_network(
 }
 
 #[async_recursion]
-async fn handle_leave(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::FolderSelector,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::FolderSelector) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::LeaveFolder {
+                namespace: command.folder.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &command.folder).await?;
@@ -2533,11 +2673,18 @@ async fn handle_leave(
 }
 
 #[async_recursion]
-async fn handle_unsubscribe(
-    data_dir: &std::path::Path,
-    command: crate::cli::commands::FolderSelector,
-    output_json: bool,
-) -> Result<()> {
+async fn handle_unsubscribe(ctx: &CliContext<'_>, command: crate::cli::commands::FolderSelector) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Unsubscribe {
+                namespace: command.folder.clone(),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &command.folder).await?;
@@ -2558,7 +2705,44 @@ async fn handle_unsubscribe(
 }
 
 #[async_recursion]
-async fn handle_folders(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
+async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        match response {
+            IpcResponse::FolderList(folders) => {
+                if output_json {
+                    println!("{}", serde_json::to_string_pretty(&folders)?);
+                } else {
+                    let mut table = Table::new();
+                    table.set_header(["Namespace", "Path", "Active", "Last Sync", "Entries", "Errors"]);
+                    for folder in &folders {
+                        let active_label = if folder.session_active { "yes" } else { "no" };
+                        table.add_row([
+                            &folder.namespace,
+                            &folder.path.display().to_string(),
+                            &active_label.to_string(),
+                            &folder.last_sync_at.map_or_else(|| "-".to_owned(), |v| v.to_string()),
+                            &folder.entries_synced.to_string(),
+                            &folder.errors.len().to_string(),
+                        ]);
+                    }
+                    println!("{table}");
+                }
+                return Ok(());
+            }
+            IpcResponse::Ok { .. }
+            | IpcResponse::Status(_)
+            | IpcResponse::DownloadComplete { .. }
+            | IpcResponse::ImportFilesComplete { .. }
+            | IpcResponse::ImportComplete(_)
+            | IpcResponse::ExportComplete(_)
+            | IpcResponse::Error { .. }
+            | _ => return print_daemon_message(response, output_json),
+        }
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folders = manager.list().await?;
@@ -2585,7 +2769,9 @@ async fn handle_folders(data_dir: &std::path::Path, output_json: bool) -> Result
     Ok(())
 }
 
-fn handle_devices(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
+fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let device_id = DeviceId::from_node_id(identity.node_id());
     if output_json {
@@ -2603,7 +2789,8 @@ fn handle_devices(data_dir: &std::path::Path, output_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn handle_ls(command: crate::cli::commands::LocalPathArgs, output_json: bool) -> Result<()> {
+fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs) -> Result<()> {
+    let output_json = ctx.output_json;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
     if let Some(criteria_str) = command.sort {
         let criteria = SortConfig::parse_criteria(&[criteria_str]);
@@ -2636,7 +2823,8 @@ fn handle_ls(command: crate::cli::commands::LocalPathArgs, output_json: bool) ->
     Ok(())
 }
 
-fn handle_find(command: crate::cli::commands::FindArgs, output_json: bool) -> Result<()> {
+fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) -> Result<()> {
+    let output_json = ctx.output_json;
     let mut query = match command.kind.as_str() {
         "exact" => FindQuery::exact(&command.pattern),
         "regex" => FindQuery::regex(&command.pattern),
@@ -2739,7 +2927,8 @@ fn handle_find(command: crate::cli::commands::FindArgs, output_json: bool) -> Re
     Ok(())
 }
 
-fn handle_sort(command: &crate::cli::commands::SortArgs, output_json: bool) -> Result<()> {
+fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -> Result<()> {
+    let output_json = ctx.output_json;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
     let mut sortable: Vec<SortEntry> = entries.into_iter().map(sort_entry).collect();
 
@@ -2889,7 +3078,8 @@ fn collect_copy_files(
     Ok(())
 }
 
-fn handle_stat(command: crate::cli::commands::StatArgs, output_json: bool) -> Result<()> {
+fn handle_stat(ctx: &CliContext<'_>, command: crate::cli::commands::StatArgs) -> Result<()> {
+    let output_json = ctx.output_json;
     let metadata = std::fs::symlink_metadata(&command.path)?;
     let file_type = if metadata.file_type().is_symlink() {
         FileType::Symlink

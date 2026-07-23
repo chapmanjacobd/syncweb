@@ -44,7 +44,32 @@ where
     F: FnOnce(IpcClient) -> R,
 {
     let client = daemon_client(data_dir)?
-        .ok_or_else(|| crate::error::SyncwebError::operation("daemon not running", "start with `syncweb daemon`"))?;
+        .ok_or_else(|| crate::error::SyncwebError::operation("daemon not running", "start with `syncweb start`"))?;
     let result = operation(client);
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn daemon_client_returns_none_when_no_lock() {
+        let dir = std::env::temp_dir().join(format!("syncweb-route-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let result = daemon_client(&dir);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn try_daemon_returns_none_when_no_lock() {
+        let dir = std::env::temp_dir().join(format!("syncweb-route-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let result = try_daemon(&dir);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

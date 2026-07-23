@@ -10,7 +10,7 @@ categories.workspace = true
 readme = "README.md"
 
 [dependencies]
-syncweb-core = { path = "../syncweb-core" }
+syncweb-core = { path = "../syncweb-core", version = "0.1.1-alpha.1" }
 tokio.workspace = true
 anyhow.workspace = true
 clap.workspace = true

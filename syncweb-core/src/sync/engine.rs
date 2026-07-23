@@ -13,6 +13,7 @@ use crate::{
     error::Result,
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::FolderManager,
+    node::iroh_node::IrohNode,
     node::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService},
 };
 
@@ -77,6 +78,16 @@ impl SyncEngine {
             blob_store,
             docs_engine,
         }
+    }
+
+    #[must_use]
+    pub fn from_node(node: &IrohNode, folder_manager: FolderManager) -> Self {
+        Self::new(
+            folder_manager,
+            node.blob_store().clone(),
+            node.docs_engine().clone(),
+            node.gossip_service().clone(),
+        )
     }
 
     /// Start reconciling a managed folder.

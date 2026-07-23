@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use std::io::{self, BufRead, Write};
 use tracing_subscriber::{EnvFilter, fmt};
 
 pub fn init_tracing(verbose: bool) -> Result<()> {
@@ -16,23 +15,4 @@ pub fn init_tracing(verbose: bool) -> Result<()> {
 
 pub fn print_version() {
     println!("syncweb {}", env!("CARGO_PKG_VERSION"));
-}
-
-pub fn run_repl() -> Result<()> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    writeln!(stdout, "syncweb repl")?;
-    writeln!(stdout, "Type 'help' for help or 'exit' to quit.")?;
-    stdout.flush()?;
-
-    for line_result in stdin.lock().lines() {
-        let line = line_result?;
-        match line.trim() {
-            "" => {}
-            "exit" | "quit" => break,
-            "help" => println!("Commands: help, exit, quit"),
-            command => println!("Unknown command: {command}"),
-        }
-    }
-    Ok(())
 }

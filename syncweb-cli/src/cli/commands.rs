@@ -6,8 +6,6 @@ use clap::{Args, Subcommand};
 pub enum Command {
     #[command(about = "Show syncweb version information")]
     Version,
-    #[command(about = "Start an interactive command shell")]
-    Repl,
     #[command(about = "Start the local syncweb daemon", alias = "daemon")]
     Start(StartArgs),
     #[command(about = "Stop the local syncweb node", alias = "daemon-shutdown")]
@@ -145,7 +143,11 @@ pub enum ConfigCommand {
 pub struct FolderCreate {
     #[arg(default_value = ".")]
     pub path: PathBuf,
-    #[arg(long, default_value = "sendreceive")]
+    #[arg(
+        long,
+        default_value = "sendreceive",
+        help = "Sync mode: sendreceive, receiveonly, sendonly, or publicreadonly"
+    )]
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
     pub relay_fallback: bool,
@@ -369,9 +371,9 @@ pub struct DownloadArgs {
     pub max_peers: Option<usize>,
     #[arg(long, help = "Fetch only blobs with at least N observed peers")]
     pub min_peers: Option<usize>,
-    #[arg(long)]
+    #[arg(long, help = "Minimum number of blobs to fetch")]
     pub min_count: Option<usize>,
-    #[arg(long)]
+    #[arg(long, help = "Maximum number of blobs to fetch")]
     pub max_count: Option<usize>,
     #[arg(
         long,
@@ -517,9 +519,13 @@ pub enum ScheduleCommand {
     Set {
         #[arg(long)]
         active: Option<String>,
-        #[arg(long)]
+        #[arg(long, help = "Bandwidth rate (e.g. '500K', '2M')")]
         bandwidth: Option<String>,
-        #[arg(long, requires = "bandwidth")]
+        #[arg(
+            long,
+            requires = "bandwidth",
+            help = "Time window for the bandwidth limit (e.g. '08:00-18:00')"
+        )]
         period: Option<String>,
     },
     #[command(about = "Set schedule overrides for a named folder")]
@@ -554,6 +560,7 @@ pub struct SubscribeArgs {
 
 #[derive(Debug, Args)]
 pub struct PublishArgs {
+    #[arg(help = "Namespace ID or managed folder path")]
     pub namespace: String,
     #[arg(long, help = "Publish this content hash as an unauthenticated blob ticket")]
     pub blob: Option<String>,
@@ -561,8 +568,9 @@ pub struct PublishArgs {
 
 #[derive(Debug, Args)]
 pub struct UnpublishArgs {
+    #[arg(help = "Namespace ID or managed folder path")]
     pub namespace: String,
-    #[arg(long)]
+    #[arg(long, help = "Blob content hash to unpublish")]
     pub blob: String,
 }
 
@@ -876,12 +884,13 @@ pub enum TrustStreamCommand {
 
 #[derive(Debug, Args)]
 pub struct AttestArgs {
+    #[arg(help = "Content hash to attest")]
     pub content: String,
     #[arg(long, conflicts_with_all = ["provenance", "derivative"])]
     pub license: Option<String>,
-    #[arg(long, conflicts_with_all = ["license", "derivative"])]
+    #[arg(long, conflicts_with_all = ["license", "derivative"], help = "Provenance attestation type")]
     pub provenance: Option<String>,
-    #[arg(long, conflicts_with_all = ["license", "provenance"])]
+    #[arg(long, conflicts_with_all = ["license", "provenance"], help = "Derivative work attestation type")]
     pub derivative: Option<String>,
     #[arg(long, default_value_t = 1)]
     pub sequence: u64,
@@ -889,8 +898,9 @@ pub struct AttestArgs {
 
 #[derive(Debug, Args)]
 pub struct ReportArgs {
+    #[arg(help = "Content hash or record identifier")]
     pub record: String,
-    #[arg(long)]
+    #[arg(long, help = "Reason for the report")]
     pub reason: String,
 }
 

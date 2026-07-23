@@ -731,8 +731,11 @@ mod tests {
         );
         assert_eq!(report.folders.len(), 2);
         assert!(report.folders.iter().any(|f| f.namespace == "ns1"));
-        assert!(report.folders.iter().any(|f| f.namespace == "ns2"
-            && !f.session_active
-            && f.errors.len() == 1));
+        assert!(
+            report
+                .folders
+                .iter()
+                .any(|f| f.namespace == "ns2" && !f.session_active && f.errors.len() == 1)
+        );
     }
 }

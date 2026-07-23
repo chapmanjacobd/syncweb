@@ -11,9 +11,7 @@ use std::{
 
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::{RwLock, broadcast, mpsc},
-};
+use tokio::sync::{RwLock, broadcast, mpsc};
 
 use crate::{
     error::{Result, SyncwebError},
@@ -900,6 +898,17 @@ impl IpcServer {
         match manager.create(sync_mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
+                let namespace_id = folder.namespace_id();
+                if self
+                    .daemon_handle
+                    .folder_registry
+                    .write()
+                    .await
+                    .add(FolderEntry::new(namespace_id, path))
+                    .is_err()
+                {
+                    tracing::warn!(%namespace, "folder already in daemon registry");
+                }
                 match folder.ticket(context.node.endpoint().addr(), true).await {
                     Ok(ticket) => IpcResponse::Ok {
                         message: format!("namespace: {namespace}\nticket: {ticket}"),
@@ -2340,16 +2349,6 @@ mod tests {
         };
 
         if let Some(ref ns) = namespace {
-            let namespace_id: iroh_docs::NamespaceId = ns.parse().expect("valid namespace");
-            fixture
-                .server
-                .daemon_handle
-                .folder_registry
-                .write()
-                .await
-                .add(FolderEntry::new(namespace_id, test_dir.clone()))
-                .expect("folder should be added");
-
             let statuses1 = fixture.server.daemon_handle.folder_registry.read().await.statuses();
             assert!(statuses1.iter().any(|s| s.namespace == *ns));
 

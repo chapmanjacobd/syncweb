@@ -1,4 +1,6 @@
-use anyhow::{Context, Result};
+mod test_utils;
+
+use anyhow::Context;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -7,45 +9,15 @@ use std::{
 
 use n0_future::StreamExt;
 use syncweb_core::{
-    node::{
-        identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
-    },
     search::{FindEngine, FindQuery},
     sync::{LazyFetch, SyncEvent},
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-lazy-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
-
-async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
-}
+use crate::test_utils::{TestDirectory, test_node};
 
 #[tokio::test]
 async fn test_ls_without_download() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-lazy-test")?;
     let node = test_node(&dir, "node").await?;
     let doc = node.docs_engine().create_namespace().await?;
     let author = node.docs_engine().author().await?;
@@ -69,7 +41,7 @@ async fn test_ls_without_download() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_download_triggers_fetch() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-lazy-test")?;
     let node = test_node(&dir, "node").await?;
 
     let hash = node.blob_store().add_bytes(b"lazy data").await?;
@@ -84,7 +56,7 @@ async fn test_download_triggers_fetch() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_fetch_intent_emits_events() -> anyhow::Result<()> {
-    let dir = TestDirectory::new()?;
+    let dir = TestDirectory::new("syncweb-lazy-test")?;
     let node = test_node(&dir, "node").await?;
 
     let hash = node.blob_store().add_bytes(b"intent data").await?;

@@ -1,6 +1,8 @@
+mod test_utils;
+
 use std::{
     io,
-    path::{Path, PathBuf},
+    path::Path,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -18,27 +20,7 @@ use tokio::{
     io::{AsyncRead, AsyncWriteExt, ReadBuf},
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-drop-verify-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 fn manifest(data: &[u8]) -> Result<CollectionManifest> {
     let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
@@ -117,7 +99,7 @@ async fn compress(path: &Path, bytes: &[u8]) -> Result<()> {
 
 #[tokio::test]
 async fn test_drop_verify_valid_archive_streams() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-verify-test")?;
     let payload = b"content";
     let manifest = manifest(payload)?;
     let archive = car(&manifest, payload, None)?;
@@ -133,7 +115,7 @@ async fn test_drop_verify_valid_archive_streams() -> Result<()> {
 
 #[tokio::test]
 async fn test_drop_tamper_detection() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-verify-test")?;
     let payload = b"content";
     let manifest = manifest(payload)?;
     let archive = car(&manifest, b"tamper!", None)?;
@@ -150,7 +132,7 @@ async fn test_drop_tamper_detection() -> Result<()> {
 
 #[tokio::test]
 async fn test_drop_manifest_mismatch() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-verify-test")?;
     let payload = b"content";
     let manifest = manifest(payload)?;
     let archive = car(&manifest, payload, Some(Hash::new(b"wrong root")))?;
@@ -164,7 +146,7 @@ async fn test_drop_manifest_mismatch() -> Result<()> {
 
 #[tokio::test]
 async fn test_drop_dos_protection_rejects_large_varint_without_allocation() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-drop-verify-test")?;
     let manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
     let manifest_bytes = manifest.to_bytes()?;
     let manifest_hash = Hash::new(&manifest_bytes);

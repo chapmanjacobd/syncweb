@@ -20,9 +20,6 @@ pub struct Cli {
     #[arg(long, global = true, help = "Emit machine-readable JSON where supported")]
     pub json: bool,
 
-    #[arg(long, global = true, help = "Disable colored output")]
-    pub no_color: bool,
-
     #[arg(
         long,
         visible_alias = "embedded",

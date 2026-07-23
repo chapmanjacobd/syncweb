@@ -1,8 +1,6 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+mod test_utils;
+
+use std::{fs, sync::Arc};
 
 use anyhow::{Result, ensure};
 use syncweb_core::{
@@ -14,27 +12,7 @@ use syncweb_core::{
     },
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-daemon-archive-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn node(directory: &TestDirectory) -> Result<Arc<IrohNode>> {
     let root = directory.path().join("node");
@@ -46,7 +24,7 @@ async fn node(directory: &TestDirectory) -> Result<Arc<IrohNode>> {
 
 #[tokio::test]
 async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-daemon-archive-test")?;
     let node = node(&directory).await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     let content = b"daemon archive";

@@ -1,3 +1,5 @@
+mod test_utils;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -13,6 +15,8 @@ use syncweb_core::{
     },
     sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
 };
+
+use crate::test_utils::TestDirectory;
 
 fn candidate(path: &str, peers: usize, size: u64) -> FetchCandidate {
     FetchCandidate::new(path, Hash::new(path.as_bytes()), size, peers, false)
@@ -77,29 +81,13 @@ fn health_report_groups_seed_counts() {
     );
 }
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> anyhow::Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-pfetch-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        let _result = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[tokio::test]
 async fn test_download_max_peers() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-pfetch-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
 
-    let root_a = directory.0.join("seeder");
+    let root_a = directory.path().join("seeder");
     let identity_a = IdentityManager::new(root_a.join("identity.key"))?;
     let node_a = IrohNode::new_with_address_lookup(
         identity_a,
@@ -112,7 +100,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
     )
     .await?;
 
-    let root_b = directory.0.join("downloader");
+    let root_b = directory.path().join("downloader");
     let identity_b = IdentityManager::new(root_b.join("identity.key"))?;
     let node_b = IrohNode::new_with_address_lookup(
         identity_b,

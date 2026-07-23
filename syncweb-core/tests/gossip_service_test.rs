@@ -1,4 +1,5 @@
-use std::path::{Path, PathBuf};
+mod test_utils;
+
 use std::time::Duration;
 
 use anyhow::Context;
@@ -7,27 +8,7 @@ use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-services-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn publish_repeatedly(sender: iroh_gossip::api::GossipSender, message: &'static [u8]) -> anyhow::Result<()> {
     loop {
@@ -56,7 +37,7 @@ async fn test_node(
 
 #[tokio::test]
 async fn test_subscribe_publish() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
     let first = test_node(
@@ -124,7 +105,7 @@ async fn test_subscribe_publish() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_multiple_subscribers() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
     let first = test_node(

@@ -1,31 +1,11 @@
-use std::path::{Path, PathBuf};
+mod test_utils;
 
 use anyhow::Context;
 use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-services-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn test_node(
     directory: &TestDirectory,
@@ -40,7 +20,7 @@ async fn test_node(
 
 #[tokio::test]
 async fn test_create_namespace() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let doc = node.docs_engine().create_namespace().await?;
     anyhow::ensure!(!doc.id().to_string().is_empty());
@@ -50,7 +30,7 @@ async fn test_create_namespace() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_set_get_entry() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let doc = node.docs_engine().create_namespace().await?;
     let author = node.docs_engine().author().await?;
@@ -69,7 +49,7 @@ async fn test_set_get_entry() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_watch_entries() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
     let doc = node.docs_engine().create_namespace().await?;
     let author = node.docs_engine().author().await?;
@@ -96,7 +76,7 @@ async fn test_watch_entries() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_author_from_secret() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
 
     let original_author_id = node.docs_engine().author().await?;

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+mod test_utils;
+
 use std::time::Duration;
 
 use anyhow::Context;
@@ -11,33 +12,17 @@ use syncweb_core::{
     },
 };
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self, std::io::Error> {
-        let path = std::env::temp_dir().join(format!("syncweb-folder-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        if let Err(error) = std::fs::remove_dir_all(&self.0) {
-            eprintln!("failed to remove test directory {}: {error}", self.0.display());
-        }
-    }
-}
+use crate::test_utils::TestDirectory;
 
 async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
-    let root = directory.0.join(name);
+    let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
     Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
 }
 
 #[tokio::test]
 async fn create_join_list_and_drop_folder() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let first = node(&directory, "first").await?;
     let second = node(&directory, "second").await?;
     let first_manager = FolderManager::new(&first);
@@ -59,7 +44,7 @@ async fn create_join_list_and_drop_folder() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn modes_enforce_local_writes_and_capabilities() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let node = node(&directory, "node").await?;
     let manager = FolderManager::new(&node);
     let receive_only = manager.create(SyncMode::ReceiveOnly).await?;
@@ -83,7 +68,7 @@ async fn modes_enforce_local_writes_and_capabilities() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_sync_modes() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let test_node = node(&directory, "node").await?;
     let manager = FolderManager::new(&test_node);
 
@@ -125,7 +110,7 @@ async fn test_sync_modes() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_public_readonly_blob_ticket_requires_no_folder_capability() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let node = node(&directory, "node").await?;
     let manager = FolderManager::new(&node);
     let folder = manager.create(SyncMode::PublicReadOnly).await?;
@@ -146,7 +131,7 @@ async fn test_public_readonly_blob_ticket_requires_no_folder_capability() -> any
 
 #[tokio::test]
 async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let node = node(&directory, "node").await?;
     let manager = FolderManager::new(&node);
     let folder = manager.create(SyncMode::PublicReadOnly).await?;
@@ -162,11 +147,11 @@ async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::R
 
 #[tokio::test]
 async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
     let first = {
-        let root = directory.0.join("publisher");
+        let root = directory.path().join("publisher");
         let identity = IdentityManager::new(root.join("identity.key"))?;
         IrohNode::new_with_address_lookup(
             identity,
@@ -180,7 +165,7 @@ async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Resu
         .await?
     };
     let second = {
-        let root = directory.0.join("subscriber");
+        let root = directory.path().join("subscriber");
         let identity = IdentityManager::new(root.join("identity.key"))?;
         IrohNode::new_with_address_lookup(
             identity,
@@ -215,7 +200,7 @@ async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Resu
 
 #[tokio::test]
 async fn test_collection_head_is_persisted_and_monotonic() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let node = node(&directory, "node").await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     let collection_id = uuid::Uuid::new_v4();
@@ -245,7 +230,7 @@ async fn test_collection_head_is_persisted_and_monotonic() -> anyhow::Result<()>
 
 #[tokio::test]
 async fn test_capability_map() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let test_node = node(&directory, "node").await?;
     let manager = FolderManager::new(&test_node);
     let folder = manager.create(SyncMode::SendReceive).await?;
@@ -274,7 +259,7 @@ async fn test_capability_map() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_accept_folder() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let test_node = node(&directory, "node").await?;
     let manager = FolderManager::new(&test_node);
     let folder = manager.create(SyncMode::SendReceive).await?;
@@ -293,7 +278,7 @@ async fn test_accept_folder() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_accept_returns_existing_if_already_managed() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let test_node = node(&directory, "node").await?;
     let manager = FolderManager::new(&test_node);
 
@@ -310,11 +295,11 @@ async fn test_accept_returns_existing_if_already_managed() -> anyhow::Result<()>
 
 #[tokio::test]
 async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
 
-    let root_a = directory.0.join("node_a");
+    let root_a = directory.path().join("node_a");
     let identity_a = IdentityManager::new(root_a.join("identity.key"))?;
     let node_a = IrohNode::new_with_address_lookup(
         identity_a,
@@ -327,7 +312,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
     )
     .await?;
 
-    let root_b = directory.0.join("node_b");
+    let root_b = directory.path().join("node_b");
     let identity_b = IdentityManager::new(root_b.join("identity.key"))?;
     let node_b = IrohNode::new_with_address_lookup(
         identity_b,
@@ -385,11 +370,11 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-folder-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
 
-    let root_a = directory.0.join("sender");
+    let root_a = directory.path().join("sender");
     let identity_a = IdentityManager::new(root_a.join("identity.key"))?;
     let node_a = IrohNode::new_with_address_lookup(
         identity_a,
@@ -402,7 +387,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
     )
     .await?;
 
-    let root_b = directory.0.join("receiver");
+    let root_b = directory.path().join("receiver");
     let identity_b = IdentityManager::new(root_b.join("identity.key"))?;
     let node_b = IrohNode::new_with_address_lookup(
         identity_b,

@@ -217,6 +217,11 @@ impl SnapshotStore {
         }
     }
 
+    #[must_use]
+    pub fn from_node(node: &crate::node::iroh_node::IrohNode) -> Self {
+        Self::with_docs(node.blob_store().clone(), node.docs_engine().clone())
+    }
+
     /// Create and persist a snapshot from existing content references.
     ///
     /// # Errors

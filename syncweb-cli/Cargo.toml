@@ -32,8 +32,10 @@ uuid.workspace = true
 async-recursion.workspace = true
 notify.workspace = true
 comfy-table = "7.2"
+dialoguer = "0.11"
 ed25519-dalek.workspace = true
 hex.workspace = true
+indicatif = "0.17"
 
 [lints]
 workspace = true

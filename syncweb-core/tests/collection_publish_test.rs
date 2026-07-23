@@ -1,43 +1,13 @@
-use std::path::{Path, PathBuf};
+mod test_utils;
 
 use anyhow::Result;
-use syncweb_core::{
-    folder::{CollectionManifest, CollectionStore, FolderManager, SyncMode},
-    node::{
-        identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
-    },
-};
+use syncweb_core::folder::{CollectionManifest, CollectionStore, FolderManager, SyncMode};
 
-struct TestDirectory(PathBuf);
-
-impl TestDirectory {
-    fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("syncweb-collection-pub-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TestDirectory {
-    fn drop(&mut self) {
-        let _result = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-async fn test_node(directory: &TestDirectory, name: &str) -> Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
-}
+use crate::test_utils::{TestDirectory, test_node};
 
 #[tokio::test]
 async fn test_collection_publish_uses_copy_mode() -> Result<()> {
-    let directory = TestDirectory::new()?;
+    let directory = TestDirectory::new("syncweb-collection-pub-test")?;
     let node = test_node(&directory, "node").await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
 

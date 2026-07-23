@@ -1,6 +1,5 @@
 use anyhow::{Context, ensure};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 #[test]
 fn version_command_outputs_version() -> anyhow::Result<()> {
@@ -24,7 +23,6 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("version"));
-    ensure!(help.contains("repl"));
     ensure!(help.contains("create"));
     ensure!(help.contains("join"));
     ensure!(help.contains("leave"));
@@ -82,29 +80,6 @@ fn devices_command_displays_iroh_and_syncthing_ids() -> anyhow::Result<()> {
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("iroh: "));
     ensure!(stdout.contains("syncthing: "));
-    Ok(())
-}
-
-#[test]
-fn repl_command_starts_and_exits() -> anyhow::Result<()> {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .arg("repl")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .context("start syncweb repl")?;
-    child
-        .stdin
-        .take()
-        .context("repl stdin")?
-        .write_all(b"help\nexit\n")
-        .context("write repl input")?;
-    let output = child.wait_with_output().context("wait for repl")?;
-
-    ensure!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("syncweb repl"));
-    ensure!(stdout.contains("Commands: help, exit, quit"));
     Ok(())
 }
 

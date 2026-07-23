@@ -1,7 +1,6 @@
 use anyhow::{Context, ensure};
 use std::fs;
-use std::io::Write as _;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 fn cli() -> Command {
     Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -48,7 +47,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
     let help = stdout_string(&output)?;
     for cmd in [
         "version",
-        "repl",
         "create",
         "join",
         "leave",
@@ -365,27 +363,6 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     );
 
     fs::remove_dir_all(data_dir)?;
-    Ok(())
-}
-
-#[test]
-fn repl_starts_and_responds() -> anyhow::Result<()> {
-    let mut child = cli()
-        .arg("repl")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .context("start repl")?;
-    child
-        .stdin
-        .take()
-        .context("repl stdin")?
-        .write_all(b"help\nexit\n")
-        .context("write repl input")?;
-    let output = child.wait_with_output().context("wait for repl")?;
-    assert_success(&output, "repl")?;
-    let stdout = stdout_string(&output)?;
-    ensure!(stdout.contains("syncweb repl"));
     Ok(())
 }
 

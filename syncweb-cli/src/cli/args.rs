@@ -1,8 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
 use super::commands::Command;
+
+#[derive(Debug, Clone, Copy)]
+pub struct CliContext<'a> {
+    pub data_dir: &'a Path,
+    pub output_json: bool,
+    pub no_daemon: bool,
+}
 
 #[derive(Debug, Parser)]
 #[command(name = "syncweb", about = "Delay-tolerant web surfing")]

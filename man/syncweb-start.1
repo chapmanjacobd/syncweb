@@ -2,12 +2,27 @@
 .el .ds Aq '
 .TH start 1  "start " 
 .SH NAME
-start \- Start the local syncweb node for one command invocation
+start \- Start the local syncweb daemon
 .SH SYNOPSIS
-\fBstart\fR [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Start the local syncweb node for one command invocation
+Start the local syncweb daemon
 .SH OPTIONS
+.TP
+\fB\-\-bg\fR
+Run in the background (daemon mode)
+.TP
+\fB\-\-data\-dir\fR \fI<DATA_DIR>\fR
+Override the global persistent data directory
+.TP
+\fB\-\-log\-file\fR \fI<LOG_FILE>\fR
+Write daemon logs to this file
+.TP
+\fB\-\-max\-threads\fR \fI<MAX_THREADS>\fR
+
+.TP
+\fB\-\-sync\-interval\fR \fI<SYNC_INTERVAL>\fR
+
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

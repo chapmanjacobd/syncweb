@@ -16,7 +16,7 @@ fn data_dir(test_name: &str) -> PathBuf {
 fn run(data_dir: &Path, args: &[&str]) -> Result<Output> {
     let data_dir_arg = data_dir.to_str().context("data directory is not UTF-8")?;
     Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg])
+        .args(["--data-dir", data_dir_arg, "--no-daemon"])
         .args(args)
         .output()
         .with_context(|| format!("run syncweb {args:?}"))

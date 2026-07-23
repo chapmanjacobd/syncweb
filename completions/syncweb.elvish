@@ -28,12 +28,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand version 'Show syncweb version information'
             cand repl 'Start an interactive command shell'
-            cand start 'Start the local syncweb node for one command invocation'
+            cand start 'Start the local syncweb daemon'
             cand shutdown 'Stop the local syncweb node'
-            cand daemon 'Start and manage the local syncweb daemon'
             cand status 'Show the local daemon status'
-            cand daemon-shutdown 'Ask the local daemon to stop'
-            cand daemon-reload 'Ask the local daemon to reload configuration'
+            cand reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
             cand unwatch 'Stop watching a folder for local changes'
             cand create 'Create a synchronized folder'
@@ -95,7 +93,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;start'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --data-dir 'Override the global persistent data directory'
+            cand --log-file 'Write daemon logs to this file'
+            cand --max-threads 'max-threads'
+            cand --sync-interval 'sync-interval'
+            cand --bg 'Run in the background (daemon mode)'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
@@ -106,21 +108,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;shutdown'= {
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-color 'Disable colored output'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;daemon'= {
-            cand --data-dir 'Override the global persistent data directory'
-            cand --log-file 'Write daemon logs to this file'
-            cand --max-threads 'max-threads'
-            cand --sync-interval 'sync-interval'
-            cand -f 'Run in the foreground'
-            cand --foreground 'Run in the foreground'
+            cand --force 'Skip graceful shutdown'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
@@ -139,18 +127,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;daemon-shutdown'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --force 'Skip graceful shutdown'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-color 'Disable colored output'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;daemon-reload'= {
+        &'syncweb;reload'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -536,11 +513,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --exclude 'Ignore a path glob; may be repeated'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --once 'Process one event and exit'
-            cand --no-daemon 'Run in the foreground without using a daemon'
-            cand --embedded 'Run in the foreground without using a daemon'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-color 'Disable colored output'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1634,12 +1611,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help'= {
             cand version 'Show syncweb version information'
             cand repl 'Start an interactive command shell'
-            cand start 'Start the local syncweb node for one command invocation'
+            cand start 'Start the local syncweb daemon'
             cand shutdown 'Stop the local syncweb node'
-            cand daemon 'Start and manage the local syncweb daemon'
             cand status 'Show the local daemon status'
-            cand daemon-shutdown 'Ask the local daemon to stop'
-            cand daemon-reload 'Ask the local daemon to reload configuration'
+            cand reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
             cand unwatch 'Stop watching a folder for local changes'
             cand create 'Create a synchronized folder'
@@ -1688,13 +1663,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;shutdown'= {
         }
-        &'syncweb;help;daemon'= {
-        }
         &'syncweb;help;status'= {
         }
-        &'syncweb;help;daemon-shutdown'= {
-        }
-        &'syncweb;help;daemon-reload'= {
+        &'syncweb;help;reload'= {
         }
         &'syncweb;help;daemon-sync'= {
         }

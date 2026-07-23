@@ -445,3 +445,189 @@ pub fn current_timestamp() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("syncweb-state-test-{}", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn daemon_status_serialization() {
+        let cases = [
+            (DaemonStatus::Starting, r#""starting""#),
+            (DaemonStatus::Running, r#""running""#),
+            (DaemonStatus::Stopping, r#""stopping""#),
+            (DaemonStatus::Stopped, r#""stopped""#),
+        ];
+        for (status, expected) in cases {
+            let json = serde_json::to_string(&status).unwrap();
+            assert_eq!(json, expected);
+            let deserialized: DaemonStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, status);
+        }
+    }
+
+    #[test]
+    fn daemon_state_serialization() {
+        let state = DaemonState::new(
+            12345,
+            "node-id",
+            1000,
+            PathBuf::from("/tmp/data"),
+            DaemonStatus::Running,
+        );
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let deserialized: DaemonState = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, state);
+    }
+
+    #[test]
+    fn state_file_save_and_load() {
+        let dir = test_dir();
+        let state_file = StateFile::new(&dir);
+        let state = DaemonState::new(std::process::id(), "test-node", 42, dir.clone(), DaemonStatus::Running);
+        state_file.save(&state).unwrap();
+        assert!(state_file.exists());
+        let loaded = state_file.load().unwrap().expect("state should exist");
+        assert_eq!(loaded.pid, state.pid);
+        assert_eq!(loaded.node_id, state.node_id);
+        assert_eq!(loaded.started_at, state.started_at);
+        assert_eq!(loaded.status, state.status);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn state_file_missing_returns_none() {
+        let dir = test_dir();
+        let state_file = StateFile::new(&dir);
+        assert!(!state_file.exists());
+        let loaded = state_file.load().unwrap();
+        assert!(loaded.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn state_file_corrupted_returns_error() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("daemon.state"), b"not valid json").unwrap();
+        let state_file = StateFile::new(&dir);
+        let result = state_file.load();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("daemon state"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn state_file_remove() {
+        let dir = test_dir();
+        let state_file = StateFile::new(&dir);
+        let state = DaemonState::new(1, "node", 1, dir.clone(), DaemonStatus::Starting);
+        state_file.save(&state).unwrap();
+        assert!(state_file.exists());
+        state_file.remove().unwrap();
+        assert!(!state_file.exists());
+        state_file.remove().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn state_file_is_running_returns_false_for_stale() {
+        let dir = test_dir();
+        let state_file = StateFile::new(&dir);
+        let state = DaemonState::new(u32::MAX, "stale", 1, dir.clone(), DaemonStatus::Running);
+        state_file.save(&state).unwrap();
+        assert!(!state_file.is_running().unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_report_save_and_load() {
+        let dir = test_dir();
+        let state_file = StateFile::new(&dir);
+        let report = DaemonStatusReport::from_state(
+            &DaemonState::new(1, "node", 100, dir.clone(), DaemonStatus::Running),
+            10,
+            vec![],
+            BandwidthSnapshot::default(),
+            None,
+            4,
+        );
+        state_file.save_status(&report).unwrap();
+        let loaded = state_file.load_status().unwrap().expect("report should exist");
+        assert_eq!(loaded.pid, report.pid);
+        assert_eq!(loaded.node_id, report.node_id);
+        assert_eq!(loaded.uptime_seconds, report.uptime_seconds);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_acquire_success() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        assert!(lock.lock_path().exists());
+        let pid = lock.owner_pid().unwrap().expect("pid should be written");
+        assert_eq!(pid, std::process::id());
+        lock.release().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_acquire_conflict() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = PidLock::new(&dir);
+        assert!(first.try_acquire().unwrap());
+        let second = PidLock::new(&dir);
+        assert!(!second.try_acquire().unwrap());
+        first.release().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_release_releases_lock() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = PidLock::new(&dir);
+        assert!(lock.try_acquire().unwrap());
+        lock.release().unwrap();
+        let reacquire = PidLock::new(&dir);
+        assert!(reacquire.try_acquire().unwrap());
+        reacquire.release().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_lock_drop_releases() {
+        let dir = test_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        {
+            let lock = PidLock::new(&dir);
+            assert!(lock.try_acquire().unwrap());
+        }
+        let reacquire = PidLock::new(&dir);
+        assert!(reacquire.try_acquire().unwrap());
+        reacquire.release().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pid_is_alive_checks_current_and_zero() {
+        assert!(pid_is_alive(std::process::id()));
+        assert!(!pid_is_alive(0));
+    }
+
+    #[test]
+    fn daemon_socket_path_returns_valid_path() {
+        let dir = test_dir();
+        let path = daemon_socket_path(&dir);
+        assert!(path.file_name().unwrap().to_string_lossy().ends_with(".sock"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

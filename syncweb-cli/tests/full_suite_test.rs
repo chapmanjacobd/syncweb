@@ -155,13 +155,13 @@ fn all_shell_completions_produce_output() -> anyhow::Result<()> {
 #[test]
 fn create_folders_list_works() -> anyhow::Result<()> {
     let data_dir = test_dir("create-folders");
-    let output = run_with_data(&data_dir, &["create"])?;
+    let output = run_with_data(&data_dir, &["--no-daemon", "create"])?;
     assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
     ensure!(stdout.contains("ticket:"), "should print ticket: {stdout}");
 
-    let folders = run_with_data(&data_dir, &["folders"])?;
+    let folders = run_with_data(&data_dir, &["--no-daemon", "folders"])?;
     assert_success(&folders, "folders")?;
     let folders_stdout = stdout_string(&folders)?;
     ensure!(
@@ -310,7 +310,16 @@ fn schedule_and_stats_persist() -> anyhow::Result<()> {
 fn init_outputs_all_fields() -> anyhow::Result<()> {
     let folder_dir = test_dir("init-folder");
     let data_dir = test_dir("init-data");
-    let output = run_with_data(&data_dir, &["init", folder_dir.to_str().context("UTF-8 path")?])?;
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "init",
+            folder_dir.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .with_context(|| "run syncweb init --no-daemon")?;
     let _ = fs::remove_dir_all(&folder_dir);
     let _ = fs::remove_dir_all(&data_dir);
     assert_success(&output, "init")?;

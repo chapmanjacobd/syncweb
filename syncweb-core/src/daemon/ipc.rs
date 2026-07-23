@@ -22,11 +22,17 @@ use crate::{
     filter::{FilterConfig, FilterEngine},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderManager, SyncMode,
+        DropImportOptions, DropImportResult, DropImporter, FolderManager, PackageAnnouncement, PackageCatalog,
+        SyncMode,
     },
     fs::Importer,
-    node::iroh_node::IrohNode,
-    sync::{ActiveSession, FetchStrategy, SessionMode, SubscribeParams, SyncEngine, SyncEvent, cancel_session},
+    node::{gossip_service::GossipService, iroh_node::IrohNode},
+    snapshot::SnapshotStore,
+    sync::{
+        ActiveSession, FetchCandidate, FetchStrategy, HealthReport, SubscribeParams, SyncEngine, SyncEvent,
+        cancel_session,
+    },
+    verify::IntegrityChecker,
 };
 
 use super::{
@@ -34,7 +40,7 @@ use super::{
     state::{DaemonStatus, daemon_socket_path},
 };
 
-const IPC_TIMEOUT: Duration = Duration::from_millis(500);
+const IPC_TIMEOUT: Duration = Duration::from_millis(500); // 0.5 s
 
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -95,7 +101,7 @@ pub enum IpcCommand {
     Join {
         ticket: String,
         path: PathBuf,
-        mode: SessionMode,
+        mode: SyncMode,
     },
     Publish {
         namespace: String,
@@ -104,6 +110,43 @@ pub enum IpcCommand {
     Subscribe {
         namespace: String,
         params: SubscribeParams,
+    },
+    CreateFolder {
+        path: PathBuf,
+        mode: String,
+    },
+    HealthCheck {
+        path: PathBuf,
+    },
+    VerifyIntegrity {
+        path: PathBuf,
+    },
+    Unsubscribe {
+        namespace: String,
+    },
+    LeaveFolder {
+        namespace: String,
+    },
+    Unpublish {
+        namespace: String,
+        blob: String,
+    },
+    SnapshotCreate {
+        path: PathBuf,
+        description: Option<String>,
+        threads: usize,
+    },
+    SnapshotList {
+        path: PathBuf,
+    },
+    SnapshotDelete {
+        id: String,
+    },
+    CollectionPublish {
+        path: PathBuf,
+        namespace: String,
+        sequence: u64,
+        bootstrap: Vec<String>,
     },
 }
 
@@ -465,68 +508,14 @@ impl IpcServer {
                 let folders = self.daemon_handle.folder_registry.read().await.statuses();
                 IpcResponse::FolderList(folders)
             }
-            IpcCommand::AddFolder { namespace, path } => match iroh_docs::NamespaceId::from_str(&namespace) {
-                Ok(namespace_id) => {
-                    let mut registry = self.daemon_handle.folder_registry.write().await;
-                    match registry.add_or_update(FolderEntry::new(namespace_id, path)) {
-                        Ok(()) => IpcResponse::Ok {
-                            message: "folder added".to_owned(),
-                        },
-                        Err(error) => response_from_error(error),
-                    }
-                }
-                Err(error) => IpcResponse::Error {
-                    message: format!("invalid folder namespace: {error}"),
-                },
-            },
-            IpcCommand::RemoveFolder { namespace } => match iroh_docs::NamespaceId::from_str(&namespace) {
-                Ok(namespace_id) => {
-                    let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
-                    if removed.is_some() {
-                        let _ = cancel_session(namespace_id);
-                        IpcResponse::Ok {
-                            message: "folder removed".to_owned(),
-                        }
-                    } else {
-                        IpcResponse::Error {
-                            message: format!("folder not found: {namespace}"),
-                        }
-                    }
-                }
-                Err(error) => IpcResponse::Error {
-                    message: format!("invalid folder namespace: {error}"),
-                },
-            },
-            IpcCommand::TriggerSync { namespace } => match self.daemon_handle.sync_trigger.send(namespace) {
-                Ok(()) => IpcResponse::Ok {
-                    message: "synchronization requested".to_owned(),
-                },
-                Err(error) => response_from_error(error),
-            },
+            IpcCommand::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
+            IpcCommand::RemoveFolder { namespace } => self.handle_remove_folder(namespace).await,
+            IpcCommand::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
             IpcCommand::SetLogLevel { level } => IpcResponse::Ok {
                 message: format!("log level set to {level}"),
             },
-            IpcCommand::ReloadConfig => {
-                self.daemon_handle.reload_requested.store(true, Ordering::Release);
-                if self.daemon_handle.sync_trigger.send(None).is_err() {
-                    tracing::debug!("daemon reload wake-up channel is not connected");
-                }
-                IpcResponse::Ok {
-                    message: "configuration reload requested".to_owned(),
-                }
-            }
-            IpcCommand::Shutdown { force } => {
-                if let Err(error) = self.daemon_handle.shutdown_sender.send(()) {
-                    return response_from_error(error);
-                }
-                IpcResponse::Ok {
-                    message: if force {
-                        "forced shutdown requested".to_owned()
-                    } else {
-                        "shutdown requested".to_owned()
-                    },
-                }
-            }
+            IpcCommand::ReloadConfig => self.handle_reload_config(),
+            IpcCommand::Shutdown { force } => self.handle_shutdown(force),
             IpcCommand::ImportArchive { input, target, filter } => {
                 match self.handle_import_archive(input, target, filter).await {
                     Ok(result) => IpcResponse::ImportComplete(Box::new(result)),
@@ -543,8 +532,100 @@ impl IpcServer {
                 Err(error) => response_from_error(error),
             },
             IpcCommand::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
-            IpcCommand::Join { .. } | IpcCommand::Publish { .. } | IpcCommand::Subscribe { .. } => IpcResponse::Error {
-                message: "node-access IPC command is not available".to_owned(),
+            IpcCommand::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
+            IpcCommand::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
+            IpcCommand::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
+            IpcCommand::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
+            IpcCommand::HealthCheck { path } => self.handle_health_check(path).await,
+            IpcCommand::VerifyIntegrity { path } => self.handle_verify_integrity(path).await,
+            IpcCommand::Unsubscribe { namespace } => self.handle_unsubscribe(&namespace),
+            IpcCommand::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
+            IpcCommand::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
+            IpcCommand::SnapshotCreate {
+                path,
+                description,
+                threads,
+            } => self.handle_snapshot_create(path, description, threads).await,
+            IpcCommand::SnapshotList { path } => self.handle_snapshot_list(path).await,
+            IpcCommand::SnapshotDelete { id } => self.handle_snapshot_delete(id).await,
+            IpcCommand::CollectionPublish {
+                path,
+                namespace,
+                sequence,
+                bootstrap,
+            } => {
+                self.handle_collection_publish(path, namespace, sequence, bootstrap)
+                    .await
+            }
+        }
+    }
+
+    async fn handle_add_folder(&self, namespace: String, path: PathBuf) -> IpcResponse {
+        match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(namespace_id) => {
+                let mut registry = self.daemon_handle.folder_registry.write().await;
+                match registry.add_or_update(FolderEntry::new(namespace_id, path)) {
+                    Ok(()) => IpcResponse::Ok {
+                        message: "folder added".to_owned(),
+                    },
+                    Err(error) => response_from_error(error),
+                }
+            }
+            Err(error) => IpcResponse::Error {
+                message: format!("invalid folder namespace: {error}"),
+            },
+        }
+    }
+
+    async fn handle_remove_folder(&self, namespace: String) -> IpcResponse {
+        match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(namespace_id) => {
+                let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
+                if removed.is_some() {
+                    let _ = cancel_session(namespace_id);
+                    IpcResponse::Ok {
+                        message: "folder removed".to_owned(),
+                    }
+                } else {
+                    IpcResponse::Error {
+                        message: format!("folder not found: {namespace}"),
+                    }
+                }
+            }
+            Err(error) => IpcResponse::Error {
+                message: format!("invalid folder namespace: {error}"),
+            },
+        }
+    }
+
+    fn handle_trigger_sync(&self, namespace: Option<String>) -> IpcResponse {
+        match self.daemon_handle.sync_trigger.send(namespace) {
+            Ok(()) => IpcResponse::Ok {
+                message: "synchronization requested".to_owned(),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    fn handle_reload_config(&self) -> IpcResponse {
+        self.daemon_handle.reload_requested.store(true, Ordering::Release);
+        if self.daemon_handle.sync_trigger.send(None).is_err() {
+            tracing::debug!("daemon reload wake-up channel is not connected");
+        }
+        IpcResponse::Ok {
+            message: "configuration reload requested".to_owned(),
+        }
+    }
+
+    fn handle_shutdown(&self, force: bool) -> IpcResponse {
+        if let Err(error) = self.daemon_handle.shutdown_sender.send(()) {
+            return response_from_error(error);
+        }
+        IpcResponse::Ok {
+            message: if force {
+                "forced shutdown requested".to_owned()
+            } else {
+                "shutdown requested".to_owned()
             },
         }
     }
@@ -683,6 +764,521 @@ impl IpcServer {
             .await
     }
 
+    async fn handle_join(&self, ticket: String, path: PathBuf, mode: SyncMode) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon join IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        match tokio::fs::create_dir_all(&path).await {
+            Ok(()) => {}
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("failed to create folder path: {error}"),
+                };
+            }
+        }
+        let manager = FolderManager::new(&context.node);
+        match manager.join(ticket, mode).await {
+            Ok(folder) => {
+                let namespace = folder.namespace_id().to_string();
+                IpcResponse::Ok {
+                    message: format!("joined: {namespace}"),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_publish(&self, namespace: String, blob: Option<String>) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon publish IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(f) => f,
+            Err(error) => return response_from_error(error),
+        };
+        match blob {
+            Some(blob_hash) => {
+                let hash = match blob_hash.parse::<iroh_blobs::Hash>() {
+                    Ok(h) => h,
+                    Err(error) => {
+                        return IpcResponse::Error {
+                            message: format!("invalid blob hash: {error}"),
+                        };
+                    }
+                };
+                match folder.publish_blob(context.node.endpoint().addr(), hash).await {
+                    Ok(ticket) => IpcResponse::Ok {
+                        message: format!("blob_ticket: {ticket}"),
+                    },
+                    Err(error) => response_from_error(error),
+                }
+            }
+            None => match folder.ticket(context.node.endpoint().addr(), false).await {
+                Ok(ticket) => IpcResponse::Ok {
+                    message: format!("ticket: {ticket}"),
+                },
+                Err(error) => response_from_error(error),
+            },
+        }
+    }
+
+    async fn handle_subscribe(&self, namespace: String, params: SubscribeParams) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon subscribe IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let sync = SyncEngine::new(
+            manager,
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            context.node.gossip_service().clone(),
+        );
+        match sync.subscribe(namespace_id, params).await {
+            Ok(_intent) => IpcResponse::Ok {
+                message: format!("subscribed: {namespace}"),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_create_folder(&self, path: PathBuf, mode: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon create-folder IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        match std::fs::create_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("failed to create directory: {error}"),
+                };
+            }
+        }
+        let sync_mode = match SyncMode::from_str(&mode) {
+            Ok(m) => m,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid sync mode: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        match manager.create(sync_mode).await {
+            Ok(folder) => {
+                let namespace = folder.namespace_id().to_string();
+                match folder.ticket(context.node.endpoint().addr(), true).await {
+                    Ok(ticket) => IpcResponse::Ok {
+                        message: format!("namespace: {namespace}\nticket: {ticket}"),
+                    },
+                    Err(error) => response_from_error(error),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_health_check(&self, path: PathBuf) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon health IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match resolve_folder_for_daemon(&manager, &path).await {
+            Ok(f) => f,
+            Err(error) => return error,
+        };
+        let entries = match context.node.docs_engine().list_latest(folder.doc()).await {
+            Ok(e) => e,
+            Err(error) => return response_from_error(error),
+        };
+        let mut candidates = Vec::new();
+        for entry in entries {
+            if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            let path_str = match String::from_utf8(entry.key().to_vec()) {
+                Ok(s) => s,
+                Err(error) => {
+                    return IpcResponse::Error {
+                        message: format!("folder entry path is not UTF-8: {error}"),
+                    };
+                }
+            };
+            let local = match folder.has_local(entry.content_hash()).await {
+                Ok(l) => l,
+                Err(error) => return response_from_error(error),
+            };
+            candidates.push(FetchCandidate::new(
+                path_str,
+                entry.content_hash(),
+                entry.content_len(),
+                0,
+                local,
+            ));
+        }
+        let report = HealthReport::from_candidates(&candidates, 4);
+        IpcResponse::Ok {
+            message: format!(
+                "total: {}, well-seeded: {}, under-seeded: {}, unseeded: {}",
+                report.total, report.well_seeded, report.under_seeded, report.unseeded,
+            ),
+        }
+    }
+
+    async fn handle_verify_integrity(&self, path: PathBuf) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon verify IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match resolve_folder_for_daemon(&manager, &path).await {
+            Ok(f) => f,
+            Err(error) => return error,
+        };
+        let checker = IntegrityChecker::new(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        match checker.verify_folder(&folder).await {
+            Ok(result) => {
+                let valid = result.is_valid();
+                IpcResponse::Ok {
+                    message: format!(
+                        "total: {}, verified: {}, corrupted: {}, missing: {}, valid: {valid}",
+                        result.total,
+                        result.verified,
+                        result.corrupted.len(),
+                        result.missing.len(),
+                    ),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn handle_unsubscribe(&self, namespace: &str) -> IpcResponse {
+        match iroh_docs::NamespaceId::from_str(namespace) {
+            Ok(namespace_id) => {
+                if cancel_session(namespace_id) {
+                    IpcResponse::Ok {
+                        message: format!("unsubscribed: {namespace}"),
+                    }
+                } else {
+                    IpcResponse::Error {
+                        message: format!("no active session for {namespace}"),
+                    }
+                }
+            }
+            Err(error) => IpcResponse::Error {
+                message: format!("invalid namespace: {error}"),
+            },
+        }
+    }
+
+    async fn handle_leave_folder(&self, namespace: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon leave-folder IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let _ = cancel_session(namespace_id);
+        let manager = FolderManager::new(&context.node);
+        match manager.drop(namespace_id).await {
+            Ok(()) => {
+                let _ = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
+                IpcResponse::Ok {
+                    message: format!("left: {namespace}"),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_unpublish(&self, namespace: String, blob: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon unpublish IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let hash = match blob.parse::<iroh_blobs::Hash>() {
+            Ok(h) => h,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid blob hash: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(f) => f,
+            Err(error) => return response_from_error(error),
+        };
+        match folder.unpublish_blob(hash).await {
+            Ok(()) => IpcResponse::Ok {
+                message: format!("unpublished: {blob}"),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_snapshot_create(&self, path: PathBuf, description: Option<String>, threads: usize) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon snapshot IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let snapshots = SnapshotStore::with_docs(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        let result = if path.exists() {
+            snapshots.create_from_path(&path, threads, description).await
+        } else {
+            let manager = FolderManager::new(&context.node);
+            let folder = match resolve_folder_for_daemon(&manager, &path).await {
+                Ok(f) => f,
+                Err(error) => return error,
+            };
+            snapshots.create_for_folder(&folder, description).await
+        };
+        match result {
+            Ok(snapshot) => IpcResponse::Ok {
+                message: format!(
+                    "snapshot: {}\nroot_hash: {}\nfiles: {}\nsize: {}",
+                    snapshot.id, snapshot.root_hash, snapshot.file_count, snapshot.total_size,
+                ),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_snapshot_list(&self, path: PathBuf) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon snapshot IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let snapshots = SnapshotStore::with_docs(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
+        match snapshots.list().await {
+            Ok(all) => {
+                let count = all
+                    .into_iter()
+                    .filter(|s| namespace.is_none_or(|id| s.namespace_id == Some(id)))
+                    .count();
+                IpcResponse::Ok {
+                    message: format!("snapshots: {count}"),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_snapshot_delete(&self, id: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon snapshot IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let hash = match id.parse::<iroh_blobs::Hash>() {
+            Ok(h) => h,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid snapshot id: {error}"),
+                };
+            }
+        };
+        let snapshots = SnapshotStore::with_docs(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        match snapshots.delete(hash).await {
+            Ok(()) => IpcResponse::Ok {
+                message: format!("deleted: {id}"),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_collection_publish(
+        &self,
+        path: PathBuf,
+        namespace: String,
+        sequence: u64,
+        bootstrap: Vec<String>,
+    ) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon collection-publish IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manifest_path = path.join(".syncweb-collection.json");
+        let manifest_bytes = match tokio::fs::read(&manifest_path).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("failed to read collection manifest: {error}"),
+                };
+            }
+        };
+        let manifest = match CollectionManifest::from_bytes(manifest_bytes) {
+            Ok(m) => m,
+            Err(error) => return response_from_error(error),
+        };
+        for entry in &manifest.entries {
+            let file_path = path.join(&entry.logical_path);
+            match context.node.blob_store().add_file(&file_path).await {
+                Ok(hash) => {
+                    if hash != entry.content_id {
+                        return IpcResponse::Error {
+                            message: format!(
+                                "collection content changed while publishing: {}",
+                                entry.logical_path.display()
+                            ),
+                        };
+                    }
+                }
+                Err(error) => return response_from_error(error),
+            }
+        }
+        let namespace_id = match namespace.parse::<iroh_docs::NamespaceId>() {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(f) => f,
+            Err(error) => return response_from_error(error),
+        };
+        let store = CollectionStore::new(
+            folder.doc().clone(),
+            folder.author(),
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+        );
+        let head = match store.publish(&manifest, sequence).await {
+            Ok(h) => h,
+            Err(error) => return response_from_error(error),
+        };
+        let name = manifest
+            .package
+            .as_ref()
+            .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
+        let ticket = context.node.blob_store().ticket(context.node.endpoint(), head.manifest);
+        let announcement = match PackageAnnouncement::new(
+            manifest.collection_id,
+            name,
+            manifest.version.clone(),
+            head.sequence,
+            head.manifest,
+            ticket.to_string(),
+            context.node.endpoint().id(),
+        ) {
+            Ok(a) => a,
+            Err(error) => return response_from_error(error),
+        };
+        let bootstrap_nodes: Vec<_> = bootstrap
+            .into_iter()
+            .filter_map(|b| b.parse::<iroh::PublicKey>().ok())
+            .collect();
+        let catalog = PackageCatalog::new(context.node.gossip_service());
+        let topic = if bootstrap_nodes.is_empty() {
+            match catalog.subscribe(bootstrap_nodes).await {
+                Ok(t) => t,
+                Err(error) => return response_from_error(error),
+            }
+        } else {
+            match catalog.subscribe_and_join(bootstrap_nodes).await {
+                Ok(t) => t,
+                Err(error) => return response_from_error(error),
+            }
+        };
+        let (sender, _receiver) = GossipService::split(topic);
+        if let Err(error) = catalog.announce(&sender, &announcement).await {
+            return response_from_error(error);
+        }
+        IpcResponse::Ok {
+            message: format!(
+                "manifest: {}\nmanifest_ticket: {}\nsequence: {}",
+                head.manifest, announcement.manifest_ticket, head.sequence,
+            ),
+        }
+    }
+
     #[cfg(unix)]
     async fn handle_connection(&self, stream: tokio::net::UnixStream) -> Result<()> {
         let (read_half, mut write_half) = stream.into_split();
@@ -741,6 +1337,29 @@ impl IpcServer {
 fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
     IpcResponse::Error {
         message: error.to_string(),
+    }
+}
+
+async fn resolve_folder_for_daemon(
+    manager: &FolderManager,
+    selector: &Path,
+) -> std::result::Result<crate::folder::SyncwebFolder, IpcResponse> {
+    if let Ok(namespace) = selector.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
+        return manager.get(namespace).await.map_err(|error| IpcResponse::Error {
+            message: format!("folder not found: {error}"),
+        });
+    }
+    let folders = manager.list().await.map_err(|error| IpcResponse::Error {
+        message: format!("failed to list folders: {error}"),
+    })?;
+    match folders.as_slice() {
+        [folder] => Ok(folder.clone()),
+        [] => Err(IpcResponse::Error {
+            message: "no synchronized folders are available".to_owned(),
+        }),
+        _ => Err(IpcResponse::Error {
+            message: "folder path is not a namespace ID and more than one synchronized folder is available".to_owned(),
+        }),
     }
 }
 
@@ -1007,5 +1626,301 @@ mod tests {
             .await
             .expect_err("missing server should fail");
         assert!(error.to_string().contains("daemon IPC connection failed"));
+    }
+
+    #[test]
+    fn new_commands_round_trip_as_json() {
+        let req1 = IpcRequest::new(IpcCommand::Unsubscribe {
+            namespace: "ns".to_owned(),
+        });
+        let enc1 = serde_json::to_vec(&req1).expect("serialize");
+        let dec1: IpcRequest = serde_json::from_slice(&enc1).expect("deserialize");
+        assert!(matches!(dec1.command, IpcCommand::Unsubscribe { .. }));
+
+        let req2 = IpcRequest::new(IpcCommand::LeaveFolder {
+            namespace: "ns".to_owned(),
+        });
+        let enc2 = serde_json::to_vec(&req2).expect("serialize");
+        let dec2: IpcRequest = serde_json::from_slice(&enc2).expect("deserialize");
+        assert!(matches!(dec2.command, IpcCommand::LeaveFolder { .. }));
+
+        let req3 = IpcRequest::new(IpcCommand::Unpublish {
+            namespace: "ns".to_owned(),
+            blob: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+        });
+        let enc3 = serde_json::to_vec(&req3).expect("serialize");
+        let dec3: IpcRequest = serde_json::from_slice(&enc3).expect("deserialize");
+        assert!(matches!(dec3.command, IpcCommand::Unpublish { .. }));
+
+        let req4 = IpcRequest::new(IpcCommand::SnapshotCreate {
+            path: PathBuf::from("."),
+            description: Some("test".to_owned()),
+            threads: 0,
+        });
+        let enc4 = serde_json::to_vec(&req4).expect("serialize");
+        let dec4: IpcRequest = serde_json::from_slice(&enc4).expect("deserialize");
+        assert!(matches!(dec4.command, IpcCommand::SnapshotCreate { .. }));
+
+        let req5 = IpcRequest::new(IpcCommand::SnapshotList {
+            path: PathBuf::from("."),
+        });
+        let enc5 = serde_json::to_vec(&req5).expect("serialize");
+        let dec5: IpcRequest = serde_json::from_slice(&enc5).expect("deserialize");
+        assert!(matches!(dec5.command, IpcCommand::SnapshotList { .. }));
+
+        let req6 = IpcRequest::new(IpcCommand::SnapshotDelete {
+            id: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+        });
+        let enc6 = serde_json::to_vec(&req6).expect("serialize");
+        let dec6: IpcRequest = serde_json::from_slice(&enc6).expect("deserialize");
+        assert!(matches!(dec6.command, IpcCommand::SnapshotDelete { .. }));
+
+        let req7 = IpcRequest::new(IpcCommand::CollectionPublish {
+            path: PathBuf::from("."),
+            namespace: "ns".to_owned(),
+            sequence: 1,
+            bootstrap: vec![],
+        });
+        let enc7 = serde_json::to_vec(&req7).expect("serialize");
+        let dec7: IpcRequest = serde_json::from_slice(&enc7).expect("deserialize");
+        assert!(matches!(dec7.command, IpcCommand::CollectionPublish { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_unsubscribe_no_active_session() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let namespace = iroh_docs::NamespaceSecret::from_bytes(&[7; 32]).id().to_string();
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Unsubscribe {
+                namespace: namespace.clone(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no active session")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_unsubscribe_invalid_namespace() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Unsubscribe {
+                namespace: "not-a-namespace".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("invalid namespace")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_leave_folder_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
+                namespace: "ns".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_unpublish_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Unpublish {
+                namespace: "ns".to_owned(),
+                blob: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_snapshot_create_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::SnapshotCreate {
+                path: PathBuf::from("."),
+                description: None,
+                threads: 0,
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_snapshot_list_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::SnapshotList {
+                path: PathBuf::from("."),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_snapshot_delete_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::SnapshotDelete {
+                id: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_collection_publish_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::CollectionPublish {
+                path: PathBuf::from("."),
+                namespace: "ns".to_owned(),
+                sequence: 1,
+                bootstrap: vec![],
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_create_folder_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: PathBuf::from("."),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_create_folder_no_context_with_invalid_mode() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
+                path: PathBuf::from("/tmp/test-create-folder"),
+                mode: "invalid".to_owned(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_health_check_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+                path: PathBuf::from("."),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_verify_integrity_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::VerifyIntegrity {
+                path: PathBuf::from("."),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_join_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Join {
+                ticket: "ticket".to_owned(),
+                path: PathBuf::from("/tmp"),
+                mode: SyncMode::SendReceive,
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_publish_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Publish {
+                namespace: "ns".to_owned(),
+                blob: None,
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_subscribe_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+                namespace: "ns".to_owned(),
+                params: SubscribeParams::ingest_only(),
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
     }
 }

@@ -287,3 +287,41 @@ impl IntentSupervisor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backoff_delay_starts_at_base() {
+        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        assert_eq!(supervisor.backoff_delay(1), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn backoff_delay_doubles() {
+        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        assert_eq!(supervisor.backoff_delay(2), Duration::from_secs(2));
+        assert_eq!(supervisor.backoff_delay(3), Duration::from_secs(4));
+    }
+
+    #[test]
+    fn backoff_delay_capped() {
+        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_secs(3));
+        assert_eq!(supervisor.backoff_delay(2), Duration::from_secs(2));
+        assert_eq!(supervisor.backoff_delay(3), Duration::from_secs(3));
+        assert_eq!(supervisor.backoff_delay(10), Duration::from_secs(3));
+    }
+
+    #[test]
+    fn backoff_delay_zero_retry() {
+        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        assert_eq!(supervisor.backoff_delay(0), Duration::ZERO);
+    }
+
+    #[test]
+    fn backoff_delay_zero_base() {
+        let supervisor = IntentSupervisor::new(3, Duration::ZERO, Duration::from_mins(1));
+        assert_eq!(supervisor.backoff_delay(5), Duration::ZERO);
+    }
+}

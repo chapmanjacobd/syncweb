@@ -38,7 +38,6 @@ use super::{
 #[non_exhaustive]
 pub struct DaemonConfig {
     pub data_dir: PathBuf,
-    pub foreground: bool,
     pub sync_interval: Duration,
     pub observation_ttl: Duration,
     pub max_retries: u32,
@@ -54,7 +53,6 @@ impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
             data_dir: PathBuf::from("."),
-            foreground: true,
             sync_interval: Duration::from_mins(1),
             observation_ttl: Duration::from_hours(1),
             max_retries: 3,

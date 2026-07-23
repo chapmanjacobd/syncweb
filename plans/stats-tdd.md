@@ -15,8 +15,8 @@ Name "stats" implies general statistics. Actual: only bandwidth accounting (`Ban
 ### Phase 1 — Existing bandwidth tests (no regressions)
 
 ```rust
-// syncweb-core/tests/phase7_test.rs — bandwidth_stats_persist_and_reset (line 31)
-// syncweb-cli/tests/cli_test.rs — schedule_and_stats_commands_persist_phase7_state (line 263)
+// syncweb-core/tests/schedule_stats_test.rs — bandwidth_stats_persist_and_reset (line 31)
+// syncweb-cli/tests/cli_test.rs — schedule_and_stats_commands_persist_state (line 279)
 // syncweb-cli/tests/full_suite_test.rs — json_stats_output (line 99), schedule_and_stats_persist (line 293)
 ```
 

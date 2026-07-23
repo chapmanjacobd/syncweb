@@ -137,7 +137,12 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command)?,
-        Command::Mirror { command } => cli::indexing::handle_mirror(&ctx, command)?,
+        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
+        Command::Mirror {
+            hash,
+            from,
+            min_providers,
+        } => cli::indexing::handle_mirror(&ctx, hash, from, min_providers).await?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
         }

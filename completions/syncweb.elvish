@@ -61,7 +61,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand network 'Network connectivity utilities'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
-            cand mirror 'Register alternate content providers'
+            cand provider 'Manage blob provider registrations'
+            cand mirror 'Fetch and pin a blob from provider(s) to replicate content locally'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
             cand report 'Submit a local moderation report'
@@ -1160,7 +1161,38 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;link;help;help'= {
         }
+        &'syncweb;provider'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand add 'Register a blob ticket as an alternate provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;provider;add'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;provider;help'= {
+            cand add 'Register a blob ticket as an alternate provider'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;provider;help;add'= {
+        }
+        &'syncweb;provider;help;help'= {
+        }
         &'syncweb;mirror'= {
+            cand --hash 'Content hash to mirror'
+            cand --from 'Blob ticket(s) for providers (can repeat)'
+            cand --min-providers 'Minimum providers for healthy replication'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1168,25 +1200,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand add 'Register a blob ticket as an alternate provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;mirror;add'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;mirror;help'= {
-            cand add 'Register a blob ticket as an alternate provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;mirror;help;add'= {
-        }
-        &'syncweb;mirror;help;help'= {
         }
         &'syncweb;trust'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1531,7 +1544,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand network 'Network connectivity utilities'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
-            cand mirror 'Register alternate content providers'
+            cand provider 'Manage blob provider registrations'
+            cand mirror 'Fetch and pin a blob from provider(s) to replicate content locally'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
             cand report 'Submit a local moderation report'
@@ -1744,10 +1758,12 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;link;revoke'= {
         }
-        &'syncweb;help;mirror'= {
+        &'syncweb;help;provider'= {
             cand add 'Register a blob ticket as an alternate provider'
         }
-        &'syncweb;help;mirror;add'= {
+        &'syncweb;help;provider;add'= {
+        }
+        &'syncweb;help;mirror'= {
         }
         &'syncweb;help;trust'= {
             cand show 'Show trust and moderation state'

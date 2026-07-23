@@ -2,6 +2,18 @@ use anyhow::{Context, ensure};
 use std::fs;
 use std::process::Command;
 
+fn workspace_version() -> anyhow::Result<String> {
+    let cargo: toml::Value = toml::from_str(include_str!("../../Cargo.toml")).context("parse workspace Cargo.toml")?;
+    let version = cargo
+        .get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .context("workspace.package.version")?
+        .to_string();
+    Ok(version)
+}
+
 fn cli() -> Command {
     Command::new(env!("CARGO_BIN_EXE_syncweb"))
 }
@@ -74,6 +86,14 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "collection",
         "package",
         "network",
+        "indexing",
+        "link",
+        "provider",
+        "mirror",
+        "trust",
+        "attest",
+        "report",
+        "moderation",
         "completions",
         "manpages",
     ] {
@@ -91,7 +111,8 @@ fn json_version_output() -> anyhow::Result<()> {
     let output = run(&["--json", "version"])?;
     assert_success(&output, "json version")?;
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    ensure!(value.get("version") == Some(&serde_json::Value::from("0.1.0")));
+    let version = workspace_version()?;
+    ensure!(value.get("version") == Some(&serde_json::Value::from(version)));
     Ok(())
 }
 
@@ -384,5 +405,22 @@ fn verbose_and_rust_log_control_logging() -> anyhow::Result<()> {
     assert_success(&rust_log, "RUST_LOG version")?;
     let rust_log_out = stdout_string(&rust_log)?;
     ensure!(rust_log_out.contains("\"level\":\"DEBUG\""));
+    Ok(())
+}
+
+#[test]
+fn syncweb_core_dependency_version_matches_workspace() -> anyhow::Result<()> {
+    let workspace_version = workspace_version()?;
+    let cli_toml: toml::Value = toml::from_str(include_str!("../Cargo.toml")).context("parse cli Cargo.toml")?;
+    let core_version = cli_toml
+        .get("dependencies")
+        .and_then(|d| d.get("syncweb-core"))
+        .and_then(|c| c.get("version"))
+        .and_then(|v| v.as_str())
+        .context("syncweb-core version in cli Cargo.toml")?;
+    ensure!(
+        core_version == workspace_version,
+        "syncweb-core dependency version '{core_version}' should match workspace version '{workspace_version}'"
+    );
     Ok(())
 }

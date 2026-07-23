@@ -100,10 +100,19 @@ pub enum Command {
         #[command(subcommand)]
         command: LinkCommand,
     },
-    #[command(about = "Register alternate content providers")]
-    Mirror {
+    #[command(about = "Manage blob provider registrations")]
+    Provider {
         #[command(subcommand)]
-        command: MirrorCommand,
+        command: ProviderCommand,
+    },
+    #[command(about = "Fetch and pin a blob from provider(s) to replicate content locally")]
+    Mirror {
+        #[arg(long, help = "Content hash to mirror")]
+        hash: String,
+        #[arg(long, help = "Blob ticket(s) for providers (can repeat)")]
+        from: Vec<String>,
+        #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
+        min_providers: usize,
     },
     #[command(about = "Inspect and delegate local trust")]
     Trust {
@@ -791,7 +800,7 @@ pub enum LinkCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum MirrorCommand {
+pub enum ProviderCommand {
     #[command(about = "Register a blob ticket as an alternate provider")]
     Add { collection: String, provider: String },
 }

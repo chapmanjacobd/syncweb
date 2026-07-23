@@ -2,19 +2,21 @@
 .el .ds Aq '
 .TH mirror 1  "mirror " 
 .SH NAME
-mirror \- Register alternate content providers
+mirror \- Fetch and pin a blob from provider(s) to replicate content locally
 .SH SYNOPSIS
-\fBmirror\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBmirror\fR <\fB\-\-hash\fR> [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Register alternate content providers
+Fetch and pin a blob from provider(s) to replicate content locally
 .SH OPTIONS
+.TP
+\fB\-\-hash\fR \fI<HASH>\fR
+Content hash to mirror
+.TP
+\fB\-\-from\fR \fI<FROM>\fR
+Blob ticket(s) for providers (can repeat)
+.TP
+\fB\-\-min\-providers\fR \fI<MIN_PROVIDERS>\fR [default: 2]
+Minimum providers for healthy replication
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
-.SH SUBCOMMANDS
-.TP
-mirror\-add(1)
-Register a blob ticket as an alternate provider
-.TP
-mirror\-help(1)
-Print this message or the help of the given subcommand(s)

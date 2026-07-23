@@ -1,5 +1,24 @@
 use anyhow::{Context, ensure};
+use iroh::{EndpointAddr, SecretKey};
+use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
 use std::process::Command;
+
+fn workspace_version() -> anyhow::Result<String> {
+    let cargo: toml::Value = toml::from_str(include_str!("../../Cargo.toml")).context("parse workspace Cargo.toml")?;
+    let version = cargo
+        .get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .context("workspace.package.version")?
+        .to_string();
+    Ok(version)
+}
+
+fn ticket_for_test(hash: Hash) -> BlobTicket {
+    let secret = SecretKey::from_bytes(&[1_u8; 32]);
+    BlobTicket::new(EndpointAddr::new(secret.public()), hash, BlobFormat::Raw)
+}
 
 #[test]
 fn version_command_outputs_version() -> anyhow::Result<()> {
@@ -9,7 +28,8 @@ fn version_command_outputs_version() -> anyhow::Result<()> {
         .context("run syncweb version")?;
 
     ensure!(output.status.success());
-    anyhow::ensure!(String::from_utf8(output.stdout).context("UTF-8 output")? == "syncweb 0.1.0\n");
+    let version = workspace_version()?;
+    anyhow::ensure!(String::from_utf8(output.stdout).context("UTF-8 output")? == format!("syncweb {version}\n"));
     Ok(())
 }
 
@@ -237,7 +257,7 @@ fn test_join_command() -> anyhow::Result<()> {
 }
 
 #[test]
-fn phase7_commands_and_json_version_are_available() -> anyhow::Result<()> {
+fn commands_and_json_version_are_available() -> anyhow::Result<()> {
     let help = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .arg("--help")
         .output()
@@ -255,13 +275,14 @@ fn phase7_commands_and_json_version_are_available() -> anyhow::Result<()> {
         .context("run syncweb --json version")?;
     ensure!(version.status.success());
     let value: serde_json::Value = serde_json::from_slice(&version.stdout)?;
-    ensure!(value.get("version") == Some(&serde_json::Value::from("0.1.0")));
+    let ws_version = workspace_version()?;
+    ensure!(value.get("version") == Some(&serde_json::Value::from(ws_version)));
     Ok(())
 }
 
 #[test]
-fn schedule_and_stats_commands_persist_phase7_state() -> anyhow::Result<()> {
-    let directory = cli_test_dir("phase7-state");
+fn schedule_and_stats_commands_persist_state() -> anyhow::Result<()> {
+    let directory = cli_test_dir("schedule-state");
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
     let schedule = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--data-dir", &data_dir, "schedule", "set", "--active", "22:00-06:00"])
@@ -651,7 +672,7 @@ fn automatic_dry_run_uses_filter_engine() -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4.7 – CLI command coverage
+// CLI command coverage
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1203,5 +1224,49 @@ fn trust_stream_publish_help() -> anyhow::Result<()> {
     ensure!(output.status.success(), "trust stream publish --help should succeed");
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("--provider"), "help should list --provider flag");
+    Ok(())
+}
+
+#[test]
+fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("provider-add");
+    let hash = Hash::from_bytes([2_u8; 32]);
+    let ticket = ticket_for_test(hash);
+    let ticket_str = ticket.to_string();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "provider",
+            "add",
+            &hash.to_string(),
+            &ticket_str,
+        ])
+        .output()
+        .context("run syncweb provider add")?;
+    ensure!(
+        output.status.success(),
+        "provider add should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("provider added"),
+        "output should indicate provider added"
+    );
+
+    let state_path = data_dir.join("indexing-state.json");
+    ensure!(state_path.exists(), "indexing-state.json should exist");
+    let state: serde_json::Value = serde_json::from_slice(&std::fs::read(&state_path).context("read indexing state")?)?;
+    let mirrors = state
+        .get("links")
+        .and_then(|l| l.get("mirrors"))
+        .and_then(|m| m.as_array())
+        .context("mirrors should be an array")?;
+    ensure!(!mirrors.is_empty(), "should have at least one mirror");
+
+    std::fs::remove_dir_all(&data_dir)?;
     Ok(())
 }

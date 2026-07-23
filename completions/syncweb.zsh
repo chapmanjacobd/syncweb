@@ -1642,7 +1642,7 @@ esac
     ;;
 esac
 ;;
-(mirror)
+(provider)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -1651,15 +1651,15 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-":: :_syncweb__subcmd__mirror_commands" \
-"*::: :->mirror" \
+":: :_syncweb__subcmd__provider_commands" \
+"*::: :->provider" \
 && ret=0
 
     case $state in
-    (mirror)
+    (provider)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-mirror-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-provider-command-$line[1]:"
         case $line[1] in
             (add)
 _arguments "${_arguments_options[@]}" : \
@@ -1676,7 +1676,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__mirror__subcmd__help_commands" \
+":: :_syncweb__subcmd__provider__subcmd__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -1684,7 +1684,7 @@ _arguments "${_arguments_options[@]}" : \
     (help)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-mirror-help-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-provider-help-command-$line[1]:"
         case $line[1] in
             (add)
 _arguments "${_arguments_options[@]}" : \
@@ -1701,6 +1701,20 @@ esac
         esac
     ;;
 esac
+;;
+(mirror)
+_arguments "${_arguments_options[@]}" : \
+'--hash=[Content hash to mirror]:HASH:_default' \
+'*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
+'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
 ;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
@@ -2650,17 +2664,17 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(mirror)
+(provider)
 _arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__mirror_commands" \
-"*::: :->mirror" \
+":: :_syncweb__subcmd__help__subcmd__provider_commands" \
+"*::: :->provider" \
 && ret=0
 
     case $state in
-    (mirror)
+    (provider)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-mirror-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:syncweb-help-provider-command-$line[1]:"
         case $line[1] in
             (add)
 _arguments "${_arguments_options[@]}" : \
@@ -2669,6 +2683,10 @@ _arguments "${_arguments_options[@]}" : \
         esac
     ;;
 esac
+;;
+(mirror)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
 ;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
@@ -2850,7 +2868,8 @@ _syncweb_commands() {
 'network:Network connectivity utilities' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
-'mirror:Register alternate content providers' \
+'provider:Manage blob provider registrations' \
+'mirror:Fetch and pin a blob from provider(s) to replicate content locally' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
 'report:Submit a local moderation report' \
@@ -3060,7 +3079,8 @@ _syncweb__subcmd__help_commands() {
 'network:Network connectivity utilities' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
-'mirror:Register alternate content providers' \
+'provider:Manage blob provider registrations' \
+'mirror:Fetch and pin a blob from provider(s) to replicate content locally' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
 'report:Submit a local moderation report' \
@@ -3298,15 +3318,8 @@ _syncweb__subcmd__help__subcmd__manpages_commands() {
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__mirror_commands] )) ||
 _syncweb__subcmd__help__subcmd__mirror_commands() {
-    local commands; commands=(
-'add:Register a blob ticket as an alternate provider' \
-    )
-    _describe -t commands 'syncweb help mirror commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__mirror__subcmd__add_commands] )) ||
-_syncweb__subcmd__help__subcmd__mirror__subcmd__add_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb help mirror add commands' commands "$@"
+    _describe -t commands 'syncweb help mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__help__subcmd__moderation_commands() {
@@ -3445,6 +3458,18 @@ _syncweb__subcmd__help__subcmd__package__subcmd__verify_commands() {
 _syncweb__subcmd__help__subcmd__package__subcmd__versions_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help package versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__provider_commands] )) ||
+_syncweb__subcmd__help__subcmd__provider_commands() {
+    local commands; commands=(
+'add:Register a blob ticket as an alternate provider' \
+    )
+    _describe -t commands 'syncweb help provider commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__provider__subcmd__add_commands] )) ||
+_syncweb__subcmd__help__subcmd__provider__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help provider add commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__publish_commands] )) ||
 _syncweb__subcmd__help__subcmd__publish_commands() {
@@ -3934,34 +3959,8 @@ _syncweb__subcmd__manpages_commands() {
 }
 (( $+functions[_syncweb__subcmd__mirror_commands] )) ||
 _syncweb__subcmd__mirror_commands() {
-    local commands; commands=(
-'add:Register a blob ticket as an alternate provider' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
+    local commands; commands=()
     _describe -t commands 'syncweb mirror commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror__subcmd__add_commands] )) ||
-_syncweb__subcmd__mirror__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb mirror add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror__subcmd__help_commands] )) ||
-_syncweb__subcmd__mirror__subcmd__help_commands() {
-    local commands; commands=(
-'add:Register a blob ticket as an alternate provider' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb mirror help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror__subcmd__help__subcmd__add_commands] )) ||
-_syncweb__subcmd__mirror__subcmd__help__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb mirror help add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__mirror__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb mirror help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__moderation_commands() {
@@ -4259,6 +4258,37 @@ _syncweb__subcmd__package__subcmd__verify_commands() {
 _syncweb__subcmd__package__subcmd__versions_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package versions commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__provider_commands] )) ||
+_syncweb__subcmd__provider_commands() {
+    local commands; commands=(
+'add:Register a blob ticket as an alternate provider' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb provider commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__provider__subcmd__add_commands] )) ||
+_syncweb__subcmd__provider__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb provider add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__provider__subcmd__help_commands] )) ||
+_syncweb__subcmd__provider__subcmd__help_commands() {
+    local commands; commands=(
+'add:Register a blob ticket as an alternate provider' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb provider help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__provider__subcmd__help__subcmd__add_commands] )) ||
+_syncweb__subcmd__provider__subcmd__help__subcmd__add_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb provider help add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__provider__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__provider__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb provider help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__publish_commands] )) ||
 _syncweb__subcmd__publish_commands() {

@@ -311,7 +311,7 @@ fn bench_search(c: &mut Criterion) {
 }
 
 fn bench_failure_tracking(c: &mut Criterion) {
-    let mut group = c.benchmark_group("phase9_failure_tracking");
+    let mut group = c.benchmark_group("failure_tracking");
 
     group.bench_function("track_1000_hashes", |b| {
         b.iter_batched(
@@ -385,7 +385,7 @@ fn bench_failure_tracking(c: &mut Criterion) {
 }
 
 fn bench_reputation(c: &mut Criterion) {
-    let mut group = c.benchmark_group("phase9_reputation");
+    let mut group = c.benchmark_group("reputation");
 
     group.bench_function("score_calculation", |b| {
         let mut config = ReputationConfig::default();

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use super::args::CliContext;
 use super::commands::{
-    AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, MirrorCommand, ModerationCommand,
+    AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
     ProviderTrustCommand, ReportArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
@@ -21,9 +21,9 @@ use syncweb_core::{
     indexing::{
         Attestation, AttestationKind, BanRecord, CatalogRecord, ContentLink, DenylistRule, FilterList, IndexingService,
         Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord, MutablePointer,
-        PrivateLink, ProviderReputationStore, ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord,
-        ProviderTrustSignal, ReplicationBudget, ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision,
-        TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
+        PrivateLink, ProviderLease, ProviderReputationStore, ProviderTrustAction, ProviderTrustDecision,
+        ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget, ReputationConfig, ResilienceConfig,
+        ResilienceService, TrustDecision, TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
     },
     node::identity::IdentityManager,
 };
@@ -356,16 +356,16 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_mirror(ctx: &CliContext<'_>, command: MirrorCommand) -> Result<()> {
+pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
-        MirrorCommand::Add { collection, provider } => {
+        ProviderCommand::Add { collection, provider } => {
             let ticket = provider.parse::<BlobTicket>()?;
             let expected_hash = collection_hash(data_dir, &collection)?;
             ensure!(
                 expected_hash.is_none_or(|hash| hash == ticket.hash()),
-                "mirror provider hash does not match collection"
+                "provider hash does not match collection"
             );
             let mut state = load_state(data_dir)?;
             let resolver = load_resolver(&state)?;
@@ -377,10 +377,88 @@ pub fn handle_mirror(ctx: &CliContext<'_>, command: MirrorCommand) -> Result<()>
             print_status(
                 output_json,
                 serde_json::json!({"status": "added", "hash": ticket.hash().to_string(), "provider": provider}),
-                format!("mirror added: {}\nprovider: {provider}", ticket.hash()),
+                format!("provider added: {}\nprovider: {provider}", ticket.hash()),
             )?;
         }
     }
+    Ok(())
+}
+
+pub async fn handle_mirror(ctx: &CliContext<'_>, hash: String, from: Vec<String>, min_providers: usize) -> Result<()> {
+    handle_mirror_replication(ctx, &hash, &from, min_providers).await
+}
+
+async fn handle_mirror_replication(
+    ctx: &CliContext<'_>,
+    hash: &str,
+    tickets: &[String],
+    min_providers: usize,
+) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let content_hash = parse_hash(hash)?;
+    let mut blob_tickets = Vec::new();
+    for t in tickets {
+        blob_tickets.push(
+            t.parse::<BlobTicket>()
+                .map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?,
+        );
+    }
+
+    let node = open_node(data_dir).await?;
+
+    let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(min_providers)));
+    for ticket in &blob_tickets {
+        let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
+        let lease = ProviderLease::new(ticket.hash(), ticket.to_string(), 0, expires_at)?;
+        resilience.record_lease(lease)?;
+    }
+
+    let result = resilience
+        .ensure_replication(node.endpoint(), node.blob_store(), content_hash)
+        .await?;
+
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "hash": result.hash.to_string(),
+                "pinned": result.pinned,
+                "short_circuited": result.short_circuited,
+                "fetched_from": result.fetched_from.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "failed_from": result.failed_from.iter().map(|(p, k)| serde_json::json!({
+                    "provider": p.to_string(),
+                    "kind": format!("{k:?}"),
+                })).collect::<Vec<_>>(),
+                "providers_before": result.health_before.verified,
+                "providers_after": result.health_after.verified,
+            })
+        );
+    } else {
+        println!("hash: {}", result.hash);
+        println!("pinned: {}", result.pinned);
+        println!("short-circuited: {}", result.short_circuited);
+        if !result.fetched_from.is_empty() {
+            println!(
+                "fetched from: {}",
+                result
+                    .fetched_from
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        if !result.failed_from.is_empty() {
+            for (provider, kind) in &result.failed_from {
+                println!("failed: {provider} ({kind:?})");
+            }
+        }
+        println!("providers before: {}", result.health_before.verified);
+        println!("providers after: {}", result.health_after.verified);
+    }
+
+    node.stop().await?;
     Ok(())
 }
 

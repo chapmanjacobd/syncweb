@@ -12,21 +12,21 @@ use uuid::Uuid;
 
 use crate::{
     error::{Result, SyncwebError},
-    folder::{CollectionManifest, CollectionState, InstalledCollection},
+    folder::{CollectionManifest, CollectionState},
+    storage::node_db::NodeDatabase,
 };
-
-const STATE_FILE: &str = "collections.json";
 
 /// Installs collection package versions into versioned directories.
 #[derive(Clone, Debug)]
 pub struct PackageManager {
     root: PathBuf,
+    db: NodeDatabase,
 }
 
 impl PackageManager {
     #[must_use]
-    pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+    pub fn new(root: impl Into<PathBuf>, db: NodeDatabase) -> Self {
+        Self { root: root.into(), db }
     }
 
     #[must_use]
@@ -38,14 +38,7 @@ impl PackageManager {
     ///
     /// Returns an error if state cannot be read or decoded.
     pub fn state(&self) -> Result<CollectionState> {
-        let path = self.root.join(STATE_FILE);
-        if !path.exists() {
-            return Ok(CollectionState::default());
-        }
-        let bytes =
-            fs::read(&path).map_err(|error| SyncwebError::operation("failed to read collection state", error))?;
-        serde_json::from_slice(&bytes)
-            .map_err(|error| SyncwebError::operation("failed to decode collection state", error))
+        self.db.get_collection_state()
     }
 
     /// Return the currently selected version for each installed collection.
@@ -93,20 +86,8 @@ impl PackageManager {
         fs::rename(&staging, &version_dir)
             .map_err(|error| SyncwebError::operation("failed to finalize staged package", error))?;
         self.set_current(manifest.collection_id, &manifest.version)?;
-
-        let mut state = self.state()?;
-        let installed = state
-            .installed
-            .entry(manifest.collection_id)
-            .or_insert_with(|| InstalledCollection {
-                manifest: manifest_hash,
-                versions: BTreeMap::default(),
-                current: manifest.version.clone(),
-            });
-        installed.manifest = manifest_hash;
-        installed.current.clone_from(&manifest.version);
-        installed.versions.insert(manifest.version.clone(), version_dir);
-        self.save_state(&state)
+        self.db
+            .install_collection(manifest.collection_id, &manifest_hash, &manifest.version, &version_dir)
     }
 
     /// Fetch a manifest and all of its content blobs, then install it
@@ -177,8 +158,7 @@ impl PackageManager {
             )));
         }
         self.set_current(collection_id, version)?;
-        version.clone_into(&mut installed.current);
-        self.save_state(&state)
+        self.db.switch_collection_version(collection_id, version)
     }
 
     /// # Errors
@@ -186,10 +166,10 @@ impl PackageManager {
     /// Returns an error if an installed version cannot be deleted.
     pub fn remove(&self, collection_id: Uuid, requested_version: impl AsRef<str>) -> Result<()> {
         let version = requested_version.as_ref();
-        let mut state = self.state()?;
+        let state = self.state()?;
         let installed = state
             .installed
-            .get_mut(&collection_id)
+            .get(&collection_id)
             .ok_or_else(|| SyncwebError::FolderNotFound(collection_id.to_string()))?;
         if installed.current == version {
             return Err(SyncwebError::InvalidConfig(
@@ -198,14 +178,11 @@ impl PackageManager {
         }
         let path = installed
             .versions
-            .remove(version)
+            .get(version)
             .ok_or_else(|| SyncwebError::InvalidConfig(format!("collection version {version} is not installed")))?;
         fs::remove_dir_all(path)
             .map_err(|error| SyncwebError::operation("failed to remove installed collection version", error))?;
-        if installed.versions.is_empty() {
-            state.installed.remove(&collection_id);
-        }
-        self.save_state(&state)
+        self.db.remove_collection_version(collection_id, version)
     }
 
     /// # Errors
@@ -230,18 +207,6 @@ impl PackageManager {
         create_current_link(version, &temporary)?;
         fs::rename(&temporary, &current)
             .map_err(|error| SyncwebError::operation("failed to atomically switch collection version", error))
-    }
-
-    fn save_state(&self, state: &CollectionState) -> Result<()> {
-        fs::create_dir_all(&self.root)
-            .map_err(|error| SyncwebError::operation("failed to create package state directory", error))?;
-        let temporary = self.root.join(format!(".{STATE_FILE}-{}", Uuid::new_v4()));
-        let bytes = serde_json::to_vec_pretty(state)
-            .map_err(|error| SyncwebError::operation("failed to serialize collection state", error))?;
-        fs::write(&temporary, bytes)
-            .map_err(|error| SyncwebError::operation("failed to write collection state", error))?;
-        fs::rename(temporary, self.root.join(STATE_FILE))
-            .map_err(|error| SyncwebError::operation("failed to atomically save collection state", error))
     }
 }
 

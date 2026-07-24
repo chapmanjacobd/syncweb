@@ -5,6 +5,7 @@ use comfy_table::Table;
 
 use std::{
     io::IsTerminal,
+    path::Path,
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
     time::{Duration, Instant},
@@ -45,8 +46,7 @@ use syncweb_core::{
     snapshot::SnapshotStore,
     sort::{SortConfig, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
-    stats::BandwidthStats,
-    storage::Config as AppConfig,
+    storage::{Config as AppConfig, node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{
         ActiveSession, AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport,
         SubscribeParams, SyncEngine, SyncEvent,
@@ -57,6 +57,14 @@ use syncweb_core::{
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
 const ERR_UNEXPECTED_RESPONSE: &str = "daemon returned an unexpected response";
+
+fn open_node_db(data_dir: &Path) -> Result<NodeDatabase> {
+    Ok(NodeDatabase::open(data_dir.join("node.db"))?)
+}
+
+fn open_stats_db(data_dir: &Path) -> Result<StatsDatabase> {
+    Ok(StatsDatabase::open(data_dir.join("stats.db"))?)
+}
 
 fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
     if output_json {
@@ -240,8 +248,8 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
 fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let config_path = data_dir.join("config.toml");
-    let mut config = AppConfig::load(&config_path)?;
+    let node_db = open_node_db(data_dir)?;
+    let mut config = node_db.load_app_config()?;
     match command {
         None | Some(ConfigCommand::Show { section: None }) => {
             if output_json {
@@ -257,7 +265,7 @@ fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result
         },
         Some(ConfigCommand::Set { key, value }) => {
             config.set(&key, &value)?;
-            config.save(&config_path)?;
+            node_db.save_app_config(&config)?;
             if output_json {
                 println!(
                     "{}",
@@ -318,7 +326,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
         return Ok(());
     }
 
-    let app_config = AppConfig::load(data_dir.join("config.toml"))?;
+    let app_config = open_node_db(data_dir)?.load_app_config()?;
     let mut daemon_config = DaemonConfig::new(data_dir);
     daemon_config.sync_interval = args.sync_interval.map_or(Duration::from_mins(1), Duration::from_secs);
     daemon_config.rayon_threads = args.max_threads.unwrap_or(app_config.parallel.threads);
@@ -761,8 +769,7 @@ async fn download_with_node(
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.source).await?;
     let sync = SyncEngine::from_node(&node, manager);
-    let stats_path = data_dir.join("stats.json");
-    let mut bandwidth_stats = BandwidthStats::load(&stats_path)?;
+    let stats_db = open_stats_db(data_dir)?;
     let folder_key = folder.namespace_id().to_string();
     let mut accounted_bytes = 0_u64;
     let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
@@ -787,7 +794,7 @@ async fn download_with_node(
             SyncEvent::Stats(transfer_stats) => {
                 let delta = transfer_stats.bytes_transferred.saturating_sub(accounted_bytes);
                 if delta > 0 {
-                    bandwidth_stats.record_download(delta, 0, Some(&folder_key), None);
+                    let _ = stats_db.record_download(delta, 0, Some(&folder_key), None);
                     accounted_bytes = transfer_stats.bytes_transferred;
                 }
                 pb.set_length(transfer_stats.bytes_total.unwrap_or(0));
@@ -802,7 +809,6 @@ async fn download_with_node(
         }
     }
     pb.finish_and_clear();
-    bandwidth_stats.save(&stats_path)?;
     if output_json {
         println!(
             "{}",
@@ -1322,12 +1328,7 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
     if let Some(period) = command.period {
         parse_period(&period)?;
     }
-    let path = data_dir.join("stats.json");
-    let mut stats = BandwidthStats::load(&path)?;
-    if command.reset {
-        stats.reset();
-        stats.save(&path)?;
-    }
+    let stats = open_stats_db(data_dir)?.current_stats()?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
         return Ok(());
@@ -1403,8 +1404,8 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
 fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let path = data_dir.join("config.toml");
-    let mut config = AppConfig::load(&path)?;
+    let node_db = open_node_db(data_dir)?;
+    let mut config = node_db.load_app_config()?;
     match command {
         None => {
             ScheduleManager::from_config(&config.schedule)?;
@@ -1436,7 +1437,7 @@ fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Re
                     .push(BandwidthWindowConfig::new(p, bw.clone(), bw));
             }
             ScheduleManager::from_config(&config.schedule)?;
-            config.save(&path)?;
+            node_db.save_app_config(&config)?;
             if output_json {
                 println!("{}", serde_json::to_string_pretty(&config.schedule)?);
             } else {
@@ -1466,7 +1467,7 @@ fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Re
                 folder.max_download = Some(rate);
             }
             ScheduleManager::from_config(&config.schedule)?;
-            config.save(&path)?;
+            node_db.save_app_config(&config)?;
             if output_json {
                 println!("{}", serde_json::to_string_pretty(&config.schedule)?);
             } else {
@@ -2142,7 +2143,8 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
 async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let packages = PackageManager::new(data_dir.join("packages"));
+    let node_db = open_node_db(data_dir)?;
+    let packages = PackageManager::new(data_dir.join("packages"), node_db);
     match command {
         PackageCommand::Search {
             query,
@@ -2332,7 +2334,8 @@ async fn handle_package_archive_import(
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let packages = PackageManager::new(data_dir.join("packages"));
+    let node_db = open_node_db(data_dir)?;
+    let packages = PackageManager::new(data_dir.join("packages"), node_db);
     let filter = parse_drop_filters(&filters)?;
     let mut options = DropImportOptions::default().with_available_dependencies(packages.available_versions()?);
     if let Some(engine) = filter {
@@ -2861,7 +2864,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
         }
         NetworkCommand::TestRelay { relay_url } => {
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-            let app_config = AppConfig::load(data_dir.join("config.toml"))?;
+            let app_config = open_node_db(data_dir)?.load_app_config()?;
             let mut config = app_config.relay_config();
             config.relay_urls = vec![relay_url.clone()];
             config.auto_fallback = true;
@@ -2938,7 +2941,8 @@ fn handle_network_list(manager: &NetworkManager, name: Option<String>, output_js
 
 fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    Ok(NetworkManager::new(data_dir.join("networks.json"), identity.node_id())?)
+    let db = open_node_db(data_dir)?;
+    Ok(NetworkManager::new(db, identity.node_id())?)
 }
 
 fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {

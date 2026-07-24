@@ -4,8 +4,11 @@ use semver::Version;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use iroh_blobs::Hash;
-use syncweb_core::folder::{
-    CollectionEntry, CollectionManifest, PackageAnnouncement, PackageDependency, PackageManager, PackageProfile,
+use syncweb_core::{
+    folder::{
+        CollectionEntry, CollectionManifest, PackageAnnouncement, PackageDependency, PackageManager, PackageProfile,
+    },
+    storage::node_db::NodeDatabase,
 };
 use uuid::Uuid;
 
@@ -92,7 +95,8 @@ fn package_install_switch_and_verify_are_atomic() -> anyhow::Result<()> {
     let collection_id = Uuid::new_v4();
     let v1 = manifest(collection_id, "1.0.0", b"v1")?;
     let v2 = manifest(collection_id, "2.0.0", b"v2")?;
-    let packages = PackageManager::new(directory.path().join("packages"));
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let packages = PackageManager::new(directory.path().join("packages"), node_db);
     packages.install(&v1, &source_v1)?;
     packages.install(&v2, &source_v2)?;
     packages.switch(collection_id, "1.0.0")?;

@@ -10,6 +10,7 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SyncwebError};
+use crate::storage::node_db::NodeDatabase;
 
 const STATE_FILE_NAME: &str = "daemon.state";
 const STATUS_FILE_NAME: &str = "daemon.status";
@@ -146,95 +147,104 @@ impl DaemonState {
     }
 }
 
-/// Atomic JSON persistence for daemon state.
+/// SQLite-backed persistence for daemon state and status.
 #[derive(Clone, Debug)]
 pub struct StateFile {
-    path: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl StateFile {
+    /// Open (or create) the `SQLite` node database in `data_dir`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or initialized.
     #[must_use]
     pub fn new(data_dir: &Path) -> Self {
         Self {
-            path: data_dir.join(STATE_FILE_NAME),
+            data_dir: data_dir.to_path_buf(),
         }
     }
 
-    /// Persist state using a same-directory temporary file and rename.
+    fn db(&self) -> Result<NodeDatabase> {
+        NodeDatabase::open(self.data_dir.join("node.db"))
+    }
+
+    /// Persist the daemon lifecycle state.
     ///
     /// # Errors
     ///
-    /// Returns an error when the directory or state file cannot be written.
+    /// Returns an error when the database cannot be written.
     pub fn save(&self, state: &DaemonState) -> Result<()> {
-        let bytes = serde_json::to_vec_pretty(state)
-            .map_err(|error| SyncwebError::operation("failed to serialize daemon state", error))?;
-        Self::save_json(&self.path, STATE_FILE_NAME, &bytes)
+        let db = self.db()?;
+        db.save_lifecycle(state)
     }
 
-    /// Load the state, returning `None` when no state file exists.
+    /// Load the daemon lifecycle state, returning `None` if absent.
     ///
     /// # Errors
     ///
-    /// Returns an error when the state file cannot be read or contains invalid JSON.
+    /// Returns an error when the database cannot be read.
     pub fn load(&self) -> Result<Option<DaemonState>> {
-        Self::load_json(&self.path, "daemon state")
+        let db = self.db()?;
+        db.load_lifecycle()
     }
 
-    /// Persist the current daemon activity report atomically.
+    /// Persist the current daemon activity report.
     ///
     /// # Errors
     ///
-    /// Returns an error when the report cannot be serialized or written.
+    /// Returns an error when the database cannot be written.
     pub fn save_status(&self, report: &DaemonStatusReport) -> Result<()> {
-        let bytes = serde_json::to_vec_pretty(report)
-            .map_err(|error| SyncwebError::operation("failed to serialize daemon status", error))?;
-        Self::save_json(&self.status_path(), STATUS_FILE_NAME, &bytes)
+        let db = self.db()?;
+        db.save_status(report)
     }
 
     /// Load the last daemon activity report.
     ///
     /// # Errors
     ///
-    /// Returns an error when the report cannot be read or contains invalid JSON.
+    /// Returns an error when the database cannot be read.
     pub fn load_status(&self) -> Result<Option<DaemonStatusReport>> {
-        Self::load_json(&self.status_path(), "daemon status")
+        let db = self.db()?;
+        db.load_status()
     }
 
+    /// Check whether a lifecycle row exists (equivalent to the old file check).
     #[must_use]
     pub fn exists(&self) -> bool {
-        self.path.exists()
+        self.db()
+            .ok()
+            .and_then(|db| db.load_lifecycle().ok())
+            .flatten()
+            .is_some()
     }
 
-    /// Remove the state file if it exists.
+    /// Remove the daemon lifecycle row.
     ///
     /// # Errors
     ///
-    /// Returns an error when the state file cannot be removed.
+    /// Returns an error when the database operation fails.
     pub fn remove(&self) -> Result<()> {
-        match fs::remove_file(&self.path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        }
+        let db = self.db()?;
+        db.remove_lifecycle()
     }
 
-    /// Remove the status report if it exists.
+    /// Remove the daemon status rows.
     ///
     /// # Errors
     ///
-    /// Returns an error when the status report cannot be removed.
+    /// Returns an error when the database operation fails.
     pub fn remove_status(&self) -> Result<()> {
-        remove_if_exists(&self.status_path())
+        let db = self.db()?;
+        db.remove_status()
     }
 
-    /// Return the initial PID liveness hint stored in the state file.
-    ///
-    /// A positive result does not prove that the process is the syncweb
-    /// daemon; callers should verify it through IPC.
+    /// Return whether the stored lifecycle indicates a still-running daemon.
     ///
     /// # Errors
     ///
-    /// Returns an error when the state file cannot be read or decoded.
+    /// Returns an error when the database cannot be read.
     pub fn is_running(&self) -> Result<bool> {
         Ok(self.load()?.is_some_and(|state| {
             matches!(state.status, DaemonStatus::Starting | DaemonStatus::Running) && pid_is_alive(state.pid)
@@ -242,44 +252,13 @@ impl StateFile {
     }
 
     #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn path(&self) -> PathBuf {
+        self.data_dir.join(STATE_FILE_NAME)
     }
 
     #[must_use]
     pub fn status_path(&self) -> PathBuf {
-        self.path.with_file_name(STATUS_FILE_NAME)
-    }
-
-    fn save_json(path: &Path, file_name: &str, bytes: &[u8]) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let temporary = path.with_file_name(format!("{file_name}.tmp-{}", std::process::id()));
-        let mut file = File::create(&temporary)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::rename(&temporary, path)?;
-        Ok(())
-    }
-
-    fn load_json<T: for<'de> Deserialize<'de>>(path: &Path, label: &str) -> Result<Option<T>> {
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.into()),
-        };
-        serde_json::from_str(&contents).map(Some).map_err(|error| {
-            SyncwebError::operation("failed to deserialize daemon report", format!("{label}: {error}"))
-        })
-    }
-}
-
-fn remove_if_exists(path: &Path) -> Result<()> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
+        self.data_dir.join(STATUS_FILE_NAME)
     }
 }
 
@@ -296,7 +275,7 @@ impl PidLock {
     pub fn new(data_dir: &Path) -> Self {
         Self {
             lock_path: data_dir.join(LOCK_FILE_NAME),
-            state_path: StateFile::new(data_dir).path,
+            state_path: data_dir.join(STATE_FILE_NAME),
             lock: Mutex::new(None),
         }
     }
@@ -546,13 +525,17 @@ mod tests {
     #[test]
     fn state_file_corrupted_returns_error() {
         let dir = test_dir();
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("daemon.state"), b"not valid json").unwrap();
         let state_file = StateFile::new(&dir);
-        let result = state_file.load();
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("daemon state"));
+        state_file
+            .save(&DaemonState::new(1, "node", 1, dir.clone(), DaemonStatus::Starting))
+            .unwrap();
+        let loaded = state_file.load().unwrap();
+        assert!(loaded.is_some());
+        assert_eq!(loaded.unwrap().pid, 1);
+
+        state_file.remove().unwrap();
+        let loaded = state_file.load().unwrap();
+        assert!(loaded.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -435,76 +435,10 @@ On successful completion, delete the checkpoint records (they're transient opera
 
 ### Rationale
 
-After migrating 6 JSON files + 2 TOML files into 3 SQLite databases (plus the pre-existing indexing.sqlite), the project needs:
-- A unified schema migration system
+With 3 SQLite databases (plus the pre-existing indexing.sqlite), the project needs:
 - Periodic VACUUM for space reclamation
 - Backup tooling
 - Integrity verification
-
-### Schema Migration System
-
-**New module:** `syncweb-core/src/storage/migrate.rs`
-
-```rust
-pub trait Migration {
-    fn version(&self) -> i64;
-    fn description(&self) -> &'static str;
-    fn up(&self, connection: &Connection) -> Result<()>;
-    // fn down(&self, connection: &Connection) -> Result<()>;  // future
-}
-
-pub struct MigrationRunner {
-    migrations: Vec<Box<dyn Migration>>,
-}
-
-impl MigrationRunner {
-    pub fn new() -> Self;
-
-    /// Register a migration. Migrations must be registered in version order.
-    pub fn add_migration(&mut self, migration: Box<dyn Migration>);
-
-    /// Run all pending migrations for a database.
-    /// Uses a `schema_version` table to track current state.
-    pub fn run(&self, connection: &Connection) -> Result<usize>;  // returns count applied
-
-    /// Check if any migrations are pending.
-    pub fn pending_count(&self, connection: &Connection) -> Result<usize>;
-}
-```
-
-Each database (`node.db`, `stats.db`, `indexing.sqlite`) uses the same `MigrationRunner` with its own set of migrations:
-
-```rust
-// syncweb-core/src/storage/node_db.rs
-
-fn create_migrations() -> MigrationRunner {
-    let mut runner = MigrationRunner::new();
-    runner.add_migration(Box::new(CreateDaemonTables));
-    runner.add_migration(Box::new(CreateNetworkTables));
-    runner.add_migration(Box::new(CreateCollectionTables));
-    runner.add_migration(Box::new(CreateConfigTables));
-    runner.add_migration(Box::new(CreateFilterTables));
-    runner.add_migration(Box::new(CreateSyncCheckpointTables));
-    runner
-}
-
-impl NodeDatabase {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let connection = Connection::open(path)?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
-        connection.busy_timeout(Duration::from_secs(5))?;
-
-        let runner = create_migrations();
-        let applied = runner.run(&connection)?;
-        if applied > 0 {
-            tracing::info!(applied, "applied node.db schema migrations");
-        }
-
-        Ok(Self { connection: Arc::new(Mutex::new(connection)) })
-    }
-}
-```
 
 ### VACUUM / Maintenance
 
@@ -590,12 +524,9 @@ Expose via CLI:
 ### Files to modify/create
 
 | File | Change |
-|---|---|
-| `syncweb-core/src/storage/migrate.rs` | **NEW** — Migration trait and MigrationRunner |
-| `syncweb-core/src/storage/mod.rs` | Add `pub mod migrate` |
-| `syncweb-core/src/storage/node_db.rs` | Add migration registration; add vacuum/check/backup methods |
-| `syncweb-core/src/storage/stats_db.rs` | Add migration registration; add vacuum/check/backup methods |
-| `syncweb-core/src/indexing.rs` | Refactor `initialize_schema` to use MigrationRunner |
+|---|---|---|
+| `syncweb-core/src/storage/node_db.rs` | Add vacuum/check/backup methods |
+| `syncweb-core/src/storage/stats_db.rs` | Add vacuum/check/backup methods |
 | `syncweb-core/src/daemon/daemon.rs` | Add periodic maintenance task |
 | `syncweb-cli/src/cli/commands.rs` | Add `DbCommand` with `check`, `vacuum`, `backup`, `stats` subcommands |
 | `syncweb-cli/src/main.rs` | Wire `db` subcommand |
@@ -867,14 +798,13 @@ For networks created before this change:
 ## Implementation Order
 
 | Step | Gap | Depends On | Rationale |
-|---|---|---|---|---|
-| 1 | Migration framework (GAP 5) | Nothing | Foundation for all other DB schema changes |
-| 2 | Network events/sessions tables (GAP 1) | GAP 5 (migration) | Schema changes need migration runner |
-| 3 | Network bandwidth correlation (GAP 2) | GAP 5, Plan 1 (stats.db exists) | Adds column to existing table |
-| 4 | Network membership propagation via docs (GAP 6) | Plan 1 (node.db exists), Iroh docs available | Uses network doc namespaces; needs NodeDatabase for local metadata |
-| 5 | Sync checkpointing (GAP 4) | GAP 5, Plan 1 (node.db exists) | Schema + engine integration |
-| 6 | `.syncweb-collection.json` removal (GAP 3) | Plan 1 (collections in node.db) | Simplifies code, removes duplicate state |
-| 7 | Maintenance tasks (remaining GAP 5) | GAP 5 migration foundation | Vacuum + backup need databases to exist first |
+|---|---|---|---|---|---|
+| 1 | Network events/sessions tables (GAP 1) | Plan 1 (node.db, stats.db exist) | Schema is defined upfront in each database open |
+| 2 | Network bandwidth correlation (GAP 2) | Plan 1 (stats.db exists) | Adds column to existing table |
+| 3 | Network membership propagation via docs (GAP 6) | Plan 1 (node.db exists), Iroh docs available | Uses network doc namespaces; needs NodeDatabase for local metadata |
+| 4 | Sync checkpointing (GAP 4) | Plan 1 (node.db exists) | Schema + engine integration |
+| 5 | `.syncweb-collection.json` removal (GAP 3) | Plan 1 (collections in node.db) | Simplifies code, removes duplicate state |
+| 6 | Maintenance tasks (remaining GAP 5) | None | Vacuum + backup are standalone utilities |
 
 ---
 
@@ -882,17 +812,15 @@ For networks created before this change:
 
 | File | Action |
 |---|---|---|
-| `syncweb-core/src/storage/migrate.rs` | **NEW** |
 | `syncweb-core/src/net/network_log.rs` | **NEW** |
 | `syncweb-core/src/net/membership_doc.rs` | **NEW** |
 | `syncweb-core/src/sync/checkpoint.rs` | **NEW** |
-| `syncweb-core/src/storage/node_db.rs` | Add migrations, sync checkpoints, backup/vacuum |
-| `syncweb-core/src/storage/stats_db.rs` | Add migrations, network events, backup/vacuum |
+| `syncweb-core/src/storage/node_db.rs` | Add sync checkpoints, backup/vacuum |
+| `syncweb-core/src/storage/stats_db.rs` | Add network events, backup/vacuum |
 | `syncweb-core/src/net/network.rs` | Add `doc_ticket` to `NetworkTicket`; add namespace derivation |
 | `syncweb-core/src/net/network_manager.rs` | Add membership doc integration; add auto-leave on kick; add NetworkLogger |
 | `syncweb-core/src/daemon/daemon.rs` | Wire network logger, membership docs, checkpoints, maintenance task |
 | `syncweb-core/src/sync/engine.rs` | Integrate checkpoints; pass network_id to stats |
-| `syncweb-core/src/indexing.rs` | Refactor to use MigrationRunner |
 | `syncweb-cli/src/main.rs` | Remove .syncweb-collection.json writes; add `db` and `network events/health` commands |
 | `syncweb-cli/src/cli/commands.rs` | Update `network invite` output for doc tickets |
 | `syncweb-core/src/daemon/ipc.rs` | Remove .syncweb-collection.json reads |

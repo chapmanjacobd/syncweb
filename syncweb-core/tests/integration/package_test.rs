@@ -9,6 +9,7 @@ use syncweb_core::{
         identity::IdentityManager,
         iroh_node::{IrohNode, RelayMode},
     },
+    storage::node_db::NodeDatabase,
 };
 
 use crate::test_utils::TestDirectory;
@@ -75,7 +76,8 @@ fn write_source_files(base: &Path, files: &[(&str, &[u8])]) -> anyhow::Result<Pa
 async fn test_package_lifecycle() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.path().join("packages"));
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let packages = PackageManager::new(directory.path().join("packages"), node_db);
 
     // Create v1 manifest and source
     let v1_tool: &[u8] = b"tool-v1";
@@ -143,7 +145,8 @@ async fn test_package_lifecycle() -> anyhow::Result<()> {
 fn test_multi_version_coexistence() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.path().join("packages"));
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let packages = PackageManager::new(directory.path().join("packages"), node_db);
 
     // Install v1
     let v1_content: &[u8] = b"content-v1";
@@ -194,7 +197,8 @@ fn test_multi_version_coexistence() -> anyhow::Result<()> {
 fn test_atomic_upgrade() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.path().join("packages"));
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let packages = PackageManager::new(directory.path().join("packages"), node_db);
 
     // Install v1
     let v1_data: &[u8] = b"v1-binary";
@@ -251,7 +255,8 @@ fn test_atomic_upgrade() -> anyhow::Result<()> {
 fn test_package_integrity() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-package-test")?;
     let collection_id = uuid::Uuid::new_v4();
-    let packages = PackageManager::new(directory.path().join("packages"));
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let packages = PackageManager::new(directory.path().join("packages"), node_db);
 
     // Install a package
     let original: &[u8] = b"original content";

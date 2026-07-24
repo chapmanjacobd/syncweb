@@ -21,14 +21,13 @@ use crate::{
         iroh_node::{IrohNode, RelayMode},
     },
     schedule::ScheduleManager,
-    stats::BandwidthStats,
-    storage::Config as AppConfig,
+    storage::{node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
 };
 
 use super::{
-    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, StateFile,
-    current_timestamp, daemon_socket_path,
+    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, current_timestamp,
+    daemon_socket_path,
     state::{BandwidthSnapshot, DaemonStatusReport, FolderStatusReport, ScheduleStatus},
     supervisor::{IntentControls, IntentSupervisor, SupervisionOptions},
 };
@@ -80,7 +79,8 @@ impl DaemonConfig {
 /// lifecycle state.
 pub struct Daemon {
     config: DaemonConfig,
-    state_file: StateFile,
+    node_db: NodeDatabase,
+    stats_db: StatsDatabase,
     pid_lock: PidLock,
     ipc_server: IpcServer,
     intent_supervisor: IntentSupervisor,
@@ -113,7 +113,15 @@ impl Daemon {
     /// cannot be opened, or configuration cannot be parsed.
     pub async fn new(config: DaemonConfig) -> Result<Self> {
         std::fs::create_dir_all(&config.data_dir)?;
-        let state_file = StateFile::new(&config.data_dir);
+
+        let node_db = match NodeDatabase::open(config.data_dir.join("node.db")) {
+            Ok(value) => value,
+            Err(error) => return Err(error),
+        };
+        let stats_db = match StatsDatabase::open(config.data_dir.join("stats.db")) {
+            Ok(value) => value,
+            Err(error) => return Err(error),
+        };
         let pid_lock = PidLock::new(&config.data_dir);
         if !pid_lock.try_acquire()? {
             return Err(SyncwebError::operation(
@@ -122,7 +130,7 @@ impl Daemon {
             ));
         }
 
-        let app_config = match AppConfig::load(config.data_dir.join("config.toml")) {
+        let app_config = match node_db.load_app_config() {
             Ok(value) => value,
             Err(error) => {
                 pid_lock.release()?;
@@ -137,7 +145,7 @@ impl Daemon {
                 return Err(error);
             }
         };
-        let filter_engine = match load_filter(&config.data_dir) {
+        let filter_engine = match node_db.load_filter_engine() {
             Ok(value) => value,
             Err(error) => {
                 pid_lock.release()?;
@@ -151,7 +159,7 @@ impl Daemon {
             &config.data_dir,
             DaemonStatus::Starting,
         );
-        if let Err(error) = state_file.save(&initial_state) {
+        if let Err(error) = node_db.save_lifecycle(&initial_state) {
             pid_lock.release()?;
             return Err(error);
         }
@@ -159,7 +167,7 @@ impl Daemon {
         let identity = match IdentityManager::new(config.data_dir.join("identity.key")) {
             Ok(value) => value,
             Err(error) => {
-                let _cleanup_state = state_file.remove();
+                let _cleanup_state = node_db.remove_lifecycle();
                 let _cleanup_lock = pid_lock.release();
                 return Err(error);
             }
@@ -167,7 +175,7 @@ impl Daemon {
         let node = match IrohNode::new(identity, config.data_dir.join("data"), RelayMode::Default).await {
             Ok(value) => Arc::new(value),
             Err(error) => {
-                let _cleanup_state = state_file.remove();
+                let _cleanup_state = node_db.remove_lifecycle();
                 let _cleanup_lock = pid_lock.release();
                 return Err(error);
             }
@@ -183,7 +191,7 @@ impl Daemon {
             Ok(value) => Arc::new(value),
             Err(error) => {
                 let _cleanup_node = node.stop().await;
-                let _cleanup_state = state_file.remove();
+                let _cleanup_state = node_db.remove_lifecycle();
                 let _cleanup_lock = pid_lock.release();
                 return Err(SyncwebError::operation("failed to create daemon thread pool", error));
             }
@@ -196,9 +204,9 @@ impl Daemon {
             state.status = DaemonStatus::Running;
             let running_state = state.clone();
             drop(state);
-            if let Err(error) = state_file.save(&running_state) {
+            if let Err(error) = node_db.save_lifecycle(&running_state) {
                 let _cleanup_node = node.stop().await;
-                let _cleanup_state = state_file.remove();
+                let _cleanup_state = node_db.remove_lifecycle();
                 let _cleanup_lock = pid_lock.release();
                 return Err(error);
             }
@@ -216,12 +224,14 @@ impl Daemon {
             handle.clone(),
             node.clone(),
             archive_pool.clone(),
-        );
+        )
+        .with_folder_manager(folder_manager.clone());
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
 
         Ok(Self {
             config,
-            state_file,
+            node_db,
+            stats_db,
             pid_lock,
             ipc_server,
             intent_supervisor,
@@ -696,7 +706,7 @@ impl Daemon {
                 next_window_start,
             }
         });
-        let bandwidth_stats = BandwidthStats::load(self.config.data_dir.join("stats.json"))?;
+        let stats = self.stats_db.current_stats().unwrap_or_default();
         let report = DaemonStatusReport {
             pid: state.pid,
             node_id: state.node_id,
@@ -714,15 +724,15 @@ impl Daemon {
                 })
                 .collect(),
             bandwidth: BandwidthSnapshot {
-                upload_total: bandwidth_stats.total_upload,
-                download_total: bandwidth_stats.total_download,
+                upload_total: stats.total_upload,
+                download_total: stats.total_download,
                 upload_rate: 0,
                 download_rate: 0,
             },
             schedule: schedule_report,
             rayon_threads: self.archive_pool.thread_count(),
         };
-        self.state_file.save_status(&report)
+        self.node_db.save_status(&report)
     }
 
     async fn load_folders(&self) -> Result<()> {
@@ -750,11 +760,11 @@ impl Daemon {
         {
             return Ok(());
         }
-        let app_config = AppConfig::load(self.config.data_dir.join("config.toml"))?;
+        let app_config = self.node_db.load_app_config()?;
         let parsed_schedule = ScheduleManager::from_config(&app_config.schedule)?;
         let schedule_manager =
             (app_config.schedule != crate::schedule::ScheduleConfig::default()).then_some(parsed_schedule);
-        let filter = load_filter(&self.config.data_dir)?;
+        let filter = self.node_db.load_filter_engine()?;
         *self.schedule_manager.write().await = schedule_manager;
         *self.filter_engine.write().await = filter;
         let statuses = self.handle.folder_registry.read().await.statuses();
@@ -777,7 +787,7 @@ impl Daemon {
     async fn shutdown_resources(&self) -> Result<()> {
         self.handle.set_status(DaemonStatus::Stopping).await;
         let stopping_state = self.handle.state.read().await.clone();
-        self.state_file.save(&stopping_state)?;
+        self.node_db.save_lifecycle(&stopping_state)?;
         self.save_status_report().await?;
 
         let namespaces: Vec<_> = self
@@ -809,8 +819,8 @@ impl Daemon {
 
         let node_result = self.node.stop().await;
         self.handle.set_status(DaemonStatus::Stopped).await;
-        let remove_result = self.state_file.remove();
-        let remove_status_result = self.state_file.remove_status();
+        let remove_result = self.node_db.remove_lifecycle();
+        let remove_status_result = self.node_db.remove_status();
         let release_result = self.pid_lock.release();
         node_result?;
         remove_result?;
@@ -839,13 +849,11 @@ impl Daemon {
 
 impl Drop for Daemon {
     fn drop(&mut self) {
-        if self.state_file.exists()
-            && let Err(error) = self.state_file.remove()
-        {
-            tracing::warn!(path = %self.state_file.path().display(), %error, "failed to remove daemon state");
+        if let Err(error) = self.node_db.remove_lifecycle() {
+            tracing::warn!(%error, "failed to remove daemon lifecycle");
         }
-        if let Err(error) = self.state_file.remove_status() {
-            tracing::warn!(path = %self.state_file.status_path().display(), %error, "failed to remove daemon status");
+        if let Err(error) = self.node_db.remove_status() {
+            tracing::warn!(%error, "failed to remove daemon status");
         }
     }
 }
@@ -853,15 +861,6 @@ impl Drop for Daemon {
 fn send_shutdown(sender: &broadcast::Sender<()>) {
     match sender.send(()) {
         Ok(_) | Err(broadcast::error::SendError(())) => {}
-    }
-}
-
-fn load_filter(data_dir: &Path) -> Result<Option<FilterEngine>> {
-    let path = data_dir.join("filters.toml");
-    if path.exists() {
-        FilterEngine::load(path).map(Some)
-    } else {
-        Ok(None)
     }
 }
 

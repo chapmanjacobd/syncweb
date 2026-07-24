@@ -1,6 +1,7 @@
 use anyhow::{Context, ensure};
 use iroh::SecretKey;
 use syncweb_core::net::{NetworkManager, NetworkOptions, NetworkTicket};
+use syncweb_core::storage::node_db::NodeDatabase;
 
 #[test]
 fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
@@ -8,16 +9,16 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root)?;
     let owner = SecretKey::generate().public();
     let member = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut owner_manager = NetworkManager::new(&path, owner)?;
+    let owner_db = NodeDatabase::open(root.join("owner.db"))?;
+    let mut owner_manager = NetworkManager::new(owner_db.clone(), owner)?;
     let id = owner_manager.create("work", NetworkOptions::default().with_label("Work").invite_only(true))?;
     let ticket = owner_manager.invite(id, member)?;
     let encoded = ticket.to_string();
     let decoded: NetworkTicket = encoded.parse()?;
     anyhow::ensure!(decoded == ticket);
 
-    let member_path = root.join("member-networks.json");
-    let mut member_manager = NetworkManager::new(&member_path, member)?;
+    let member_db = NodeDatabase::open(root.join("member.db"))?;
+    let mut member_manager = NetworkManager::new(member_db, member)?;
     anyhow::ensure!(member_manager.join(decoded)? == id);
     anyhow::ensure!(
         member_manager
@@ -28,7 +29,7 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
     owner_manager.kick(id, &member)?;
     anyhow::ensure!(!owner_manager.get(&id).is_some_and(|network| network.is_member(&member)));
     drop(owner_manager);
-    let reloaded = NetworkManager::new(&path, owner)?;
+    let reloaded = NetworkManager::new(owner_db, owner)?;
     anyhow::ensure!(reloaded.list().len() == 1);
 
     std::fs::remove_dir_all(root)?;
@@ -40,8 +41,8 @@ fn test_network_create_rejects_empty_name() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-net-empty-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager = NetworkManager::new(db, owner).context("unwrap failed")?;
 
     let result = manager.create("", NetworkOptions::default());
     ensure!(result.is_err());
@@ -59,9 +60,9 @@ fn test_network_invite_rejects_non_owner() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let other = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut manager_owner = NetworkManager::new(&path, owner).context("unwrap failed")?;
-    let mut manager_other = NetworkManager::new(&path, other).context("unwrap failed")?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager_owner = NetworkManager::new(db.clone(), owner).context("unwrap failed")?;
+    let mut manager_other = NetworkManager::new(db, other).context("unwrap failed")?;
 
     let id = manager_owner
         .create("test", NetworkOptions::default())
@@ -80,8 +81,8 @@ fn test_network_kick_owner_rejected() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-net-kick-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager = NetworkManager::new(db, owner).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -98,8 +99,8 @@ fn test_network_leave_removes_network() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-net-leave-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager = NetworkManager::new(db, owner).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -119,8 +120,8 @@ fn test_network_folder_membership() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-net-folder-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
-    let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner).context("unwrap failed")?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager = NetworkManager::new(db, owner).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -146,8 +147,8 @@ fn test_network_ticket_round_trip_deterministic() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-net-ticket-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root)?;
 
-    let path = root.join("networks.json");
-    let mut manager = NetworkManager::new(&path, owner)?;
+    let db = NodeDatabase::open(root.join("node.db"))?;
+    let mut manager = NetworkManager::new(db, owner)?;
     let id = manager.create("roundtrip", NetworkOptions::default().with_label("RT"))?;
     let ticket = manager.invite(id, member)?;
 

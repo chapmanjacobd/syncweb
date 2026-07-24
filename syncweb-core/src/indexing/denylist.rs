@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Result, SyncwebError},
-    indexing::CatalogRecord,
+    indexing::{CatalogRecord, IndexingDatabase},
 };
 
 const FILTER_LIST_CONTEXT: &[u8] = b"syncweb/filter-list/v1\0";
@@ -284,6 +284,25 @@ impl Denylist {
         Ok(true)
     }
 
+    /// Return all rules currently in the denylist.
+    #[must_use]
+    pub fn list_rules(&self) -> Vec<DenylistRule> {
+        let mut rules = Vec::new();
+        for device in &self.devices {
+            rules.push(DenylistRule::Device(device.clone()));
+        }
+        for (namespace_id, key) in &self.files {
+            rules.push(DenylistRule::File {
+                namespace_id: *namespace_id,
+                key: key.clone(),
+            });
+        }
+        for hash in &self.hashes {
+            rules.push(DenylistRule::Hash(*hash));
+        }
+        rules
+    }
+
     /// Subscribe to a federated filter namespace and apply its first list.
     ///
     /// # Errors
@@ -319,15 +338,51 @@ impl Denylist {
 
 /// Thread-safe denylist hooks suitable for sharing with fetch and discovery
 /// tasks.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct DenylistService {
     denylist: Arc<RwLock<Denylist>>,
+    database: Option<IndexingDatabase>,
 }
 
 impl DenylistService {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            denylist: Arc::new(RwLock::new(Denylist::new())),
+            database: None,
+        }
+    }
+
+    /// Create a service backed by an indexing database.
+    ///
+    /// Rules are loaded from the database on construction and persisted on
+    /// every mutation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn with_database(database: IndexingDatabase) -> Result<Self> {
+        let rules = database.load_denylist_rules()?;
+        let mut denylist = Denylist::new();
+        for rule in rules {
+            denylist.add(rule);
+        }
+        Ok(Self {
+            denylist: Arc::new(RwLock::new(denylist)),
+            database: Some(database),
+        })
+    }
+
+    fn persist(&self) -> Result<()> {
+        let Some(ref database) = self.database else {
+            return Ok(());
+        };
+        let rules: Vec<DenylistRule> = self
+            .denylist
+            .read()
+            .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?
+            .list_rules();
+        database.save_denylist_rules(&rules)
     }
 
     /// # Errors
@@ -342,24 +397,28 @@ impl DenylistService {
 
     /// # Errors
     ///
-    /// Returns an error if the denylist lock is poisoned.
+    /// Returns an error if the denylist lock is poisoned or persistence fails.
     pub fn add(&self, rule: DenylistRule) -> Result<()> {
         self.denylist
             .write()
             .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?
             .add(rule);
-        Ok(())
+        self.persist()
     }
 
     /// # Errors
     ///
-    /// Returns an error if the denylist lock is poisoned.
+    /// Returns an error if the denylist lock is poisoned or persistence fails.
     pub fn remove(&self, rule: &DenylistRule) -> Result<bool> {
-        Ok(self
+        let removed = self
             .denylist
             .write()
             .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?
-            .remove(rule))
+            .remove(rule);
+        if removed {
+            self.persist()?;
+        }
+        Ok(removed)
     }
 
     /// # Errors

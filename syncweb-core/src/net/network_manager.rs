@@ -1,43 +1,46 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
 
 use iroh::PublicKey;
 use iroh_docs::NamespaceId;
 use iroh_gossip::{TopicId, api::GossipTopic};
-use serde::{Deserialize, Serialize};
 
 use crate::node::gossip_service::GossipService;
+use crate::storage::node_db::NodeDatabase;
 use crate::{Result, SyncwebError};
 
-use super::network::{Network, NetworkId, NetworkOptions, NetworkTicket, network_topic, parse_public_key};
+use super::network::{Network, NetworkId, NetworkOptions, NetworkTicket, network_topic};
 
 /// Persistent manager for network membership and folder associations.
 #[derive(Clone, Debug)]
 pub struct NetworkManager {
-    path: PathBuf,
+    db: NodeDatabase,
     local_node: PublicKey,
     networks: HashMap<NetworkId, Network>,
 }
 
 impl NetworkManager {
-    /// Open the network database at `path`.
+    /// Open the network database.
     ///
     /// # Errors
     ///
-    /// Returns an error if existing state cannot be read or parsed.
-    pub fn new(path_arg: impl Into<PathBuf>, local_node: PublicKey) -> Result<Self> {
-        let path = path_arg.into();
-        let networks = load_networks(&path)?
+    /// Returns an error if existing state cannot be read.
+    pub fn new(db: NodeDatabase, local_node: PublicKey) -> Result<Self> {
+        let networks = db
+            .list_networks()?
             .into_iter()
             .map(|network| (network.id, network))
             .collect();
         Ok(Self {
-            path,
+            db,
             local_node,
             networks,
         })
+    }
+
+    /// Return a reference to the underlying database.
+    #[must_use]
+    pub const fn database(&self) -> &NodeDatabase {
+        &self.db
     }
 
     /// Create and persist a network owned by the local node.
@@ -56,9 +59,9 @@ impl NetworkManager {
                 "network {normalized:?} already exists"
             )));
         }
-        self.networks
-            .insert(id, Network::new(normalized, self.local_node, options));
-        self.save()?;
+        let network = Network::new(normalized, self.local_node, options);
+        self.db.create_network(&network)?;
+        self.networks.insert(id, network);
         Ok(id)
     }
 
@@ -91,8 +94,8 @@ impl NetworkManager {
             shared_secret: ticket.shared_secret,
         };
         let id = network.id;
+        self.db.create_network(&network)?;
         self.networks.insert(id, network);
-        self.save()?;
         Ok(id)
     }
 
@@ -105,7 +108,7 @@ impl NetworkManager {
         self.networks
             .remove(&id)
             .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))?;
-        self.save()
+        self.db.delete_network(id)
     }
 
     /// Generate a device-bound invitation and add the device as a member.
@@ -127,7 +130,7 @@ impl NetworkManager {
             folders: network.folders.clone(),
             shared_secret: network.shared_secret,
         };
-        self.save()?;
+        self.db.add_member(id, device)?;
         Ok(ticket)
     }
 
@@ -166,7 +169,8 @@ impl NetworkManager {
         if !network.members.remove(device) {
             return Err(SyncwebError::InvalidConfig("device is not a network member".to_owned()));
         }
-        self.save()
+        self.db.remove_member(id, device)?;
+        Ok(())
     }
 
     /// Associate a folder with a network.
@@ -176,7 +180,7 @@ impl NetworkManager {
     /// Returns an error if the network does not exist or persistence fails.
     pub fn add_folder(&mut self, id: NetworkId, folder: NamespaceId) -> Result<()> {
         self.network_mut(id)?.folders.insert(folder);
-        self.save()
+        self.db.add_folder_to_network(id, folder)
     }
 
     /// Remove a folder association without changing the folder itself.
@@ -186,7 +190,7 @@ impl NetworkManager {
     /// Returns an error if the network does not exist or persistence fails.
     pub fn remove_folder(&mut self, id: NetworkId, folder: NamespaceId) -> Result<()> {
         self.network_mut(id)?.folders.remove(&folder);
-        self.save()
+        self.db.remove_folder_from_network(id, folder)
     }
 
     /// Subscribe to the network's deterministic gossip topic.
@@ -274,103 +278,4 @@ impl NetworkManager {
         }
         self.network_mut(id)
     }
-
-    fn save(&self) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let records = self.networks.values().map(NetworkRecord::from).collect::<Vec<_>>();
-        let contents = serde_json::to_vec_pretty(&records)
-            .map_err(|error| SyncwebError::operation("failed to serialize networks", error))?;
-        let temporary = self.path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
-        std::fs::write(&temporary, contents)
-            .map_err(|error| SyncwebError::operation("failed to write network state", error))?;
-        std::fs::rename(&temporary, &self.path)
-            .map_err(|error| SyncwebError::operation("failed to persist network state", error))
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-struct NetworkRecord {
-    id: String,
-    name: String,
-    label: String,
-    owner: String,
-    members: Vec<String>,
-    folders: Vec<String>,
-    shared_secret: Option<String>,
-}
-
-impl From<&Network> for NetworkRecord {
-    fn from(network: &Network) -> Self {
-        Self {
-            id: network.id.to_string(),
-            name: network.name.clone(),
-            label: network.label.clone(),
-            owner: network.owner.to_string(),
-            members: network.members.iter().map(ToString::to_string).collect(),
-            folders: network.folders.iter().map(ToString::to_string).collect(),
-            shared_secret: network.shared_secret.map(hex::encode),
-        }
-    }
-}
-
-impl TryFrom<NetworkRecord> for Network {
-    type Error = SyncwebError;
-
-    fn try_from(record: NetworkRecord) -> Result<Self> {
-        if record.name.trim().is_empty() {
-            return Err(SyncwebError::InvalidConfig("network name cannot be empty".to_owned()));
-        }
-        let id: NetworkId = record.id.parse()?;
-        if id != NetworkId::from_name(record.name.trim()) {
-            return Err(SyncwebError::InvalidConfig(
-                "network ID does not match its name".to_owned(),
-            ));
-        }
-        let members = record
-            .members
-            .into_iter()
-            .map(|member| parse_public_key(&member))
-            .collect::<Result<HashSet<_>>>()?;
-        let folders = record
-            .folders
-            .into_iter()
-            .map(|namespace| {
-                namespace
-                    .parse()
-                    .map_err(|error| SyncwebError::InvalidConfig(format!("invalid folder namespace: {error}")))
-            })
-            .collect::<Result<HashSet<_>>>()?;
-        let shared_secret = record
-            .shared_secret
-            .map(|secret| {
-                let bytes = hex::decode(secret)
-                    .map_err(|error| SyncwebError::InvalidConfig(format!("invalid network secret: {error}")))?;
-                bytes.try_into().map_err(|_length_error| {
-                    SyncwebError::InvalidConfig("network secret must contain 32 bytes".to_owned())
-                })
-            })
-            .transpose()?;
-        Ok(Self {
-            id,
-            name: record.name,
-            label: record.label,
-            topic: network_topic(id),
-            owner: parse_public_key(&record.owner)?,
-            members,
-            folders,
-            shared_secret,
-        })
-    }
-}
-
-fn load_networks(path: &Path) -> Result<Vec<Network>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let bytes = std::fs::read(path).map_err(|error| SyncwebError::operation("failed to read network state", error))?;
-    let records: Vec<NetworkRecord> = serde_json::from_slice(&bytes)
-        .map_err(|error| SyncwebError::operation("failed to parse network state", error))?;
-    records.into_iter().map(Network::try_from).collect()
 }

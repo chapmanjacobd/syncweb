@@ -16,7 +16,7 @@ use syncweb_core::{
         iroh_node::{IrohNode, RelayMode},
     },
     schedule::BandwidthWindowConfig,
-    storage::Config,
+    storage::node_db::NodeDatabase,
 };
 use tokio::task::JoinHandle;
 
@@ -200,9 +200,12 @@ async fn test_daemon_reload_and_sync_over_ipc() -> Result<()> {
     let directory = TestDirectory::new("reload")?;
     let (client, task) = start_daemon(&directory).await?;
 
-    let mut config = Config::default();
-    config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
-    config.save(directory.path().join("config.toml"))?;
+    {
+        let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+        let mut config = node_db.load_app_config()?;
+        config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
+        node_db.save_app_config(&config)?;
+    }
 
     let reload_response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
     ensure!(matches!(reload_response, IpcResponse::Ok { .. }));
@@ -517,10 +520,13 @@ async fn test_daemon_schedule_pause_resume() -> Result<()> {
         }
     };
     let inactive_window = format!("{}-{}", hours_before(inactive_start), hours_after(inactive_end));
-    let schedule_toml = format!(
-        "[schedule]\nactive_hours = \"{inactive_window}\"\n\n[[schedule.bandwidth]]\nhours = \"00:00-24:00\"\nmax_upload = \"0\"\nmax_download = \"1MB/s\"\n"
-    );
-    fs::write(directory.path().join("config.toml"), schedule_toml)?;
+    {
+        let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+        let mut config = node_db.load_app_config()?;
+        config.schedule.active_hours = inactive_window.clone();
+        config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
+        node_db.save_app_config(&config)?;
+    }
 
     let (client, task) = start_daemon(&directory).await?;
     client

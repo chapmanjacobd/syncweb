@@ -440,6 +440,7 @@ pub struct IpcServer {
     listener: IpcListener,
     daemon_handle: DaemonHandle,
     archive_context: Option<Arc<ArchiveContext>>,
+    folder_manager: Option<FolderManager>,
 }
 
 #[derive(Clone)]
@@ -455,6 +456,7 @@ impl IpcServer {
             listener: IpcListener::new(socket_path),
             daemon_handle,
             archive_context: None,
+            folder_manager: None,
         }
     }
 
@@ -470,7 +472,15 @@ impl IpcServer {
             listener: IpcListener::new(socket_path),
             daemon_handle,
             archive_context: Some(Arc::new(ArchiveContext { node, pool })),
+            folder_manager: None,
         }
+    }
+
+    /// Set the folder manager for this IPC server.
+    #[must_use]
+    pub fn with_folder_manager(mut self, folder_manager: FolderManager) -> Self {
+        self.folder_manager = Some(folder_manager);
+        self
     }
 
     /// Accept and process requests until the daemon broadcasts shutdown.
@@ -614,6 +624,9 @@ impl IpcServer {
                 let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
                 if removed.is_some() {
                     let _ = cancel_session(namespace_id);
+                    if let Some(ref manager) = self.folder_manager {
+                        let _ = manager.drop(namespace_id).await;
+                    }
                     IpcResponse::Ok {
                         message: "folder removed".to_owned(),
                     }

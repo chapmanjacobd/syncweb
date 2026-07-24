@@ -1267,14 +1267,8 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
         "output should indicate provider added"
     );
 
-    let state_path = data_dir.join("indexing-state.json");
-    ensure!(state_path.exists(), "indexing-state.json should exist");
-    let state: serde_json::Value = serde_json::from_slice(&std::fs::read(&state_path).context("read indexing state")?)?;
-    let mirrors = state
-        .get("links")
-        .and_then(|l| l.get("mirrors"))
-        .and_then(|m| m.as_array())
-        .context("mirrors should be an array")?;
+    let db = syncweb_core::indexing::IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let (_pointers, mirrors, _revoked) = db.load_links()?;
     ensure!(!mirrors.is_empty(), "should have at least one mirror");
 
     std::fs::remove_dir_all(&data_dir)?;

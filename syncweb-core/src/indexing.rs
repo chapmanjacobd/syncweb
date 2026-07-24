@@ -42,10 +42,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::{Entry, NamespaceId, engine::LiveEvent};
 use n0_future::StreamExt;
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::{Deserialize, Serialize};
 use tokio::{sync::broadcast, task::JoinHandle};
 
 use crate::{
@@ -886,6 +888,732 @@ impl IndexingDatabase {
             .map_err(|error| SyncwebError::operation("indexing database lock poisoned", error))?;
         operation(&mut connection)
     }
+
+    // ── Denylist rules ─────────────────────────────────────
+
+    pub fn save_denylist_rules(&self, rules: &[DenylistRule]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute("DELETE FROM denylist_rules", [])
+                .map_err(|error| database_error("failed to clear denylist rules", error))?;
+            let now = now_seconds();
+            for rule in rules {
+                let (rule_type, rule_value, namespace_id) = match rule {
+                    DenylistRule::Device(d) => ("device", d.as_bytes().to_vec(), None::<String>),
+                    DenylistRule::Hash(h) => ("hash", h.as_bytes().to_vec(), None),
+                    DenylistRule::File { namespace_id: ns, key } => ("file", key.clone(), ns.map(|n| n.to_string())),
+                };
+                connection
+                    .execute(
+                        "INSERT OR REPLACE INTO denylist_rules(rule_type, rule_value, namespace_id, updated_at)
+                     VALUES (?1, ?2, ?3, ?4)",
+                        params![rule_type, rule_value, namespace_id, now],
+                    )
+                    .map_err(|error| database_error("failed to save denylist rule", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_denylist_rules(&self) -> Result<Vec<DenylistRule>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT rule_type, rule_value, namespace_id FROM denylist_rules ORDER BY updated_at")
+                .map_err(|error| database_error("failed to prepare denylist query", error))?;
+            let rules = stmt
+                .query_map([], |row| {
+                    let rule_type: String = row.get(0)?;
+                    let rule_value: Vec<u8> = row.get(1)?;
+                    let namespace_id: Option<String> = row.get(2)?;
+                    match rule_type.as_str() {
+                        "device" => Ok(DenylistRule::Device(String::from_utf8_lossy(&rule_value).to_string())),
+                        "hash" => {
+                            let arr: [u8; 32] = rule_value.try_into().map_err(|_| {
+                                rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                                    "invalid hash length",
+                                    "",
+                                )))
+                            })?;
+                            Ok(DenylistRule::Hash(Hash::from(arr)))
+                        }
+                        "file" => {
+                            let ns = namespace_id.and_then(|s| s.parse::<NamespaceId>().ok());
+                            Ok(DenylistRule::File {
+                                namespace_id: ns,
+                                key: rule_value,
+                            })
+                        }
+                        _ => Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                            SyncwebError::operation("unknown rule type", rule_type),
+                        ))),
+                    }
+                })
+                .map_err(|error| database_error("failed to query denylist rules", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read denylist rules", error))?;
+            Ok(rules)
+        })
+    }
+
+    // ── Links ─────────────────────────────────────────────
+
+    pub fn load_links(&self) -> Result<(Vec<links::MutablePointer>, Vec<String>, Vec<links::PrivateLink>)> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT link, kind, payload, updated_at FROM stable_links ORDER BY updated_at")
+                .map_err(|error| database_error("failed to prepare links query", error))?;
+            let mut pointers = Vec::new();
+            let rows = stmt
+                .query_map([], |row| {
+                    let kind: String = row.get(1)?;
+                    let payload: Vec<u8> = row.get(2)?;
+                    Ok((kind, payload))
+                })
+                .map_err(|error| database_error("failed to query stable links", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read link rows", error))?;
+            for (kind, payload) in rows {
+                if kind.as_str() == "mutable"
+                    && let Ok(p) = serde_json::from_slice::<links::MutablePointer>(&payload)
+                {
+                    pointers.push(p);
+                }
+            }
+
+            let mut mirror_stmt = connection
+                .prepare("SELECT ticket FROM link_mirrors ORDER BY priority")
+                .map_err(|error| database_error("failed to prepare mirror query", error))?;
+            let mirrors = mirror_stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| database_error("failed to query mirrors", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read mirror rows", error))?;
+
+            let revoked = Vec::new();
+            Ok((pointers, mirrors, revoked))
+        })
+    }
+
+    pub fn save_links(
+        &self,
+        pointers: &[links::MutablePointer],
+        mirrors: &[String],
+        _revoked: &[links::PrivateLink],
+    ) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM stable_links", [])
+                .map_err(|error| database_error("failed to clear stable links", error))?;
+            connection.execute("DELETE FROM link_mirrors", [])
+                .map_err(|error| database_error("failed to clear link mirrors", error))?;
+            let now = now_seconds();
+            for pointer in pointers {
+                let payload = serde_json::to_vec(pointer)
+                    .map_err(|error| database_error("failed to serialize pointer", error))?;
+                connection.execute(
+                    "INSERT OR REPLACE INTO stable_links(link, kind, publisher, alias, content_hash, sequence, version, payload, updated_at)
+                     VALUES (?1, 'mutable', ?2, ?3, NULL, ?4, ?5, ?6, ?7)",
+                    params![
+                        format!("mutable:{}:{}", pointer.publisher, pointer.alias),
+                        pointer.publisher.to_string(),
+                        pointer.alias,
+                        pointer.sequence as i64,
+                        pointer.version.as_deref(),
+                        payload,
+                        now,
+                    ],
+                ).map_err(|error| database_error("failed to save pointer", error))?;
+            }
+            for uri in mirrors {
+                connection.execute(
+                    "INSERT INTO link_mirrors(link, provider, ticket, priority, updated_at)
+                     VALUES ('', 'local', ?1, 0, ?2)",
+                    params![uri, now],
+                ).map_err(|error| database_error("failed to save mirror", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    // ── Leases ────────────────────────────────────────────
+
+    pub fn save_leases(&self, leases: &[resilience::ProviderLease]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM provider_leases", [])
+                .map_err(|error| database_error("failed to clear provider leases", error))?;
+            for lease in leases {
+                connection.execute(
+                    "INSERT INTO provider_leases(provider, content_hash, ticket, sequence, issued_at, expires_at, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        lease.provider.to_string(),
+                        lease.hash.as_bytes().to_vec(),
+                        lease.ticket,
+                        lease.sequence as i64,
+                        lease.issued_at as i64,
+                        lease.expires_at as i64,
+                        lease.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save lease", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_leases(&self) -> Result<Vec<resilience::ProviderLease>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, content_hash, ticket, sequence, issued_at, expires_at, signature
+                 FROM provider_leases ORDER BY issued_at",
+                )
+                .map_err(|error| database_error("failed to prepare leases query", error))?;
+            let leases = stmt
+                .query_map([], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let hash_bytes: Vec<u8> = row.get(1)?;
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid hash length",
+                            "",
+                        )))
+                    })?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            provider_str,
+                        )))
+                    })?;
+                    Ok(resilience::ProviderLease {
+                        hash: Hash::from(arr),
+                        provider,
+                        ticket: row.get(2)?,
+                        sequence: row.get::<_, i64>(3)? as u64,
+                        issued_at: row.get::<_, i64>(4)? as u64,
+                        expires_at: row.get::<_, i64>(5)? as u64,
+                        signature: row.get(6)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query leases", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read lease rows", error))?;
+            Ok(leases)
+        })
+    }
+
+    // ── Trust delegations ─────────────────────────────────
+
+    pub fn save_trust_delegations(&self, delegations: &[wot::TrustDelegation]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM trust_delegations", [])
+                .map_err(|error| database_error("failed to clear trust delegations", error))?;
+            for d in delegations {
+                connection.execute(
+                    "INSERT INTO trust_delegations(delegator, delegate, scope, sequence, issued_at, expires_at, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        d.delegator, d.delegate,
+                        d.scope.map(|h| h.as_bytes().to_vec()),
+                        d.sequence as i64, d.issued_at as i64, d.expires_at as i64,
+                        d.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save delegation", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_trust_delegations(&self) -> Result<Vec<wot::TrustDelegation>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT delegator, delegate, scope, sequence, issued_at, expires_at, signature
+                 FROM trust_delegations ORDER BY issued_at",
+                )
+                .map_err(|error| database_error("failed to prepare delegations query", error))?;
+            let delegations = stmt
+                .query_map([], |row| {
+                    let scope: Option<Vec<u8>> = row.get(2)?;
+                    let hash = scope.and_then(|b| {
+                        let arr: [u8; 32] = b.try_into().ok()?;
+                        Some(Hash::from(arr))
+                    });
+                    Ok(wot::TrustDelegation {
+                        delegator: row.get::<_, String>(0)?,
+                        delegate: row.get::<_, String>(1)?,
+                        scope: hash,
+                        sequence: row.get::<_, i64>(3)? as u64,
+                        issued_at: row.get::<_, i64>(4)? as u64,
+                        expires_at: row.get::<_, i64>(5)? as u64,
+                        signature: row.get(6)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query delegations", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read delegation rows", error))?;
+            Ok(delegations)
+        })
+    }
+
+    // ── Moderation records ────────────────────────────────
+
+    pub fn save_moderation_records(&self, records: &[wot::ModerationRecord]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM moderation_records_v2", [])
+                .map_err(|error| database_error("failed to clear moderation records", error))?;
+            for r in records {
+                let scope_json = serde_json::to_string(&r.scope)
+                    .map_err(|error| database_error("failed to serialize scope", error))?;
+                connection.execute(
+                    "INSERT INTO moderation_records_v2(content_hash, moderator, action, scope_json, sequence, created_at, reason, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        r.content.as_bytes().to_vec(), r.moderator,
+                        format!("{:?}", r.action), scope_json,
+                        r.sequence as i64, r.created_at as i64, r.reason,
+                        r.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save moderation record", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_moderation_records(&self) -> Result<Vec<wot::ModerationRecord>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT content_hash, moderator, action, scope_json, sequence, created_at, reason, signature
+                 FROM moderation_records_v2 ORDER BY created_at",
+                )
+                .map_err(|error| database_error("failed to prepare moderation query", error))?;
+            let records = stmt
+                .query_map([], |row| {
+                    let hash_bytes: Vec<u8> = row.get(0)?;
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid hash length",
+                            "",
+                        )))
+                    })?;
+                    let scope_json: String = row.get(3)?;
+                    let scope: wot::ModerationScope = serde_json::from_str(&scope_json)
+                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+                    let action_str: String = row.get(2)?;
+                    let action = match action_str.as_str() {
+                        "Show" => wot::ModerationAction::Show,
+                        "Hide" => wot::ModerationAction::Hide,
+                        "Warn" => wot::ModerationAction::Warn,
+                        "Quarantine" => wot::ModerationAction::Quarantine,
+                        "Restore" => wot::ModerationAction::Restore,
+                        _ => {
+                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                SyncwebError::operation("unknown moderation action", action_str),
+                            )));
+                        }
+                    };
+                    Ok(wot::ModerationRecord {
+                        content: Hash::from(arr),
+                        moderator: row.get::<_, String>(1)?,
+                        action,
+                        scope,
+                        sequence: row.get::<_, i64>(4)? as u64,
+                        created_at: row.get::<_, i64>(5)? as u64,
+                        reason: row.get::<_, String>(6)?,
+                        signature: row.get(7)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query moderation records", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read moderation rows", error))?;
+            Ok(records)
+        })
+    }
+
+    // ── Attestations ─────────────────────────────────────
+
+    pub fn save_attestations(&self, attestations: &[wot::Attestation]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM attestations_v2", [])
+                .map_err(|error| database_error("failed to clear attestations", error))?;
+            for a in attestations {
+                let (kind, kind_other) = match &a.kind {
+                    wot::AttestationKind::License => ("license", None),
+                    wot::AttestationKind::Provenance => ("provenance", None),
+                    wot::AttestationKind::Derivative => ("derivative", None),
+                    wot::AttestationKind::Other(v) => ("other", Some(v.as_str())),
+                };
+                connection.execute(
+                    "INSERT INTO attestations_v2(content_hash, issuer, kind, kind_other, value, sequence, issued_at, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        a.content.as_bytes().to_vec(), a.issuer,
+                        kind, kind_other, a.value,
+                        a.sequence as i64, a.issued_at as i64,
+                        a.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save attestation", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_attestations(&self) -> Result<Vec<wot::Attestation>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT content_hash, issuer, kind, kind_other, value, sequence, issued_at, signature
+                 FROM attestations_v2 ORDER BY issued_at",
+                )
+                .map_err(|error| database_error("failed to prepare attestations query", error))?;
+            let attestations = stmt
+                .query_map([], |row| {
+                    let hash_bytes: Vec<u8> = row.get(0)?;
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid hash length",
+                            "",
+                        )))
+                    })?;
+                    let kind_str: String = row.get(2)?;
+                    let kind_other: Option<String> = row.get(3)?;
+                    let kind = match kind_str.as_str() {
+                        "license" => wot::AttestationKind::License,
+                        "provenance" => wot::AttestationKind::Provenance,
+                        "derivative" => wot::AttestationKind::Derivative,
+                        "other" => wot::AttestationKind::Other(kind_other.unwrap_or_default()),
+                        _ => {
+                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                SyncwebError::operation("unknown attestation kind", kind_str),
+                            )));
+                        }
+                    };
+                    Ok(wot::Attestation {
+                        content: Hash::from(arr),
+                        issuer: row.get::<_, String>(1)?,
+                        kind,
+                        value: row.get::<_, String>(4)?,
+                        sequence: row.get::<_, i64>(5)? as u64,
+                        issued_at: row.get::<_, i64>(6)? as u64,
+                        signature: row.get(7)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query attestations", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read attestation rows", error))?;
+            Ok(attestations)
+        })
+    }
+
+    // ── Content reports ──────────────────────────────────
+
+    pub fn save_content_reports(&self, reports: &[ReportRecord]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute("DELETE FROM content_reports_v2", [])
+                .map_err(|error| database_error("failed to clear content reports", error))?;
+            for r in reports {
+                connection
+                    .execute(
+                        "INSERT INTO content_reports_v2(content_hash, reporter, reason, scope, created_at)
+                     VALUES (?1, 'cli', ?2, 'global', ?3)",
+                        params![r.content.as_bytes().to_vec(), r.reason, r.created_at as i64],
+                    )
+                    .map_err(|error| database_error("failed to save content report", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_content_reports(&self) -> Result<Vec<ReportRecord>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT content_hash, reason, created_at FROM content_reports_v2 ORDER BY created_at")
+                .map_err(|error| database_error("failed to prepare reports query", error))?;
+            let reports = stmt
+                .query_map([], |row| {
+                    let hash_bytes: Vec<u8> = row.get(0)?;
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid hash length",
+                            "",
+                        )))
+                    })?;
+                    Ok(ReportRecord {
+                        content: Hash::from(arr),
+                        reason: row.get::<_, String>(1)?,
+                        created_at: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map_err(|error| database_error("failed to query content reports", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read report rows", error))?;
+            Ok(reports)
+        })
+    }
+
+    // ── Provider bans ────────────────────────────────────
+
+    pub fn save_provider_bans(&self, bans: &[resilience::BanRecord]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute("DELETE FROM provider_bans_v2", [])
+                .map_err(|error| database_error("failed to clear provider bans", error))?;
+            for b in bans {
+                connection
+                    .execute(
+                        "INSERT INTO provider_bans_v2(provider, content_hash, banned_at, expires_at, reason, source)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![
+                            b.provider.to_string(),
+                            b.hash.map(|h| h.as_bytes().to_vec()),
+                            b.banned_at as i64,
+                            b.expires_at.map(|v| v as i64),
+                            b.reason,
+                            format!("{:?}", b.source),
+                        ],
+                    )
+                    .map_err(|error| database_error("failed to save provider ban", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_provider_bans(&self) -> Result<Vec<resilience::BanRecord>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, content_hash, banned_at, expires_at, reason, source
+                 FROM provider_bans_v2 ORDER BY banned_at",
+                )
+                .map_err(|error| database_error("failed to prepare bans query", error))?;
+            let bans = stmt
+                .query_map([], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let content_hash: Option<Vec<u8>> = row.get(1)?;
+                    let source_str: String = row.get(5)?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            provider_str,
+                        )))
+                    })?;
+                    let hash = content_hash.and_then(|b| {
+                        let arr: [u8; 32] = b.try_into().ok()?;
+                        Some(Hash::from(arr))
+                    });
+                    let source = match source_str.as_str() {
+                        "Manual" => resilience::BanSource::Manual,
+                        "Automated" => resilience::BanSource::Automated,
+                        "WoT" => resilience::BanSource::WoT,
+                        _ => resilience::BanSource::Manual,
+                    };
+                    Ok(resilience::BanRecord {
+                        provider,
+                        hash,
+                        banned_at: row.get::<_, i64>(2)? as u64,
+                        expires_at: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+                        reason: row.get::<_, String>(4)?,
+                        source,
+                    })
+                })
+                .map_err(|error| database_error("failed to query provider bans", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read ban rows", error))?;
+            Ok(bans)
+        })
+    }
+
+    // ── Provider trust records ───────────────────────────
+
+    pub fn save_provider_trust_records(&self, records: &[wot::ProviderTrustRecord]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM provider_trust_records_v2", [])
+                .map_err(|error| database_error("failed to clear provider trust records", error))?;
+            for r in records {
+                let action_str = format!("{:?}", r.action);
+                connection.execute(
+                    "INSERT INTO provider_trust_records_v2(provider, action, scope, issuer, sequence, issued_at, expires_at, reason, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        r.provider.to_string(), action_str,
+                        r.scope.map(|h| h.as_bytes().to_vec()),
+                        r.issuer, r.sequence as i64, r.issued_at as i64,
+                        r.expires_at.map(|v| v as i64), r.reason,
+                        r.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save provider trust record", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_provider_trust_records(&self) -> Result<Vec<wot::ProviderTrustRecord>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, action, scope, issuer, sequence, issued_at, expires_at, reason, signature
+                 FROM provider_trust_records_v2 ORDER BY issued_at",
+                )
+                .map_err(|error| database_error("failed to prepare trust records query", error))?;
+            let records = stmt
+                .query_map([], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let action_str: String = row.get(1)?;
+                    let scope: Option<Vec<u8>> = row.get(2)?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            provider_str,
+                        )))
+                    })?;
+                    let action = match action_str.as_str() {
+                        "Trust" => wot::ProviderTrustAction::Trust,
+                        "Distrust" => wot::ProviderTrustAction::Distrust,
+                        "Vouch" => wot::ProviderTrustAction::Vouch,
+                        "Warn" => wot::ProviderTrustAction::Warn,
+                        _ => {
+                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                SyncwebError::operation("unknown trust action", action_str),
+                            )));
+                        }
+                    };
+                    let hash = scope.and_then(|b| {
+                        let arr: [u8; 32] = b.try_into().ok()?;
+                        Some(Hash::from(arr))
+                    });
+                    Ok(wot::ProviderTrustRecord {
+                        provider,
+                        action,
+                        scope: hash,
+                        issuer: row.get::<_, String>(3)?,
+                        sequence: row.get::<_, i64>(4)? as u64,
+                        issued_at: row.get::<_, i64>(5)? as u64,
+                        expires_at: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
+                        reason: row.get::<_, String>(7)?,
+                        signature: row.get(8)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query provider trust records", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read trust record rows", error))?;
+            Ok(records)
+        })
+    }
+
+    // ── Provider trust signals ───────────────────────────
+
+    pub fn save_provider_trust_signals(&self, signals: &[reputation::ProviderTrustSignal]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute("DELETE FROM provider_trust_signals_v2", [])
+                .map_err(|error| database_error("failed to clear provider trust signals", error))?;
+            for s in signals {
+                let kind_str = format!("{:?}", s.signal);
+                connection.execute(
+                    "INSERT INTO provider_trust_signals_v2(reporter, provider, signal_kind, content_hash, sequence, timestamp, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        s.reporter.to_string(), s.provider.to_string(),
+                        kind_str,
+                        s.hash.map(|h| h.as_bytes().to_vec()),
+                        s.sequence as i64, s.timestamp as i64,
+                        s.signature,
+                    ],
+                ).map_err(|error| database_error("failed to save trust signal", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_provider_trust_signals(&self) -> Result<Vec<reputation::ProviderTrustSignal>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT reporter, provider, signal_kind, content_hash, sequence, timestamp, signature
+                 FROM provider_trust_signals_v2 ORDER BY timestamp",
+                )
+                .map_err(|error| database_error("failed to prepare trust signals query", error))?;
+            let signals = stmt
+                .query_map([], |row| {
+                    let reporter_str: String = row.get(0)?;
+                    let provider_str: String = row.get(1)?;
+                    let kind_str: String = row.get(2)?;
+                    let content_hash: Option<Vec<u8>> = row.get(3)?;
+                    let reporter = reporter_str.parse::<PublicKey>().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid reporter",
+                            reporter_str,
+                        )))
+                    })?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            provider_str,
+                        )))
+                    })?;
+                    let kind = match kind_str.as_str() {
+                        "ObservedSuccess" => reputation::TrustSignalKind::ObservedSuccess,
+                        "ObservedFailure" => reputation::TrustSignalKind::ObservedFailure,
+                        "ObservedCorruption" => reputation::TrustSignalKind::ObservedCorruption,
+                        _ => {
+                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                SyncwebError::operation("unknown signal kind", kind_str),
+                            )));
+                        }
+                    };
+                    let hash = content_hash.and_then(|b| {
+                        let arr: [u8; 32] = b.try_into().ok()?;
+                        Some(Hash::from(arr))
+                    });
+                    Ok(reputation::ProviderTrustSignal {
+                        reporter,
+                        provider,
+                        signal: kind,
+                        hash,
+                        sequence: row.get::<_, i64>(4)? as u64,
+                        timestamp: row.get::<_, i64>(5)? as u64,
+                        signature: row.get(6)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query trust signals", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read trust signal rows", error))?;
+            Ok(signals)
+        })
+    }
+
+    // ── Trust streams ────────────────────────────────────
+
+    pub fn save_trust_streams(&self, streams: &[String]) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute("DELETE FROM trust_streams", [])
+                .map_err(|error| database_error("failed to clear trust streams", error))?;
+            let now = now_seconds();
+            for ns in streams {
+                connection
+                    .execute(
+                        "INSERT INTO trust_streams(namespace, subscribed_at) VALUES (?1, ?2)",
+                        params![ns, now],
+                    )
+                    .map_err(|error| database_error("failed to save trust stream", error))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn load_trust_streams(&self) -> Result<Vec<String>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT namespace FROM trust_streams ORDER BY subscribed_at")
+                .map_err(|error| database_error("failed to prepare trust streams query", error))?;
+            let streams = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| database_error("failed to query trust streams", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read trust stream rows", error))?;
+            Ok(streams)
+        })
+    }
 }
 
 /// The opt-in indexing service for synchronized folders.
@@ -913,7 +1641,7 @@ impl IndexingService {
     ///
     /// Returns an error if the database cannot be opened or initialized.
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(Self::with_database(IndexingDatabase::open(path)?))
+        Self::with_database(IndexingDatabase::open(path)?)
     }
 
     /// Start an in-memory indexing service.
@@ -922,19 +1650,23 @@ impl IndexingService {
     ///
     /// Returns an error if `SQLite` cannot initialize the schema.
     pub fn in_memory() -> Result<Self> {
-        Ok(Self::with_database(IndexingDatabase::in_memory()?))
+        Self::with_database(IndexingDatabase::in_memory()?)
     }
 
     /// Start a service from an already opened database.
-    #[must_use]
-    pub fn with_database(database: IndexingDatabase) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the denylist rules cannot be loaded from the database.
+    pub fn with_database(database: IndexingDatabase) -> Result<Self> {
         let (events, _) = broadcast::channel(EVENT_CAPACITY);
-        Self {
+        let denylist = denylist::DenylistService::with_database(database.clone())?;
+        Ok(Self {
             database,
             events,
             tasks: Arc::new(Mutex::new(HashMap::new())),
-            denylist: denylist::DenylistService::new(),
-        }
+            denylist,
+        })
     }
 
     /// Create a catalog service backed by this indexing service.
@@ -1394,13 +2126,14 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
                  payload BLOB NOT NULL,
                  updated_at INTEGER NOT NULL
              );
-             CREATE TABLE IF NOT EXISTS link_mirrors (
-                 link TEXT NOT NULL REFERENCES stable_links(link) ON DELETE CASCADE,
-                 provider TEXT NOT NULL,
-                 ticket TEXT NOT NULL,
-                 priority INTEGER NOT NULL DEFAULT 0,
-                 PRIMARY KEY(link, provider)
-             );
+CREATE TABLE IF NOT EXISTS link_mirrors (
+    link TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    ticket TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(link, provider)
+);
              CREATE TABLE IF NOT EXISTS denylist_rules (
                  rule_type TEXT NOT NULL,
                  rule_value BLOB NOT NULL,
@@ -1422,6 +2155,94 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
                  payload BLOB NOT NULL,
                  updated_at INTEGER NOT NULL,
                  PRIMARY KEY(content_hash, scope)
+             );
+             CREATE TABLE IF NOT EXISTS provider_leases (
+                 provider TEXT NOT NULL,
+                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+                 ticket TEXT NOT NULL,
+                 sequence INTEGER NOT NULL,
+                 issued_at INTEGER NOT NULL,
+                 expires_at INTEGER NOT NULL,
+                 signature TEXT,
+                 PRIMARY KEY(provider, content_hash)
+             );
+             CREATE INDEX IF NOT EXISTS idx_provider_leases_hash ON provider_leases(content_hash);
+             CREATE TABLE IF NOT EXISTS trust_delegations (
+                 delegator TEXT NOT NULL,
+                 delegate TEXT NOT NULL,
+                 scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
+                 sequence INTEGER NOT NULL,
+                 issued_at INTEGER NOT NULL,
+                 expires_at INTEGER NOT NULL,
+                 signature TEXT,
+                 PRIMARY KEY(delegator, delegate, sequence)
+             );
+             CREATE TABLE IF NOT EXISTS moderation_records_v2 (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+                 moderator TEXT NOT NULL,
+                 action TEXT NOT NULL,
+                 scope_json TEXT NOT NULL,
+                 sequence INTEGER NOT NULL,
+                 created_at INTEGER NOT NULL,
+                 reason TEXT NOT NULL,
+                 signature TEXT
+             );
+             CREATE TABLE IF NOT EXISTS attestations_v2 (
+                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+                 issuer TEXT NOT NULL,
+                 kind TEXT NOT NULL,
+                 kind_other TEXT,
+                 value TEXT NOT NULL,
+                 sequence INTEGER NOT NULL,
+                 issued_at INTEGER NOT NULL,
+                 signature TEXT,
+                 PRIMARY KEY(content_hash, issuer, kind)
+             );
+             CREATE TABLE IF NOT EXISTS content_reports_v2 (
+                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+                 reporter TEXT NOT NULL,
+                 reason TEXT NOT NULL,
+                 scope TEXT NOT NULL DEFAULT 'global',
+                 created_at INTEGER NOT NULL,
+                 PRIMARY KEY(content_hash, reporter, reason)
+             );
+             CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 provider TEXT NOT NULL,
+                 action TEXT NOT NULL,
+                 scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
+                 issuer TEXT NOT NULL,
+                 sequence INTEGER NOT NULL,
+                 issued_at INTEGER NOT NULL,
+                 expires_at INTEGER,
+                 reason TEXT NOT NULL,
+                 signature TEXT
+             );
+             CREATE TABLE IF NOT EXISTS provider_bans_v2 (
+                 provider TEXT NOT NULL,
+                 content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
+                 banned_at INTEGER NOT NULL,
+                 expires_at INTEGER,
+                 reason TEXT NOT NULL,
+                 source TEXT NOT NULL,
+                 PRIMARY KEY(provider, content_hash)
+             );
+             CREATE TABLE IF NOT EXISTS provider_trust_signals_v2 (
+                 reporter TEXT NOT NULL,
+                 provider TEXT NOT NULL,
+                 signal_kind TEXT NOT NULL,
+                 content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
+                 sequence INTEGER NOT NULL,
+                 timestamp INTEGER NOT NULL,
+                 signature TEXT,
+                 PRIMARY KEY(reporter, provider, sequence)
+             );
+             CREATE INDEX IF NOT EXISTS idx_trust_signals_provider_v2 ON provider_trust_signals_v2(provider);
+             CREATE INDEX IF NOT EXISTS idx_trust_signals_ts_v2 ON provider_trust_signals_v2(timestamp);
+             CREATE TABLE IF NOT EXISTS trust_streams (
+                 namespace TEXT PRIMARY KEY,
+                 subscribed_at INTEGER NOT NULL
              );",
         )
         .map_err(|error| database_error("failed to initialize indexing database schema", error))?;
@@ -1440,4 +2261,12 @@ fn database_error(context: &'static str, error: impl std::fmt::Display) -> Syncw
 
 fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
     let _ = events.send(event);
+}
+
+/// A content report stored in the indexing database.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReportRecord {
+    pub content: Hash,
+    pub reason: String,
+    pub created_at: u64,
 }

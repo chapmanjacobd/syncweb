@@ -203,28 +203,45 @@ candidates.push(FetchCandidate::new(path, hash, size, 0, local));
 
 Fixed: Same pattern — query `ResilienceService::health()` when indexing is available.
 
-### `syncweb-core/src/indexing/resilience.rs` — Add `ResilienceService::health_batch()`
+### `syncweb-core/src/indexing/resilience.rs` — Add `health_batch()` with reverse index
 
 For efficiency when health-checking an entire folder (many hashes):
 
 ```rust
-/// Query health for many hashes at once.
-pub fn health_batch(&self, hashes: &[Hash]) -> Result<HashMap<Hash, AvailabilityHealth>> {
+/// Query health for many hashes at once using a reverse index.
+/// Returns a HashMap<Hash, Health> (the existing `Health` struct with `verified`/`unverified`/`banned` fields).
+pub fn health_batch(&self, hashes: &[Hash]) -> Result<HashMap<Hash, Health>> {
     let tracker = self.tracker.lock()?;
     let ttl = self.config.budget.observation_ttl;
-    Ok(hashes.iter().map(|hash| (*hash, tracker.health(hash, ttl))).collect())
+    let now = now();
+    // Build a hash→count reverse index in one pass over tracker.leases
+    // (leases: HashMap<Hash, HashMap<PublicKey, ProviderLease>>)
+    let mut by_hash: HashMap<Hash, usize> = HashMap::new();
+    for (hash, provider_leases) in &tracker.leases {
+        for (provider_key, lease) in provider_leases {
+            if lease.expires_at > now && !tracker.is_banned(provider_key, hash) {
+                *by_hash.entry(*hash).or_default() += 1;
+            }
+        }
+    }
+    Ok(hashes.iter().map(|hash| {
+        let health = by_hash.get(hash).map(|count| Health::new(*count)).unwrap_or(Health::new(0));
+        (*hash, health)
+    }).collect())
 }
 ```
 
+This is O(n + m) where n = total provider leases and m = queried hashes, instead of O(n * m).
+
 ### `syncweb-core/src/sync/partial_fetch.rs` — Update `HealthReport`
 
-Add a method that integrates with `AvailabilityHealth`:
+Add a method that integrates with `resilience::Health`:
 
 ```rust
 impl HealthReport {
     pub fn from_candidates_with_health(
         candidates: &[FetchCandidate],
-        health_map: &HashMap<Hash, AvailabilityHealth>,
+        health_map: &HashMap<Hash, crate::indexing::resilience::Health>,
         well_seeded_threshold: usize,
     ) -> Self {
         // Override each candidate's peer_count from health_map

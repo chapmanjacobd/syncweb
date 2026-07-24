@@ -105,18 +105,27 @@ browser terms; `ByteArray` in Kotlin).
 ### Frame envelope
 
 ```
-┌────────────────────┬──────────┬──────────────────────────┐
-│ tag (1 byte)       │ seq (4)  │ payload (remaining bytes)│
-│ message type ID    │ big-end  │ type-specific            │
-│                    │ u32      │                          │
-└────────────────────┴──────────┴──────────────────────────┘
+┌────────────────────┬──────────┬──────────────┬──────────────────────────┐
+│ tag (1 byte)       │ seq (4)  │ payload_len  │ payload (remaining bytes)│
+│ message type ID    │ big-end  │ (4) big-end  │ type-specific            │
+│                    │ u32      │ u32          │                          │
+└────────────────────┴──────────┴──────────────┴──────────────────────────┘
 ```
 
 - tag: Identifies the message kind (command request, command response,
   or server-push event). See the tag table below.
 - seq: Request/response correlation ID. Commands set a non-zero
   `seq`; the response echoes it. Server-push events always use `seq=0`.
+- payload_len: Total length of the payload in bytes. Enables error
+  recovery: if parsing the payload fails, the server can skip
+  `payload_len` bytes and process the next frame.
 - payload: Tag-specific binary encoding described per-message below.
+
+Error recovery detail: The receiver always reads `tag(1) + seq(4) + len(4) = 9` bytes
+to get the frame header. Then it reads exactly `payload_len` bytes for the payload.
+If the payload is malformed, the receiver logs the error, discards the `payload_len` bytes,
+and continues with the next frame. This is not possible with an unlength-prefixed format
+where a parse error would desynchronize the stream.
 
 ### Tag assignments
 
@@ -542,18 +551,25 @@ class WsBridgeConnectionImpl(private val scope: CoroutineScope) : WsBridgeConnec
         val session = session ?: return
         session.incoming.receiveAsFlow().collect { frame ->
             val bytes = (frame as Frame.Binary).data
+            if (bytes.size < 9) return@collect  // minimum frame: tag(1) + seq(4) + payload_len(4)
             val tag = bytes[0].toInt() and 0xFF
             val seq = ((bytes[1].toInt() and 0xFF) shl 24) or
                        ((bytes[2].toInt() and 0xFF) shl 16) or
                        ((bytes[3].toInt() and 0xFF) shl 8) or
                        (bytes[4].toInt() and 0xFF)
-            val payload = bytes.drop(5).toByteArray()
+            val payloadLen = ((bytes[5].toInt() and 0xFF) shl 24) or
+                             ((bytes[6].toInt() and 0xFF) shl 16) or
+                             ((bytes[7].toInt() and 0xFF) shl 8) or
+                             (bytes[8].toInt() and 0xFF)
+            // Read exactly payloadLen bytes starting at offset 9
+            if (bytes.size < 9 + payloadLen) return@collect  // truncated frame
+            val payload = bytes.copyOfRange(9, 9 + payloadLen)
             when (tag) {
-                0x80.toByte() -> dispatchResult(seq, payload)    // ok
-                0x81.toByte() -> dispatchError(seq, payload)    // error
-                0x82.toByte() -> handleSyncEvent(payload)
-                0x83.toByte() -> handleNodeStatus(payload)
-                0x84.toByte() -> handleGossipEvent(payload)
+                0x80 -> dispatchResult(seq, payload)    // ok
+                0x81 -> dispatchError(seq, payload)    // error
+                0x82 -> handleSyncEvent(payload)
+                0x83 -> handleNodeStatus(payload)
+                0x84 -> handleGossipEvent(payload)
             }
         }
     }
@@ -622,12 +638,15 @@ bridge/
 
 ### Key types
 
+### BridgeService
+
 ```rust
 // bridge/service.rs
 
 pub struct BridgeService {
     node: Arc<IrohNode>,
     // Maps collection_id → NamespaceId for opened/created docs
+    // Guard with RwLock to prevent concurrent creation of the same collection
     doc_map: RwLock<HashMap<String, NamespaceId>>,
     // Maps topic_str → GossipSender for active gossip subscriptions
     gossip_topics: RwLock<HashMap<String, GossipSender>>,
@@ -644,7 +663,37 @@ pub struct ConnectedPeer {
     pub first_seen_secs: u64,
     pub last_seen_secs: u64,
 }
+
+impl BridgeService {
+    /// Get or create a doc namespace for a collection_id.
+    /// Uses a deterministic namespace derived from the collection_id to prevent
+    /// duplicate namespace creation when two clients race on the same collection_id.
+    async fn get_or_create_collection(&self, collection_id: &str) -> Result<NamespaceId> {
+        // Fast path: already cached
+        if let Some(ns) = self.doc_map.read().unwrap().get(collection_id) {
+            return Ok(*ns);
+        }
+
+        // Slow path: derive deterministic namespace from collection_id
+        let namespace = NamespaceId::from_bytes(
+            *blake3::hash(format!("syncweb/collection/{collection_id}").as_bytes()).as_bytes()
+        );
+
+        // Use write lock sparingly — check again to avoid race
+        let mut map = self.doc_map.write().unwrap();
+        if let Some(ns) = map.get(collection_id) {
+            return Ok(*ns);
+        }
+
+        // Create or open the doc
+        let doc = self.node.docs_engine().get_or_create(namespace).await?;
+        map.insert(collection_id.to_string(), namespace);
+        Ok(namespace)
+    }
+}
 ```
+
+Race condition fix: Using a deterministic namespace derivation from `collection_id` means two clients that race on the same `collection_id` will derive the same namespace. The `get_or_create_collection` method is idempotent — `docs_engine().get_or_create(namespace)` returns the existing doc if the namespace already exists.
 
 ```rust
 // bridge/session.rs
@@ -657,20 +706,48 @@ pub struct WsSession {
 
 impl WsSession {
     async fn handle_frame(&mut self, bytes: Vec<u8>) -> Result<()> {
+        // Minimum frame size: tag(1) + seq(4) + payload_len(4) = 9 bytes
+        if bytes.len() < 9 {
+            return Err("frame too short".into());
+        }
         let tag = bytes[0];
         let seq = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
-        let payload = &bytes[5..];
+        let payload_len = u32::from_be_bytes([bytes[5], bytes[6], bytes[7], bytes[8]]) as usize;
+        let payload = &bytes[9..];
+        if payload.len() < payload_len {
+            return Err("truncated payload".into());
+        }
+        let actual_payload = &payload[..payload_len];
         let result = match tag {
-            0x01 => self.handle_dial_peer(payload).await,
-            0x02 => self.handle_append_event(payload).await,
+            0x01 => self.handle_dial_peer(actual_payload).await,
+            0x02 => self.handle_append_event(actual_payload).await,
             // ...
-            0x0F => self.handle_get_node_id(payload).await,
+            0x0F => self.handle_get_node_id(actual_payload).await,
             _   => Err(format!("unknown tag: 0x{tag:02X}")),
         };
         match result {
-            Ok(response_bytes) => self.send_response(0x80, seq, &response_bytes).await,
-            Err(msg)          => self.send_error(seq, &msg).await,
+            Ok(response_bytes) => {
+                let full_frame = build_response(0x80, seq, &response_bytes);
+                self.sender.send(Message::Binary(full_frame)).await
+            }
+            Err(msg) => {
+                let error_frame = build_error(seq, &msg);
+                self.sender.send(Message::Binary(error_frame)).await
+            }
         }
+    }
+
+    // Continuous frame reader with error recovery:
+    async fn read_loop(&mut self, rx: &mut SplitStream<WebSocketStream<...>>) -> Result<()> {
+        while let Some(Ok(msg)) = rx.next().await {
+            if let Message::Binary(data) = msg {
+                // Try to parse. On failure, skip and continue.
+                if let Err(e) = self.handle_frame(data.to_vec()).await {
+                    tracing::warn!("frame error (continuing): {e}");
+                }
+            }
+        }
+        Ok(())
     }
 }
 ```
@@ -692,6 +769,54 @@ lightweight bridge-only mode.
 
 Default bridge port: 9192. Derived from: 9 (map) + 192 (iroh/docs).
 Convention: the variable name `SYNCWEB_BRIDGE_PORT` in configs.
+
+### Multi-listener coordination (shared with Plan 18)
+
+When both `--bridge-listen` and `--media-listen` are used with the daemon, the
+daemon manages three TCP listeners: Unix socket IPC, WebSocket bridge, and HTTP
+media server. Coordination requirements:
+
+1. Port allocation: Ports are user-configured (no dynamic allocation). If the
+   user specifies colliding ports, the daemon fails at startup with a clear error.
+   Default ports: IPC (Unix socket, no port conflict), bridge (9192), media (9193).
+
+2. Shared `Arc<IrohNode>`: All three servers share the same `IrohNode`. The
+   `WsBridgeServer` and `MediaServer` receive an `Arc<IrohNode>` at construction.
+   No locking issues: `IrohNode` methods are `&self` (interior mutability via
+   `Arc<RwLock<...>>` where needed).
+
+3. Shutdown: All listeners share a `broadcast::Sender<()>` shutdown signal.
+   On daemon shutdown, the signal triggers all servers to close connections and
+   exit their accept loops.
+
+4. Startup order: The daemon starts in this order: (a) `IrohNode`, (b) IPC
+   server, (c) bridge server (if `--bridge-listen`), (d) media server (if
+   `--media-listen`). Each is independent — if one fails to bind, the others
+   continue (but the daemon logs a warning).
+
+```rust
+// In DaemonInner::run_inner():
+let shutdown = Arc::new(broadcast::channel::<()>(1).0);
+
+// Start IPC server (existing)
+let ipc_handle = tokio::spawn(ipc_server.run(shutdown.clone()));
+
+// Start bridge server (if configured)
+let bridge_handle = if let Some(addr) = config.bridge_listen {
+    let bridge = WsBridgeServer::new(node.clone(), addr);
+    Some(tokio::spawn(bridge.run(shutdown.clone())))
+} else {
+    None
+};
+
+// Start media server (if configured)
+let media_handle = if let Some(addr) = config.media_listen {
+    let media = MediaServer::new(node.clone(), addr);
+    Some(tokio::spawn(media.run(shutdown.clone())))
+} else {
+    None
+};
+```
 
 ---
 
@@ -776,12 +901,40 @@ the same gossip topics and doc events.
 
 ### What happens when the client disconnects?
 
-The WebSocket closes. Doc subscriptions (LiveEvent listeners spawned
-for this session) are cleaned up. Gossip subscriptions are NOT cleaned
-up—the node continues listening for gossip so data isn't lost.
+The WebSocket closes. The session cleans up:
+
+- Gossip subscriptions created by this session are unsubscribed (tracked in a per-session `gossip_topics: HashSet<String>`)
+- Doc subscriptions (`LiveEvent` listeners spawned for this session) are cancelled via a shutdown signal
+- The session's `bridge::session::WsSession` handle is dropped, releasing its resources
+
+Important: Not all gossip subscriptions are per-session. The daemon's own subscriptions (e.g., `syncweb/provider-trust-stream/v1`, `syncweb/attestations/v1`) persist regardless of WebSocket client connections. The bridge distinguishes between:
+- System subscriptions (daemon-managed, survive disconnects) 
+- Client subscriptions (created at client request, cleaned up on disconnect)
+
+The `BridgeService` tracks which topic subscriptions were created per-session:
+
+```rust
+struct WsSession {
+    service: Arc<BridgeService>,
+    subscribed_topics: HashSet<String>,  // per-session subscriptions
+    // ...
+}
+
+impl Drop for WsSession {
+    fn drop(&mut self) {
+        // Unsubscribe all per-session gossip topics
+        for topic in &self.subscribed_topics {
+            if let Err(e) = self.service.node.gossip_service().leave_topic(topic) {
+                tracing::warn!("failed to leave topic {topic}: {e}");
+            }
+        }
+    }
+}
+```
 
 The client's reconnection loop (already exists in `MapaSyncManager`)
-handles reconnecting with exponential backoff.
+handles reconnecting with exponential backoff. On reconnect, the client
+must re-subscribe to all desired gossip topics.
 
 ### Blocklist persistence
 

@@ -146,5 +146,5 @@ fn test_cli_mirror_missing_args_fails_gracefully() {
 - Provider discovery depends on gossip infrastructure — `ProviderLeaseTracker` may need a `list_providers()` or `blobs_for_provider()` query
 - Network discovery depends on the doc/namespace sync layer — enumerate all document namespaces associated with the network and collect all blob hashes from their entries.
 - Progress can reuse `indicatif::ProgressBar` (similar to `handle_download`)
-- Checkpoint state lives in a JSON file (e.g. `mirror-state.json` alongside `indexing-state.json`)
+- Checkpoint state lives in `node.db` via `sync_checkpoints` and `sync_entry_progress` tables (from `02-json-to-sqlite-migration.md` and `14-network-remaining-gaps.md` GAP 4)
 - Each blob uses the existing `ensure_replication` or `download_blob` path under the hood

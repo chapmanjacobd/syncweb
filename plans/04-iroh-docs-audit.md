@@ -96,8 +96,7 @@ impl PublicSubscription {
             hash: ticket.hash(),
             ticket,
             size,
-            label: String::from_utf8_lossy(&blake3::hash(ticket.hash().as_bytes()).as_bytes()[..8].to_vec())
-                .to_string(),
+            label: format_short_hash(&ticket.hash()),
         }
     }
 
@@ -117,27 +116,63 @@ pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<PublicSubscr
 }
 ```
 
-Update `DaemonHandle` and IPC to track `PublicSubscription` alongside `SyncwebFolder` in the folder registry. Commands like `ls`, `find`, `health` that currently operate on folders should accept either a `SyncwebFolder` or a `PublicSubscription` via a common trait or enum:
+Update `DaemonHandle` and IPC to track `PublicSubscription` alongside `SyncwebFolder` in the folder registry. To avoid forcing all `SyncwebFolder` trait implementations on `PublicSubscription`, use a common trait with only the operations both types need:
 
 ```rust
-pub enum FolderOrSubscription {
-    Folder(SyncwebFolder),
-    Subscription(PublicSubscription),
+/// Common trait for folders and subscriptions that commands can operate on.
+pub trait FolderLike: Send + Sync {
+    fn namespace_id(&self) -> String;
+    fn label(&self) -> String;
+    fn kind(&self) -> &'static str;
+    fn path(&self) -> Option<&Path>;
+    /// List entry metadata (hash, size, path) for this folder or subscription.
+    async fn list_entries(&self) -> Result<Vec<EntryLike>>;
 }
 
-impl FolderOrSubscription {
-    pub fn namespace_id(&self) -> String {
-        match self {
-            Self::Folder(f) => f.namespace_id().to_string(),
-            Self::Subscription(s) => format!("blob:{}", s.hash()),
-        }
+/// Lightweight metadata for a folder or subscription entry.
+/// Used by `FolderLike::list_entries()` — commands iterate over this.
+#[derive(Clone, Debug)]
+pub struct EntryLike {
+    pub path: String,
+    pub hash: Hash,
+    pub size: u64,
+}
+
+impl FolderLike for SyncwebFolder {
+    fn namespace_id(&self) -> String { ... }
+    fn label(&self) -> String { ... }
+    fn kind(&self) -> &'static str { "folder" }
+    fn path(&self) -> Option<&Path> { ... }
+    async fn list_entries(&self) -> Result<Vec<EntryLike>> { ... }
+}
+
+impl FolderLike for PublicSubscription {
+    fn namespace_id(&self) -> String { format!("blob:{}", self.hash()) }
+    fn label(&self) -> String { self.label().to_string() }
+    fn kind(&self) -> &'static str { "subscription" }
+    fn path(&self) -> Option<&Path> { None }
+    async fn list_entries(&self) -> Result<Vec<EntryLike>> {
+        Ok(vec![EntryLike {
+            path: self.label().to_string(),
+            hash: self.hash(),
+            size: self.size(),
+        }])
     }
-
-    pub async fn list_entries(&self) -> Result<Vec<EntryLike>> { ... }
-    pub fn path(&self) -> Option<&Path> { ... }
-    pub fn label(&self) -> &str { ... }
 }
+
+// Daemon uses Vec<Box<dyn FolderLike>> for the folder registry
+// NOTE: FolderLike must use #[async_trait] (from the async-trait crate)
+// since it has async methods and is used as a trait object (Box<dyn FolderLike>).
+// Without async_trait, async fn in a dyn-compatible trait is not supported in stable Rust.
+pub type FolderRegistry = Vec<Box<dyn FolderLike>>;
 ```
+
+This avoids the `FolderOrSubscription` enum approach which would require implementing all `SyncwebFolder` methods on `PublicSubscription` (breaking abstraction). Commands like `ls`, `find`, `health`, `unsubscribe`, `verify`, `stat` iterate over `FolderRegistry` and dispatch on `kind()` or `namespace_id()`.
+
+Note: The `FolderLike` trait (Plan 04) and `FolderSelector` struct (Plan 16) serve different purposes:
+- `FolderLike` (core trait) — runtime polymorphism for folder and subscription objects that commands operate on. Lives in `syncweb-core`.
+- `FolderSelector` (CLI struct) — clap argument parsing for user-provided folder identifiers (namespace ID or path). Lives in `syncweb-cli`.
+They are complementary: a command uses `FolderSelector` to parse the user's input, then resolves it to a `Box<dyn FolderLike>` from the `FolderRegistry`.
 
 Files to modify:
 
@@ -273,7 +308,7 @@ Current: `networks.json` (now `node.db` via Plan 1) stores network member lists.
 
 Idea: Store signed membership lists as doc entries in a per-network doc namespace. Members sync the doc and see real-time membership changes (owner adds/kicks members, signed by owner key).
 
-Verdict: IMPLEMENTED in plans/network-remaining-gaps.md (GAP 6). A full implementation plan with data structures, signature scheme, namespace derivation, lifecycle, edge cases, and migration strategy is in that plan. This is no longer deferred.
+Verdict: IMPLEMENTED in plans/14-network-remaining-gaps.md (GAP 6). A full implementation plan with data structures, signature scheme, namespace derivation, lifecycle, edge cases, and migration strategy is in that plan. This is no longer deferred.
 
 ### Potential Use 2: Config Distribution
 
@@ -387,10 +422,10 @@ In `syncweb-core/src/daemon/ipc.rs`, the `FolderEntry` enum already supports a `
 
 | Command | Current behavior with public subscription | After refactor |
 |---|---|---|
-| `ls` | Shows single `public/content` entry | Shows blob hash, size, direct access |
-| `find` | N/A (not applicable to single blobs) | Can search by hash |
-| `health` | Shows `public/content` as single entry | Shows blob seeding status |
+| `ls` | Shows single `public/content` entry | Shows blob hash, size, via `FolderLike::list_entries()` |
+| `find` | N/A (not applicable to single blobs) | Accepts `FolderLike`, searches by hash |
+| `health` | Shows `public/content` as single entry | Shows blob seeding status via `FolderLike` |
 | `download` | Fetches blob (works correctly) | Works correctly with `PublicSubscription.hash()` |
-| `unsubscribe` | Drops the doc namespace | Untracks the subscription |
-| `verify` | Hashes the single blob | Uses blob store directly |
-| `stat` | Shows doc namespace stats | Shows blob store stats |
+| `unsubscribe` | Drops the doc namespace | Untracks the subscription from `FolderRegistry` |
+| `verify` | Hashes the single blob | Uses blob store directly via `FolderLike` |
+| `stat` | Shows doc namespace stats | Shows blob store stats via `FolderLike` |

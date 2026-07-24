@@ -81,8 +81,8 @@ async fn test_report_gossip_broadcasts_to_peers() -> anyhow::Result<()> {
     let gossip_a = node_a.gossip_service();
     let gossip_b = node_b.gossip_service();
 
-    // Both subscribe to the report topic
-    let report_topic = TopicId::from_bytes(b"syncweb/reports");
+    // Both subscribe to the report topic (topic ID derived via blake3::hash per 01-shared-gossip-abstraction.md)
+    let report_topic = TopicId::from_bytes(*blake3::hash(b"syncweb/reports").as_bytes());
     gossip_a.subscribe(report_topic).await?;
     gossip_b.subscribe(report_topic).await?;
 
@@ -133,12 +133,20 @@ fn test_moderation_report_creates_signed_record() -> anyhow::Result<()> {
         .output()?;
     assert!(output.status.success());
 
-    // Verify the report is persisted with a signature
-    let state_path = data_dir.join("indexing-state.json");
-    let state: serde_json::Value = serde_json::from_slice(&fs::read(&state_path)?)?;
-    let reports = state["reports"].as_array().unwrap();
-    assert_eq!(reports.len(), 1);
-    assert!(reports[0]["signature"].is_string()); // signed
+    // Verify the report is persisted with a signature in SQLite (not JSON)
+    // After 02-json-to-sqlite-migration, reports are in indexing.sqlite
+    let db_path = data_dir.join("indexing.sqlite");
+    let conn = rusqlite::Connection::open(&db_path)?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM reports", [], |r| r.get(0)
+    )?;
+    assert_eq!(count, 1);
+
+    // Verify signature column is populated (not null)
+    let has_sig: bool = conn.query_row(
+        "SELECT signature IS NOT NULL FROM reports LIMIT 1", [], |r| r.get(0)
+    )?;
+    assert!(has_sig);
 
     fs::remove_dir_all(&data_dir)?;
     Ok(())
@@ -186,15 +194,24 @@ async fn test_incoming_report_auto_moderates() -> anyhow::Result<()> {
 
 ```rust
 use iroh::PublicKey;
-use ed25519_dalec::Signature;
+use ed25519_dalek::Signature;
 
+/// Moderation report with optional cryptographic signing.
+///
+/// Persistence: stored in `indexing.sqlite` via the `reports` table
+/// (Plan 02, migration v3). NOT stored in JSON — the JSON migration path
+/// was superseded by the SQLite schema. The `reports` table has columns:
+///   id, content_hash, reason, reporter, signature, created_at
+///
+/// Old reports from `indexing-state.json` are imported on first run via
+/// the JSON import path in Plan 02's `import_indexing_state()`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReportRecord {
     pub content: Hash,
     pub reason: String,
     pub created_at: u64,
-    pub reporter: Option<PublicKey>,    // NEW
-    pub signature: Option<String>,      // NEW — hex-encoded signature
+    pub reporter: Option<PublicKey>,    // NEW — hex pubkey of signer
+    pub signature: Option<String>,      // NEW — hex-encoded Ed25519 signature
 }
 
 impl ReportRecord {
@@ -218,47 +235,43 @@ impl ReportRecord {
     }
 
     fn signing_payload(&self) -> Vec<u8> {
-        // Canonical serialization of content + reason + created_at
-        let mut payload = Vec::new();
-        payload.extend_from_slice(self.content.as_bytes());
-        payload.extend_from_slice(self.reason.as_bytes());
-        payload.extend_from_slice(&self.created_at.to_be_bytes());
-        payload
+        // Canonical serialization: length-prefixed fields prevent ambiguity.
+        // Using serde_json::to_vec on a canonical struct ensures the same
+        // inputs always produce the same bytes, avoiding issues with
+        // variable-length fields or platform-dependent representations.
+        let canonical = (self.content.as_bytes(), &self.reason, self.created_at);
+        serde_json::to_vec(&canonical).expect("serialization of canonical fields cannot fail")
     }
 }
 ```
 
 ### Phase B — Gossip channel for reports
 
-#### `syncweb-core/src/indexing/gossip_report.rs` (new file)
+Uses the shared `TopicChannel<ReportRecord>` from `syncweb-core/src/gossip/` (defined in `01-shared-gossip-abstraction.md`). No separate `gossip_report.rs` module — call sites use `TopicChannel` directly (see Plan 01, which removes the old `indexing/gossip_report.rs`).
 
 ```rust
-pub const REPORT_GOSSIP_TOPIC: &[u8] = b"syncweb/reports";
+use syncweb_core::gossip::TopicChannel;
 
-pub struct ReportGossip {
-    gossip: GossipService,
-    identity: SecretKey,
-    trust: WebOfTrust,
-}
-
-impl ReportGossip {
-    pub async fn publish(&self, report: ReportRecord) -> Result<()> {
-        let bytes = serde_json::to_vec(&report)?;
-        self.gossip.broadcast(
-            TopicId::from_bytes(REPORT_GOSSIP_TOPIC),
-            bytes.into(),
-        ).await?;
-        Ok(())
-    }
-
-    pub async fn subscribe(&self) -> Result<Receiver<SignedReport>> {
-        let topic = TopicId::from_bytes(REPORT_GOSSIP_TOPIC);
-        self.gossip.subscribe(topic).await?;
-        // Spawn listener that verifies signatures and forwards verified reports
-        // ...
-    }
-}
+const REPORT_GOSSIP_TOPIC: &[u8] = b"syncweb/reports";
 ```
+
+Usage in CLI handler:
+```rust
+let gossip_svc = node.gossip_service();
+let topic = TopicChannel::<ReportRecord>::new(gossip_svc.gossip(), REPORT_GOSSIP_TOPIC);
+topic.publish(&report).await?;
+```
+
+Usage in daemon listener:
+```rust
+let gossip_svc = self.node.gossip_service();
+let topic = TopicChannel::<ReportRecord>::new(gossip_svc.gossip(), REPORT_GOSSIP_TOPIC);
+let stream = gossip_svc.subscribe(topic.topic_id(), vec![]).await?;
+let mut filtered = topic.receive_from(stream);
+// ... process incoming reports ...
+```
+
+The `TopicChannel` handles serialization, deserialization, signature verification, and topic ID derivation automatically.
 
 ### Phase C — Wire `moderation report` CLI
 
@@ -290,17 +303,21 @@ ModerationCommand::Report { record, reason, broadcast } => {
     let node = open_node(data_dir).await?;
     let report = ReportRecord::new(hash, reason)
         .sign_with(node.endpoint().secret_key())?;
-    // Persist locally
-    state.reports.push(report.clone());
-    save_state(data_dir, &state)?;
+    // Persist to indexing.sqlite (reports table, Plan 02 migration v3)
+    indexing_db.insert_report(&report)?;
     // Broadcast if requested
     if broadcast {
-        let gossip = ReportGossip::new(
-            node.gossip_service(),
-            node.endpoint().secret_key().clone(),
-            load_wot(data_dir)?,
-        );
-        gossip.publish(report).await?;
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let node = open_node(data_dir).await?;
+            let gossip_svc = node.gossip_service();
+            let topic = TopicChannel::<ReportRecord>::new(
+                gossip_svc.gossip(), b"syncweb/reports"
+            );
+            topic.publish(&report).await?;
+            node.stop().await?;
+            Ok::<(), SyncwebError>(())
+        })?;
     }
     // ...
 }
@@ -311,11 +328,75 @@ ModerationCommand::Report { record, reason, broadcast } => {
 #### `syncweb-core/src/daemon/daemon.rs`
 
 On startup, if indexing is enabled, spawn a task that:
-1. Subscribes to `syncweb/reports` gossip topic
+1. Subscribes to `syncweb/reports` gossip topic (via `TopicChannel::<ReportRecord>::new(gossip, b"syncweb/reports")`)
 2. Receives signed `ReportRecord` messages
-3. Verifies the reporter's signature against the WoT trust delegations
-4. If trusted, creates a local `ModerationRecord` to hide the content
+3. Verifies the reporter's signature against the local trust policy (see `05-trust-delegate-tdd.md` for delegation infrastructure)
+4. If the reporter is a trust root or has a valid delegation chain to the reported content, auto-creates a local `ModerationRecord` to hide the content
 5. Logs the imported report
+
+Note: The auto-import trust check depends on `05-trust-delegate-tdd.md` being implemented first. Without delegations, only self-signed reports (reporter == local node) or reports from configured trust roots are auto-imported. Unknown reporters are logged but not auto-moderated.
+
+#### `ModerationRecord` type (auto-created from incoming reports)
+
+```rust
+/// A local moderation decision. Created when an incoming report passes trust verification,
+/// or when the user manually moderates content.
+///
+/// Persistence: stored in a `moderation` table in `indexing.sqlite`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModerationRecord {
+    pub content_hash: Hash,
+    pub action: ModerationAction,
+    pub reason: String,
+    pub reporter: Option<PublicKey>,  // who reported it (None for local decisions)
+    pub created_at: u64,
+    pub expires_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ModerationAction {
+    Hide,       // hide from local results
+    Block,      // block content + provider
+    Allow,      // explicit allow-override (whitelist)
+}
+
+impl ModerationRecord {
+    pub fn from_report(report: &ReportRecord, action: ModerationAction) -> Self {
+        Self {
+            content_hash: report.content,
+            action,
+            reason: report.reason.clone(),
+            reporter: report.reporter,
+            created_at: report.created_at,
+            expires_at: None,
+        }
+    }
+}
+```
+
+#### `apply_report()` method on `IndexingService`
+
+```rust
+// In syncweb-core/src/indexing.rs or moderation.rs
+impl IndexingService {
+    /// Apply an incoming report as a local moderation decision.
+    ///
+    /// 1. Verifies the reporter is trusted via `TrustPolicy::is_trusted_for_at()`.
+    /// 2. If trusted, auto-creates a `ModerationRecord` with `Block` action.
+    /// 3. Unknown reporters are logged and ignored (no auto-moderation).
+    pub fn apply_report(&self, report: &ReportRecord) -> Result<()> {
+        let reporter = report.reporter
+            .ok_or(SyncwebError::MissingSignature("report has no reporter".into()))?;
+        if self.trust_policy.is_trusted_for_at(&reporter, &report.content, report.created_at).is_err() {
+            tracing::info!("ignoring report from untrusted reporter: {}", reporter);
+            return Ok(());
+        }
+        let moderation = ModerationRecord::from_report(report, ModerationAction::Block);
+        self.database.insert_moderation(&moderation)?;
+        Ok(())
+    }
+}
+```
 
 ---
 
@@ -332,8 +413,7 @@ On startup, if indexing is enabled, spawn a task that:
 | File | Changes |
 |------|---------|
 | `syncweb-core/src/indexing.rs` | Add `pub mod report` (or add to `moderation.rs`) |
-| `syncweb-core/src/indexing/report.rs` | New — `ReportRecord` with signing/verification |
-| `syncweb-core/src/indexing/gossip_report.rs` | New — `ReportGossip` publish/subscribe |
+| `syncweb-core/src/indexing/report.rs` | New — `ReportRecord` with signing/verification, `SignedGossipMessage` impl |
 | `syncweb-core/src/indexing/moderation.rs` | Add `apply_report()` to auto-create moderation records |
 | `syncweb-core/src/daemon/daemon.rs` | Spawn report-gossip listener on startup |
 | `syncweb-core/src/daemon/state.rs` | Track incoming report counts |

@@ -144,8 +144,18 @@ fn test_sort_with_enrich_flag() -> anyhow::Result<()> {
 
 1. Add `IpcCommand::EnrichSort { path: PathBuf }` variant
 2. Handler resolves the `path` to a managed folder (`namespace_id`). If the path is not part of a managed folder, return an empty map.
-3. If managed, query `ProviderLeaseTracker` for peer counts on each blob in the folder
-4. Returns `HashMap<String, usize>` (relative path → peer count)
+3. If managed, enumerate all doc entries in the folder (via `docs_engine.list_latest()`) to get `(path, hash)` pairs
+4. Query `ProviderLeaseTracker::health_batch(&hashes)` for peer counts per hash
+5. Map the results back to `(relative_path → peer_count)` using the entry enumeration
+6. Returns `HashMap<String, usize>` (relative path → peer count)
+
+Note on coupling: The `EnrichSort` IPC command intentionally crosses the architectural
+boundary between the sort command and the indexing/resilience layer. This is acceptable
+because the enrichment data (peer counts, access frequencies) lives exclusively in the
+daemon process — the CLI cannot access it without IPC. The IPC command is the correct
+abstraction boundary: the CLI asks "give me enrichment data for this path", the daemon
+resolves it internally. The CLI does not need to know about `ProviderLeaseTracker` or
+doc enumeration — it just receives a `HashMap<String, usize>`.
 
 ---
 

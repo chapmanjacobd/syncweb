@@ -259,12 +259,77 @@ pub struct FileStatsArgs {
 ### `syncweb-cli/src/main.rs`
 
 - `handle_filestats` — scans path, collects `FileStatsReport`, prints summary table
-- `handle_syncstats` — checks if daemon is running. If so, sends `IpcCommand::GetSyncStats` to fetch live metrics. If not, reads from persisted sync log on disk.
+- `handle_syncstats` — checks if daemon is running. If so, sends IPC to fetch live metrics. If not, reads from the `sync_stats` table in `stats.db` (Plan 02).
 
 ### `syncweb-core/src/daemon/ipc.rs`
 
 - Add `IpcCommand::GetSyncStats` variant
 - Handler returns the current `SyncStatsReport` from the daemon's `SyncStatsCollector`
+
+### `SyncStatsCollector` design (resolves the design gap)
+
+The `SyncStatsCollector` lives in the daemon and is populated during each sync round:
+
+```rust
+pub struct SyncStatsCollector {
+    database: Arc<StatsDatabase>,
+}
+
+impl SyncStatsCollector {
+    /// Create a new collector backed by the stats database.
+    pub fn new(database: Arc<StatsDatabase>) -> Self {
+        Self { database }
+    }
+
+    /// Record a completed sync round. Called by the sync engine after each reconciliation.
+    pub fn record_round(
+        &self,
+        network_id: Option<&str>,
+        folder_namespace: &str,
+        files_synced: u64,
+        conflicts_resolved: u64,
+    ) -> Result<()> {
+        let round_number = self.next_round_number(folder_namespace)?;
+        self.database.insert_sync_stats(
+            network_id, folder_namespace, round_number, files_synced, conflicts_resolved,
+        )?;
+        Ok(())
+    }
+
+    /// Generate a report from persisted data. Reads from sync_stats table.
+    pub fn report(&self) -> Result<SyncStatsReport> {
+        let rows = self.database.load_all_sync_stats()?;
+        // Aggregate per-folder and total
+        Ok(SyncStatsReport { ... })
+    }
+}
+```
+
+The `sync_stats` table in `stats.db` (Plan 02, `02-json-to-sqlite-migration.md`) already
+has the schema: `network_id, folder_namespace, round_number, files_synced,
+conflicts_resolved, timestamp`. The `SyncStatsCollector` writes rows after each sync
+round and reads them back for the `report()` method.
+
+### `syncweb-core/src/daemon/ipc.rs` — GetSyncStats handler
+
+```rust
+IpcCommand::GetSyncStats => {
+    let stats = self.sync_stats_collector.report()?;
+    Ok(IpcResponse::SyncStats(stats))
+}
+```
+
+The IPC response format:
+
+```rust
+#[derive(Serialize)]
+pub struct SyncStatsResponse {
+    pub total_rounds: u64,
+    pub total_files_synced: u64,
+    pub total_conflicts: u64,
+    pub per_folder: BTreeMap<String, SyncFolderStats>,
+}
+```
 
 ---
 

@@ -126,17 +126,29 @@ impl NetworkManager {
 
 Wire into daemon sync cycle:
 
+Prerequisite: `SyncEngine::sync()` must accept an optional `session_id: Option<String>` parameter and pass it through to transfer hooks so `record_transfer` can correlate bandwidth events.
+
 ```rust
 // syncweb-core/src/daemon/daemon.rs — in the automatic sync loop
 
 for (network_id, folders) in &network_folders {
     for folder_namespace in folders {
         let session_id = logger.record_sync_start(network_id, folder_namespace)?;
-        let result = sync_engine.sync(folder_namespace, SessionMode::ReconcileOnce).await;
+        let result = sync_engine.sync(
+            folder_namespace,
+            SessionMode::ReconcileOnce,
+            Some(network_id),  // for bandwidth correlation (GAP 2)
+            Some(&session_id), // for transfer tracking
+        ).await;
         match result {
-            Ok(handle) => {
-                // ... wait for completion, collect stats ...
-                logger.record_sync_finish(session_id, files, bytes, errors, "completed")?;
+            Ok(stats) => {
+                logger.record_sync_finish(
+                    session_id,
+                    stats.files_transferred,
+                    stats.bytes_transferred,
+                    stats.errors,
+                    "completed"
+                )?;
             }
             Err(e) => {
                 logger.record_sync_finish(session_id, 0, 0, 1, "failed")?;
@@ -145,6 +157,33 @@ for (network_id, folders) in &network_folders {
     }
 }
 ```
+
+The `SyncEngine.sync()` signature change:
+```rust
+pub async fn sync(
+    &self,
+    folder_namespace: NamespaceId,
+    mode: SessionMode,
+    network_id: Option<NetworkId>,    // NEW: for GAP 2 bandwidth correlation
+    session_id: Option<&str>,          // NEW: for GAP 1 session tracking
+) -> Result<SyncResult>;
+
+pub struct SyncResult {
+    pub files_transferred: u64,
+    pub bytes_transferred: u64,
+    pub errors: u64,
+    pub new_entries: u64,
+    pub conflicts_resolved: u64,
+}
+```
+
+Breaking change note: This changes the public API of `SyncEngine`. All call sites
+must be updated:
+- Daemon path (GAP 7): passes `network_id` and `session_id` as shown above.
+- CLI direct path (non-daemon `syncweb sync`): passes `None` for both
+  `network_id` and `session_id`. The CLI's direct sync path does not participate in
+  network-scoped bandwidth correlation or session tracking — those are daemon-only
+  concerns. This is a backward-compatible default: `None` means "no network context".
 
 Expose via CLI:
 
@@ -173,13 +212,9 @@ New subcommand: `syncweb network health [--network <id>]`
 
 ### Fix
 
-Add a `network_id` column to the `bandwidth_events` table:
+The `network_id` column is already present in `bandwidth_events` from `02-json-to-sqlite-migration.md`. Add indexes and the aggregate view:
 
 ```sql
--- In stats.db (add column to existing table from Plan 1)
-ALTER TABLE bandwidth_events ADD COLUMN network_id TEXT;
-CREATE INDEX idx_bw_network ON bandwidth_events(network_id);
-
 -- Per-network aggregate view
 CREATE VIEW network_bandwidth_summary AS
 SELECT
@@ -345,20 +380,23 @@ pub struct SyncCheckpoint {
 impl SyncCheckpoint {
     pub fn new(database: &NodeDatabase, namespace_id: NamespaceId) -> Result<Self>;
 
-    /// Initialize with total entry count. Returns session_id.
-    pub fn initialize(&self, total_entries: usize) -> Result<String>;
+    /// Create a session (total_entries is unknown for streaming; starts at 0).
+    pub fn create_session(&self) -> Result<String>;
 
-    /// Mark an entry as completed.
+    /// Mark an entry as completed (downloaded successfully).
     pub fn mark_completed(&self, entry_key: &[u8], hash: Hash, size: u64) -> Result<()>;
 
     /// Mark an entry as failed with error message.
     pub fn mark_failed(&self, entry_key: &[u8], error: &str) -> Result<()>;
 
-    /// Mark an entry as skipped (already present locally).
-    pub fn mark_skipped(&self, entry_key: &[u8]) -> Result<()>;
+    /// Mark an entry as skipped (already present locally or deleted).
+    pub fn mark_skipped(&self, entry_key: &[u8], hash: Hash, size: u64) -> Result<()>;
 
-    /// Get all pending entries for this session.
-    pub fn pending_entries(&self) -> Result<Vec<PendingEntry>>;
+    /// Get all completed entries for this session (for resume filtering).
+    pub fn completed_entries(&self) -> Result<Vec<EntryProgress>>;
+
+    /// Get all failed entries for this session (for retry).
+    pub fn failed_entries(&self) -> Result<Vec<EntryProgress>>;
 
     /// Get overall progress.
     pub fn progress(&self) -> Result<CheckpointProgress>;
@@ -366,8 +404,20 @@ impl SyncCheckpoint {
     /// Mark session as completed.
     pub fn complete(&self) -> Result<()>;
 
+    /// Mark session as incomplete (has leftovers for next resume).
+    pub fn mark_incomplete(&self) -> Result<()>;
+
     /// Load the most recent unfinished checkpoint for a folder.
     pub fn resume(namespace_id: NamespaceId) -> Result<Option<Self>>;
+}
+
+pub struct EntryProgress {
+    pub entry_key: Vec<u8>,
+    pub hash: Hash,
+    pub size: u64,
+    pub status: String,
+    pub retries: u32,
+    pub error_message: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -385,36 +435,97 @@ pub struct CheckpointProgress {
 
 ### Wire into SyncEngine
 
+Sync is streaming — entries arrive via `LiveEvent`, not as a pre-known total. The checkpoint must handle incremental discovery:
+
 ```rust
 // syncweb-core/src/sync/engine.rs — in run_intent()
 
 async fn run_intent(folder: SyncwebFolder, mode: SessionMode, ...) -> Result<()> {
-    let checkpoint = match SyncCheckpoint::resume(folder.namespace_id())? {
-        Some(cp) => {
-            tracing::info!("resuming sync checkpoint {}", cp.session_id());
-            cp
-        }
-        None => {
-            let entries = docs_engine.list_latest(folder.doc()).await?;
-            let cp = SyncCheckpoint::new(&node_db, folder.namespace_id())?;
-            cp.initialize(entries.len())?;
-            cp
-        }
-    };
+    // Check for an unfinished checkpoint on previous session
+    let maybe_cp = SyncCheckpoint::resume(folder.namespace_id())?;
+    let mut completed: HashSet<Vec<u8>> = HashSet::new();
+    let mut failed: Vec<(Vec<u8>, String)> = Vec::new();
+    let mut checkpoint = None;
 
-    // Only process entries that are still pending
-    for entry in checkpoint.pending_entries()? {
-        match download_entry(&entry).await {
-            Ok(_) => checkpoint.mark_completed(&entry.key, entry.hash, entry.size)?,
-            Err(e) => checkpoint.mark_failed(&entry.key, &e.to_string())?,
+    if let Some(cp) = maybe_cp {
+        tracing::info!("resuming sync checkpoint: {}", cp.session_id());
+        // Replay completed entries from the checkpoint so we don't re-download
+        for entry in cp.completed_entries()? {
+            completed.insert(entry.entry_key);
+        }
+        // Re-queue failed entries for retry (up to max_retries)
+        for entry in cp.failed_entries()? {
+            if entry.retries < 3 {
+                failed.push((entry.entry_key, entry.error_message));
+            }
+        }
+        checkpoint = Some(cp);
+    }
+
+    // Subscribe to live events and process entries as they arrive
+    let mut stream = docs_engine.watch(folder.doc()).await?;
+    while let Some(event) = stream.next().await {
+        // NOTE: The exact fields of LiveEvent depend on the iroh-docs version.
+        // Current iroh-docs exports LiveEvent via iroh::docs::store::LiveEvent.
+        // The Insert variant provides entry content (key, hash, size) through
+        // an Entry trait, not as raw fields. Actual destructuring:
+        //   LiveEvent::InsertLocal { entry } or LiveEvent::InsertRemote { entry, .. }
+        // Adjust this code during implementation to match the actual API.
+        match event {
+            LiveEvent::Insert { key, hash, size } => {
+                if completed.contains(&key) {
+                    continue; // already handled in checkpoint
+                }
+                // Check if blob already exists locally
+                let already_local = blob_store.has(hash).await.unwrap_or(false);
+                if already_local {
+                    if let Some(ref cp) = checkpoint {
+                        cp.mark_skipped(&key, hash, size)?;
+                    }
+                    continue;
+                }
+                // Need to download
+                match download_entry(key, hash, size).await {
+                    Ok(_) => {
+                        completed.insert(key.clone());
+                        if let Some(ref cp) = checkpoint {
+                            cp.mark_completed(&key, hash, size)?;
+                        }
+                    }
+                    Err(e) => {
+                        failed.push((key.clone(), e.to_string()));
+                        if let Some(ref cp) = checkpoint {
+                            cp.mark_failed(&key, &e.to_string())?;
+                        }
+                    }
+                }
+            }
+            LiveEvent::Delete { key } => {
+                // Remove from checkpoint if present
+                if let Some(ref cp) = checkpoint {
+                    cp.mark_skipped(&key, Hash::default(), 0)?;
+                }
+            }
+            LiveEvent::SyncFinished => break,
+            _ => {}
         }
     }
 
-    if checkpoint.progress()?.failed == 0 {
-        checkpoint.complete()?;
+    if let Some(ref cp) = checkpoint {
+        if failed.is_empty() {
+            cp.complete()?;
+        } else {
+            cp.mark_incomplete()?; // leave for next resume attempt
+        }
     }
 }
 ```
+
+Key design points:
+- No upfront total count — entries are discovered incrementally via `LiveEvent`
+- Resume by filtering — completed entries from the checkpoint are skipped
+- Failed entries have retry limit — after 3 failures, the sync fails (no infinite retry)
+- Already-local blobs are skipped — check `blob_store.has(hash)` before downloading
 
 ### Cleanup
 
@@ -435,7 +546,7 @@ On successful completion, delete the checkpoint records (they're transient opera
 
 ### Rationale
 
-With 3 SQLite databases (plus the pre-existing indexing.sqlite), the project needs:
+With 3 SQLite databases (the ones created in Plan 02: `indexing.sqlite`, `node.db`, `stats.db`), the project needs:
 - Periodic VACUUM for space reclamation
 - Backup tooling
 - Integrity verification
@@ -472,12 +583,15 @@ Add a daemon maintenance task that runs periodically (every 24h by default):
 let maintenance_interval = Duration::from_hours(24);
 let node_db = self.node_db.clone();
 let stats_db = self.stats_db.clone();
+let indexing_db = self.indexing_db.clone();
 tokio::spawn(async move {
     loop {
         tokio::time::sleep(maintenance_interval).await;
-        for db in [&node_db, &stats_db] {
-            if db.freelist_count()? > 100 {
-                db.vacuum()?;
+        for db in [&node_db, &stats_db, &indexing_db] {
+            if let Ok(count) = db.freelist_count() {
+                if count > 100 {
+                    let _ = db.vacuum();
+                }
             }
         }
     }
@@ -526,6 +640,7 @@ Expose via CLI:
 | File | Change |
 |---|---|---|
 | `syncweb-core/src/storage/node_db.rs` | Add vacuum/check/backup methods |
+| `syncweb-core/src/storage/indexing_db.rs` | Add vacuum/check/backup methods |
 | `syncweb-core/src/storage/stats_db.rs` | Add vacuum/check/backup methods |
 | `syncweb-core/src/daemon/daemon.rs` | Add periodic maintenance task |
 | `syncweb-cli/src/cli/commands.rs` | Add `DbCommand` with `check`, `vacuum`, `backup`, `stats` subcommands |
@@ -640,10 +755,17 @@ impl SignedMemberList {
 ```rust
 /// Derive the deterministic Iroh docs namespace for a network.
 ///
-/// Uses the network ID and shared secret so that:
-/// - All members can independently compute the same namespace
-/// - An attacker who knows the network ID but not the shared secret cannot
-///   compute the namespace (content-addressing provides privacy by obscurity)
+/// This derivation is used only by the OWNER at network creation time.
+/// New members do NOT derive the namespace — they receive it via the doc_ticket
+/// in the NetworkTicket. The derivation exists so the owner can pre-compute
+/// the namespace before creating the doc, and to verify that a received
+/// doc_ticket maps to the expected network (defense in depth).
+///
+/// Security note: The shared_secret provides privacy-by-obscurity for the
+/// namespace. An attacker who knows the network_id but not the shared_secret
+/// cannot derive the namespace to probe for the doc. However, the doc_ticket
+/// is the authoritative reference for the doc location — if derivation and
+/// ticket disagree, trust the ticket.
 pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) -> NamespaceId {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"syncweb/network-doc/v1\0");
@@ -653,48 +775,49 @@ pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) ->
 }
 ```
 
-#### Lifecycle
+Owner pre-computes at network creation:
+```rust
+// In NetworkManager::create()
+let shared_secret = generate_secret();
+let doc_namespace = network_doc_namespace(network_id, &shared_secret);
+let doc = docs_engine.create_doc(doc_namespace).await?;
+let doc_ticket = doc.share(ShareMode::Read, AddrInfoOptions::default()).await?.to_string();
 
-Owner creates network:
-1. Generate `network_doc_namespace(network_id, shared_secret)`
-2. Create or open the doc with that namespace
-3. Write `sys/network/info` with network metadata
-4. Write `sys/network/members` with `SignedMemberList { members: [owner], sequence: 1, ... }`
-5. Write `sys/network/folders` with folder namespace list
-6. Store the doc as a `Doc` handle; members can now receive live updates
+// Write initial membership
+let members = SignedMemberList {
+    network_id: network_id.to_string(),
+    owner: local_key.public().to_string(),
+    sequence: 1,
+    members: vec![MemberEntry { key: local_key.public().to_string(), joined_at: now(), role: MemberRole::Admin }],
+    updated_at: now(),
+    signature: String::new(),
+};
+members.sign(&local_key)?;
+doc.set_bytes(author, b"sys/network/members", serde_json::to_vec(&members)?).await?;
+doc.set_bytes(author, b"sys/network/info", serde_json::to_vec(&NetworkInfo { ... })?).await?;
 
-Owner adds a member:
-1. Increment sequence
-2. Add `MemberEntry { key: new_member, role: Member, joined_at: now }` to the list
-3. Sign and write to `sys/network/members`
-4. The doc syncs to all connected members automatically
-5. The new member still needs to join by importing a ticket (to get the shared secret and doc namespace), but existing members see the change immediately
+// Store in node.db
+database.insert_network(NetworkRecord {
+    id: network_id,
+    name,
+    owner: local_key.public(),
+    shared_secret,
+    doc_ticket,  // <-- PRE-COMPUTED
+    created_at: now(),
+})?;
+```
 
-Owner kicks a member:
-1. Increment sequence
-2. Remove `MemberEntry` for the kicked member
-3. Sign and write to `sys/network/members`
-4. The doc syncs to ALL members including the kicked one
-5. On receiving the updated member list, the kicked node:
-   - Verifies the owner's signature
-   - Sees it's no longer in the list
-   - Auto-leaves the network (unsubscribes gossip topic, closes doc)
-   - Log/emit a "kicked from network" event
+New member joins with ticket (no derivation needed):
+```rust
+// In NetworkManager::join(ticket)
+let doc = docs_engine.import_ticket(ticket.doc_ticket).await?;  // Direct!
+let members_bytes = doc.get(author, b"sys/network/members").await?.unwrap().content_bytes();
+let members: SignedMemberList = serde_json::from_slice(&members_bytes)?;
+members.verify()?;
+// Verify we're in the member list (or it's an invite-any network)
+```
 
-New member joins (receives ticket):
-1. Ticket contains: `network_id`, `shared_secret`, `owner PublicKey`, and relay/bootstrap info
-2. New member derives `network_doc_namespace(network_id, shared_secret)`
-3. Opens the doc (may need to fetch it from the network first via Iroh's doc ticket mechanism)
-4. Reads `sys/network/members` → verifies owner signature → discovers full member list
-5. Subscribes to the doc for live updates (future membership changes propagate automatically)
-
-Any member detects changes:
-1. Doc live event fires for `sys/network/members` key
-2. Read the new entry, verify signature
-3. Compare old and new member lists
-4. If local node is no longer in the list → auto-leave
-5. If new members added → update gossip topic peer set
-6. If members removed → update gossip topic peer set
+This eliminates the circular dependency entirely. The doc_ticket is the single source of truth for the doc location.
 
 #### Integration with Existing NetworkManager
 
@@ -747,7 +870,7 @@ impl NetworkManager {
 
 #### Ticket Changes
 
-The `NetworkTicket` now carries the doc ticket (so new members can find the namespace) in addition to the shared secret:
+The `NetworkTicket` now carries the doc ticket (so new members can find the namespace) in addition to the shared secret. The doc_ticket is generated by the owner at network creation time and embedded in every invite.
 
 ```rust
 pub struct NetworkTicket {
@@ -755,10 +878,17 @@ pub struct NetworkTicket {
     pub name: String,
     pub owner: PublicKey,
     pub shared_secret: [u8; 32],
-    pub doc_ticket: String,               // Iroh DocTicket for the membership doc
+    pub doc_ticket: String,               // Iroh DocTicket for the membership doc (pre-computed by owner)
     pub invited_node: Option<PublicKey>,  // None = invite-any ticket
 }
 ```
+
+Breaking the circular dependency:
+1. Owner creates network → generates `shared_secret` → derives `doc_namespace` → creates doc → gets `doc_ticket`
+2. Owner stores `doc_ticket` in `networks` table (new column)
+3. When inviting, owner includes `doc_ticket` in the `NetworkTicket`
+4. New member receives ticket → has `shared_secret` (to verify) AND `doc_ticket` (to open doc directly)
+5. No derivation needed at join time — the doc_ticket is the authoritative reference
 
 #### Edge Cases
 
@@ -777,8 +907,14 @@ pub struct NetworkTicket {
 For networks created before this change:
 1. Existing networks have their member lists in `node.db` / `networks.json`
 2. On owner's first sync after upgrade: read local member list, derive doc namespace, create the doc, write initial signed member list
-3. Existing members with tickets: the ticket carries the doc_ticket. On next connection, the member opens the doc and discovers the canonical member list
-4. Networks with no shared secret: generate one retroactively, distribute via new ticket
+3. Owner generates `doc_ticket` and stores it in `networks` table
+4. Existing members with tickets: the ticket format is extended to include `doc_ticket`. On next connection, the member opens the doc and discovers the canonical member list
+5. Networks with no shared secret: generate one retroactively, distribute via new ticket (requires owner to re-invite)
+
+CLI changes:
+- `syncweb network invite` now outputs a ticket containing `doc_ticket`
+- Old tickets without `doc_ticket` still work (fallback to derivation) but log a deprecation warning
+- `syncweb network join` accepts both old and new ticket formats
 
 ### Files to modify/create
 
@@ -1010,7 +1146,33 @@ impl NetworkContext {
 }
 ```
 
-Optimization: Instead of scanning doc entries per download, build a reverse index on sync completion — a `blob_network_index` table in SQLite that maps `(hash, network_id)` on folder sync completion.
+Optimization: Instead of scanning doc entries per download, build a reverse index on sync completion — a `blob_folders` table in SQLite that maps `(hash, namespace_id)` to associate a blob with all folders that reference it, then join through `network_folders` for network membership:
+
+```sql
+-- Blob→folder index (populated on sync completion, incremental update on LiveEvent::Insert)
+CREATE TABLE blob_folders (
+    content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+    namespace_id TEXT NOT NULL,
+    entry_key BLOB NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY(content_hash, namespace_id, entry_key)
+);
+CREATE INDEX idx_blob_folders_hash ON blob_folders(content_hash);
+
+-- O(1) lookup: is this blob accessible in any of my networks?
+-- SELECT 1 FROM blob_folders bf
+-- JOIN network_folders nf ON bf.namespace_id = nf.namespace_id
+-- JOIN network_members nm ON nf.network_id = nm.network_id
+-- WHERE bf.content_hash = ? AND nm.member = ?
+-- LIMIT 1
+```
+
+Performance requirement: The `blob_folders` reverse index MUST be built BEFORE
+enabling access control checks on blob downloads. The initial O(n) scan (iterating all
+doc entries) is only acceptable during the index build phase. Once the index is
+populated, all access checks use the O(1) SQL query. The index is maintained
+incrementally: on each `LiveEvent::Insert`, insert into `blob_folders`; on
+`LiveEvent::Delete`, delete from `blob_folders`.
 
 #### Layer 3: Peer Discovery Scoping
 
@@ -1043,7 +1205,7 @@ self.docs_engine.start_sync(folder.doc(), peer_ids).await?;
 | `syncweb-core/src/sync/engine.rs` | Accept `NetworkContext`; gate sync initiation on `can_access_folder()`; scope peer discovery |
 | `syncweb-core/src/daemon/daemon.rs` | Construct `NetworkContext` before calls to `SyncEngine`; pass context to blob downloads |
 | `syncweb-core/src/net/network_context.rs` | NEW — `NetworkContext` type with `can_access_blob()` and network-scoped operations |
-| `syncweb-core/src/storage/node_db.rs` | Add `blob_network_index` table for reverse-lookup optimization |
+| `syncweb-core/src/storage/node_db.rs` | Add `blob_folders` table for reverse-lookup optimization; maintain on sync completion |
 
 ---
 
@@ -1051,7 +1213,7 @@ self.docs_engine.start_sync(folder.doc(), peer_ids).await?;
 
 This section defines tests that verify the network isolation and integration behavior described in GAPs 6--8, plus the existing gaps 1--5. These are integration tests that spin up real daemon instances with Iroh nodes — distinct from the existing `network_test.rs` which tests only the data model CRUD in isolation.
 
-### Test Suite: Network Isolation (`syncweb-core/tests/integration/network_isolation_test.rs`)
+### Test Suite: Network Isolation (`syncweb-core/tests/network_isolation_test.rs`)
 
 #### Test 1: Cross-network blob isolation
 
@@ -1136,7 +1298,7 @@ Assertions:
 - member-X receives the update → verifies signature → auto-leaves network
 - member-X's folder access for network folders is revoked within 5 seconds
 
-### Test Suite: Daemon Integration (`syncweb-core/tests/integration/daemon_integration_test.rs` additions)
+### Test Suite: Daemon Integration (`syncweb-cli/tests/daemon_integration_test.rs` additions)
 
 #### Test: Two daemons on different networks
 
@@ -1243,7 +1405,7 @@ Assertions:
 | `syncweb-core/src/net/membership_doc.rs` | NEW |
 | `syncweb-core/src/net/network_context.rs` | NEW |
 | `syncweb-core/src/sync/checkpoint.rs` | NEW |
-| `syncweb-core/src/storage/node_db.rs` | Add sync checkpoints, blob_network_index, backup/vacuum; add network folder/member lookup queries |
+| `syncweb-core/src/storage/node_db.rs` | Add sync checkpoints, blob_folders table, backup/vacuum; add network folder/member lookup queries |
 | `syncweb-core/src/storage/stats_db.rs` | Add network events, backup/vacuum; add `network_id` to bandwidth_events |
 | `syncweb-core/src/net/network.rs` | Add `doc_ticket` to `NetworkTicket`; add namespace derivation |
 | `syncweb-core/src/net/network_manager.rs` | Add membership doc integration; add auto-leave on kick; add NetworkLogger; add `can_access_folder()`, `networks_for_folder()`, `folders_for_network()`, `members_of_network()`; add `open()` and `network_for_folder()` for daemon use |
@@ -1253,8 +1415,8 @@ Assertions:
 | `syncweb-core/src/node/blob_store.rs` | Add `download_with_network()` gated by `NetworkContext` |
 | `syncweb-cli/src/main.rs` | Remove .syncweb-collection.json writes; add `db` and `network events/health` commands |
 | `syncweb-cli/src/cli/commands.rs` | Update `network invite` output for doc tickets |
-| `syncweb-core/tests/integration/network_isolation_test.rs` | NEW — Cross-network isolation tests |
-| `syncweb-core/tests/integration/daemon_integration_test.rs` | Add network-aware daemon tests |
-| `syncweb-core/tests/integration/network_test.rs` | Add bandwidth/event logging assertions |
-| `syncweb-core/tests/integration/sync_test.rs` | Add checkpoint resume tests |
+| `syncweb-core/tests/network_isolation_test.rs` | NEW — Cross-network isolation tests |
+| `syncweb-cli/tests/daemon_integration_test.rs` | Add network-aware daemon tests |
+| `syncweb-core/tests/network_test.rs` | Add bandwidth/event logging assertions |
+| `syncweb-core/tests/sync_checkpoint_test.rs` | Add checkpoint resume tests |
 | `syncweb-cli/tests/cli_test.rs` | Add network isolation CLI tests |

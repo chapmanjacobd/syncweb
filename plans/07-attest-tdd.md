@@ -12,7 +12,7 @@ handle_attest → Attestation::new(content, kind, value, sequence, signing_key)
   → print_status(...)                        // done — nobody else ever sees it
 ```
 
-`append_attestation` also checks `policy.is_trusted_for_at(issuer, content)` — meaning only the local trust root (self) can attest, since no delegations from others are known (they're also local-only, see `trust-delegate-tdd.md`).
+`append_attestation` also checks `policy.is_trusted_for_at(issuer, content)` — meaning only the local trust root (self) can attest, since no delegations from others are known (they're also local-only, see `05-trust-delegate-tdd.md`).
 
 ## Read-side gap
 Even if attestations were broadcast, there's no `syncweb attest verify <hash>` command to check them. `trust show <hash>` shows attestations, but only from local state.
@@ -35,6 +35,7 @@ Even if attestations were broadcast, there's no `syncweb attest verify <hash>` c
 #[test]
 fn test_attestation_is_signed_but_trapped() {
     let signing = SigningKey::from_bytes(&secret_key.to_bytes());
+    let content_hash = Hash::from_bytes([4u8; 32]);
     let attestation = Attestation::new(
         content_hash, AttestationKind::License, "MIT".into(), 1, &signing,
     )?;
@@ -64,24 +65,26 @@ async fn test_attestation_gossip_reaches_peers() -> anyhow::Result<()> {
         alice.endpoint().secret_key(),
     )?;
 
-    // Alice broadcasts on attestation gossip topic
-    let topic = attestation_topic();
-    let alice_gossip = alice.gossip_service();
-    alice_gossip.subscribe(topic, vec![]).await?;
-    let gossip_topic = alice_gossip.subscribe(topic, vec![]).await?;
-    let (sender, _) = GossipService::split(gossip_topic);
-    sender.broadcast(attestation.to_bytes()?.into()).await?;
+    // Alice broadcasts via TopicChannel (shared abstraction from 01-shared-gossip-abstraction.md)
+    let gossip = alice.gossip_service();
+    let topic = TopicChannel::<Attestation>::new(gossip, ATTESTATION_GOSSIP_TOPIC);
+    topic.publish(&attestation).await?;
 
-    // Bob receives the attestation
+    // Bob receives the attestation via TopicChannel (+ GossipService subscription)
     let bob_gossip = bob.gossip_service();
+    let bob_topic = TopicChannel::<Attestation>::new(bob_gossip.gossip(), ATTESTATION_GOSSIP_TOPIC);
+    let bob_stream = bob_gossip.subscribe(bob_topic.topic_id(), vec![alice.endpoint().id()]).await?;
     let received = tokio::time::timeout(Duration::from_secs(10), async {
-        let mut receiver = bob_gossip.subscribe(topic, vec![alice.endpoint().id()]).await?.1;
-        receiver.recv().await.unwrap()
-    }).await?;
+        bob_topic.collect_for(
+            bob_stream,
+            |a| a.content == hash,
+            Duration::from_secs(10),
+        ).await
+    }).await??;
 
-    let received_attestation: Attestation = serde_json::from_slice(&received.content)?;
-    assert!(received_attestation.verify_signature().is_ok());
-    assert_eq!(received_attestation.value, "MIT");
+    assert_eq!(received.len(), 1);
+    assert!(received[0].verify_signature().is_ok());
+    assert_eq!(received[0].value, "MIT");
 
     alice.stop().await?;
     bob.stop().await?;
@@ -140,57 +143,34 @@ fn test_attest_without_broadcast_still_local() -> anyhow::Result<()> {
 
 ## Implementation
 
-### `syncweb-core/src/indexing/attestation_gossip.rs` (new file)
+### `syncweb-core/src/indexing/wot.rs` — `SignedGossipMessage` impl for Attestation
+
+Uses the shared `TopicChannel<Attestation>` from `syncweb-core/src/gossip/` (defined in `01-shared-gossip-abstraction.md`). No separate `attestation_gossip.rs` module — call sites use `TopicChannel` directly (see Plan 01, which removes the old `indexing/attestation_gossip.rs`).
 
 ```rust
-pub const ATTESTATION_GOSSIP_TOPIC: &[u8] = b"syncweb/attestations/v1";
-
-pub fn attestation_topic() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(ATTESTATION_GOSSIP_TOPIC).as_bytes())
+impl SignedGossipMessage for Attestation {
+    fn verify_signature(&self) -> Result<()> {
+        self.verify_signature().map_err(|_| SyncwebError::InvalidSignature)
+    }
 }
+```
 
-pub async fn publish_attestation(
-    gossip: &GossipService,
-    attestation: &Attestation,
-) -> Result<()> {
-    attestation.verify_signature()?;
-    let topic = attestation_topic();
-    let gossip_topic = gossip.subscribe(topic, vec![]).await?;
-    let (sender, _) = GossipService::split(gossip_topic);
-    sender.broadcast(serde_json::to_vec(attestation)?.into()).await
-}
+Usage in CLI handler:
+```rust
+use syncweb_core::gossip::TopicChannel;
 
-pub async fn subscribe_attestations(
-    gossip: &GossipService,
-    bootstrap: Vec<PublicKey>,
-) -> Result<GossipReceiver> {
-    let topic = attestation_topic();
-    let gossip_topic = gossip.subscribe(topic, bootstrap).await?;
-    let (_, receiver) = GossipService::split(gossip_topic);
-    Ok(receiver)
-}
+const ATTESTATION_GOSSIP_TOPIC: &[u8] = b"syncweb/attestations/v1";
 
-pub async fn collect_attestations(
-    gossip: &GossipService,
-    bootstrap: Vec<PublicKey>,
-    content: &Hash,
-    timeout_duration: Duration,
-) -> Result<Vec<Attestation>> {
-    let mut receiver = subscribe_attestations(gossip, bootstrap).await?;
-    let mut results = Vec::new();
-    
-    let _ = tokio::time::timeout(timeout_duration, async {
-        while let Ok(event) = receiver.recv().await {
-            if let Ok(attestation) = serde_json::from_slice::<Attestation>(&event.content) {
-                if attestation.content == *content && attestation.verify_signature().is_ok() {
-                    results.push(attestation);
-                }
-            }
-        }
-    }).await;
-    
-    Ok(results)
-}
+// To publish:
+let gossip_svc = node.gossip_service();
+let topic = TopicChannel::<Attestation>::new(gossip_svc.gossip(), ATTESTATION_GOSSIP_TOPIC);
+topic.publish(&attestation).await?;
+
+// To collect (caller must subscribe via GossipService first):
+let stream = gossip_svc.subscribe(topic.topic_id(), vec![]).await?;
+let results = topic.collect_for(
+    stream, move |a: &Attestation| a.content == content_hash, timeout
+).await?;
 ```
 
 ### `syncweb-core/src/indexing/wot.rs` — Add `Attestation::to_bytes()`/`from_bytes()`
@@ -213,7 +193,7 @@ On startup, spawn a task that:
 2. Receives `Attestation` messages
 3. Verifies signatures
 4. Applies to local `WotService` via `wot.append_attestation()`
-5. Persists to `indexing-state.json`
+5. Persists to `indexing.sqlite` (attestations table, Plan 02 migration v2)
 
 ### `syncweb-cli/src/cli/commands.rs`
 
@@ -250,7 +230,31 @@ Attest {
 },
 ```
 
-For backward compatibility, keep the flat `Attest(AttestArgs)` but with a deprecation warning, and add the subcommand-based version.
+For backward compatibility, keep the existing flat `Attest(AttestArgs)` variant. Clap
+does not easily support both flat-arg and subcommand forms of the same variant
+simultaneously. The recommended approach: add a new `AttestV2` variant that uses
+subcommands, and mark the old `Attest(AttestArgs)` as deprecated via a custom
+`display_name` or hidden attribute. The dispatch code checks if the old variant was
+matched and prints a deprecation warning before delegating to the new handler.
+
+**Deprecation wiring:**
+```rust
+// In syncweb-cli/src/main.rs dispatch:
+TopLevelCommand::Attest(args) => {
+    eprintln!("WARNING: 'syncweb attest <hash> --license <name>' is deprecated. Use 'syncweb attest create <hash> --license <name>' instead.");
+    handle_attest(ctx, AttestCommand::Create {
+        content: args.content,
+        license: args.license,
+        provenance: args.provenance,
+        derivative: args.derivative,
+        sequence: args.sequence,
+        broadcast: false,
+    })
+}
+TopLevelCommand::AttestV2 { command } => {
+    handle_attest(ctx, command)
+}
+```
 
 ### `syncweb-cli/src/cli/indexing.rs`
 
@@ -315,8 +319,7 @@ pub fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()>
 
 | File | Changes |
 |------|---------|
-| `syncweb-core/src/indexing/attestation_gossip.rs` | New — topic, publish, subscribe, collect functions |
-| `syncweb-core/src/indexing.rs` | Re-export attestation gossip module |
+| `syncweb-core/src/indexing/wot.rs` | Add `SignedGossipMessage` impl for `Attestation` |
 | `syncweb-core/src/indexing/wot.rs` | Add `Attestation::to_bytes()`/`from_bytes()` if missing |
 | `syncweb-core/src/daemon/daemon.rs` | Spawn attestation listener on startup |
 | `syncweb-cli/src/cli/commands.rs` | Restructure `Attest` as subcommand with `Create` + `Verify` |

@@ -229,21 +229,46 @@ In `handle_link`, when `--publish <namespace>` is given:
 
 #### `syncweb-core/src/indexing/links.rs`
 
-Add an optional fetch hook to `LinkResolver`:
+Add an optional fetch hook to `LinkResolver` using `Arc<dyn Fn ...>` instead of `Box<dyn Fn>` to satisfy `Send + Sync`:
 
 ```rust
 pub struct LinkResolver {
     state: Arc<Mutex<ResolverState>>,
-    provider_fetch: Option<Box<dyn Fn(&NameLink) -> Pin<Box<dyn Future<Output=Result<LinkResolution>>> + Send> + Send + Sync>>,
+    provider_fetch: Option<Arc<dyn Fn(NameLink) -> Pin<Box<dyn Future<Output=Result<LinkResolution>> + Send>> + Send + Sync>>,
 }
 
 impl LinkResolver {
-    pub fn with_provider_fetch(fetch: impl ...) -> Self { ... }
+    pub fn with_provider_fetch(fetch: Arc<dyn Fn(NameLink) -> Pin<Box<dyn Future<Output=Result<LinkResolution>> + Send>> + Send + Sync>) -> Self { ... }
     pub async fn resolve_remote(&self, link: &Link) -> Result<LinkResolution> {
         // Try local first, then fall back to provider_fetch
+        if let Link::Name(name_link) = link {
+            if let Some(ref fetch) = self.provider_fetch {
+                return fetch(name_link.clone()).await;
+            }
+        }
+        // ... local resolution ...
     }
 }
 ```
+
+Construction pattern (avoids closure capture of non-Send types):
+```rust
+// Instead of capturing IrohNode in a closure (which is !Send):
+let node: Arc<IrohNode> = self.node.clone();
+let resolver = LinkResolver::with_provider_fetch(Arc::new(move |name_link: NameLink| {
+    let node = node.clone();
+    Box::pin(async move {
+        // Use node.docs_engine() to query the folder doc
+        let folder_namespace = resolve_folder_for_link(&name_link, &node).await?;
+        let doc = node.docs_engine().open_doc(folder_namespace).await?;
+        let entry = doc.get(node.author(), format!("sys/links/mutable/{}", name_link.alias).as_bytes()).await?;
+        // ... parse pointer, verify signature, return LinkResolution ...
+        Ok(LinkResolution { ... })
+    })
+}));
+```
+
+The key change from the original plan: `Arc<dyn Fn>` instead of `Box<dyn Fn>` to satisfy `Send + Sync` bounds.
 
 #### `syncweb-cli/src/cli/indexing.rs`
 
@@ -254,24 +279,53 @@ Make `handle_link` async. For `Resolve`:
 
 ### Phase C — `link revoke` gossip broadcast
 
-#### `syncweb-core/src/indexing/links.rs`
-
-Add revocation gossip topic and service:
+Uses the shared `TopicChannel<PrivateLink>` from `syncweb-core/src/gossip/`:
 
 ```rust
+use syncweb_core::gossip::TopicChannel;
+
 pub const REVOCATION_GOSSIP_TOPIC: &[u8] = b"syncweb/link-revocations/v1";
 
-pub async fn publish_revocation(gossip: &GossipService, link: &PrivateLink) -> Result<()> {
-    let topic = TopicId::from_bytes(*blake3::hash(REVOCATION_GOSSIP_TOPIC).as_bytes());
-    gossip.subscribe(topic, vec![]).await?;
-    let (sender, _) = GossipService::split(topic);
-    gossip.publish(&sender, serde_json::to_vec(link)?).await
+pub async fn publish_revocation(gossip: &Gossip, link: &PrivateLink) -> Result<()> {
+    let topic = TopicChannel::<PrivateLink>::new(gossip, REVOCATION_GOSSIP_TOPIC);
+    topic.publish(link).await
 }
 ```
 
 #### `syncweb-core/src/daemon/daemon.rs`
 
-On startup, subscribe to revocation gossip topic and apply incoming revocations to local `LinkResolver`.
+On startup, subscribe to revocation gossip topic and apply incoming revocations to local `LinkResolver`. The listener MUST enforce the security constraints from `01-shared-gossip-abstraction.md`:
+
+```rust
+// In revocation_listener:
+pub struct RevocationListener {
+    link_resolver: Arc<LinkResolver>,
+    /// Local capability index: only apply revocations for capabilities we possess.
+    /// Maps capability_hash → PrivateLink for fast lookup.
+    ///
+    /// Populated from the `revoked_links` table in `indexing.sqlite` at startup,
+    /// and updated whenever a new private link is created or imported.
+    local_capabilities: Arc<RwLock<HashMap<[u8; 32], PrivateLink>>>,
+}
+
+impl RevocationListener {
+    fn handle_incoming(&self, revocation: &PrivateLink) -> Result<()> {
+        let cap_hash = revocation.capability_hash();
+        let caps = self.local_capabilities.read().unwrap();
+        if !caps.contains_key(cap_hash) {
+            tracing::debug!("ignoring revocation for unknown capability: {:?}", cap_hash);
+            return Ok(()); // Don't apply revocations for hashes we don't hold
+        }
+        drop(caps);
+
+        // We have this capability; apply the revocation
+        self.link_resolver.revoke(revocation)?;
+        self.database.insert_revoked_link(cap_hash, now())?;
+        tracing::info!("applied revocation for capability: {:?}", cap_hash);
+        Ok(())
+    }
+}
+```
 
 #### `syncweb-cli/src/main.rs`
 

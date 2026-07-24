@@ -30,9 +30,9 @@ File: `syncweb-core/src/sync/engine.rs`
 - Add `topic_tracker: Option<TopicTracker>` field
 - Update `from_node` or constructor to optionally store it
 - In `sync` / `sync_with_params` / `fetch`, before starting reconciliation:
-  - Call `topic_tracker.find_peers(namespace_id).await` 
-  - Pass discovered peers into the sync loop or log them for debugging
-  - (Optional) Use peers to seed the docs engine's peer set via `docs_engine.start_sync_with_peers`
+- Call `topic_tracker.find_peers(namespace_id).await` 
+- Pass discovered peers into the sync loop or log them for debugging
+- (Optional) Use peers to seed the docs engine's peer set via `docs_engine.set_peers(namespace, peer_ids)` (requires resolving `PublicKey` → `PeerId` via `Endpoint:lookup_peer_id`)
 
 ### 3. Re-announce on Daemon Startup
 
@@ -49,8 +49,11 @@ Files: `syncweb-cli/src/main.rs`, `syncweb-core/src/daemon/ipc.rs`
 
 ## Dependencies
 
-- `TopicTracker` already derives `Clone` — safe to pass around
-- `FolderManager` and `SyncEngine` both take `&IrohNode` already, so the wiring is straightforward
+- `TopicTracker` already derives `Clone` — BUT cloning shares the underlying `Arc<Mutex<HashMap<...>>>`, so `announce()` and `find_peers()` calls from different owners race on the same internal state. Ensure callers serialize access to `TopicTracker` where correctness depends on non-interleaving.
+- `TopicTracker::announce` is not idempotent — calling it multiple times may re-publish a namespace to the gossip layer. The caller MUST gate on whether the namespace was already announced. Solution: maintain a `HashSet<NamespaceId>` of already-announced namespaces in the caller (e.g., `FolderManager` or `DaemonInner`), and only call `announce()` if the namespace is not yet in the set. On daemon startup, the set is populated from the folder registry before iterating.
+- `TopicTracker::find_peers` may return stale results from the last discovery round — callers should treat results as hints, not authoritative peer lists.
+- `TopicTracker` has no garbage collection — topics accumulate in the internal `HashMap` forever. For long-running daemons, this is a memory leak. Fix: add a `gc()` method that removes topics not re-announced within a configurable TTL (e.g., 24h). The daemon calls `gc()` on a periodic timer (e.g., every 6h). Topics whose folder is still in the registry are re-announced by the startup loop, so they survive GC. Topics whose folder was removed are naturally GC'd.
+- `FolderManager` and `SyncEngine` both take `&IrohNode` already, so the wiring is straightforward - `IrohNode` should expose `topic_tracker()` as `Arc<TopicTracker>` to safely share across consumers.
 
 ## Notes
 
@@ -125,6 +128,6 @@ Both announce and query attempt 0-RTT connections first, falling back to 1-RTT i
 
 ### Potential Future Directions (not blocked on current plan)
 
-- Async verification: After `find_peers` returns neighbors, optionally probe one or more with a lightweight doc entry request to confirm they hold the namespace
+- Async verification: After `find_peers` returns neighbors, optionally probe them. Caveat: iroh-docs has no per-peer single-entry fetch API — sync is whole-doc. Verification would require establishing a direct connection and querying the peer's blob store for a specific content hash (`iroh_blobs::get`), then checking if the peer holds any blob referenced by the folder's doc.
 - Multi-backend discovery: Abstract peer discovery behind a trait so syncweb can use both gossip-based (current TopicTracker) and tracker-server-based (iroh-content-discovery client) backends simultaneously
 - Announce metadata: Extend `TopicTracker::announce` to accept optional metadata (e.g., entry count, sync cursor) that could be gossiped alongside presence

@@ -62,11 +62,14 @@ Implementation:
 File: `syncweb-core/src/indexing/reputation.rs`
 
 ```rust
+use std::sync::Arc;
+
 impl ProviderReputationStore {
-    pub fn new(database: IndexingDatabase, config: ReputationConfig) -> Self {
-        let reputations = database.load_all_reputations()?;      // SELECT * FROM provider_reputation
-        let signal_sequences = database.load_signal_sequences()?; // SELECT * FROM provider_signal_sequences
+    pub fn new(database: Arc<IndexingDatabase>, config: ReputationConfig) -> Self {
+        let reputations = database.load_all_reputations().unwrap_or_default();      // SELECT * FROM provider_reputation
+        let signal_sequences = database.load_signal_sequences().unwrap_or_default(); // SELECT * FROM provider_signal_sequences
         Self {
+            database,
             reputations,
             config,
             policy: TrustPolicy::new(),
@@ -86,14 +89,64 @@ impl ProviderReputationStore {
             provider, 
             &self.reputations[&provider], 
             self.auto_bans.get(&provider)
-        )?;
+        ).ok(); // log error, don't fail the in-memory update
     }
 
     pub fn purge_stale(&mut self, now: u64, ttl: Duration) {
         // ... existing logic ...
         // ADD: also DELETE from database
-        self.database.delete_stale_reputations(now, ttl)?;
+        self.database.delete_stale_reputations(now, ttl).ok();
     }
+}
+```
+
+Note: `IndexingDatabase` wraps a `rusqlite::Connection` which is not `Clone`. Since
+`ProviderReputationStore` derives `Clone`, the database field must be `Arc<IndexingDatabase>`.
+This is already handled in the constructor above.
+
+`IndexingDatabase` must provide these new methods (add to `syncweb-core/src/indexing.rs`):
+
+```rust
+impl IndexingDatabase {
+    /// Load all provider reputations from the database.
+    pub fn load_all_reputations(&self) -> Result<HashMap<PublicKey, ProviderReputation>> {
+        let mut stmt = self.conn.prepare("SELECT provider, total_fetches, successful_fetches,
+            failed_fetches, consecutive_failures, last_success_at, last_failure_at,
+            auto_ban_until, auto_ban_count FROM provider_reputation")?;
+        let rows = stmt.query_map([], |row| {
+            let provider: String = row.get(0)?;
+            let rep = ProviderReputation {
+                total_fetches: row.get(1)?,
+                successful_fetches: row.get(2)?,
+                failed_fetches: row.get(3)?,
+                consecutive_failures: row.get(4)?,
+                last_success_at: row.get(5)?,
+                last_failure_at: row.get(6)?,
+            };
+            Ok((provider.parse()?, rep))
+        })?;
+        rows.collect()
+    }
+
+    /// Load all signal sequence numbers from the database.
+    pub fn load_signal_sequences(&self) -> Result<HashMap<(PublicKey, PublicKey), u64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT reporter, provider, last_sequence FROM provider_signal_sequences"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let reporter: String = row.get(0)?;
+            let provider: String = row.get(1)?;
+            let seq: u64 = row.get(2)?;
+            Ok(((reporter.parse()?, provider.parse()?), seq))
+        })?;
+        rows.collect()
+    }
+
+    /// Upsert a provider reputation record (INSERT OR REPLACE).
+    pub fn upsert_reputation(&self, provider: PublicKey, rep: &ProviderReputation, auto_ban: Option<&AutoBan>) -> Result<()>;
+
+    /// Delete stale reputation records older than the given TTL.
+    pub fn delete_stale_reputations(&self, now: u64, ttl: Duration) -> Result<()>;
 }
 ```
 
@@ -101,7 +154,7 @@ impl ProviderReputationStore {
 
 | File | Change |
 |---|---|
-| `syncweb-core/src/indexing/reputation.rs` | Add `IndexingDatabase` field; persist on write; hydrate on new |
+| `syncweb-core/src/indexing/reputation.rs` | Add `Arc<IndexingDatabase>` field; persist on write; hydrate on new |
 | `syncweb-core/src/indexing.rs` | Add `load_all_reputations`, `upsert_reputation`, etc. to `IndexingDatabase` |
 
 ---
@@ -152,13 +205,13 @@ File: `syncweb-core/src/indexing/resilience.rs`
 
 ```rust
 impl ResilienceService {
-    pub fn new(database: IndexingDatabase, config: ResilienceConfig) -> Self {
-        let leases = database.load_active_leases()?;  // SELECT WHERE expires_at > now
-        let bans = database.load_active_bans()?;      // SELECT WHERE expires_at IS NULL OR expires_at > now
+    pub fn new(database: Arc<IndexingDatabase>, config: ResilienceConfig) -> Self {
+        let leases = database.load_active_leases().unwrap_or_default();  // SELECT WHERE expires_at > now
+        let bans = database.load_active_bans().unwrap_or_default();      // SELECT WHERE expires_at IS NULL OR expires_at > now
         let tracker = ProviderLeaseTracker::new(config.budget.observation_ttl);
-        for lease in leases { tracker.record(lease)?; }
-        for ban in bans { tracker.ban_provider_from_record(ban)?; }
-        Self { tracker: Arc::new(Mutex::new(tracker)), ... }
+        for lease in leases { tracker.record(lease).ok(); }
+        for ban in bans { tracker.ban_provider_from_record(ban).ok(); }
+        Self { tracker: Arc::new(Mutex::new(tracker)), database, config }
     }
 
     pub fn ban_provider(&self, provider: PublicKey, reason: String, hash: Option<Hash>, duration: Option<Duration>) -> Result<()> {
@@ -268,16 +321,16 @@ File: `syncweb-core/src/indexing/links.rs`
 
 ```rust
 pub struct LinkResolver {
-    database: IndexingDatabase,
+    database: Arc<IndexingDatabase>,
     pointers: Arc<Mutex<HashMap<String, MutablePointer>>>,
     mirrors: Arc<Mutex<HashMap<String, Vec<Mirror>>>>,
     revoked: Arc<Mutex<HashSet<PrivateLink>>>,
 }
 
 impl LinkResolver {
-    pub fn new(database: IndexingDatabase) -> Self {
-        let pointers = database.load_all_pointers()?;   // SELECT from stable_links
-        let mirrors = database.load_all_mirrors()?;    // SELECT from link_mirrors
+    pub fn new(database: Arc<IndexingDatabase>) -> Self {
+        let pointers = database.load_all_pointers().unwrap_or_default();   // SELECT from stable_links
+        let mirrors = database.load_all_mirrors().unwrap_or_default();    // SELECT from link_mirrors
         // ... reconstruct caches ...
     }
 
@@ -358,10 +411,12 @@ Justification: Gossip topics are network subscriptions — TCP connections and p
 
 ## Implementation Order
 
-1. GAP 2 first — ResilienceService leases/bans must be persisted because the JSON→SQLite plan already creates the `provider_leases` and `provider_bans` tables. This gap is zero new schema, just wiring.
-2. GAP 1 second — ProviderReputationStore requires the `provider_reputation` and `provider_signal_sequences` tables from the JSON→SQLite plan. Depends on those tables existing.
-3. GAP 3 third — DenylistService already has tables in indexing.sqlite, just needs wiring. Depends on `IndexingDatabase` being the source of truth.
+1. GAP 2 first — ResilienceService leases/bans. Zero new schema: the `provider_leases` and `provider_bans` tables already exist in Plan 02's `indexing.sqlite`. This is pure wiring: add an `IndexingDatabase` field to `ResilienceService`, hydrate from DB on `new()`, write-through on mutations.
+2. GAP 1 second — ProviderReputationStore. Also zero new schema: `provider_reputation` and `provider_signal_sequences` tables exist in Plan 02. Same wiring pattern. Done after GAP 2 because `ResilienceService` is simpler to wire (fewer fields) and serves as the template for the pattern.
+3. GAP 3 third — DenylistService. Tables already exist, just needs wiring. Depends on `IndexingDatabase` being the source of truth.
 4. GAP 4 last — LinkResolver is lowest impact and already half-persisted via the existing `stable_links` table.
+
+Note on ordering: All four gaps depend on `IndexingDatabase` (from Plan 02) being complete. The ordering above is by complexity and risk — simplest first — not by schema dependency, since all required tables already exist in Plan 02.
 
 ---
 

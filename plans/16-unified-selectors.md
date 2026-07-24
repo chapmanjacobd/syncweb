@@ -121,26 +121,64 @@ Currently the core has two filter types that overlap:
 
 | Concept            | `sync::AreaFilter`     | `verify::VerifyFilter` |
 |--------------------|------------------------|------------------------|
-| All                | `All`                  | (no filter)            |
-| Path prefix        | `Prefix(PathBuf)`      | `path`                 |
-| Glob               | `Glob(String)`         | `glob`                 |
-| Hash range         | `HashRange(_, _)`      | `hashes`               |
+| All                | `All`                  | `VerifyFilter::default()` |
+| Path prefix        | `Prefix(PathBuf)`      | `path: Option<String>` |
+| Glob               | `Glob(String)`         | `glob: Option<String>` |
+| Hash range         | `HashRange(_, _)`      | `hashes: Vec<Hash>` |
 
-Both are used in different contexts (`AreaFilter` for live sync
-subscriptions, `VerifyFilter` for the verify command).  Instead of
-merging them (which would risk breaking existing callers), the plan
-adds a bridge function in each crate:
+Important structural difference: `AreaFilter` is an enum with variants, while `VerifyFilter` is a struct with optional fields. The conversion logic must handle this:
 
 ```rust
 // in syncweb-cli/src/cli/filter.rs (new)
 impl TryFrom<&ContentFilter> for VerifyFilter {
     type Error = anyhow::Error;
-    fn try_from(filter: &ContentFilter) -> Result<Self, Self::Error> { ... }
+    fn try_from(filter: &ContentFilter) -> Result<Self, Self::Error> {
+        let hashes: Vec<Hash> = filter.hash.iter()
+            .map(|h| h.parse()).collect::<Result<Vec<_>>>()?;
+        Ok(VerifyFilter {
+            hashes: if hashes.is_empty() { None } else { Some(hashes) },
+            path: filter.path_prefix.clone(),
+            glob: filter.glob.clone(),
+        })
+    }
 }
 
 // in syncweb_core::verify (new)
 impl VerifyFilter {
-    pub fn to_area_filter(&self) -> Option<AreaFilter> { ... }
+    pub fn to_area_filter(&self) -> Option<AreaFilter> {
+        match (self.hashes.as_ref(), self.path.as_ref(), self.glob.as_ref()) {
+            (None, None, None) => None,  // no filter = All
+            (Some(hashes), None, None) => {
+                // AreaFilter::HashRange takes (start, end). For multiple hashes,
+                // use min/max as bounds. NOTE: AreaFilter needs a HashSet variant
+                // for exact multi-hash matching; this is an approximation.
+                match hashes.len() {
+                    0 => None,
+                    1 => Some(AreaFilter::HashRange(hashes[0], hashes[0])),
+                    _ => Some(AreaFilter::HashRange(
+                        *hashes.iter().min().unwrap(),
+                        *hashes.iter().max().unwrap(),
+                    )),
+                }
+            }
+            (None, Some(prefix), None) => Some(AreaFilter::Prefix(PathBuf::from(prefix))),
+            (None, None, Some(pattern)) => Some(AreaFilter::Glob(pattern.clone())),
+            // Multiple constraints: apply path prefix as primary filter.
+            // Glob within a prefix is not natively supported by AreaFilter —
+            // apply glob as a post-filter on entries returned by prefix scan.
+            _ => {
+                if let Some(prefix) = &self.path {
+                    Some(AreaFilter::Prefix(PathBuf::from(prefix)))
+                } else if let Some(glob) = &self.glob {
+                    Some(AreaFilter::Glob(glob.clone()))
+                } else if let Some(hashes) = &self.hashes {
+                    hashes.first().map(|h| AreaFilter::HashRange(*h, *h))
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 ```
 
@@ -183,7 +221,10 @@ The `build_verify_filter` function in `main.rs` is moved into `syncweb-cli/src/c
 
 ### `syncweb_core::verify::VerifyFilter`
 
-Already has the fields.  Needs:
+Already has the fields. The `hashes` field must be `Option<Vec<Hash>>` (not bare
+`Vec<Hash>`) for the `TryFrom<ContentFilter>` conversion to compile. If the current
+struct uses `Vec<Hash>`, change it to `Option<Vec<Hash>>` with `#[serde(default)]`
+for backward-compatible IPC deserialization. Needs:
 
 ```rust
 impl VerifyFilter {

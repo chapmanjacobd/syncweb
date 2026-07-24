@@ -267,7 +267,8 @@ http://127.0.0.1:9193/media/{hash}?mime={mime_type}
 ```
 
 The hash is the iroh-blobs BLAKE3 `Hash` in multibase encoding (the same format
-returned by `BlobStore::add_bytes()` and displayed by `syncweb` CLI).
+returned by `BlobStore::add_bytes()` and displayed by `syncweb` CLI). Size is
+looked up automatically from the blob store via `blob_store.stat(hash)`.
 
 For blobs that are referenced by an iroh-docs entry (a named file in a
 collection), an alternative URL could resolve the path to a hash:
@@ -427,12 +428,10 @@ pub(crate) async fn serve_media(
     // Open reader & get total size
     let reader = state.blob_store.reader(hash);
     
-    // NOTE: BlobReader does NOT expose total size after creation, and we cannot 
-    // easily look up docs metadata by hash without a reverse index.
-    // For v1, the client must pass the size in the query params.
-    let total_size = match params.get("size").and_then(|s| s.parse::<u64>().ok()) {
-        Some(s) => s,
-        None => return (StatusCode::BAD_REQUEST, "size query parameter required").into_response(),
+    // Get total size from blob store
+    let total_size = match state.blob_store.stat(hash).await {
+        Ok(info) => info.size,
+        Err(_) => return (StatusCode::NOT_FOUND, "blob size unavailable").into_response(),
     };
 
     // Detect MIME
@@ -482,26 +481,20 @@ pub(crate) async fn serve_media(
 
 ### Size metadata
 
-`BlobReader` does not expose total blob size. The size is stored inside
-the blob's first BLAKE3 chunk (as part of the Bao tree header). Options:
+`BlobReader` does not expose total blob size directly after creation, but `blob_store.stat(hash)` returns the size:
 
-1. Store size in iroh-docs alongside the hash — the `ContentEntry`
-   struct in the docs entry includes `content_len`. Use this.
-2. Read the Bao tree header — the `bao_tree::BaoTree::new(size, block_size)`
-   has the size, but it's not exposed through `BlobReader`.
-3. Use `iroh_blobs::store::ExportRangesProgress` — the `export_ranges()`
-   stream emits `Size(u64)` as the first item.
-4. Track size at insert time — when the blob is added via
-   `BlobStore::add_bytes()`, also store the `(hash, size)` pair in a
-   local `HashMap` or SQLite table.
+```rust
+let size = state.blob_store.stat(hash).await?.size;
+```
 
-Option 1 is flawed because the media endpoint only receives a `hash`. Iroh docs
-does not maintain a `hash -> entry` reverse index, so finding the docs metadata
-for an arbitrary hash requires a full database scan.
+This works for all blobs in the store — no external metadata needed. The `?size=`
+query parameter is NOT required; the server can always look up the size from the
+blob store. The `stat()` call is O(1) (metadata read from the Bao tree header).
 
-For v1, the simplest and most stateless approach is to require the client to pass
-the size explicitly: `GET /media/{hash}?mime=video/mp4&size=48234496`. The client
-(mapa) already knows the size from the `MapEvent` protobuf payload or docs metadata.
+Update to `serve_media`: Replace the `?size=` query param requirement with:
+```rust
+let total_size = state.blob_store.stat(hash).await?.size;
+```
 
 ### On-demand fetch for partial blobs
 
@@ -518,9 +511,10 @@ async fn ensure_range_available(
         return Ok(());
     }
 
-    // Get missing chunks in the requested range
-    let bitfield = blob_store.observe(hash).await?; // which chunks are present
-    let missing = find_missing_chunks(&bitfield, range);
+    // Get the total blob size and chunk bitfield
+    let size = blob_store.stat(hash).await?.size;
+    let bitfield = blob_store.bitfield(hash).await?; // checks which chunks are present
+    let missing = find_missing_chunks(&bitfield, range, size);
 
     // Attempt to fetch from connected peers and wait
     let downloader = blob_store.downloader(endpoint);
@@ -556,6 +550,16 @@ syncweb daemon --data-dir /home/user/.syncweb \
 The media server shares the `Arc<IrohNode>` with the bridge and daemon.
 All three share the same blob store, so blob contents are consistent.
 
+### Multi-listener coordination (shared with Plan 17)
+
+Port allocation and lifecycle are coordinated with the bridge server (see
+`17-mapa-p2p-api.md` "Multi-listener coordination" section). Key points:
+- Default ports: 9192 (bridge), 9193 (media) — no conflict.
+- Both servers share `Arc<IrohNode>` and `broadcast::Sender<()>` shutdown signal.
+- If only `--media-listen` is used without `--bridge-listen`, the bridge does not
+  start (no unused port reserved).
+- The daemon validates that configured ports don't collide at startup.
+
 ---
 
 ## Comparison table
@@ -574,10 +578,7 @@ a separate optimization for off-grid/low-latency scenarios.
 
 ## Open questions
 
-1. Size metadata: Should the endpoint require a `?size=<bytes>` parameter
-   (like it does for `?mime=`), or should we resolve size from iroh-docs
-   metadata? If the blob was added outside a docs namespace (e.g., raw
-   `syncweb add-file`), there is no docs metadata to consult.
+1. Size metadata: ~~Should the endpoint require a `?size=<bytes>` parameter?~~ Resolved: Use `blob_store.stat(hash).await?.size` — always available locally, no external metadata needed.
 
 2. Partial blob semantics: When the blob is incomplete, should the server:
    - Block and wait for the missing chunks (adds latency)?

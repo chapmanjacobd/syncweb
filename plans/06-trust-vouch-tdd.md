@@ -162,26 +162,39 @@ fn test_vouch_without_broadcast_still_local() -> anyhow::Result<()> {
 ```rust
 impl ProviderTrustSignal {
     /// Create a trust signal from a signed provider trust record.
-    pub fn from_trust_record(record: &ProviderTrustRecord) -> Result<Self> {
-        let reporter = parse_pubkey(&record.issuer)?;
+    /// Requires the signing key (available at the CLI layer, not in core).
+    ///
+    /// Maps ProviderTrustAction to the existing TrustSignalKind variants:
+    /// - Vouch → ObservedSuccess (positive signal: "I trust this provider")
+    /// - Distrust → ObservedFailure (negative signal: "I do not trust this provider")
+    ///
+    /// Note: TrustSignalKind is observational (observed success/failure), not opinion-based.
+    /// This mapping is a semantic approximation: vouch means "I have observed this provider
+    /// succeeding" and distrust means "I have observed this provider failing". The distinction
+    /// matters for downstream consumers — do NOT add Positive/Negative variants to
+    /// TrustSignalKind; the observational semantics are correct for the gossip protocol.
+    pub fn from_trust_record(record: &ProviderTrustRecord, signing_key: &SigningKey) -> Result<Self> {
+        let reporter = signing_key.public();
         Self::new_with_time(
             record.provider,
             match record.action {
-                ProviderTrustAction::Vouch => SignalKind::Positive,
-                ProviderTrustAction::Distrust => SignalKind::Negative,
+                ProviderTrustAction::Vouch => SignalKind::ObservedSuccess,
+                ProviderTrustAction::Distrust => SignalKind::ObservedFailure,
                 _ => return Err(SyncwebError::InvalidConfig(
                     "only vouch/distrust records can be converted to signals".into()
                 )),
             },
             record.scope,
             record.sequence,
-            &SigningKey::from_bytes(&record.issuer.as_bytes()), // needs actual key
+            signing_key,
         )
     }
 }
 ```
 
 Note: Conversion requires the signing key, which is only available during the CLI handler. The conversion should happen at the CLI layer, not in core.
+
+Important semantic note: `TrustSignalKind` has three variants: `ObservedSuccess`, `ObservedFailure`, `ObservedCorruption`. These are observational — "I saw this provider succeed/fail/corrupt data". The vouch/distrust mapping is an approximation: vouch = "I vouch for this provider's reliability" maps to `ObservedSuccess`; distrust = "I warn about this provider" maps to `ObservedFailure`. Adding opinion-based `Positive`/`Negative` variants would break the existing gossip protocol semantics — all downstream consumers expect observational signals.
 
 ### Phase B — CLI changes
 
@@ -223,31 +236,25 @@ fn handle_provider_trust_record(
     let record = ProviderTrustRecord::new(...)?;
     // ... local save ...
 
-    if broadcast {
-        // First try to broadcast via the running daemon using IPC
-        if let Ok(mut client) = DaemonClient::connect(data_dir).await {
-            let signal = ProviderTrustSignal::from_trust_record(&record)?;
-            client.send_command(IpcCommand::BroadcastTrustSignal(signal)).await?;
-        } else {
-            // Fallback: If daemon is offline, temporarily open node and broadcast
-            let node = open_node(data_dir).await?;
-            let signal = ProviderTrustSignal::from_trust_record(&record)?;
-            let gossip = ProviderReputationStore::default();
-            let topic = gossip.subscribe_trust_stream(
-                node.gossip_service(), Vec::new()
-            ).await?;
-            let (sender, _receiver) = GossipService::split(topic);
-            gossip.publish_signal(node.gossip_service(), &sender, &signal).await?;
-            node.stop().await?;
+        if broadcast {
+            // First try to broadcast via the running daemon using IPC
+            if let Ok(mut client) = DaemonClient::connect(data_dir).await {
+                let signal = ProviderTrustSignal::from_trust_record(&record, node.endpoint().secret_key())?;
+                client.send_command(IpcCommand::BroadcastTrustSignal(signal)).await?;
+            } else {
+                // Fallback: If daemon is offline, temporarily open node and broadcast
+                let node = open_node(data_dir).await?;
+                let signal = ProviderTrustSignal::from_trust_record(&record, node.endpoint().secret_key())?;
+                let gossip = node.gossip_service();
+                let topic = TopicChannel::<ProviderTrustSignal>::new(
+                    gossip, b"syncweb/provider-trust-stream/v1"
+                );
+                topic.publish(&signal).await?;
+                node.stop().await?;
+            }
         }
+        print_status(...)
     }
-    print_status(...)
-}
-
-#### `syncweb-core/src/daemon/ipc.rs`
-
-- Add `IpcCommand::BroadcastTrustSignal(ProviderTrustSignal)` variant
-- Daemon handler receives this, signs/verifies it (or just relays it if already signed), and broadcasts it to the trust stream gossip topic.
 ```
 
 ---
@@ -256,10 +263,15 @@ fn handle_provider_trust_record(
 
 - Reuses the existing gossip topic `syncweb/provider-trust-stream/v1` (already defined in `reputation.rs`)
 - Reuses the existing `ProviderTrustSignal` type
-- Reuses the existing `ProviderReputationStore::publish_signal()` and `subscribe_trust_stream()` methods
+- Uses the shared `TopicChannel<ProviderTrustSignal>` from `syncweb-core/src/gossip/` (Plan 01) for publish/subscribe
 - The `trust stream subscribe` handler already receives and applies incoming signals via `reputation.ingest_trust_signal()`
-- No new gossip infrastructure needed — just wiring the existing vouch/distrust commands to the existing gossip machinery
 - The `--broadcast` flag is optional; without it, behavior is unchanged (local only)
+
+### IPC handler for `BroadcastTrustSignal`
+
+Add to `syncweb-core/src/daemon/ipc.rs`:
+- `IpcCommand::BroadcastTrustSignal(ProviderTrustSignal)` variant
+- Daemon handler receives this, verifies the signal, and broadcasts it via `TopicChannel` to the trust stream gossip topic
 
 ## Files to modify/plan
 
@@ -267,5 +279,6 @@ fn handle_provider_trust_record(
 |------|---------|
 | `syncweb-cli/src/cli/commands.rs` | Add `--broadcast` flag to `Vouch` and `Distrust` subcommands |
 | `syncweb-cli/src/cli/indexing.rs` | Wire gossip broadcast in `handle_provider_trust_record` |
+| `syncweb-core/src/daemon/ipc.rs` | Add `IpcCommand::BroadcastTrustSignal` variant and handler |
 | `syncweb-core/tests/provider_trust_gossip_test.rs` | New — two-node vouch/distrust gossip tests |
 | `syncweb-cli/tests/cli_test.rs` | CLI integration tests with/without `--broadcast` |

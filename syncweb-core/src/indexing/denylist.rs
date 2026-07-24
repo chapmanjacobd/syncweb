@@ -344,13 +344,19 @@ pub struct DenylistService {
     database: Option<IndexingDatabase>,
 }
 
-impl DenylistService {
-    #[must_use]
-    pub fn new() -> Self {
+impl Default for DenylistService {
+    fn default() -> Self {
         Self {
             denylist: Arc::new(RwLock::new(Denylist::new())),
             database: None,
         }
+    }
+}
+
+impl DenylistService {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Create a service backed by an indexing database.

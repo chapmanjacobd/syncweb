@@ -103,7 +103,36 @@ struct PendingWatch {
     ready_at: Instant,
 }
 
+type SignalTask<'a> = std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
+
 impl Daemon {
+    async fn open_identity_and_node(
+        data_dir: &Path,
+        node_db: &NodeDatabase,
+        pid_lock: &PidLock,
+    ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
+        let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
+            let _ = node_db.remove_lifecycle();
+            let _ = pid_lock.release();
+        })?;
+        let node = Arc::new(
+            IrohNode::new(identity, data_dir.join("data"), RelayMode::Default)
+                .await
+                .inspect_err(|_| {
+                    let _ = node_db.remove_lifecycle();
+                    let _ = pid_lock.release();
+                })?,
+        );
+        let folder_manager = FolderManager::new(&node);
+        let sync_engine = SyncEngine::new(
+            folder_manager.clone(),
+            node.blob_store().clone(),
+            node.docs_engine().clone(),
+            node.gossip_service().clone(),
+        );
+        Ok((node, folder_manager, sync_engine))
+    }
+
     /// Create a daemon, acquire its process lock, and persist its running
     /// state.
     ///
@@ -164,29 +193,9 @@ impl Daemon {
             return Err(error);
         }
 
-        let identity = match IdentityManager::new(config.data_dir.join("identity.key")) {
-            Ok(value) => value,
-            Err(error) => {
-                let _cleanup_state = node_db.remove_lifecycle();
-                let _cleanup_lock = pid_lock.release();
-                return Err(error);
-            }
-        };
-        let node = match IrohNode::new(identity, config.data_dir.join("data"), RelayMode::Default).await {
-            Ok(value) => Arc::new(value),
-            Err(error) => {
-                let _cleanup_state = node_db.remove_lifecycle();
-                let _cleanup_lock = pid_lock.release();
-                return Err(error);
-            }
-        };
-        let folder_manager = FolderManager::new(&node);
-        let sync_engine = SyncEngine::new(
-            folder_manager.clone(),
-            node.blob_store().clone(),
-            node.docs_engine().clone(),
-            node.gossip_service().clone(),
-        );
+        let (node, folder_manager, sync_engine) =
+            Self::open_identity_and_node(&config.data_dir, &node_db, &pid_lock).await?;
+
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
             Ok(value) => Arc::new(value),
             Err(error) => {
@@ -290,7 +299,7 @@ impl Daemon {
         let mut server_task = tokio::spawn(async move { server.serve().await });
         let mut shutdown = self.handle.shutdown_sender.subscribe();
         let shutdown_sender = self.handle.shutdown_sender.clone();
-        let mut signal_task = Box::pin(self.handle_signals(shutdown_sender.clone()));
+        let mut signal_task: SignalTask<'_> = Box::pin(self.handle_signals(shutdown_sender.clone()));
         let interval_duration = self.config.sync_interval.max(Duration::from_millis(1));
         let mut interval = tokio::time::interval(interval_duration);
         let mut watch_interval = tokio::time::interval(Duration::from_millis(100));
@@ -320,7 +329,7 @@ impl Daemon {
     async fn run_event_loop(
         &self,
         server_task: &mut JoinHandle<Result<()>>,
-        signal_task: &mut std::pin::Pin<std::boxed::Box<impl std::future::Future<Output = Result<()>> + Send>>,
+        signal_task: &mut SignalTask<'_>,
         shutdown: &mut broadcast::Receiver<()>,
         shutdown_sender: &broadcast::Sender<()>,
         interval: &mut tokio::time::Interval,
@@ -706,7 +715,7 @@ impl Daemon {
                 next_window_start,
             }
         });
-        let stats = self.stats_db.current_stats().unwrap_or_default();
+        let current_stats = self.stats_db.current_stats().unwrap_or_default();
         let report = DaemonStatusReport {
             pid: state.pid,
             node_id: state.node_id,
@@ -724,8 +733,8 @@ impl Daemon {
                 })
                 .collect(),
             bandwidth: BandwidthSnapshot {
-                upload_total: stats.total_upload,
-                download_total: stats.total_download,
+                upload_total: current_stats.total_upload,
+                download_total: current_stats.total_download,
                 upload_rate: 0,
                 download_rate: 0,
             },

@@ -1056,11 +1056,7 @@ pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let content = parse_hash(&command.record)?;
     let mut state = load_indexing_state(data_dir)?;
-    let report = ReportRecord {
-        content,
-        reason: command.reason,
-        created_at: epoch_seconds(),
-    };
+    let report = ReportRecord::new(content, command.reason, epoch_seconds());
     state.reports.push(report.clone());
     save_indexing_state(data_dir, &state)?;
     print_status(
@@ -1340,24 +1336,35 @@ fn load_resolver(state: &IndexingState) -> Result<LinkResolver> {
 
 fn load_indexing_state(data_dir: &Path) -> Result<IndexingState> {
     let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-    let mut state = IndexingState::default();
-    state.denylist = db.load_denylist_rules()?;
+    let denylist = db.load_denylist_rules()?;
     let (pointers, mirrors, revoked) = db.load_links()?;
-    state.links = LinkState {
-        pointers,
-        mirrors,
-        revoked,
-    };
-    state.leases = db.load_leases()?;
-    state.delegations = db.load_trust_delegations()?;
-    state.moderation = db.load_moderation_records()?;
-    state.attestations = db.load_attestations()?;
-    state.reports = db.load_content_reports()?;
-    state.provider_bans = db.load_provider_bans()?;
-    state.provider_trust = db.load_provider_trust_records()?;
-    state.trust_signals = db.load_provider_trust_signals()?;
-    state.trust_streams = db.load_trust_streams()?;
-    Ok(state)
+    let leases = db.load_leases()?;
+    let delegations = db.load_trust_delegations()?;
+    let moderation = db.load_moderation_records()?;
+    let attestations = db.load_attestations()?;
+    let reports = db.load_content_reports()?;
+    let provider_bans = db.load_provider_bans()?;
+    let provider_trust = db.load_provider_trust_records()?;
+    let trust_signals = db.load_provider_trust_signals()?;
+    let trust_streams = db.load_trust_streams()?;
+    Ok(IndexingState {
+        denylist,
+        links: LinkState {
+            pointers,
+            mirrors,
+            revoked,
+        },
+        leases,
+        delegations,
+        moderation,
+        attestations,
+        reports,
+        provider_bans,
+        provider_trust,
+        trust_signals,
+        trust_streams,
+        ..Default::default()
+    })
 }
 
 fn save_indexing_state(data_dir: &Path, state: &IndexingState) -> Result<()> {

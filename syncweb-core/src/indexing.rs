@@ -889,8 +889,11 @@ impl IndexingDatabase {
         operation(&mut connection)
     }
 
-    // ── Denylist rules ─────────────────────────────────────
-
+    /// Persist denylist rules to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rules cannot be saved.
     pub fn save_denylist_rules(&self, rules: &[DenylistRule]) -> Result<()> {
         self.with_connection(|connection| {
             connection
@@ -915,6 +918,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load persisted denylist rules from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rules cannot be read.
     pub fn load_denylist_rules(&self) -> Result<Vec<DenylistRule>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -928,10 +936,10 @@ impl IndexingDatabase {
                     match rule_type.as_str() {
                         "device" => Ok(DenylistRule::Device(String::from_utf8_lossy(&rule_value).to_string())),
                         "hash" => {
-                            let arr: [u8; 32] = rule_value.try_into().map_err(|_| {
+                            let arr: [u8; 32] = rule_value.try_into().map_err(|error: Vec<u8>| {
                                 rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                                     "invalid hash length",
-                                    "",
+                                    format!("expected 32 bytes, got {}", error.len()),
                                 )))
                             })?;
                             Ok(DenylistRule::Hash(Hash::from(arr)))
@@ -955,8 +963,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Links ─────────────────────────────────────────────
-
+    /// Load stable links from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the links cannot be read.
     pub fn load_links(&self) -> Result<(Vec<links::MutablePointer>, Vec<String>, Vec<links::PrivateLink>)> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -994,6 +1005,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Save stable links to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the links cannot be persisted.
     pub fn save_links(
         &self,
         pointers: &[links::MutablePointer],
@@ -1016,8 +1032,8 @@ impl IndexingDatabase {
                         format!("mutable:{}:{}", pointer.publisher, pointer.alias),
                         pointer.publisher.to_string(),
                         pointer.alias,
-                        pointer.sequence as i64,
-                        pointer.version.as_deref(),
+                        i64::try_from(pointer.sequence).unwrap_or(i64::MAX),
+                         pointer.version.as_deref(),
                         payload,
                         now,
                     ],
@@ -1034,8 +1050,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Leases ────────────────────────────────────────────
-
+    /// Save provider leases to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the leases cannot be persisted.
     pub fn save_leases(&self, leases: &[resilience::ProviderLease]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM provider_leases", [])
@@ -1048,9 +1067,9 @@ impl IndexingDatabase {
                         lease.provider.to_string(),
                         lease.hash.as_bytes().to_vec(),
                         lease.ticket,
-                        lease.sequence as i64,
-                        lease.issued_at as i64,
-                        lease.expires_at as i64,
+                        i64::try_from(lease.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(lease.issued_at).unwrap_or(i64::MAX),
+                        i64::try_from(lease.expires_at).unwrap_or(i64::MAX),
                         lease.signature,
                     ],
                 ).map_err(|error| database_error("failed to save lease", error))?;
@@ -1059,6 +1078,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load provider leases from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the leases cannot be read.
     pub fn load_leases(&self) -> Result<Vec<resilience::ProviderLease>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1071,25 +1095,25 @@ impl IndexingDatabase {
                 .query_map([], |row| {
                     let provider_str: String = row.get(0)?;
                     let hash_bytes: Vec<u8> = row.get(1)?;
-                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid hash length",
-                            "",
+                            format!("expected 32 bytes, got {}", error.len()),
                         )))
                     })?;
-                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid provider",
-                            provider_str,
+                            error,
                         )))
                     })?;
                     Ok(resilience::ProviderLease {
                         hash: Hash::from(arr),
                         provider,
                         ticket: row.get(2)?,
-                        sequence: row.get::<_, i64>(3)? as u64,
-                        issued_at: row.get::<_, i64>(4)? as u64,
-                        expires_at: row.get::<_, i64>(5)? as u64,
+                        sequence: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        expires_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
                         signature: row.get(6)?,
                     })
                 })
@@ -1100,8 +1124,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Trust delegations ─────────────────────────────────
-
+    /// Save trust delegations to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the delegations cannot be persisted.
     pub fn save_trust_delegations(&self, delegations: &[wot::TrustDelegation]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM trust_delegations", [])
@@ -1113,7 +1140,9 @@ impl IndexingDatabase {
                     params![
                         d.delegator, d.delegate,
                         d.scope.map(|h| h.as_bytes().to_vec()),
-                        d.sequence as i64, d.issued_at as i64, d.expires_at as i64,
+                        i64::try_from(d.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(d.issued_at).unwrap_or(i64::MAX),
+                        i64::try_from(d.expires_at).unwrap_or(i64::MAX),
                         d.signature,
                     ],
                 ).map_err(|error| database_error("failed to save delegation", error))?;
@@ -1122,6 +1151,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load trust delegations from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the delegations cannot be read.
     pub fn load_trust_delegations(&self) -> Result<Vec<wot::TrustDelegation>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1141,9 +1175,9 @@ impl IndexingDatabase {
                         delegator: row.get::<_, String>(0)?,
                         delegate: row.get::<_, String>(1)?,
                         scope: hash,
-                        sequence: row.get::<_, i64>(3)? as u64,
-                        issued_at: row.get::<_, i64>(4)? as u64,
-                        expires_at: row.get::<_, i64>(5)? as u64,
+                        sequence: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        expires_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
                         signature: row.get(6)?,
                     })
                 })
@@ -1154,8 +1188,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Moderation records ────────────────────────────────
-
+    /// Save moderation records to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the records cannot be persisted.
     pub fn save_moderation_records(&self, records: &[wot::ModerationRecord]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM moderation_records_v2", [])
@@ -1169,7 +1206,9 @@ impl IndexingDatabase {
                     params![
                         r.content.as_bytes().to_vec(), r.moderator,
                         format!("{:?}", r.action), scope_json,
-                        r.sequence as i64, r.created_at as i64, r.reason,
+                        i64::try_from(r.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(r.created_at).unwrap_or(i64::MAX),
+                        r.reason,
                         r.signature,
                     ],
                 ).map_err(|error| database_error("failed to save moderation record", error))?;
@@ -1178,6 +1217,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load moderation records from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the records cannot be read.
     pub fn load_moderation_records(&self) -> Result<Vec<wot::ModerationRecord>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1189,10 +1233,10 @@ impl IndexingDatabase {
             let records = stmt
                 .query_map([], |row| {
                     let hash_bytes: Vec<u8> = row.get(0)?;
-                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid hash length",
-                            "",
+                            format!("expected 32 bytes, got {}", error.len()),
                         )))
                     })?;
                     let scope_json: String = row.get(3)?;
@@ -1216,8 +1260,8 @@ impl IndexingDatabase {
                         moderator: row.get::<_, String>(1)?,
                         action,
                         scope,
-                        sequence: row.get::<_, i64>(4)? as u64,
-                        created_at: row.get::<_, i64>(5)? as u64,
+                        sequence: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        created_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
                         reason: row.get::<_, String>(6)?,
                         signature: row.get(7)?,
                     })
@@ -1229,8 +1273,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Attestations ─────────────────────────────────────
-
+    /// Save attestations to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the attestations cannot be persisted.
     pub fn save_attestations(&self, attestations: &[wot::Attestation]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM attestations_v2", [])
@@ -1248,7 +1295,8 @@ impl IndexingDatabase {
                     params![
                         a.content.as_bytes().to_vec(), a.issuer,
                         kind, kind_other, a.value,
-                        a.sequence as i64, a.issued_at as i64,
+                        i64::try_from(a.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(a.issued_at).unwrap_or(i64::MAX),
                         a.signature,
                     ],
                 ).map_err(|error| database_error("failed to save attestation", error))?;
@@ -1257,6 +1305,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load attestations from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the attestations cannot be read.
     pub fn load_attestations(&self) -> Result<Vec<wot::Attestation>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1268,10 +1321,10 @@ impl IndexingDatabase {
             let attestations = stmt
                 .query_map([], |row| {
                     let hash_bytes: Vec<u8> = row.get(0)?;
-                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid hash length",
-                            "",
+                            format!("expected 32 bytes, got {}", error.len()),
                         )))
                     })?;
                     let kind_str: String = row.get(2)?;
@@ -1292,8 +1345,8 @@ impl IndexingDatabase {
                         issuer: row.get::<_, String>(1)?,
                         kind,
                         value: row.get::<_, String>(4)?,
-                        sequence: row.get::<_, i64>(5)? as u64,
-                        issued_at: row.get::<_, i64>(6)? as u64,
+                        sequence: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(6)?).unwrap_or_default(),
                         signature: row.get(7)?,
                     })
                 })
@@ -1304,8 +1357,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Content reports ──────────────────────────────────
-
+    /// Save content reports to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the reports cannot be persisted.
     pub fn save_content_reports(&self, reports: &[ReportRecord]) -> Result<()> {
         self.with_connection(|connection| {
             connection
@@ -1316,7 +1372,11 @@ impl IndexingDatabase {
                     .execute(
                         "INSERT INTO content_reports_v2(content_hash, reporter, reason, scope, created_at)
                      VALUES (?1, 'cli', ?2, 'global', ?3)",
-                        params![r.content.as_bytes().to_vec(), r.reason, r.created_at as i64],
+                        params![
+                            r.content.as_bytes().to_vec(),
+                            r.reason,
+                            i64::try_from(r.created_at).unwrap_or(i64::MAX),
+                        ],
                     )
                     .map_err(|error| database_error("failed to save content report", error))?;
             }
@@ -1324,6 +1384,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load content reports from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the reports cannot be read.
     pub fn load_content_reports(&self) -> Result<Vec<ReportRecord>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1332,16 +1397,16 @@ impl IndexingDatabase {
             let reports = stmt
                 .query_map([], |row| {
                     let hash_bytes: Vec<u8> = row.get(0)?;
-                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|_| {
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid hash length",
-                            "",
+                            format!("expected 32 bytes, got {}", error.len()),
                         )))
                     })?;
                     Ok(ReportRecord {
                         content: Hash::from(arr),
                         reason: row.get::<_, String>(1)?,
-                        created_at: row.get::<_, i64>(2)? as u64,
+                        created_at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
                     })
                 })
                 .map_err(|error| database_error("failed to query content reports", error))?
@@ -1351,8 +1416,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Provider bans ────────────────────────────────────
-
+    /// Save provider bans to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bans cannot be persisted.
     pub fn save_provider_bans(&self, bans: &[resilience::BanRecord]) -> Result<()> {
         self.with_connection(|connection| {
             connection
@@ -1366,8 +1434,8 @@ impl IndexingDatabase {
                         params![
                             b.provider.to_string(),
                             b.hash.map(|h| h.as_bytes().to_vec()),
-                            b.banned_at as i64,
-                            b.expires_at.map(|v| v as i64),
+                            i64::try_from(b.banned_at).unwrap_or(i64::MAX),
+                            b.expires_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
                             b.reason,
                             format!("{:?}", b.source),
                         ],
@@ -1378,6 +1446,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load provider bans from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bans cannot be read.
     pub fn load_provider_bans(&self) -> Result<Vec<resilience::BanRecord>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1391,10 +1464,10 @@ impl IndexingDatabase {
                     let provider_str: String = row.get(0)?;
                     let content_hash: Option<Vec<u8>> = row.get(1)?;
                     let source_str: String = row.get(5)?;
-                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid provider",
-                            provider_str,
+                            error,
                         )))
                     })?;
                     let hash = content_hash.and_then(|b| {
@@ -1402,7 +1475,6 @@ impl IndexingDatabase {
                         Some(Hash::from(arr))
                     });
                     let source = match source_str.as_str() {
-                        "Manual" => resilience::BanSource::Manual,
                         "Automated" => resilience::BanSource::Automated,
                         "WoT" => resilience::BanSource::WoT,
                         _ => resilience::BanSource::Manual,
@@ -1410,8 +1482,10 @@ impl IndexingDatabase {
                     Ok(resilience::BanRecord {
                         provider,
                         hash,
-                        banned_at: row.get::<_, i64>(2)? as u64,
-                        expires_at: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+                        banned_at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                        expires_at: row
+                            .get::<_, Option<i64>>(3)?
+                            .map(|v| u64::try_from(v).unwrap_or_default()),
                         reason: row.get::<_, String>(4)?,
                         source,
                     })
@@ -1423,8 +1497,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Provider trust records ───────────────────────────
-
+    /// Save provider trust records to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the records cannot be persisted.
     pub fn save_provider_trust_records(&self, records: &[wot::ProviderTrustRecord]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM provider_trust_records_v2", [])
@@ -1437,8 +1514,11 @@ impl IndexingDatabase {
                     params![
                         r.provider.to_string(), action_str,
                         r.scope.map(|h| h.as_bytes().to_vec()),
-                        r.issuer, r.sequence as i64, r.issued_at as i64,
-                        r.expires_at.map(|v| v as i64), r.reason,
+                        r.issuer,
+                        i64::try_from(r.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(r.issued_at).unwrap_or(i64::MAX),
+                        r.expires_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+                        r.reason,
                         r.signature,
                     ],
                 ).map_err(|error| database_error("failed to save provider trust record", error))?;
@@ -1447,6 +1527,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load provider trust records from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the records cannot be read.
     pub fn load_provider_trust_records(&self) -> Result<Vec<wot::ProviderTrustRecord>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1460,10 +1545,10 @@ impl IndexingDatabase {
                     let provider_str: String = row.get(0)?;
                     let action_str: String = row.get(1)?;
                     let scope: Option<Vec<u8>> = row.get(2)?;
-                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid provider",
-                            provider_str,
+                            error,
                         )))
                     })?;
                     let action = match action_str.as_str() {
@@ -1486,9 +1571,11 @@ impl IndexingDatabase {
                         action,
                         scope: hash,
                         issuer: row.get::<_, String>(3)?,
-                        sequence: row.get::<_, i64>(4)? as u64,
-                        issued_at: row.get::<_, i64>(5)? as u64,
-                        expires_at: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
+                        sequence: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
+                        expires_at: row
+                            .get::<_, Option<i64>>(6)?
+                            .map(|v| u64::try_from(v).unwrap_or_default()),
                         reason: row.get::<_, String>(7)?,
                         signature: row.get(8)?,
                     })
@@ -1500,8 +1587,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Provider trust signals ───────────────────────────
-
+    /// Save provider trust signals to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the signals cannot be persisted.
     pub fn save_provider_trust_signals(&self, signals: &[reputation::ProviderTrustSignal]) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM provider_trust_signals_v2", [])
@@ -1515,7 +1605,8 @@ impl IndexingDatabase {
                         s.reporter.to_string(), s.provider.to_string(),
                         kind_str,
                         s.hash.map(|h| h.as_bytes().to_vec()),
-                        s.sequence as i64, s.timestamp as i64,
+                        i64::try_from(s.sequence).unwrap_or(i64::MAX),
+                        i64::try_from(s.timestamp).unwrap_or(i64::MAX),
                         s.signature,
                     ],
                 ).map_err(|error| database_error("failed to save trust signal", error))?;
@@ -1524,6 +1615,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load provider trust signals from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the signals cannot be read.
     pub fn load_provider_trust_signals(&self) -> Result<Vec<reputation::ProviderTrustSignal>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -1538,16 +1634,16 @@ impl IndexingDatabase {
                     let provider_str: String = row.get(1)?;
                     let kind_str: String = row.get(2)?;
                     let content_hash: Option<Vec<u8>> = row.get(3)?;
-                    let reporter = reporter_str.parse::<PublicKey>().map_err(|_| {
+                    let reporter = reporter_str.parse::<PublicKey>().map_err(|error| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid reporter",
-                            reporter_str,
+                            error,
                         )))
                     })?;
-                    let provider = provider_str.parse::<PublicKey>().map_err(|_| {
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
                         rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
                             "invalid provider",
-                            provider_str,
+                            error,
                         )))
                     })?;
                     let kind = match kind_str.as_str() {
@@ -1565,12 +1661,12 @@ impl IndexingDatabase {
                         Some(Hash::from(arr))
                     });
                     Ok(reputation::ProviderTrustSignal {
-                        reporter,
                         provider,
                         signal: kind,
                         hash,
-                        sequence: row.get::<_, i64>(4)? as u64,
-                        timestamp: row.get::<_, i64>(5)? as u64,
+                        reporter,
+                        timestamp: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
+                        sequence: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
                         signature: row.get(6)?,
                     })
                 })
@@ -1581,8 +1677,11 @@ impl IndexingDatabase {
         })
     }
 
-    // ── Trust streams ────────────────────────────────────
-
+    /// Save trust streams to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the streams cannot be persisted.
     pub fn save_trust_streams(&self, streams: &[String]) -> Result<()> {
         self.with_connection(|connection| {
             connection
@@ -1601,6 +1700,11 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load trust streams from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the streams cannot be read.
     pub fn load_trust_streams(&self) -> Result<Vec<String>> {
         self.with_connection(|connection| {
             let mut stmt = connection
@@ -2013,6 +2117,218 @@ fn wot_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<wot::Metad
     })
 }
 
+const SCHEMA_PART1: &str = "PRAGMA journal_mode = WAL;
+     CREATE TABLE IF NOT EXISTS index_metadata (
+         key TEXT PRIMARY KEY NOT NULL,
+         value TEXT NOT NULL
+     );
+     CREATE TABLE IF NOT EXISTS indexed_folders (
+         namespace_id TEXT PRIMARY KEY NOT NULL,
+         label TEXT NOT NULL,
+         enabled_at INTEGER NOT NULL
+     );
+     CREATE TABLE IF NOT EXISTS indexed_entries (
+         id INTEGER PRIMARY KEY,
+         namespace_id TEXT NOT NULL REFERENCES indexed_folders(namespace_id) ON DELETE CASCADE,
+         entry_key BLOB NOT NULL,
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         content_len INTEGER NOT NULL CHECK(content_len >= 0),
+         updated_at INTEGER NOT NULL,
+         UNIQUE(namespace_id, entry_key)
+     );
+     CREATE INDEX IF NOT EXISTS indexed_entries_namespace
+         ON indexed_entries(namespace_id);
+     CREATE VIRTUAL TABLE IF NOT EXISTS indexed_entries_fts USING fts5(
+         namespace_id UNINDEXED,
+         entry_key,
+         title,
+         tags,
+         tokenize = 'unicode61'
+     );
+     CREATE TABLE IF NOT EXISTS indexed_catalogs (
+         namespace_id TEXT PRIMARY KEY NOT NULL,
+         label TEXT NOT NULL,
+         subscribed_at INTEGER NOT NULL
+     );
+     CREATE TABLE IF NOT EXISTS indexed_catalog_entries (
+         id INTEGER PRIMARY KEY,
+         catalog_namespace_id TEXT NOT NULL REFERENCES indexed_catalogs(namespace_id) ON DELETE CASCADE,
+         folder_namespace_id TEXT NOT NULL,
+         entry_key BLOB NOT NULL,
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         content_len INTEGER NOT NULL CHECK(content_len >= 0),
+         folder_name TEXT NOT NULL,
+         title TEXT NOT NULL,
+         tags TEXT NOT NULL,
+         publisher TEXT NOT NULL,
+         updated_at INTEGER NOT NULL,
+         UNIQUE(catalog_namespace_id, folder_namespace_id, entry_key)
+     );
+     CREATE INDEX IF NOT EXISTS indexed_catalog_entries_catalog
+         ON indexed_catalog_entries(catalog_namespace_id);
+     CREATE VIRTUAL TABLE IF NOT EXISTS indexed_catalog_entries_fts USING fts5(
+         catalog_namespace_id UNINDEXED,
+         folder_namespace_id UNINDEXED,
+         entry_key,
+         folder_name,
+         title,
+         tags,
+         publisher,
+         content_hash,
+         tokenize = 'unicode61'
+     );
+     CREATE TABLE IF NOT EXISTS wot_metadata (
+         id INTEGER PRIMARY KEY,
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         metadata_key TEXT NOT NULL,
+         metadata_value TEXT NOT NULL,
+         author TEXT NOT NULL,
+         sequence INTEGER NOT NULL CHECK(sequence > 0),
+         created_at INTEGER NOT NULL CHECK(created_at >= 0),
+         signature TEXT NOT NULL,
+         UNIQUE(content_hash, metadata_key, author, sequence)
+     );
+     CREATE INDEX IF NOT EXISTS wot_metadata_content
+         ON wot_metadata(content_hash);
+     CREATE VIRTUAL TABLE IF NOT EXISTS wot_metadata_fts USING fts5(
+         content_hash UNINDEXED,
+         metadata_key,
+         metadata_value,
+         author,
+         tokenize = 'unicode61'
+     );";
+
+const SCHEMA_PART2: &str = "CREATE TABLE IF NOT EXISTS stable_links (
+     link TEXT PRIMARY KEY NOT NULL,
+     kind TEXT NOT NULL,
+     publisher TEXT,
+     alias TEXT,
+     content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
+     sequence INTEGER NOT NULL CHECK(sequence >= 0),
+     version TEXT,
+     payload BLOB NOT NULL,
+     updated_at INTEGER NOT NULL
+ );
+CREATE TABLE IF NOT EXISTS link_mirrors (
+link TEXT NOT NULL,
+provider TEXT NOT NULL,
+ticket TEXT NOT NULL,
+priority INTEGER NOT NULL DEFAULT 0,
+updated_at INTEGER NOT NULL,
+PRIMARY KEY(link, provider)
+);
+     CREATE TABLE IF NOT EXISTS denylist_rules (
+         rule_type TEXT NOT NULL,
+         rule_value BLOB NOT NULL,
+         namespace_id TEXT,
+         updated_at INTEGER NOT NULL,
+         PRIMARY KEY(rule_type, rule_value, namespace_id)
+     );
+     CREATE TABLE IF NOT EXISTS filter_lists (
+         namespace_id TEXT PRIMARY KEY NOT NULL,
+         sequence INTEGER NOT NULL CHECK(sequence > 0),
+         publisher TEXT NOT NULL,
+         payload BLOB NOT NULL,
+         updated_at INTEGER NOT NULL
+     );
+     CREATE TABLE IF NOT EXISTS moderation_records (
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         scope TEXT NOT NULL,
+         sequence INTEGER NOT NULL CHECK(sequence > 0),
+         payload BLOB NOT NULL,
+         updated_at INTEGER NOT NULL,
+         PRIMARY KEY(content_hash, scope)
+     );
+     CREATE TABLE IF NOT EXISTS provider_leases (
+         provider TEXT NOT NULL,
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         ticket TEXT NOT NULL,
+         sequence INTEGER NOT NULL,
+         issued_at INTEGER NOT NULL,
+         expires_at INTEGER NOT NULL,
+         signature TEXT,
+         PRIMARY KEY(provider, content_hash)
+     );
+     CREATE INDEX IF NOT EXISTS idx_provider_leases_hash ON provider_leases(content_hash);";
+
+const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS trust_delegations (
+     delegator TEXT NOT NULL,
+     delegate TEXT NOT NULL,
+     scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
+     sequence INTEGER NOT NULL,
+     issued_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL,
+     signature TEXT,
+     PRIMARY KEY(delegator, delegate, sequence)
+ );
+     CREATE TABLE IF NOT EXISTS moderation_records_v2 (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         moderator TEXT NOT NULL,
+         action TEXT NOT NULL,
+         scope_json TEXT NOT NULL,
+         sequence INTEGER NOT NULL,
+         created_at INTEGER NOT NULL,
+         reason TEXT NOT NULL,
+         signature TEXT
+     );
+     CREATE TABLE IF NOT EXISTS attestations_v2 (
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         issuer TEXT NOT NULL,
+         kind TEXT NOT NULL,
+         kind_other TEXT,
+         value TEXT NOT NULL,
+         sequence INTEGER NOT NULL,
+         issued_at INTEGER NOT NULL,
+         signature TEXT,
+         PRIMARY KEY(content_hash, issuer, kind)
+     );
+     CREATE TABLE IF NOT EXISTS content_reports_v2 (
+         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+         reporter TEXT NOT NULL,
+         reason TEXT NOT NULL,
+         scope TEXT NOT NULL DEFAULT 'global',
+         created_at INTEGER NOT NULL,
+         PRIMARY KEY(content_hash, reporter, reason)
+     );
+     CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         provider TEXT NOT NULL,
+         action TEXT NOT NULL,
+         scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
+         issuer TEXT NOT NULL,
+         sequence INTEGER NOT NULL,
+         issued_at INTEGER NOT NULL,
+         expires_at INTEGER,
+         reason TEXT NOT NULL,
+         signature TEXT
+     );
+     CREATE TABLE IF NOT EXISTS provider_bans_v2 (
+         provider TEXT NOT NULL,
+         content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
+         banned_at INTEGER NOT NULL,
+         expires_at INTEGER,
+         reason TEXT NOT NULL,
+         source TEXT NOT NULL,
+         PRIMARY KEY(provider, content_hash)
+     );
+     CREATE TABLE IF NOT EXISTS provider_trust_signals_v2 (
+         reporter TEXT NOT NULL,
+         provider TEXT NOT NULL,
+         signal_kind TEXT NOT NULL,
+         content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
+         sequence INTEGER NOT NULL,
+         timestamp INTEGER NOT NULL,
+         signature TEXT,
+         PRIMARY KEY(reporter, provider, sequence)
+     );
+     CREATE INDEX IF NOT EXISTS idx_trust_signals_provider_v2 ON provider_trust_signals_v2(provider);
+     CREATE INDEX IF NOT EXISTS idx_trust_signals_ts_v2 ON provider_trust_signals_v2(timestamp);
+     CREATE TABLE IF NOT EXISTS trust_streams (
+         namespace TEXT PRIMARY KEY,
+         subscribed_at INTEGER NOT NULL
+     );";
+
 fn initialize_connection(connection: &Connection) -> Result<()> {
     connection
         .busy_timeout(std::time::Duration::from_secs(5))
@@ -2033,219 +2349,11 @@ fn initialize_connection(connection: &Connection) -> Result<()> {
 }
 
 fn initialize_schema(connection: &Connection) -> Result<()> {
-    connection
-        .execute_batch(
-            "PRAGMA journal_mode = WAL;
-             CREATE TABLE IF NOT EXISTS index_metadata (
-                 key TEXT PRIMARY KEY NOT NULL,
-                 value TEXT NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS indexed_folders (
-                 namespace_id TEXT PRIMARY KEY NOT NULL,
-                 label TEXT NOT NULL,
-                 enabled_at INTEGER NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS indexed_entries (
-                 id INTEGER PRIMARY KEY,
-                 namespace_id TEXT NOT NULL REFERENCES indexed_folders(namespace_id) ON DELETE CASCADE,
-                 entry_key BLOB NOT NULL,
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 content_len INTEGER NOT NULL CHECK(content_len >= 0),
-                 updated_at INTEGER NOT NULL,
-                 UNIQUE(namespace_id, entry_key)
-             );
-             CREATE INDEX IF NOT EXISTS indexed_entries_namespace
-                 ON indexed_entries(namespace_id);
-             CREATE VIRTUAL TABLE IF NOT EXISTS indexed_entries_fts USING fts5(
-                 namespace_id UNINDEXED,
-                 entry_key,
-                 title,
-                 tags,
-                 tokenize = 'unicode61'
-             );
-             CREATE TABLE IF NOT EXISTS indexed_catalogs (
-                 namespace_id TEXT PRIMARY KEY NOT NULL,
-                 label TEXT NOT NULL,
-                 subscribed_at INTEGER NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS indexed_catalog_entries (
-                 id INTEGER PRIMARY KEY,
-                 catalog_namespace_id TEXT NOT NULL REFERENCES indexed_catalogs(namespace_id) ON DELETE CASCADE,
-                 folder_namespace_id TEXT NOT NULL,
-                 entry_key BLOB NOT NULL,
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 content_len INTEGER NOT NULL CHECK(content_len >= 0),
-                 folder_name TEXT NOT NULL,
-                 title TEXT NOT NULL,
-                 tags TEXT NOT NULL,
-                 publisher TEXT NOT NULL,
-                 updated_at INTEGER NOT NULL,
-                 UNIQUE(catalog_namespace_id, folder_namespace_id, entry_key)
-             );
-             CREATE INDEX IF NOT EXISTS indexed_catalog_entries_catalog
-                 ON indexed_catalog_entries(catalog_namespace_id);
-             CREATE VIRTUAL TABLE IF NOT EXISTS indexed_catalog_entries_fts USING fts5(
-                 catalog_namespace_id UNINDEXED,
-                 folder_namespace_id UNINDEXED,
-                 entry_key,
-                 folder_name,
-                 title,
-                 tags,
-                 publisher,
-                 content_hash,
-                 tokenize = 'unicode61'
-             );
-             CREATE TABLE IF NOT EXISTS wot_metadata (
-                 id INTEGER PRIMARY KEY,
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 metadata_key TEXT NOT NULL,
-                 metadata_value TEXT NOT NULL,
-                 author TEXT NOT NULL,
-                 sequence INTEGER NOT NULL CHECK(sequence > 0),
-                 created_at INTEGER NOT NULL CHECK(created_at >= 0),
-                 signature TEXT NOT NULL,
-                 UNIQUE(content_hash, metadata_key, author, sequence)
-             );
-             CREATE INDEX IF NOT EXISTS wot_metadata_content
-                 ON wot_metadata(content_hash);
-             CREATE VIRTUAL TABLE IF NOT EXISTS wot_metadata_fts USING fts5(
-                 content_hash UNINDEXED,
-                 metadata_key,
-                 metadata_value,
-                 author,
-                 tokenize = 'unicode61'
-             );
-             CREATE TABLE IF NOT EXISTS stable_links (
-                 link TEXT PRIMARY KEY NOT NULL,
-                 kind TEXT NOT NULL,
-                 publisher TEXT,
-                 alias TEXT,
-                 content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
-                 sequence INTEGER NOT NULL CHECK(sequence >= 0),
-                 version TEXT,
-                 payload BLOB NOT NULL,
-                 updated_at INTEGER NOT NULL
-             );
-CREATE TABLE IF NOT EXISTS link_mirrors (
-    link TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    ticket TEXT NOT NULL,
-    priority INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY(link, provider)
-);
-             CREATE TABLE IF NOT EXISTS denylist_rules (
-                 rule_type TEXT NOT NULL,
-                 rule_value BLOB NOT NULL,
-                 namespace_id TEXT,
-                 updated_at INTEGER NOT NULL,
-                 PRIMARY KEY(rule_type, rule_value, namespace_id)
-             );
-             CREATE TABLE IF NOT EXISTS filter_lists (
-                 namespace_id TEXT PRIMARY KEY NOT NULL,
-                 sequence INTEGER NOT NULL CHECK(sequence > 0),
-                 publisher TEXT NOT NULL,
-                 payload BLOB NOT NULL,
-                 updated_at INTEGER NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS moderation_records (
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 scope TEXT NOT NULL,
-                 sequence INTEGER NOT NULL CHECK(sequence > 0),
-                 payload BLOB NOT NULL,
-                 updated_at INTEGER NOT NULL,
-                 PRIMARY KEY(content_hash, scope)
-             );
-             CREATE TABLE IF NOT EXISTS provider_leases (
-                 provider TEXT NOT NULL,
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 ticket TEXT NOT NULL,
-                 sequence INTEGER NOT NULL,
-                 issued_at INTEGER NOT NULL,
-                 expires_at INTEGER NOT NULL,
-                 signature TEXT,
-                 PRIMARY KEY(provider, content_hash)
-             );
-             CREATE INDEX IF NOT EXISTS idx_provider_leases_hash ON provider_leases(content_hash);
-             CREATE TABLE IF NOT EXISTS trust_delegations (
-                 delegator TEXT NOT NULL,
-                 delegate TEXT NOT NULL,
-                 scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
-                 sequence INTEGER NOT NULL,
-                 issued_at INTEGER NOT NULL,
-                 expires_at INTEGER NOT NULL,
-                 signature TEXT,
-                 PRIMARY KEY(delegator, delegate, sequence)
-             );
-             CREATE TABLE IF NOT EXISTS moderation_records_v2 (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 moderator TEXT NOT NULL,
-                 action TEXT NOT NULL,
-                 scope_json TEXT NOT NULL,
-                 sequence INTEGER NOT NULL,
-                 created_at INTEGER NOT NULL,
-                 reason TEXT NOT NULL,
-                 signature TEXT
-             );
-             CREATE TABLE IF NOT EXISTS attestations_v2 (
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 issuer TEXT NOT NULL,
-                 kind TEXT NOT NULL,
-                 kind_other TEXT,
-                 value TEXT NOT NULL,
-                 sequence INTEGER NOT NULL,
-                 issued_at INTEGER NOT NULL,
-                 signature TEXT,
-                 PRIMARY KEY(content_hash, issuer, kind)
-             );
-             CREATE TABLE IF NOT EXISTS content_reports_v2 (
-                 content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-                 reporter TEXT NOT NULL,
-                 reason TEXT NOT NULL,
-                 scope TEXT NOT NULL DEFAULT 'global',
-                 created_at INTEGER NOT NULL,
-                 PRIMARY KEY(content_hash, reporter, reason)
-             );
-             CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 provider TEXT NOT NULL,
-                 action TEXT NOT NULL,
-                 scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
-                 issuer TEXT NOT NULL,
-                 sequence INTEGER NOT NULL,
-                 issued_at INTEGER NOT NULL,
-                 expires_at INTEGER,
-                 reason TEXT NOT NULL,
-                 signature TEXT
-             );
-             CREATE TABLE IF NOT EXISTS provider_bans_v2 (
-                 provider TEXT NOT NULL,
-                 content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
-                 banned_at INTEGER NOT NULL,
-                 expires_at INTEGER,
-                 reason TEXT NOT NULL,
-                 source TEXT NOT NULL,
-                 PRIMARY KEY(provider, content_hash)
-             );
-             CREATE TABLE IF NOT EXISTS provider_trust_signals_v2 (
-                 reporter TEXT NOT NULL,
-                 provider TEXT NOT NULL,
-                 signal_kind TEXT NOT NULL,
-                 content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
-                 sequence INTEGER NOT NULL,
-                 timestamp INTEGER NOT NULL,
-                 signature TEXT,
-                 PRIMARY KEY(reporter, provider, sequence)
-             );
-             CREATE INDEX IF NOT EXISTS idx_trust_signals_provider_v2 ON provider_trust_signals_v2(provider);
-             CREATE INDEX IF NOT EXISTS idx_trust_signals_ts_v2 ON provider_trust_signals_v2(timestamp);
-             CREATE TABLE IF NOT EXISTS trust_streams (
-                 namespace TEXT PRIMARY KEY,
-                 subscribed_at INTEGER NOT NULL
-             );",
-        )
-        .map_err(|error| database_error("failed to initialize indexing database schema", error))?;
+    for part in [SCHEMA_PART1, SCHEMA_PART2, SCHEMA_PART3] {
+        connection
+            .execute_batch(part)
+            .map_err(|error| database_error("failed to initialize indexing database schema", error))?;
+    }
     Ok(())
 }
 
@@ -2265,8 +2373,20 @@ fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
 
 /// A content report stored in the indexing database.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ReportRecord {
     pub content: Hash,
     pub reason: String,
     pub created_at: u64,
+}
+
+impl ReportRecord {
+    #[must_use]
+    pub const fn new(content: Hash, reason: String, created_at: u64) -> Self {
+        Self {
+            content,
+            reason,
+            created_at,
+        }
+    }
 }

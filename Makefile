@@ -7,6 +7,10 @@ fmt:
 
 flint:
 	@EXIT_CODE=0; \
+	fd -eRS -x sed -i '/───────────/d'
+	fd -eMD -tf -x sed -i 's|–|--|g'
+	fd -eMD -tf -x sed -i 's|\*\*||g'
+
 	cargo fix --broken-code --allow-dirty || EXIT_CODE=$$?; \
 	cargo clippy --fix --allow-dirty || EXIT_CODE=$$?; \
 	rg -i --no-heading --no-line-number -F '#[expect' | grep -v Makefile || true; \
@@ -21,6 +25,8 @@ lint:
 	EXIT_CODE=$${EXIT_CODE:-0}; \
 	echo ""; echo "Error Summary:"; \
 	cat clippy.log | sed "s/\x1B\[[0-9;]*[a-zA-Z]//g" | grep -E -i "^error(\[[^]]+\])?:" | grep -v "could not compile" | sort | uniq -c | sort -g || true; \
+	echo ""; echo "Line Numbers:"; \
+	cat clippy.log | sed "s/\x1B\[[0-9;]*[a-zA-Z]//g" | grep "^\s*-->" | sed "s/.*--> //" | sort | uniq -c | sort -g || true; \
 	rm -f clippy.log; \
 	exit $$EXIT_CODE'
 

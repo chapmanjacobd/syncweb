@@ -6,17 +6,17 @@ Name "report" implies submitting to an authority or sharing with peers. Actual: 
 ## Current scope
 - `handle_report` parses a hash, pushes a `ReportRecord { content, reason, created_at }` to `state.reports`
 - Saved to `indexing-state.json` on disk
-- **Zero** network communication
-- **Zero** validation (no signature, no proof, no identity check)
+- Zero network communication
+- Zero validation (no signature, no proof, no identity check)
 - `ReportRecord` has no signature field, no sequence number, no topic identifier
 - No other code ever reads `state.reports` — it's write-only dead data
 
 ## Decision
-- **Move** `report` under `moderation` as `moderation report` — this clarifies its purpose
-- **Deprecate** top-level `report` with a forwarding notice
-- **Add** cryptographic signing of reports with the local node identity
-- **Add** a gossip channel to broadcast signed reports to peers
-- **Add** an `--import` flag to apply incoming reports from other peers as local moderation decisions
+- Move `report` under `moderation` as `moderation report` — this clarifies its purpose
+- Deprecate top-level `report` with a forwarding notice
+- Add cryptographic signing of reports with the local node identity
+- Add a gossip channel to broadcast signed reports to peers
+- Add an `--import` flag to apply incoming reports from other peers as local moderation decisions
 
 ---
 
@@ -321,7 +321,7 @@ On startup, if indexing is enabled, spawn a task that:
 
 ## Gossip/network integration note
 
-- `report` currently has **zero** network integration — purely local
+- `report` currently has zero network integration — purely local
 - The fix adds a dedicated gossip topic (`syncweb/reports`) for broadcasting signed reports
 - Reports are self-authenticating (signed by the reporter's node key)
 - Receiving peers can decide whether to trust the report based on their WoT configuration

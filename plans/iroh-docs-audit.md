@@ -15,61 +15,61 @@ Iroh docs is a key-value document store where:
 - Live events (`LiveEvent`) stream insertions, deletions, and sync state changes
 
 This makes Iroh docs ideal for:
-- **Mutable, shared state** that multiple peers concurrently update
-- **Folder synchronization** where entries change over time
-- **Discoverable metadata** that should sync with peer discovery
+- Mutable, shared state that multiple peers concurrently update
+- Folder synchronization where entries change over time
+- Discoverable metadata that should sync with peer discovery
 
 Iroh docs is NOT ideal for:
-- **Immutable data** that never changes after creation
-- **Single-writer data** that only the local node ever reads (use blobs or SQLite instead)
-- **High-frequency counters** or rapidly-updating state (use SQLite or in-memory)
-- **Key material** or secrets that should never leave the local machine
+- Immutable data that never changes after creation
+- Single-writer data that only the local node ever reads (use blobs or SQLite instead)
+- High-frequency counters or rapidly-updating state (use SQLite or in-memory)
+- Key material or secrets that should never leave the local machine
 
 ## Audit: Every Docs Usage Site
 
 ### 1. Folder Entry Storage (CORRECT)
 
-**File:** `syncweb-core/src/folder/syncweb_folder.rs` (via `DocsEngine`)
+File: `syncweb-core/src/folder/syncweb_folder.rs` (via `DocsEngine`)
 
-**Usage:** Each synchronized folder has an Iroh doc where keys are file paths (as byte strings) and values are blob references (hash + size). The doc acts as the canonical index of what files exist in the folder.
+Usage: Each synchronized folder has an Iroh doc where keys are file paths (as byte strings) and values are blob references (hash + size). The doc acts as the canonical index of what files exist in the folder.
 
-**Assessment: CORRECT.** This is the primary and most appropriate use of Iroh docs. Multiple peers can concurrently add, modify, or delete files. The CRDT merge provides automatic conflict resolution. The doc is the synchronization unit.
+Assessment: CORRECT. This is the primary and most appropriate use of Iroh docs. Multiple peers can concurrently add, modify, or delete files. The CRDT merge provides automatic conflict resolution. The doc is the synchronization unit.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 2. Folder Metadata Key (CORRECT)
 
-**File:** `syncweb-core/src/folder/manager.rs:18`
+File: `syncweb-core/src/folder/manager.rs:18`
 
-**Usage:** A single doc entry under key `b"sys/syncweb/mode"` stores the `SyncMode` string (`"SendReceive"`, `"ReceiveOnly"`, etc.).
+Usage: A single doc entry under key `b"sys/syncweb/mode"` stores the `SyncMode` string (`"SendReceive"`, `"ReceiveOnly"`, etc.).
 
-**Assessment: CORRECT.** This is a tiny piece of metadata that benefits from being inside the doc — it syncs with the folder, and any peer can read it to understand the folder's intent. Less than 50 bytes.
+Assessment: CORRECT. This is a tiny piece of metadata that benefits from being inside the doc — it syncs with the folder, and any peer can read it to understand the folder's intent. Less than 50 bytes.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 3. Capability Grants (CORRECT)
 
-**File:** `syncweb-core/src/folder/syncweb_folder.rs` (`grant` method)
+File: `syncweb-core/src/folder/syncweb_folder.rs` (`grant` method)
 
-**Usage:** Uses Iroh docs' built-in `set_capability()` and `list_capabilities()` API to grant/revoke read/write access to peers. Capabilities are stored inside the docs persistent store as part of the namespace metadata.
+Usage: Uses Iroh docs' built-in `set_capability()` and `list_capabilities()` API to grant/revoke read/write access to peers. Capabilities are stored inside the docs persistent store as part of the namespace metadata.
 
-**Assessment: CORRECT.** This is Iroh's own permission system. The capabilities are small and tightly coupled to the doc's access control. No custom storage needed.
+Assessment: CORRECT. This is Iroh's own permission system. The capabilities are small and tightly coupled to the doc's access control. No custom storage needed.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 4. Public Blob Subscription (OVERUSE)
 
-**File:** `syncweb-core/src/folder/manager.rs:87-113` (`subscribe_public`)
+File: `syncweb-core/src/folder/manager.rs:87-113` (`subscribe_public`)
 
-**Usage:** When subscribing to a public blob ticket, creates a new doc namespace, writes a single entry `b"public/content"` pointing to the blob hash, and wraps it as a `SyncwebFolder` with `SyncMode::PublicReadOnly`.
+Usage: When subscribing to a public blob ticket, creates a new doc namespace, writes a single entry `b"public/content"` pointing to the blob hash, and wraps it as a `SyncwebFolder` with `SyncMode::PublicReadOnly`.
 
-**Why this is overuse:**
+Why this is overuse:
 - The blob is immutable (content-addressed) — there is nothing to sync
 - Only one key (`b"public/content"`) ever exists in this doc
 - Only the local node ever writes to it (single-writer)
@@ -77,7 +77,7 @@ Iroh docs is NOT ideal for:
 - A `SyncwebFolder` is created solely to conform to the folder API, not because the data is a folder
 - Memory: each doc namespace consumes ~hundreds of bytes in the docs store and has a live sync task
 
-**Fix: Refactor to use BlobStore directly.**
+Fix: Refactor to use BlobStore directly.
 
 Create a lightweight `PublicSubscription` abstraction that doesn't create a doc:
 
@@ -139,11 +139,11 @@ impl FolderOrSubscription {
 }
 ```
 
-**Files to modify:**
+Files to modify:
 
 | File | Change |
 |---|---|
-| `syncweb-core/src/folder/public_subscription.rs` | **NEW** — PublicSubscription type |
+| `syncweb-core/src/folder/public_subscription.rs` | NEW — PublicSubscription type |
 | `syncweb-core/src/folder/mod.rs` | Add `pub mod public_subscription` |
 | `syncweb-core/src/folder/manager.rs` | Change `subscribe_public` return type; remove doc creation |
 | `syncweb-core/src/daemon/daemon.rs` | Track subscriptions alongside folders |
@@ -155,113 +155,113 @@ impl FolderOrSubscription {
 
 ### 5. Collection Publication (CORRECT)
 
-**File:** `syncweb-core/src/folder/collection.rs:457-509` (`CollectionStore::publish`)
+File: `syncweb-core/src/folder/collection.rs:457-509` (`CollectionStore::publish`)
 
-**Usage:** A `CollectionHead` (manifest hash + version) is stored as a doc entry in a collection-specific namespace. The doc acts as a mutable pointer to the latest published version.
+Usage: A `CollectionHead` (manifest hash + version) is stored as a doc entry in a collection-specific namespace. The doc acts as a mutable pointer to the latest published version.
 
-**Assessment: CORRECT.** This is the canonical "mutable pointer" pattern. The blob stores the immutable manifest; the doc entry stores the current version. Peers only need to sync the doc to discover the latest version, not download all historical manifests.
+Assessment: CORRECT. This is the canonical "mutable pointer" pattern. The blob stores the immutable manifest; the doc entry stores the current version. Peers only need to sync the doc to discover the latest version, not download all historical manifests.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 6. Catalog Publishing (CORRECT)
 
-**File:** `syncweb-core/src/indexing/catalog.rs` — `CatalogService`
+File: `syncweb-core/src/indexing/catalog.rs` — `CatalogService`
 
-**Usage:** Each catalog has a dedicated doc namespace. Catalog records (folder entries with metadata) are stored as doc entries keyed by `{folder_namespace_id}/{entry_key}`. Catalogs sync between peers for distributed search.
+Usage: Each catalog has a dedicated doc namespace. Catalog records (folder entries with metadata) are stored as doc entries keyed by `{folder_namespace_id}/{entry_key}`. Catalogs sync between peers for distributed search.
 
-**Why the doc is appropriate:**
+Why the doc is appropriate:
 - Catalogs are mutable (records are added/updated as folders change)
 - Multiple publishers can contribute to a catalog (multi-writer)
 - Peers can subscribe to a catalog and receive live updates
 - The doc provides structured, queryable metadata
 
-**Assessment: CORRECT.** Catalogs are exactly the kind of shared, mutable, multi-writer metadata that Iroh docs was designed for.
+Assessment: CORRECT. Catalogs are exactly the kind of shared, mutable, multi-writer metadata that Iroh docs was designed for.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 7. Mutable Links / Signed Pointers (ADEQUATE)
 
-**File:** `syncweb-core/src/indexing/links.rs` — `MutablePointer` stored in Iroh docs
+File: `syncweb-core/src/indexing/links.rs` — `MutablePointer` stored in Iroh docs
 
-**Usage:** Signed mutable pointers (alias → hash + sequence + signature) are stored as doc entries in link-specific doc namespaces. The doc syncs pointer updates between peers.
+Usage: Signed mutable pointers (alias → hash + sequence + signature) are stored as doc entries in link-specific doc namespaces. The doc syncs pointer updates between peers.
 
-**Why the doc is used:**
+Why the doc is used:
 - Pointers change over time (new versions)
 - Multiple peers may discover and cache the same pointer
 - Doc sync ensures pointer updates propagate
 
-**Why it's borderline:**
+Why it's borderline:
 - This could also work with simple gossip messages (announce pointer update on a topic)
 - The doc approach adds overhead for what is essentially a single-value-per-key update
 - But the doc provides persistent storage that survives the gossip window
 
-**Assessment: ADEQUATE.** The docs approach works and provides persistence that gossip alone doesn't. No urgent change needed, but if link resolution becomes a performance bottleneck, consider a hybrid: gossip for discovery + SQLite for persistence.
+Assessment: ADEQUATE. The docs approach works and provides persistence that gossip alone doesn't. No urgent change needed, but if link resolution becomes a performance bottleneck, consider a hybrid: gossip for discovery + SQLite for persistence.
 
-**No immediate change.**
+No immediate change.
 
 ---
 
 ### 8. Sync Engine Live Events (CORRECT)
 
-**File:** `syncweb-core/src/sync/engine.rs:196` — `self.docs_engine.watch(folder.doc())`
+File: `syncweb-core/src/sync/engine.rs:196` — `self.docs_engine.watch(folder.doc())`
 
-**Usage:** The sync engine subscribes to `LiveEvent` streams from folder docs to drive synchronization intents. When an entry is inserted remotely, the engine decides whether to download the blob.
+Usage: The sync engine subscribes to `LiveEvent` streams from folder docs to drive synchronization intents. When an entry is inserted remotely, the engine decides whether to download the blob.
 
-**Assessment: CORRECT.** Live events from docs are the proper way to be notified of remote changes. This is the reactive synchronization model that Iroh docs provides.
+Assessment: CORRECT. Live events from docs are the proper way to be notified of remote changes. This is the reactive synchronization model that Iroh docs provides.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 9. Indexing Service Live Events (CORRECT)
 
-**File:** `syncweb-core/src/indexing.rs:1055` — `folder.docs_engine().watch(folder.doc())`
+File: `syncweb-core/src/indexing.rs:1055` — `folder.docs_engine().watch(folder.doc())`
 
-**Usage:** When a folder is enabled for indexing, the `IndexingService` subscribes to its doc's live events to index new entries in SQLite for FTS5 search.
+Usage: When a folder is enabled for indexing, the `IndexingService` subscribes to its doc's live events to index new entries in SQLite for FTS5 search.
 
-**Assessment: CORRECT.** The indexing service consumes doc events to build the search index. This is a read-only consumer layered on top of the doc — appropriate architecture.
+Assessment: CORRECT. The indexing service consumes doc events to build the search index. This is a read-only consumer layered on top of the doc — appropriate architecture.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 10. Integrity Verification (CORRECT)
 
-**File:** `syncweb-core/src/verify.rs:59` — `self.docs_engine.list_latest(folder.doc())`
+File: `syncweb-core/src/verify.rs:59` — `self.docs_engine.list_latest(folder.doc())`
 
-**Usage:** The `IntegrityChecker` lists all entries in a folder's doc, then checks each referenced blob for hash integrity.
+Usage: The `IntegrityChecker` lists all entries in a folder's doc, then checks each referenced blob for hash integrity.
 
-**Assessment: CORRECT.** The doc is the canonical list of folder entries. Reading from it to verify blobs is the right data source.
+Assessment: CORRECT. The doc is the canonical list of folder entries. Reading from it to verify blobs is the right data source.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 11. Health Check (CORRECT)
 
-**File:** `syncweb-core/src/daemon/ipc.rs` (handle_health_check)
+File: `syncweb-core/src/daemon/ipc.rs` (handle_health_check)
 
-**Usage:** Lists doc entries and checks if referenced blobs are locally available, then computes seeding health.
+Usage: Lists doc entries and checks if referenced blobs are locally available, then computes seeding health.
 
-**Assessment: CORRECT.** Same pattern as verify — the doc is the entry list.
+Assessment: CORRECT. Same pattern as verify — the doc is the entry list.
 
-**No change needed.**
+No change needed.
 
 ---
 
 ### 12. Snapshot (CORRECT — bypasses docs)
 
-**File:** `syncweb-core/src/snapshot.rs:458-475` (`SnapshotStore::store`)
+File: `syncweb-core/src/snapshot.rs:458-475` (`SnapshotStore::store`)
 
-**Usage:** Snapshots are stored as pinned blobs (using naming convention `syncweb/snapshot/{id}/manifest`), NOT as doc entries. The `restore_for_folder` method does write back to the doc, but the snapshot itself lives entirely in the blob store.
+Usage: Snapshots are stored as pinned blobs (using naming convention `syncweb/snapshot/{id}/manifest`), NOT as doc entries. The `restore_for_folder` method does write back to the doc, but the snapshot itself lives entirely in the blob store.
 
-**Assessment: CORRECT.** Snapshots are immutable point-in-time captures. No CRDT needed. The pin naming convention provides discovery. This is the right pattern — use blobs for immutable data, docs for mutable data.
+Assessment: CORRECT. Snapshots are immutable point-in-time captures. No CRDT needed. The pin naming convention provides discovery. This is the right pattern — use blobs for immutable data, docs for mutable data.
 
-**No change needed.**
+No change needed.
 
 ---
 
@@ -269,25 +269,25 @@ impl FolderOrSubscription {
 
 ### Potential Use 1: Network Membership as Docs
 
-**Current:** `networks.json` (now `node.db` via Plan 1) stores network member lists. Membership changes require explicit ticket exchange — no automatic propagation of kicks or joins.
+Current: `networks.json` (now `node.db` via Plan 1) stores network member lists. Membership changes require explicit ticket exchange — no automatic propagation of kicks or joins.
 
-**Idea:** Store signed membership lists as doc entries in a per-network doc namespace. Members sync the doc and see real-time membership changes (owner adds/kicks members, signed by owner key).
+Idea: Store signed membership lists as doc entries in a per-network doc namespace. Members sync the doc and see real-time membership changes (owner adds/kicks members, signed by owner key).
 
-**Verdict: IMPLEMENTED in plans/network-remaining-gaps.md (GAP 6).** A full implementation plan with data structures, signature scheme, namespace derivation, lifecycle, edge cases, and migration strategy is in that plan. This is no longer deferred.
+Verdict: IMPLEMENTED in plans/network-remaining-gaps.md (GAP 6). A full implementation plan with data structures, signature scheme, namespace derivation, lifecycle, edge cases, and migration strategy is in that plan. This is no longer deferred.
 
 ### Potential Use 2: Config Distribution
 
-**Current:** `config.toml` / `node.db` stores local-only config. Multi-device users must manually copy config.
+Current: `config.toml` / `node.db` stores local-only config. Multi-device users must manually copy config.
 
-**Idea:** Store config in a dedicated doc namespace, synced between the user's devices. Config changes on one device propagate automatically.
+Idea: Store config in a dedicated doc namespace, synced between the user's devices. Config changes on one device propagate automatically.
 
-**Verdict: DEFER.** Config is intentionally device-specific (paths, relay preferences, thread counts). Sharing config across devices is actively harmful — a sync interval that works on a powerful desktop won't work on a laptop. If cross-device config sync is desired, it should be opt-in and scoped to specific config keys (e.g., `filter_rules` only).
+Verdict: DEFER. Config is intentionally device-specific (paths, relay preferences, thread counts). Sharing config across devices is actively harmful — a sync interval that works on a powerful desktop won't work on a laptop. If cross-device config sync is desired, it should be opt-in and scoped to specific config keys (e.g., `filter_rules` only).
 
 ### Potential Use 3: Watcher/PendingWatch Persistence
 
-**Current:** File watchers are re-registered from scratch on daemon restart.
+Current: File watchers are re-registered from scratch on daemon restart.
 
-**Verdict: NO CHANGE.** Watchers must be registered with the OS (`inotify`/`FSEvents`). You can't persist a file descriptor. Re-registration from folder paths (stored in Iroh docs as folder entries) is the correct approach.
+Verdict: NO CHANGE. Watchers must be registered with the OS (`inotify`/`FSEvents`). You can't persist a file descriptor. Re-registration from folder paths (stored in Iroh docs as folder entries) is the correct approach.
 
 ---
 

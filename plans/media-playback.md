@@ -14,7 +14,7 @@ within the file. We need to bridge the iroh blob store to HTTP Range semantics s
 ```
 
 resolves to verified, content-addressed bytes from the iroh blob store — even for
-**partially downloaded blobs** where on-demand fetching may still be in progress.
+partially downloaded blobs where on-demand fetching may still be in progress.
 
 ## Prior art
 
@@ -22,7 +22,7 @@ resolves to verified, content-addressed bytes from the iroh blob store — even 
 Mar 2025) adds `entry_path_or_data()` to the store trait and an `open(hash)` method
 that returns `impl std::io::Read + std::io::Seek` backed by a `BaoFile`. Key ideas:
 
-- A blob opened this way is **independent of the store** — valid even after the store
+- A blob opened this way is independent of the store — valid even after the store
   is dropped.
 - Partial blobs are supported: reads at positions where chunks are missing return an
   `io::Error`. This is intentional ("YOLO reads").
@@ -71,7 +71,7 @@ This is the building block for HTTP range serving.
 The media HTTP server is a separate TCP listener from the WebSocket bridge.
 It speaks plain HTTP/1.1 (no WebSocket upgrade, no TLS for local-only use).
 
-Port: **9193** (`SYNCWEB_MEDIA_PORT`), one above the bridge port.
+Port: 9193 (`SYNCWEB_MEDIA_PORT`), one above the bridge port.
 
 ---
 
@@ -138,7 +138,7 @@ Content-Length: 42991616
 Range: bytes=0-1023,5000-5999
 ```
 
-We do **not** support multiple ranges (rare in video playback). Respond with
+We do not support multiple ranges (rare in video playback). Respond with
 a single range containing the full requested span, or fall back to 200 for
 simplicity. The `<video>` tag does not use multi-range.
 
@@ -165,11 +165,11 @@ If the requested byte range overlaps chunks that have not been downloaded yet,
 
 | Strategy | Behavior |
 |----------|----------|
-| **Fail 503** | Return `503 Service Unavailable` with `Retry-After`. Player retries. |
-| **Block & fetch** | Trigger an on-demand `BlobStore::fetch()` for the missing chunk, await arrival, then read. |
-| **Serve what we have** | Return `206` with only available contiguous bytes. Short response — player may stall. |
+| Fail 503 | Return `503 Service Unavailable` with `Retry-After`. Player retries. |
+| Block & fetch | Trigger an on-demand `BlobStore::fetch()` for the missing chunk, await arrival, then read. |
+| Serve what we have | Return `206` with only available contiguous bytes. Short response — player may stall. |
 
-**Recommendation: Block & fetch.** Trigger a background fetch for the missing
+Recommendation: Block & fetch. Trigger a background fetch for the missing
 range if the blob is partial, await the download, then complete the read. The
 player experiences latency instead of errors. This requires wiring a
 `Downloader` or `BlobApi::downloader()` into the media endpoint.
@@ -218,7 +218,7 @@ Read the first 256 bytes of the blob, match against known signatures:
 
 Fallback: `application/octet-stream`.
 
-**Initial implementation: option B with C as fallback.** MIME passed via
+Initial implementation: option B with C as fallback. MIME passed via
 `?mime=` query param; if absent, detect from magic bytes.
 
 ---
@@ -248,7 +248,7 @@ sequence:
 The browser handles all of this automatically given a valid `Accept-Ranges`
 response. No JavaScript needed for basic playback.
 
-For **adaptive streaming** (HLS/DASH), the `<video>` tag needs a playlist URL:
+For adaptive streaming (HLS/DASH), the `<video>` tag needs a playlist URL:
 
 ```html
 <video>
@@ -312,7 +312,7 @@ WebRTC DataChannels can carry bytes directly.
 Peer A (has blob)  ←──WebRTC DataChannel──→  Peer B (browser)
 ```
 
-**How it would work:**
+How it would work:
 
 1. A JavaScript/WASM bridge on peer B requests a blob range from peer A
    over the WebRTC signaling channel.
@@ -322,7 +322,7 @@ Peer A (has blob)  ←──WebRTC DataChannel──→  Peer B (browser)
    [`MediaSource`](https://developer.mozilla.org/en-US/docs/Web/API/MediaSource)
    buffer.
 
-**Challenges:**
+Challenges:
 
 - `<video>` does not consume WebRTC natively. You need a `MediaSource` +
   `SourceBuffer` JavaScript shim that receives chunks over a DataChannel
@@ -335,7 +335,7 @@ Peer A (has blob)  ←──WebRTC DataChannel──→  Peer B (browser)
   context (though LAN-only works without STUN).
 - WebRTC in Android WebView requires additional permissions and API levels.
 
-**When WebRTC makes sense:**
+When WebRTC makes sense:
 
 - Off-grid/air-gap scenarios (BLE + WiFi Direct handoff, as mapa already
   explores).
@@ -343,7 +343,7 @@ Peer A (has blob)  ←──WebRTC DataChannel──→  Peer B (browser)
   peer streaming.
 - When latency is critical (live streaming).
 
-**For v1, HTTP range requests are the right primitive.** They leverage
+For v1, HTTP range requests are the right primitive. They leverage
 the browser's native media pipeline, require zero JavaScript, and work
 with every `<video>` tag on every platform.
 
@@ -478,16 +478,16 @@ pub(crate) async fn serve_media(
 
 ### Size metadata
 
-`BlobReader` does not expose total blob size. The size is stored **inside**
+`BlobReader` does not expose total blob size. The size is stored inside
 the blob's first BLAKE3 chunk (as part of the Bao tree header). Options:
 
-1. **Store size in iroh-docs alongside the hash** — the `ContentEntry`
+1. Store size in iroh-docs alongside the hash — the `ContentEntry`
    struct in the docs entry includes `content_len`. Use this.
-2. **Read the Bao tree header** — the `bao_tree::BaoTree::new(size, block_size)`
+2. Read the Bao tree header — the `bao_tree::BaoTree::new(size, block_size)`
    has the size, but it's not exposed through `BlobReader`.
-3. **Use `iroh_blobs::store::ExportRangesProgress`** — the `export_ranges()`
+3. Use `iroh_blobs::store::ExportRangesProgress` — the `export_ranges()`
    stream emits `Size(u64)` as the first item.
-4. **Track size at insert time** — when the blob is added via
+4. Track size at insert time — when the blob is added via
    `BlobStore::add_bytes()`, also store the `(hash, size)` pair in a
    local `HashMap` or SQLite table.
 
@@ -526,7 +526,7 @@ This requires a `Downloader` that can be scoped to a byte range. The iroh-blobs
 protocol already supports range-based fetching (`BlobDownloadRequest` with
 `RangeSpec`). The downloader API may need wrapping for this use case.
 
-**For v1: return 503 for missing ranges, let the player retry.** This is
+For v1: return 503 for missing ranges, let the player retry. This is
 simpler and still works — the browser retries failed range requests. Once
 the blob is fully synced (via the normal sync process), playback works.
 
@@ -553,39 +553,39 @@ All three share the same blob store, so blob contents are consistent.
 
 | Approach | Protocol | Seeking | Latency | Browser support | JS needed |
 |----------|----------|---------|---------|-----------------|-----------|
-| **HTTP Range (this plan)** | HTTP/1.1 | Native via `Range` header | Low (local loopback) | Universal | None |
-| **WebRTC DataChannel** | SCTP/DTLS | Manual via JS signaling | Very low | Chrome, Firefox, Safari | Full shim |
-| **blob: URL (full download)** | N/A | None (must download entire file first) | High (wait for full blob) | Universal | Minimal |
-| **HLS via Service Worker** | HTTP + JS | Via m3u8 playlist | Low (segmented) | Chrome, Firefox, Safari | Service Worker |
+| HTTP Range (this plan) | HTTP/1.1 | Native via `Range` header | Low (local loopback) | Universal | None |
+| WebRTC DataChannel | SCTP/DTLS | Manual via JS signaling | Very low | Chrome, Firefox, Safari | Full shim |
+| blob: URL (full download) | N/A | None (must download entire file first) | High (wait for full blob) | Universal | Minimal |
+| HLS via Service Worker | HTTP + JS | Via m3u8 playlist | Low (segmented) | Chrome, Firefox, Safari | Service Worker |
 
-**Recommendation:** HTTP Range Requests are the right v1 primitive. WebRTC is
+Recommendation: HTTP Range Requests are the right v1 primitive. WebRTC is
 a separate optimization for off-grid/low-latency scenarios.
 
 ---
 
 ## Open questions
 
-1. **Size metadata:** Should the endpoint require a `?size=<bytes>` parameter
+1. Size metadata: Should the endpoint require a `?size=<bytes>` parameter
    (like it does for `?mime=`), or should we resolve size from iroh-docs
    metadata? If the blob was added outside a docs namespace (e.g., raw
    `syncweb add-file`), there is no docs metadata to consult.
 
-2. **Partial blob semantics:** When the blob is incomplete, should the server:
+2. Partial blob semantics: When the blob is incomplete, should the server:
    - Block and wait for the missing chunks (adds latency)?
    - Return 503 with `Retry-After` (player retries)?
    - Return as much as it can (206 with truncated range)?
    - Return a [multipart/byteranges](https://www.rfc-editor.org/rfc/rfc9110#section-14.6)
      response with available chunks?
 
-3. **Docs-based URL routing:** Should we add a `/docs/{namespace_id}/media/{path}`
+3. Docs-based URL routing: Should we add a `/docs/{namespace_id}/media/{path}`
    endpoint for human-readable URLs, or stick to hash-only URLs where the
    client resolves the name→hash mapping itself?
 
-4. **CORS:** The media endpoint runs on a different port than the map app's
+4. CORS: The media endpoint runs on a different port than the map app's
    WebView origin. Do we need `Access-Control-Allow-Origin: *` headers, or is
    the WebView configured to allow cross-origin requests to `localhost`?
 
-5. **WebSocket transport for media:** Could the existing WebSocket bridge
+5. WebSocket transport for media: Could the existing WebSocket bridge
    (from the [mapa-p2p-api.md](./mapa-p2p-api.md) plan) serve media chunks
    instead of a separate HTTP server? A custom binary frame type for
    `read_blob_range(hash, offset, len)` would reuse the connection. But

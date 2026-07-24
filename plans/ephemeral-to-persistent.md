@@ -306,7 +306,7 @@ Location: `syncweb-core/src/folder/manager.rs:27`
 folders: Arc<RwLock<HashMap<NamespaceId, SyncwebFolder>>>
 ```
 
-**Justification:** Iroh docs persistent store (`data/docs/`) is the source of truth. On daemon restart, `FolderManager::list()` calls `docs.inner().list()` which enumerates all namespaces from the Iroh docs store. The in-memory `HashMap` is a performance optimization, not state.
+Justification: Iroh docs persistent store (`data/docs/`) is the source of truth. On daemon restart, `FolderManager::list()` calls `docs.inner().list()` which enumerates all namespaces from the Iroh docs store. The in-memory `HashMap` is a performance optimization, not state.
 
 ### 2. IntentTasks / IntentControls
 
@@ -317,7 +317,7 @@ intent_tasks: Mutex<HashMap<NamespaceId, JoinHandle<()>>>,
 intent_controls: IntentControls,  // Arc<Mutex<HashMap<NamespaceId, IntentControl>>>
 ```
 
-**Justification:** These hold active `tokio::task::JoinHandle` objects to running async tasks. JoinHandles are OS-level resources (references to live futures on the tokio runtime). They cannot be serialized and would be immediately stale after deserialization. Sync intents are re-created on demand by `syncweb automatic` or explicit `syncweb sync` commands.
+Justification: These hold active `tokio::task::JoinHandle` objects to running async tasks. JoinHandles are OS-level resources (references to live futures on the tokio runtime). They cannot be serialized and would be immediately stale after deserialization. Sync intents are re-created on demand by `syncweb automatic` or explicit `syncweb sync` commands.
 
 ### 3. FsWatcher / PendingWatch
 
@@ -328,7 +328,7 @@ watchers: Mutex<HashMap<String, FsWatcher>>,
 pending_watch_events: Mutex<HashMap<String, PendingWatch>>,
 ```
 
-**Justification:** `FsWatcher` wraps OS-level filesystem notification handles (`inotify` on Linux). These are file descriptors — impossible to serialize. They must be re-registered with the OS on daemon startup. The daemon re-registers watchers for all watched folders in its startup sequence (reading folder paths from Iroh docs).
+Justification: `FsWatcher` wraps OS-level filesystem notification handles (`inotify` on Linux). These are file descriptors — impossible to serialize. They must be re-registered with the OS on daemon startup. The daemon re-registers watchers for all watched folders in its startup sequence (reading folder paths from Iroh docs).
 
 ### 4. ScheduleManager
 
@@ -338,26 +338,26 @@ Location: `syncweb-core/src/daemon/daemon.rs:89`
 schedule_manager: tokio::sync::RwLock<Option<ScheduleManager>>,
 ```
 
-**Justification:** Parsed from `config.toml` (now `node.db` after Plan 1) at daemon startup. The schedule config is a pure function of the persisted config — no runtime state to preserve.
+Justification: Parsed from `config.toml` (now `node.db` after Plan 1) at daemon startup. The schedule config is a pure function of the persisted config — no runtime state to preserve.
 
 ### 5. MemoryLookup
 
 Location: `syncweb-core/src/node/iroh_node.rs:1` and usage
 
-**Justification:** Iroh's internal address lookup table. Populated from active connections and announced endpoints. Connections must be re-established after restart regardless — serializing stale addresses would be harmful.
+Justification: Iroh's internal address lookup table. Populated from active connections and announced endpoints. Connections must be re-established after restart regardless — serializing stale addresses would be harmful.
 
 ### 6. Gossip topic subscriptions (PackageCatalog, TopicTracker, etc.)
 
-**Justification:** Gossip topics are network subscriptions — TCP connections and protocol state. They expire when the connection drops. On restart, topics are re-subscribed using the persisted network membership (from `node.db`).
+Justification: Gossip topics are network subscriptions — TCP connections and protocol state. They expire when the connection drops. On restart, topics are re-subscribed using the persisted network membership (from `node.db`).
 
 ---
 
 ## Implementation Order
 
-1. **GAP 2 first** — ResilienceService leases/bans must be persisted because the JSON→SQLite plan already creates the `provider_leases` and `provider_bans` tables. This gap is zero new schema, just wiring.
-2. **GAP 1 second** — ProviderReputationStore requires the `provider_reputation` and `provider_signal_sequences` tables from the JSON→SQLite plan. Depends on those tables existing.
-3. **GAP 3 third** — DenylistService already has tables in indexing.sqlite, just needs wiring. Depends on `IndexingDatabase` being the source of truth.
-4. **GAP 4 last** — LinkResolver is lowest impact and already half-persisted via the existing `stable_links` table.
+1. GAP 2 first — ResilienceService leases/bans must be persisted because the JSON→SQLite plan already creates the `provider_leases` and `provider_bans` tables. This gap is zero new schema, just wiring.
+2. GAP 1 second — ProviderReputationStore requires the `provider_reputation` and `provider_signal_sequences` tables from the JSON→SQLite plan. Depends on those tables existing.
+3. GAP 3 third — DenylistService already has tables in indexing.sqlite, just needs wiring. Depends on `IndexingDatabase` being the source of truth.
+4. GAP 4 last — LinkResolver is lowest impact and already half-persisted via the existing `stable_links` table.
 
 ---
 

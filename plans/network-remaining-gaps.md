@@ -8,12 +8,12 @@ Three prior plans covered JSON→SQLite migration, ephemeral→persistent gaps, 
 
 Address six distinct gaps:
 
-1. **Network health & event log** — persist network connectivity history and events per-network
-2. **Per-network bandwidth/transfer tracking** — correlate stats with network membership
-3. **`.syncweb-collection.json` redundancy** — remove the local JSON manifest, read from blob store
-4. **Sync progress persistence** — checkpoint partial sync/download progress to survive restarts
-5. **Network membership propagation via Iroh docs** — replace ticket-only membership with real-time doc-synced member lists
-6. **Database maintenance** — migration framework, vacuum, backup, integrity checks
+1. Network health & event log — persist network connectivity history and events per-network
+2. Per-network bandwidth/transfer tracking — correlate stats with network membership
+3. `.syncweb-collection.json` redundancy — remove the local JSON manifest, read from blob store
+4. Sync progress persistence — checkpoint partial sync/download progress to survive restarts
+5. Network membership propagation via Iroh docs — replace ticket-only membership with real-time doc-synced member lists
+6. Database maintenance — migration framework, vacuum, backup, integrity checks
 
 ---
 
@@ -83,7 +83,7 @@ CREATE TABLE relay_health (
 
 ### Implementation
 
-**New module:** `syncweb-core/src/net/network_log.rs`
+New module: `syncweb-core/src/net/network_log.rs`
 
 ```rust
 pub struct NetworkLogger {
@@ -103,7 +103,7 @@ impl NetworkLogger {
 }
 ```
 
-**Wire into NetworkManager:**
+Wire into NetworkManager:
 
 ```rust
 // syncweb-core/src/net/network_manager.rs
@@ -124,7 +124,7 @@ impl NetworkManager {
 }
 ```
 
-**Wire into daemon sync cycle:**
+Wire into daemon sync cycle:
 
 ```rust
 // syncweb-core/src/daemon/daemon.rs — in the automatic sync loop
@@ -146,7 +146,7 @@ for (network_id, folders) in &network_folders {
 }
 ```
 
-**Expose via CLI:**
+Expose via CLI:
 
 New subcommand: `syncweb network events <network-id> [--limit N]`
 New subcommand: `syncweb network health [--network <id>]`
@@ -155,7 +155,7 @@ New subcommand: `syncweb network health [--network <id>]`
 
 | File | Change |
 |---|---|
-| `syncweb-core/src/net/network_log.rs` | **NEW** — NetworkLogger implementation |
+| `syncweb-core/src/net/network_log.rs` | NEW — NetworkLogger implementation |
 | `syncweb-core/src/net/mod.rs` | Add `pub mod network_log` |
 | `syncweb-core/src/net/network_manager.rs` | Add event logging on mutations |
 | `syncweb-core/src/daemon/daemon.rs` | Log sync sessions per network |
@@ -224,8 +224,8 @@ pub fn record_transfer(&self, network_id: Option<NetworkId>, direction: Directio
 ### Current State
 
 Two copies of each collection manifest exist after `collection init`:
-1. **In the Iroh blob store** — content-addressed, integrity-guaranteed (the canonical source)
-2. **As `.syncweb-collection.json`** — JSON file written alongside the package source directory (`syncweb-cli/src/main.rs:2614`)
+1. In the Iroh blob store — content-addressed, integrity-guaranteed (the canonical source)
+2. As `.syncweb-collection.json` — JSON file written alongside the package source directory (`syncweb-cli/src/main.rs:2614`)
 
 The JSON file is a convenience copy that lets `package export` and `package info` read the manifest without hitting the blob store. But this creates a consistency risk: the blob in the store and the JSON file can diverge (e.g., if the user edits the JSON file, or if the package is imported from a ticket where no local manifest file was written).
 
@@ -233,13 +233,13 @@ The JSON file is a convenience copy that lets `package export` and `package info
 
 | File | Line | Operation |
 |------|------|-----------|
-| `syncweb-cli/src/main.rs` | **2599-2601** | `manifest_path()` returns `<path>/.syncweb-collection.json` |
-| `syncweb-cli/src/main.rs` | **2613-2616** | `save_manifest()` writes `manifest.to_bytes()` (JSON) to disk |
-| `syncweb-core/src/daemon/ipc.rs` | **1191-1192** | `tokio::fs::read(&manifest_path)` reads it back |
+| `syncweb-cli/src/main.rs` | 2599-2601 | `manifest_path()` returns `<path>/.syncweb-collection.json` |
+| `syncweb-cli/src/main.rs` | 2613-2616 | `save_manifest()` writes `manifest.to_bytes()` (JSON) to disk |
+| `syncweb-core/src/daemon/ipc.rs` | 1191-1192 | `tokio::fs::read(&manifest_path)` reads it back |
 
 ### Fix
 
-**Remove the local JSON file entirely.** Manifests are already in the blob store. Reading from the blob store is fast (local hashing + disk read). The blob store is the canonical, content-addressed source.
+Remove the local JSON file entirely. Manifests are already in the blob store. Reading from the blob store is fast (local hashing + disk read). The blob store is the canonical, content-addressed source.
 
 For `package export`:
 ```rust
@@ -333,7 +333,7 @@ CREATE TABLE sync_entry_progress (
 
 ### Implementation
 
-**New module:** `syncweb-core/src/sync/checkpoint.rs`
+New module: `syncweb-core/src/sync/checkpoint.rs`
 
 ```rust
 pub struct SyncCheckpoint {
@@ -424,7 +424,7 @@ On successful completion, delete the checkpoint records (they're transient opera
 
 | File | Change |
 |---|---|
-| `syncweb-core/src/sync/checkpoint.rs` | **NEW** — SyncCheckpoint implementation |
+| `syncweb-core/src/sync/checkpoint.rs` | NEW — SyncCheckpoint implementation |
 | `syncweb-core/src/sync/mod.rs` | Add `pub mod checkpoint` |
 | `syncweb-core/src/sync/engine.rs` | Integrate checkpoint into `run_intent()` |
 | `syncweb-core/src/storage/node_db.rs` | Add sync_checkpoints schema; add CRUD methods |
@@ -547,15 +547,15 @@ Network membership is managed entirely through one-time tickets:
 
 ### Impact
 
-- **Kicked members** continue trying to connect until they time out or manually leave
-- **Newly added members** are invisible to existing peers until they exchange tickets manually
-- **Two nodes with tickets from different points in time** may have different member lists, causing confusion about who is in the network
-- **No single source of truth** — each node's local copy can diverge
+- Kicked members continue trying to connect until they time out or manually leave
+- Newly added members are invisible to existing peers until they exchange tickets manually
+- Two nodes with tickets from different points in time may have different member lists, causing confusion about who is in the network
+- No single source of truth — each node's local copy can diverge
 - Network members can't see the full member list without asking the owner for a fresh ticket
 
 ### Fix: Signed Membership Doc
 
-Store network membership as a **signed document entry** in a per-network Iroh docs namespace. Every network gets a dedicated doc. The owner writes a signed membership list; all members sync the doc and verify signatures.
+Store network membership as a signed document entry in a per-network Iroh docs namespace. Every network gets a dedicated doc. The owner writes a signed membership list; all members sync the doc and verify signatures.
 
 #### Architecture
 
@@ -655,7 +655,7 @@ pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) ->
 
 #### Lifecycle
 
-**Owner creates network:**
+Owner creates network:
 1. Generate `network_doc_namespace(network_id, shared_secret)`
 2. Create or open the doc with that namespace
 3. Write `sys/network/info` with network metadata
@@ -663,14 +663,14 @@ pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) ->
 5. Write `sys/network/folders` with folder namespace list
 6. Store the doc as a `Doc` handle; members can now receive live updates
 
-**Owner adds a member:**
+Owner adds a member:
 1. Increment sequence
 2. Add `MemberEntry { key: new_member, role: Member, joined_at: now }` to the list
 3. Sign and write to `sys/network/members`
 4. The doc syncs to all connected members automatically
 5. The new member still needs to join by importing a ticket (to get the shared secret and doc namespace), but existing members see the change immediately
 
-**Owner kicks a member:**
+Owner kicks a member:
 1. Increment sequence
 2. Remove `MemberEntry` for the kicked member
 3. Sign and write to `sys/network/members`
@@ -681,14 +681,14 @@ pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) ->
    - Auto-leaves the network (unsubscribes gossip topic, closes doc)
    - Log/emit a "kicked from network" event
 
-**New member joins (receives ticket):**
+New member joins (receives ticket):
 1. Ticket contains: `network_id`, `shared_secret`, `owner PublicKey`, and relay/bootstrap info
 2. New member derives `network_doc_namespace(network_id, shared_secret)`
 3. Opens the doc (may need to fetch it from the network first via Iroh's doc ticket mechanism)
 4. Reads `sys/network/members` → verifies owner signature → discovers full member list
 5. Subscribes to the doc for live updates (future membership changes propagate automatically)
 
-**Any member detects changes:**
+Any member detects changes:
 1. Doc live event fires for `sys/network/members` key
 2. Read the new entry, verify signature
 3. Compare old and new member lists
@@ -699,8 +699,8 @@ pub fn network_doc_namespace(network_id: NetworkId, shared_secret: &[u8; 32]) ->
 #### Integration with Existing NetworkManager
 
 The `NetworkManager` becomes a hybrid:
-- **Local state** (`node.db`): network metadata (name, label, owner key, shared secret), folder associations
-- **Synced state** (Iroh docs): member list (single source of truth for membership)
+- Local state (`node.db`): network metadata (name, label, owner key, shared secret), folder associations
+- Synced state (Iroh docs): member list (single source of truth for membership)
 
 ```rust
 pub struct NetworkManager {
@@ -762,15 +762,15 @@ pub struct NetworkTicket {
 
 #### Edge Cases
 
-1. **Two owners writing concurrently**: The `sys/network/members` key is single-writer (only the owner writes). If two nodes claim to be owner, CRDT merge picks the latest write. Members should verify the owner field matches the expected owner and reject entries signed by anyone else.
+1. Two owners writing concurrently: The `sys/network/members` key is single-writer (only the owner writes). If two nodes claim to be owner, CRDT merge picks the latest write. Members should verify the owner field matches the expected owner and reject entries signed by anyone else.
 
-2. **Owner rotates signing key**: If the owner generates a new keypair, they must issue a transition entry signed by the OLD key authorizing the NEW key. This is a future concern — initially, owner key rotation is unsupported (re-create the network if needed).
+2. Owner rotates signing key: If the owner generates a new keypair, they must issue a transition entry signed by the OLD key authorizing the NEW key. This is a future concern — initially, owner key rotation is unsupported (re-create the network if needed).
 
-3. **Member joins while owner is offline**: The ticket-based join path still works via relay/bootstrap peers. The new member fetches the doc from any connected peer (not just the owner). Signature verification ensures authenticity even without direct owner connectivity.
+3. Member joins while owner is offline: The ticket-based join path still works via relay/bootstrap peers. The new member fetches the doc from any connected peer (not just the owner). Signature verification ensures authenticity even without direct owner connectivity.
 
-4. **Shared secret compromise**: If the shared secret is leaked, an attacker can derive the doc namespace but cannot write to `sys/network/members` (only the owner's signature is accepted). They can read the member list (privacy by obscurity is weak, but acceptable for discovery).
+4. Shared secret compromise: If the shared secret is leaked, an attacker can derive the doc namespace but cannot write to `sys/network/members` (only the owner's signature is accepted). They can read the member list (privacy by obscurity is weak, but acceptable for discovery).
 
-5. **Stale sequence numbers**: If a member receives a member list with `sequence <= current_sequence`, it's rejected as a replay. The owner must always increment the sequence counter.
+5. Stale sequence numbers: If a member receives a member list with `sequence <= current_sequence`, it's rejected as a replay. The owner must always increment the sequence counter.
 
 #### Migration from existing ticket-only model
 
@@ -784,7 +784,7 @@ For networks created before this change:
 
 | File | Change |
 |---|---|
-| `syncweb-core/src/net/membership_doc.rs` | **NEW** — `SignedMemberList`, `MemberEntry`, signature/verification, namespace derivation |
+| `syncweb-core/src/net/membership_doc.rs` | NEW — `SignedMemberList`, `MemberEntry`, signature/verification, namespace derivation |
 | `syncweb-core/src/net/mod.rs` | Add `pub mod membership_doc` |
 | `syncweb-core/src/net/network.rs` | Add `doc_ticket` field to `NetworkTicket`; add doc namespace derivation |
 | `syncweb-core/src/net/network_manager.rs` | Add doc-based member list sync; integrate with Iroh docs; add auto-leave on kick |
@@ -812,9 +812,9 @@ For networks created before this change:
 
 | File | Action |
 |---|---|---|
-| `syncweb-core/src/net/network_log.rs` | **NEW** |
-| `syncweb-core/src/net/membership_doc.rs` | **NEW** |
-| `syncweb-core/src/sync/checkpoint.rs` | **NEW** |
+| `syncweb-core/src/net/network_log.rs` | NEW |
+| `syncweb-core/src/net/membership_doc.rs` | NEW |
+| `syncweb-core/src/sync/checkpoint.rs` | NEW |
 | `syncweb-core/src/storage/node_db.rs` | Add sync checkpoints, backup/vacuum |
 | `syncweb-core/src/storage/stats_db.rs` | Add network events, backup/vacuum |
 | `syncweb-core/src/net/network.rs` | Add `doc_ticket` to `NetworkTicket`; add namespace derivation |
@@ -824,3 +824,437 @@ For networks created before this change:
 | `syncweb-cli/src/main.rs` | Remove .syncweb-collection.json writes; add `db` and `network events/health` commands |
 | `syncweb-cli/src/cli/commands.rs` | Update `network invite` output for doc tickets |
 | `syncweb-core/src/daemon/ipc.rs` | Remove .syncweb-collection.json reads |
+
+---
+
+## GAP 7: Daemon Integration of NetworkManager
+
+### Current State
+
+`NetworkManager` is only instantiated by the CLI (`syncweb-cli/src/main.rs:2942`) for synchronous commands like `network create`, `network join`, `network leave`, etc. It is never present in the daemon process. The daemon constructs `IdentityManager`, `IrohNode`, `FolderManager`, `SyncEngine`, `ManagedPool`, `IpcServer`, and `IntentSupervisor` — but no `NetworkManager`.
+
+### Impact
+
+- All network state (`members`, `folders`, `shared_secret`, invite management) is invisible to the daemon
+- The gossip topic subscription (`NetworkManager::subscribe()`) is never called — networks have no real-time membership presence
+- Network membership docs (GAP 6) cannot be opened or synced without a daemon-side doc handle
+- Network events (GAP 1) and bandwidth correlation (GAP 2) have no daemon-side trigger — the `NetworkLogger` never receives events
+- Network-scoped access control (GAP 8) has no enforcement point
+- CLI `network join` creates a network and stores it in `node.db`, but the daemon never sees it until a full restart re-reads the database
+
+### Fix
+
+Add `NetworkManager` to the daemon's `DaemonInner` struct and wire it through startup and all network-relevant code paths.
+
+```rust
+// syncweb-core/src/daemon/daemon.rs
+
+pub struct DaemonInner {
+    // ... existing fields ...
+    pub network_manager: Arc<tokio::sync::RwLock<NetworkManager>>,
+}
+
+impl DaemonInner {
+    async fn new(config: &DaemonConfig) -> Result<Self> {
+        // ... existing setup ...
+        let network_manager = NetworkManager::open(&node_db, local_node_id)?;
+        Ok(DaemonInner { network_manager: Arc::new(tokio::sync::RwLock::new(network_manager)), ... })
+    }
+
+    async fn run_inner(self: Arc<Self>) -> Result<()> {
+        // On startup: subscribe to gossip for every existing network
+        for network in self.network_manager.read().await.list()? {
+            self.gossip_service.subscribe_bookmarked_topics(&[network.topic])?;
+        }
+
+        // On startup: open membership docs for live sync (GAP 6)
+        for network in self.network_manager.read().await.list()? {
+            if let Some(doc_ticket) = network.doc_ticket() {
+                self.docs_engine.import_ticket(doc_ticket).await?;
+                self.docs_engine.watch(network.membership_doc()).await?;
+            }
+        }
+
+        // Wire network_id into the sync cycle
+        self.sync_engine.set_network_resolver(move |namespace_id: NamespaceId| {
+            self.network_manager.read().await.network_for_folder(namespace_id)
+        });
+
+        // ... rest of run_inner ...
+    }
+}
+```
+
+Wiring network_id into sync intents:
+
+```rust
+// In DaemonInner::run_folder_intent():
+let network_id = net_mgr.network_for_folder(&folder.namespace_id());
+self.network_logger.record_sync_start(&network_id, folder.namespace_id())?;
+let result = self.sync_engine.sync(folder.doc(), network_id, mode).await;
+match result {
+    Ok(stats) => self.network_logger.record_sync_finish(session_id, stats.files, stats.bytes, 0, "completed")?,
+    Err(e) => self.network_logger.record_sync_finish(session_id, 0, 0, 1, "failed")?,
+}
+```
+
+Expose via IPC for CLI commands that need runtime state:
+
+```rust
+// syncweb-core/src/daemon/ipc.rs
+
+IpcRequest::NetworkInvite { network_id, device } => {
+    let mut net_mgr = self.network_manager.write().await;
+    let ticket = net_mgr.invite(&network_id, device)?;
+    Ok(IpcResponse::NetworkTicket { ticket: ticket.encode() })
+}
+
+IpcRequest::NetworkKick { network_id, device } => {
+    let mut net_mgr = self.network_manager.write().await;
+    net_mgr.kick(&network_id, &device)?;
+    Ok(IpcResponse::Ok)
+}
+
+IpcRequest::NetworkLeave { network_id } => {
+    let mut net_mgr = self.network_manager.write().await;
+    net_mgr.leave(&network_id)?;
+    Ok(IpcResponse::Ok)
+}
+```
+
+### Files to modify
+
+| File | Change |
+|---|---|
+| `syncweb-core/src/daemon/daemon.rs` | Add `NetworkManager` field; wire through `new()`, `run_inner()`, `run_folder_intent()`, `run_collection_intent()` |
+| `syncweb-core/src/daemon/ipc.rs` | Add network mutation IPC handlers; route `NetworkInvite`, `NetworkKick`, `NetworkLeave` to daemon |
+| `syncweb-core/src/net/network_manager.rs` | Add `network_for_folder()` lookup; add `open()` constructor for daemon use; add `list()` iterator |
+| `syncweb-core/src/sync/engine.rs` | Accept optional `network_id` parameter in sync/reconcile methods |
+
+---
+
+## GAP 8: Network Access Control & Isolation
+
+### Current State
+
+Blob access (`blob_store.rs`), folder operations (`folder/`), and sync engine (`sync/engine.rs`) have zero awareness of networks. There is no access control check that gates blob downloads, folder entry listing, or sync participation on network membership. A peer can:
+
+- Read any folder's doc if they possess the namespace capability, regardless of network association
+- Download any blob if they know the hash, regardless of which network the blob "belongs to"
+- Discover peers and sync data for any folder, even ones not associated with their networks
+
+### Impact
+
+- No data isolation between networks — blobs and folders are globally accessible
+- A user who joins network "work" can potentially access data from network "personal" if they discover the namespace ID
+- Invite-only networks provide zero security — the `shared_secret` is generated but never checked, and anyone with a gossiped namespace ID can sync the folder
+- Multi-tenant or organization-separated deployments are impossible
+- Compliance with data isolation requirements (e.g., per-project access boundaries) cannot be met
+
+### Why This Matters
+
+The fundamental purpose of a "network" in Syncweb is to group peers and folders into trust boundaries. Without access control, networks are reduced to cosmetic labels. A project collaboration network, a family sharing network, and a public distribution network must not leak data to each other.
+
+### Fix: Three-Layer Access Control
+
+#### Layer 1: Folder Association Enforcement
+
+A namespace can only be synced if it is explicitly associated with a network the local node belongs to. On daemon startup, the folder registry only includes folders whose `NamespaceId` appears in at least one `network_folders` row where the local node is a `network_members` entry:
+
+```rust
+impl NetworkManager {
+    /// Returns true if the local node is a member of at least one network
+    /// that has the given folder namespace associated with it.
+    pub fn can_access_folder(&self, namespace_id: &NamespaceId) -> Result<bool> {
+        let local_key = self.local_node.to_string();
+        self.database.with_connection(|conn| -> Result<bool> {
+            let mut stmt = conn.prepare(
+                "SELECT 1 FROM network_folders nf
+                 JOIN network_members nm ON nf.network_id = nm.network_id
+                 WHERE nf.namespace_id = ?1 AND nm.member = ?2
+                 LIMIT 1"
+            )?;
+            Ok(stmt.exists(params![namespace_id.to_string(), &local_key])?)
+        })
+    }
+}
+```
+
+#### Layer 2: Blob Download Gating
+
+Before downloading a blob, verify the blob is referenced by a folder entry in at least one network the local node belongs to. This prevents blind hash-based downloading of blobs that have leaked via side channels:
+
+```rust
+pub struct NetworkContext {
+    network_manager: Arc<tokio::sync::RwLock<NetworkManager>>,
+    network_id: NetworkId,
+}
+
+impl NetworkContext {
+    /// Check if the given blob hash appears as an entry in any folder
+    /// associated with this network.
+    pub async fn can_access_blob(&self, hash: &Hash) -> Result<bool> {
+        let mgr = self.network_manager.read().await;
+        let folders = mgr.folders_for_network(&self.network_id)?;
+        for namespace_id in folders {
+            let doc = self.docs_engine.open_doc(namespace_id).await?;
+            let entries = self.docs_engine.list_latest(&doc).await?;
+            for entry in entries {
+                if entry.hash == *hash {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+}
+```
+
+Optimization: Instead of scanning doc entries per download, build a reverse index on sync completion — a `blob_network_index` table in SQLite that maps `(hash, network_id)` on folder sync completion.
+
+#### Layer 3: Peer Discovery Scoping
+
+Gossip peer discovery should be scoped to network membership. When syncing a folder for network X, only bootstrap from peers that are members of network X (not all connected peers):
+
+```rust
+let members = self.network_manager.members_of_network(&network_id)?;
+let peer_ids: Vec<PeerId> = members.iter()
+    .filter_map(|pk| self.peer_map.lookup(pk))
+    .collect();
+self.docs_engine.start_sync(folder.doc(), peer_ids).await?;
+```
+
+### Edge Cases
+
+1. Public blobs / read-only subscriptions: Public blobs subscribed via `subscribe_public` should be accessible without network membership (they are intentionally public).
+
+2. Cross-network folder sharing: If a folder needs to be in two networks intentionally (e.g., "team-x" and "team-y" both get the docs folder), both networks must explicitly add the folder. The `network_folders` composite primary key `(network_id, namespace_id)` supports this.
+
+3. Owner-only content: Invite-only network members who aren't the owner should not have owner-level capabilities (kick, modify member list). The `SignedMemberList.owner` field from GAP 6 is verified before writes.
+
+4. Performance: The blob access check at Layer 2 adds overhead. Mitigate by caching the reverse index in memory (populated on sync completion) and building a `blob_network_index` table for O(1) lookups.
+
+### Files to modify
+
+| File | Change |
+|---|---|
+| `syncweb-core/src/net/network_manager.rs` | Add `can_access_folder()`, `networks_for_folder()`, `folders_for_network()`, `members_of_network()` |
+| `syncweb-core/src/node/blob_store.rs` | Add `download_with_network()` gated by `NetworkContext` |
+| `syncweb-core/src/sync/engine.rs` | Accept `NetworkContext`; gate sync initiation on `can_access_folder()`; scope peer discovery |
+| `syncweb-core/src/daemon/daemon.rs` | Construct `NetworkContext` before calls to `SyncEngine`; pass context to blob downloads |
+| `syncweb-core/src/net/network_context.rs` | NEW — `NetworkContext` type with `can_access_blob()` and network-scoped operations |
+| `syncweb-core/src/storage/node_db.rs` | Add `blob_network_index` table for reverse-lookup optimization |
+
+---
+
+## Test Plan: Network Isolation & Integration
+
+This section defines tests that verify the network isolation and integration behavior described in GAPs 6--8, plus the existing gaps 1--5. These are integration tests that spin up real daemon instances with Iroh nodes — distinct from the existing `network_test.rs` which tests only the data model CRUD in isolation.
+
+### Test Suite: Network Isolation (`syncweb-core/tests/integration/network_isolation_test.rs`)
+
+#### Test 1: Cross-network blob isolation
+
+Setup:
+1. Spin up 3 IrohNode instances: owner-A, member-A, member-B (all on relay)
+2. Create network "alpha" (owner-A)
+3. Create network "beta" (owner-A)
+4. member-A joins "alpha" only; member-B joins "beta" only
+5. Owner-A creates folder "alpha-docs" → add to network "alpha"
+6. Owner-A creates folder "beta-docs" → add to network "beta"
+7. Owner-A adds blob `x` to "alpha-docs" folder (write to alpha doc)
+8. Owner-A adds blob `y` to "beta-docs" folder (write to beta doc)
+
+Assertions:
+- member-A can list entries and download blobs from "alpha-docs"
+- member-A cannot list entries from "beta-docs" (not a member of beta)
+- member-B can list entries and download blobs from "beta-docs"
+- member-B cannot list entries from "alpha-docs"
+
+#### Test 2: Same namespace label, different networks, no data leakage
+
+Setup:
+1. Spin up 4 IrohNode instances: owner-A, owner-B, member-A, member-B
+2. Create network "team-a" (owner-A) and network "team-b" (owner-B)
+3. owner-A creates folder "docs" and adds to "team-a"
+4. owner-B creates folder "docs" (a different namespace ID) and adds to "team-b"
+5. member-A joins "team-a"; member-B joins "team-b"
+6. owner-A writes blob with content `"team a content"` to "team-a/docs"
+7. owner-B writes blob with content `"team b content"` to "team-b/docs"
+
+Assertions:
+- member-A syncs "docs" and gets content `"team a content"` (NOT `"team b content"`)
+- member-B syncs "docs" and gets content `"team b content"` (NOT `"team a content"`)
+- Network "team-a" members cannot enumerate or sync folders that are only in "team-b"
+- The `network_folders` table correctly isolates the two docs entries
+
+#### Test 3: Blob content identical across networks, access still isolated
+
+Setup:
+1. Spin up 3 IrohNode instances: owner-A, member-A, member-B
+2. Create network "alpha" and "beta" (owner-A)
+3. member-A joins "alpha"; member-B joins "beta"
+4. owner-A creates folder "alpha-docs" → network "alpha"
+5. owner-A creates folder "beta-docs" → network "beta"
+6. Add identical blob content `b"shared-content"` to both folders (same hash, same bytes)
+7. Verify both folders reference the same blob hash
+
+Assertions:
+- member-A can retrieve the blob through "alpha-docs" (access gated by folder membership)
+- member-B can retrieve the blob through "beta-docs"
+- member-A cannot discover or enumerate "beta-docs" entries (folder is not in their networks)
+- The blob itself is content-addressed (not network-scoped), but access to the doc that references it is network-gated
+
+#### Test 4: Invite-only network rejects unauthorized access
+
+Setup:
+1. Spin up 2 IrohNode instances: owner-A, outsider
+2. Create invite-only network "secure" (owner-A, `invite_only = true`)
+3. owner-A creates folder "secure-docs" → network "secure"
+4. owner-A adds blob `secret.txt`
+5. outsider discovers the folder namespace via gossip but does NOT possess a valid ticket
+
+Assertions:
+- outsider cannot open the folder doc (namespace capability not granted)
+- outsider cannot fetch blobs from the doc's entries
+- After GAP 6 (signed membership docs): outsider cannot verify membership in the network
+- `NetworkManager::can_access_folder()` returns `false` for the outsider
+
+#### Test 5: Network membership propagation (post GAP 6)
+
+Setup:
+1. Spin up 3 IrohNode instances: owner-A, member-X, member-Y
+2. Create network "team" (owner-A) with membership doc
+3. member-X joins via ticket → membership doc is synced
+4. member-X and member-Y are connected via relay
+
+Assertions:
+- owner-A invites member-Y → writes `SignedMemberList` with both X and Y as members
+- member-X's membership doc live event fires → member-X sees new member Y in list
+- member-X's gossip peer set is updated to include member-Y
+- owner-A kicks member-X → writes `SignedMemberList` without X
+- member-X receives the update → verifies signature → auto-leaves network
+- member-X's folder access for network folders is revoked within 5 seconds
+
+### Test Suite: Daemon Integration (`syncweb-core/tests/integration/daemon_integration_test.rs` additions)
+
+#### Test: Two daemons on different networks
+
+Setup:
+1. Start daemon-A with network "alpha" and folder "alpha-docs"
+2. Start daemon-B with network "beta" and folder "beta-docs"
+3. Both daemons connected to the same relay
+4. Add blob content `"alpha-data"` to daemon-A's "alpha-docs"
+5. Add blob content `"beta-data"` to daemon-B's "beta-docs"
+
+Assertions:
+- daemon-A's blob does not appear in daemon-B's blob store
+- daemon-B's blob does not appear in daemon-A's blob store
+- IPC `list` from daemon-A shows only "alpha-docs", not "beta-docs"
+- IPC `network list` from daemon-A shows only "alpha"
+
+#### Test: Daemon sync respects network scoping on restart
+
+Setup:
+1. Start daemon with network "team", folder "docs" in network
+2. Add blobs to "docs", sync completes
+3. Restart the daemon
+4. On startup, daemon reads `network_folders` and `network_members` from `node.db`
+
+Assertions:
+- `can_access_folder("docs")` returns `true` after restart
+- `can_access_folder("unrelated-folder")` returns `false` (folder exists but not in any network)
+- Sync engine only reconciles folders with valid network access
+- No sync is initiated for folders outside the node's networks
+
+### Test Suite: Bandwidth & Event Logging (post GAP 1 & 2)
+
+#### Test: Network events recorded on membership changes
+
+Assertions:
+- `network_events` table has `member_added` event for join
+- `network_events` table has `member_removed` event for kick
+- `network_events` table has `ticket_created` event for invite
+- `network_events` table has `ticket_accepted` event for join
+
+#### Test: Bandwidth attributed to correct network
+
+Setup:
+1. Create networks "alpha" and "beta"
+2. Add 10MB blob to "alpha" folder, sync with "alpha" member
+3. Add 5MB blob to "beta" folder, sync with "beta" member
+
+Assertions:
+- `network_bandwidth_summary` shows ~10MB for "alpha", ~5MB for "beta"
+- No bandwidth from "alpha" sync is attributed to "beta"
+- Per-peer bandwidth records have the correct `network_id`
+
+### Test Suite: Sync Checkpointing (post GAP 4)
+
+#### Test: Checkpoint survives daemon restart
+
+Setup: Create folder with 100 blobs, kill daemon after 40 completed.
+
+Assertions:
+- `sync_entry_progress` has 40 entries `completed`, 60 `pending`
+- After resume, only 60 blobs are downloaded (not all 100)
+- `sync_checkpoints` status transitions: `running` → `running` (after restart) → `completed`
+
+#### Test: Failed entries retried on resume
+
+Assertions:
+- Failed entries recorded with `retries > 0`
+- On resume, failed entries are re-attempted
+- `sync_checkpoints.failed_entries` decrements as retries succeed
+
+### Files to create/modify for tests
+
+| File | Action |
+|---|---|
+| `syncweb-core/tests/integration/network_isolation_test.rs` | NEW — Tests 1--5 defined above |
+| `syncweb-core/tests/integration/daemon_integration_test.rs` | Add network-aware daemon tests |
+| `syncweb-core/tests/integration/network_test.rs` | Add bandwidth correlation and event logging assertions |
+| `syncweb-core/tests/integration/sync_test.rs` | Add checkpoint resume tests |
+| `syncweb-cli/tests/cli_test.rs` | Add CLI test: network create with same name across separate daemon instances |
+
+---
+
+## Implementation Order (Updated)
+
+| Step | Gap | Depends On | Rationale |
+|---|---|---|---|
+| 1 | Network events/sessions tables (GAP 1) | Plan 1 (node.db, stats.db exist) | Schema is defined upfront in each database open |
+| 2 | Network bandwidth correlation (GAP 2) | Plan 1 (stats.db exists) | Adds column to existing table |
+| 3 | Daemon integration of NetworkManager (GAP 7) | GAP 1 (node.db has network tables) | Without daemon integration, GAPs 6 and 8 have no runtime context |
+| 4 | Network membership propagation via docs (GAP 6) | GAP 7 (NetworkManager in daemon) | Network docs need daemon-side NetworkManager for doc lifecycle |
+| 5 | Network access control & isolation (GAP 8) | GAP 7 (NetworkManager in daemon), GAP 6 (signed membership lists) | Access checks depend on daemon runtime; signed lists provide verifiable membership |
+| 6 | Sync checkpointing (GAP 4) | Plan 1 (node.db exists) | Schema + engine integration |
+| 7 | `.syncweb-collection.json` removal (GAP 3) | Plan 1 (collections in node.db) | Simplifies code, removes duplicate state |
+| 8 | Maintenance tasks (GAP 5) | None | Vacuum + backup are standalone utilities |
+| 9 | Network isolation & integration tests | GAPs 1--8 | Write tests alongside each gap, not deferred to end |
+
+---
+
+## Files Summary (Updated)
+
+| File | Action |
+|---|---|
+| `syncweb-core/src/net/network_log.rs` | NEW |
+| `syncweb-core/src/net/membership_doc.rs` | NEW |
+| `syncweb-core/src/net/network_context.rs` | NEW |
+| `syncweb-core/src/sync/checkpoint.rs` | NEW |
+| `syncweb-core/src/storage/node_db.rs` | Add sync checkpoints, blob_network_index, backup/vacuum; add network folder/member lookup queries |
+| `syncweb-core/src/storage/stats_db.rs` | Add network events, backup/vacuum; add `network_id` to bandwidth_events |
+| `syncweb-core/src/net/network.rs` | Add `doc_ticket` to `NetworkTicket`; add namespace derivation |
+| `syncweb-core/src/net/network_manager.rs` | Add membership doc integration; add auto-leave on kick; add NetworkLogger; add `can_access_folder()`, `networks_for_folder()`, `folders_for_network()`, `members_of_network()`; add `open()` and `network_for_folder()` for daemon use |
+| `syncweb-core/src/daemon/daemon.rs` | Add `NetworkManager` field; wire through `new()`, `run_inner()`, `run_folder_intent()`; construct `NetworkContext` for sync calls; subscribe to network gossip on startup |
+| `syncweb-core/src/daemon/ipc.rs` | Remove .syncweb-collection.json reads; add network mutation IPC handlers |
+| `syncweb-core/src/sync/engine.rs` | Integrate checkpoints; accept `NetworkContext`; pass `network_id` to stats; gate sync on `can_access_folder()` |
+| `syncweb-core/src/node/blob_store.rs` | Add `download_with_network()` gated by `NetworkContext` |
+| `syncweb-cli/src/main.rs` | Remove .syncweb-collection.json writes; add `db` and `network events/health` commands |
+| `syncweb-cli/src/cli/commands.rs` | Update `network invite` output for doc tickets |
+| `syncweb-core/tests/integration/network_isolation_test.rs` | NEW — Cross-network isolation tests |
+| `syncweb-core/tests/integration/daemon_integration_test.rs` | Add network-aware daemon tests |
+| `syncweb-core/tests/integration/network_test.rs` | Add bandwidth/event logging assertions |
+| `syncweb-core/tests/integration/sync_test.rs` | Add checkpoint resume tests |
+| `syncweb-cli/tests/cli_test.rs` | Add network isolation CLI tests |

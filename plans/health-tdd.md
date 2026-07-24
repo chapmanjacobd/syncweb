@@ -1,19 +1,19 @@
 # TDD Plan: `health` command
 
 ## Divergence
-Name "health" implies general system/network health. Actual: "Show seeding status per folder blob" — but **peer_count is hardcoded to 0**, making the report always show "all blobs unseeded". The concept is correct; the data pipeline is broken.
+Name "health" implies general system/network health. Actual: "Show seeding status per folder blob" — but peer_count is hardcoded to 0, making the report always show "all blobs unseeded". The concept is correct; the data pipeline is broken.
 
 ## Current scope
 - Enumerates blobs in a synchronized folder
 - Classifies them as well-seeded (>=4), under-seeded (1-3), unseeded (0)
-- **Bug:** `peer_count` is always `0` in both daemon and direct paths — `FetchCandidate::new(path, hash, size, 0, local)` is called with literal `0`
+- Bug: `peer_count` is always `0` in both daemon and direct paths — `FetchCandidate::new(path, hash, size, 0, local)` is called with literal `0`
 - No live peer-count tracking integrated
 - No gossip channels queried
 
 ## Decision
-- **Keep** the name `health` (it accurately describes the intent)
-- **Fix** the `peer_count = 0` bug by wiring to `ProviderLeaseTracker` for real peer counts
-- **Connect** to the indexing/resilience layer to get live seeding data
+- Keep the name `health` (it accurately describes the intent)
+- Fix the `peer_count = 0` bug by wiring to `ProviderLeaseTracker` for real peer counts
+- Connect to the indexing/resilience layer to get live seeding data
 - Add a separate `network health` subcommand for general connectivity checks
 
 ---
@@ -174,13 +174,13 @@ async fn test_health_improves_after_replication() -> anyhow::Result<()> {
 
 ### `syncweb-core/src/daemon/ipc.rs` — Fix `handle_health_check`
 
-**Current (broken):**
+Current (broken):
 ```rust
 candidates.push(FetchCandidate::new(path_str, hash, size, 0, local));
 //                                                   ^ hardcoded 0
 ```
 
-**Fixed:**
+Fixed:
 ```rust
 let provider_count = match context.indexing {
     Some(ref indexing) => {
@@ -195,13 +195,13 @@ candidates.push(FetchCandidate::new(path_str, hash, size, provider_count, local)
 
 ### `syncweb-cli/src/main.rs` — Fix `handle_health` direct path
 
-**Current:**
+Current:
 ```rust
 candidates.push(FetchCandidate::new(path, hash, size, 0, local));
 //                                                ^ hardcoded 0
 ```
 
-**Fixed:** Same pattern — query `ResilienceService::health()` when indexing is available.
+Fixed: Same pattern — query `ResilienceService::health()` when indexing is available.
 
 ### `syncweb-core/src/indexing/resilience.rs` — Add `ResilienceService::health_batch()`
 
@@ -250,7 +250,7 @@ The `HealthArgs` struct is fine. (Optionally add `--min-providers` flag to custo
 
 - `ProviderLeaseTracker` already receives provider information via gossip (signed `ProviderLease` messages)
 - The health command doesn't need new gossip channels — it reads from the `ProviderLeaseTracker` that gossip already populates
-- **Prerequisite:** The daemon must have indexing enabled for the tracked folder (which enables `GossipService` subscription to provider lease topics)
+- Prerequisite: The daemon must have indexing enabled for the tracked folder (which enables `GossipService` subscription to provider lease topics)
 - If indexing is not enabled, `health` falls back to local-only (peer_count = 0, as today)
 
 ## Files to modify/plan

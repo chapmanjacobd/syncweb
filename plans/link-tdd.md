@@ -8,7 +8,7 @@ Name "Create and resolve stable syncweb links" implies network-addressable links
 | Subcommand | About text | Actual behavior | Problem |
 |---|---|---|---|
 | `link create` | "Create an immutable, private, or mutable link" | `--name` (mutable): signs a `MutablePointer`, saves to `state.links.pointers`, never publishes to iroh-docs. `--private`: generates a random capability, saves to `state.links.revoked`. No network I/O. | Created links are only accessible on the creating machine. Other peers have no way to discover them. |
-| `link resolve` | "Resolve a stable link" | Called **synchronously** (no `.await`). Reads from in-memory `ResolverState` loaded from `indexing-state.json`. Never connects to network. `LinkResolver::fetch_with_mirrors()` exists but is never called by CLI. | Cannot resolve links created by other peers. Shows stale/cached data only. |
+| `link resolve` | "Resolve a stable link" | Called synchronously (no `.await`). Reads from in-memory `ResolverState` loaded from `indexing-state.json`. Never connects to network. `LinkResolver::fetch_with_mirrors()` exists but is never called by CLI. | Cannot resolve links created by other peers. Shows stale/cached data only. |
 | `link revoke` | "Revoke a private capability link" | Adds revocation key to in-memory `HashSet` + `state.links.revoked`. Never propagates to peers. | If Alice shares a private link with Bob, then revokes it, Bob never learns. |
 
 ---

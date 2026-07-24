@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    editorial::{Channel, ContentType, EditorialState},
     error::{Result, SyncwebError},
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
@@ -173,6 +174,20 @@ pub struct CollectionManifest {
     pub signature: Option<String>,
     #[serde(default)]
     pub public_key: Option<String>,
+    /// Content type taxonomy — `None` means the collection behaves as a
+    /// generic file set (default, backward-compatible behaviour).
+    #[serde(default)]
+    pub content_type: Option<ContentType>,
+    /// Editorial lifecycle stage — `None` means the collection is in the
+    /// implicit `Published` state (backward-compatible).
+    #[serde(default)]
+    pub editorial_state: Option<EditorialState>,
+    /// Channels this collection version should be announced on.
+    ///
+    /// An empty list means the collection is broadcast only on the default
+    /// public catalog topic.
+    #[serde(default)]
+    pub channels: Vec<Channel>,
 }
 
 impl CollectionManifest {
@@ -188,6 +203,9 @@ impl CollectionManifest {
             package: None,
             signature: None,
             public_key: None,
+            content_type: None,
+            editorial_state: None,
+            channels: Vec::new(),
         }
     }
 
@@ -365,6 +383,25 @@ impl CollectionManifest {
     /// Returns an error when the manifest is invalid or cannot be serialized.
     pub fn blob_id(&self) -> Result<Hash> {
         Ok(Hash::new(&self.to_bytes()?))
+    }
+
+    /// Whether this collection has opted into editorial flows.
+    #[must_use]
+    pub const fn has_editorial_metadata(&self) -> bool {
+        self.content_type.is_some() || self.editorial_state.is_some() || !self.channels.is_empty()
+    }
+
+    /// The effective editorial state (defaults to `Published`).
+    #[must_use]
+    pub fn effective_state(&self) -> EditorialState {
+        self.editorial_state.unwrap_or_default()
+    }
+
+    /// The effective content type (defaults to `Generic`).
+    #[must_use]
+    pub fn effective_content_type(&self) -> &ContentType {
+        static GENERIC: ContentType = ContentType::Generic;
+        self.content_type.as_ref().unwrap_or(&GENERIC)
     }
 }
 

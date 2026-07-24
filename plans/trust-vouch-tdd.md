@@ -1,7 +1,7 @@
 # TDD Plan: `trust provider vouch` / `trust provider distrust`
 
 ## Note
-This is NOT a "not hooked up" bug. `trust provider vouch` is local bookkeeping — storing your opinion about a provider in your local trust database. The `trust stream publish` command already exists for broadcasting trust signals over gossip. This plan is a **convenience enhancement**: adding `--broadcast` so users can vouch/distrust and optionally share that opinion via the existing gossip topic, without needing to learn the `trust stream publish` syntax.
+This is NOT a "not hooked up" bug. `trust provider vouch` is local bookkeeping — storing your opinion about a provider in your local trust database. The `trust stream publish` command already exists for broadcasting trust signals over gossip. This plan is a convenience enhancement: adding `--broadcast` so users can vouch/distrust and optionally share that opinion via the existing gossip topic, without needing to learn the `trust stream publish` syntax.
 
 ## Current state vs. `trust stream publish`
 
@@ -257,9 +257,9 @@ fn handle_provider_trust_record(
 
 ## Gossip/network integration note
 
-- Reuses the **existing** gossip topic `syncweb/provider-trust-stream/v1` (already defined in `reputation.rs`)
-- Reuses the **existing** `ProviderTrustSignal` type
-- Reuses the **existing** `ProviderReputationStore::publish_signal()` and `subscribe_trust_stream()` methods
+- Reuses the existing gossip topic `syncweb/provider-trust-stream/v1` (already defined in `reputation.rs`)
+- Reuses the existing `ProviderTrustSignal` type
+- Reuses the existing `ProviderReputationStore::publish_signal()` and `subscribe_trust_stream()` methods
 - The `trust stream subscribe` handler already receives and applies incoming signals via `reputation.ingest_trust_signal()`
 - No new gossip infrastructure needed — just wiring the existing vouch/distrust commands to the existing gossip machinery
 - The `--broadcast` flag is optional; without it, behavior is unchanged (local only)

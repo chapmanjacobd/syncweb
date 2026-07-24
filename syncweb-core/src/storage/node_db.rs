@@ -28,6 +28,11 @@ pub struct NodeDatabase {
 }
 
 impl NodeDatabase {
+    /// Open (or create) the node database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or initialized.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db_path = path.as_ref();
         if let Some(parent) = db_path.parent() {
@@ -43,6 +48,11 @@ impl NodeDatabase {
         Ok(db)
     }
 
+    /// Run database migrations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database schema cannot be created or migrated.
     pub fn migrate(&self) -> Result<()> {
         let connection = self
             .connection
@@ -150,11 +160,15 @@ impl NodeDatabase {
                 [],
             )
             .map_err(|error| SyncwebError::operation("failed to seed schema version", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Daemon lifecycle ───────────────────────────────────
-
+    /// Persist the daemon lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn save_lifecycle(&self, state: &DaemonState) -> Result<()> {
         let connection = self
             .connection
@@ -181,16 +195,22 @@ impl NodeDatabase {
                 params![
                     i64::from(state.pid),
                     state.node_id,
-                    state.started_at as i64,
+                    state.started_at.cast_signed(),
                     status,
                     state.data_dir.to_string_lossy().as_ref(),
-                    now as i64,
+                    now.cast_signed(),
                 ],
             )
             .map_err(|error| SyncwebError::operation("failed to save daemon lifecycle", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Load the daemon lifecycle state, returning `None` if absent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
     pub fn load_lifecycle(&self) -> Result<Option<DaemonState>> {
         let connection = self
             .connection
@@ -220,9 +240,9 @@ impl NodeDatabase {
                         }
                     };
                     Ok(DaemonState::new(
-                        pid as u32,
+                        u32::try_from(pid).unwrap_or_default(),
                         node_id,
-                        started_at as u64,
+                        started_at.cast_unsigned(),
                         data_dir,
                         status,
                     ))
@@ -230,9 +250,15 @@ impl NodeDatabase {
             )
             .optional()
             .map_err(|error| SyncwebError::operation("failed to load daemon lifecycle", error))?;
+        drop(connection);
         Ok(result)
     }
 
+    /// Remove the daemon lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn remove_lifecycle(&self) -> Result<()> {
         let connection = self
             .connection
@@ -241,17 +267,21 @@ impl NodeDatabase {
         connection
             .execute("DELETE FROM daemon_lifecycle WHERE id = 1", [])
             .map_err(|error| SyncwebError::operation("failed to remove daemon lifecycle", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Daemon status ──────────────────────────────────────
-
+    /// Persist the daemon status report.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn save_status(&self, report: &DaemonStatusReport) -> Result<()> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         let has_schedule = report.schedule.is_some();
         connection
             .execute(
@@ -276,16 +306,16 @@ impl NodeDatabase {
                 params![
                     i64::from(report.pid),
                     report.node_id,
-                    report.started_at as i64,
-                    report.uptime_seconds as i64,
-                    report.bandwidth.upload_total as i64,
-                    report.bandwidth.download_total as i64,
-                    report.bandwidth.upload_rate as i64,
-                    report.bandwidth.download_rate as i64,
+                    report.started_at.cast_signed(),
+                    report.uptime_seconds.cast_signed(),
+                    report.bandwidth.upload_total.cast_signed(),
+                    report.bandwidth.download_total.cast_signed(),
+                    report.bandwidth.upload_rate.cast_signed(),
+                    report.bandwidth.download_rate.cast_signed(),
                     i64::from(has_schedule),
                     report.schedule.map_or(0, |s| i64::from(s.in_active_window)),
-                    report.schedule.and_then(|s| s.next_window_start.map(|v| v as i64)),
-                    report.rayon_threads as i64,
+                    report.schedule.and_then(|s| s.next_window_start.map(u64::cast_signed)),
+                    i64::try_from(report.rayon_threads).unwrap_or_default(),
                     now,
                 ],
             )
@@ -309,17 +339,23 @@ impl NodeDatabase {
                         folder.namespace,
                         folder.path.to_string_lossy().as_ref(),
                         i64::from(folder.session_active),
-                        folder.last_sync_at.map(|v| v as i64),
-                        folder.entries_synced as i64,
+                        folder.last_sync_at.map(u64::cast_signed),
+                        folder.entries_synced.cast_signed(),
                         errors_json,
                         now,
                     ],
                 )
                 .map_err(|error| SyncwebError::operation("failed to save folder status", error))?;
         }
+        drop(connection);
         Ok(())
     }
 
+    /// Load the daemon status report, returning `None` if absent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
     pub fn load_status(&self) -> Result<Option<DaemonStatusReport>> {
         let connection = self
             .connection
@@ -348,23 +384,23 @@ impl NodeDatabase {
 
                     let schedule = (has_schedule != 0).then(|| ScheduleStatus {
                         in_active_window: in_active_window != 0,
-                        next_window_start: next_window_start.map(|v| v as u64),
+                        next_window_start: next_window_start.map(i64::cast_unsigned),
                     });
 
                     Ok(DaemonStatusReport {
-                        pid: pid as u32,
+                        pid: u32::try_from(pid).unwrap_or_default(),
                         node_id,
-                        started_at: started_at as u64,
-                        uptime_seconds: uptime_seconds as u64,
+                        started_at: started_at.cast_unsigned(),
+                        uptime_seconds: uptime_seconds.cast_unsigned(),
                         folders: Vec::new(),
                         bandwidth: BandwidthSnapshot {
-                            upload_total: upload_total as u64,
-                            download_total: download_total as u64,
-                            upload_rate: upload_rate as u64,
-                            download_rate: download_rate as u64,
+                            upload_total: upload_total.cast_unsigned(),
+                            download_total: download_total.cast_unsigned(),
+                            upload_rate: upload_rate.cast_unsigned(),
+                            download_rate: download_rate.cast_unsigned(),
                         },
                         schedule,
-                        rayon_threads: rayon_threads as usize,
+                        rayon_threads: usize::try_from(rayon_threads).unwrap_or_default(),
                     })
                 },
             )
@@ -391,8 +427,8 @@ impl NodeDatabase {
                         namespace,
                         path,
                         session_active != 0,
-                        last_sync_at.map(|v| v as u64),
-                        entries_synced as u64,
+                        last_sync_at.map(i64::cast_unsigned),
+                        entries_synced.cast_unsigned(),
                         errors,
                     ))
                 })
@@ -400,12 +436,20 @@ impl NodeDatabase {
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|error| SyncwebError::operation("failed to read folder status rows", error))?;
             report.folders = folders;
+            drop(folder_stmt);
+            drop(connection);
             Ok(Some(report))
         } else {
+            drop(connection);
             Ok(None)
         }
     }
 
+    /// Remove all daemon status data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn remove_status(&self) -> Result<()> {
         let connection = self
             .connection
@@ -417,17 +461,21 @@ impl NodeDatabase {
         connection
             .execute("DELETE FROM folder_status_reports", [])
             .map_err(|error| SyncwebError::operation("failed to remove folder status reports", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Networks ───────────────────────────────────────────
-
+    /// Create a network entry in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn create_network(&self, network: &Network) -> Result<()> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         connection.execute(
             "INSERT INTO networks(id, name, label, owner, shared_secret, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
@@ -455,9 +503,15 @@ impl NodeDatabase {
                 )
                 .map_err(|error| SyncwebError::operation("failed to add network folder", error))?;
         }
+        drop(connection);
         Ok(())
     }
 
+    /// Delete a network from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network is not found or the database cannot be written.
     pub fn delete_network(&self, id: NetworkId) -> Result<()> {
         let connection = self
             .connection
@@ -467,11 +521,18 @@ impl NodeDatabase {
             .execute("DELETE FROM networks WHERE id = ?1", params![id.to_string()])
             .map_err(|error| SyncwebError::operation("failed to delete network", error))?;
         if affected == 0 {
+            drop(connection);
             return Err(SyncwebError::FolderNotFound(format!("network {id}")));
         }
+        drop(connection);
         Ok(())
     }
 
+    /// Add a member to a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn add_member(&self, network_id: NetworkId, member: PublicKey) -> Result<()> {
         let connection = self
             .connection
@@ -483,9 +544,15 @@ impl NodeDatabase {
                 params![network_id.to_string(), member.to_string()],
             )
             .map_err(|error| SyncwebError::operation("failed to add network member", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Remove a member from a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn remove_member(&self, network_id: NetworkId, member: &PublicKey) -> Result<bool> {
         let connection = self
             .connection
@@ -497,9 +564,15 @@ impl NodeDatabase {
                 params![network_id.to_string(), member.to_string()],
             )
             .map_err(|error| SyncwebError::operation("failed to remove network member", error))?;
+        drop(connection);
         Ok(affected > 0)
     }
 
+    /// Add a folder to a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn add_folder_to_network(&self, network_id: NetworkId, namespace_id: NamespaceId) -> Result<()> {
         let connection = self
             .connection
@@ -511,9 +584,15 @@ impl NodeDatabase {
                 params![network_id.to_string(), namespace_id.to_string()],
             )
             .map_err(|error| SyncwebError::operation("failed to add network folder", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Remove a folder from a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn remove_folder_from_network(&self, network_id: NetworkId, namespace_id: NamespaceId) -> Result<()> {
         let connection = self
             .connection
@@ -525,9 +604,15 @@ impl NodeDatabase {
                 params![network_id.to_string(), namespace_id.to_string()],
             )
             .map_err(|error| SyncwebError::operation("failed to remove network folder", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// List all networks from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
     pub fn list_networks(&self) -> Result<Vec<Network>> {
         let connection = self
             .connection
@@ -536,7 +621,7 @@ impl NodeDatabase {
         let mut stmt = connection
             .prepare("SELECT id, name, label, owner, shared_secret FROM networks ORDER BY name")
             .map_err(|error| SyncwebError::operation("failed to prepare network query", error))?;
-        let networks: Vec<(String, String, String, String, Option<Vec<u8>>)> = stmt
+        let networks = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -564,7 +649,7 @@ impl NodeDatabase {
             let owner = parse_public_key(&owner_str)?;
             let shared_secret = shared_secret_bytes
                 .map(|bytes| -> Result<[u8; 32]> {
-                    bytes.try_into().map_err(|_| {
+                    bytes.try_into().map_err(|_bytes: Vec<u8>| {
                         SyncwebError::operation("invalid shared secret length in database", "expected 32 bytes")
                     })
                 })
@@ -600,11 +685,18 @@ impl NodeDatabase {
                 shared_secret,
             });
         }
+        drop(stmt);
+        drop(member_stmt);
+        drop(folder_stmt);
+        drop(connection);
         Ok(result)
     }
 
-    // ── Collections ────────────────────────────────────────
-
+    /// Get the installed collection state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
     pub fn get_collection_state(&self) -> Result<CollectionState> {
         let connection = self
             .connection
@@ -656,9 +748,17 @@ impl NodeDatabase {
                 },
             );
         }
+        drop(stmt);
+        drop(version_stmt);
+        drop(connection);
         Ok(CollectionState { installed })
     }
 
+    /// Install a collection version in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn install_collection(
         &self,
         collection_id: Uuid,
@@ -670,7 +770,7 @@ impl NodeDatabase {
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         connection
             .execute(
                 "INSERT INTO installed_collections(collection_id, manifest_hash, current_version, installed_at)
@@ -688,9 +788,15 @@ impl NodeDatabase {
                 params![collection_id.to_string(), version, path.to_string_lossy().as_ref()],
             )
             .map_err(|error| SyncwebError::operation("failed to record collection version", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Switch the active version of a collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn switch_collection_version(&self, collection_id: Uuid, version: &str) -> Result<()> {
         let connection = self
             .connection
@@ -702,9 +808,15 @@ impl NodeDatabase {
                 params![version, collection_id.to_string()],
             )
             .map_err(|error| SyncwebError::operation("failed to switch collection version", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Remove a collection version from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn remove_collection_version(&self, collection_id: Uuid, version: &str) -> Result<()> {
         let connection = self
             .connection
@@ -732,11 +844,15 @@ impl NodeDatabase {
                 )
                 .map_err(|error| SyncwebError::operation("failed to remove installed collection", error))?;
         }
+        drop(connection);
         Ok(())
     }
 
-    // ── App Config ──────────────────────────────────────────
-
+    /// Get a configuration value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
     pub fn get_config(&self, key: &str) -> Result<Option<String>> {
         let connection = self
             .connection
@@ -748,15 +864,21 @@ impl NodeDatabase {
             })
             .optional()
             .map_err(|error| SyncwebError::operation("failed to get config", error))?;
+        drop(connection);
         Ok(result)
     }
 
+    /// Set a configuration value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         connection
             .execute(
                 "INSERT INTO app_config(key, value, updated_at) VALUES (?1, ?2, ?3)
@@ -764,9 +886,15 @@ impl NodeDatabase {
                 params![key, value, now],
             )
             .map_err(|error| SyncwebError::operation("failed to set config", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Load the application configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read or the config cannot be parsed.
     pub fn load_app_config(&self) -> Result<AppConfig> {
         let connection = self
             .connection
@@ -778,16 +906,22 @@ impl NodeDatabase {
             })
             .optional()
             .map_err(|error| SyncwebError::operation("failed to load app config", error))?;
-        match blob {
-            Some(toml_str) => {
+        drop(connection);
+        blob.map_or_else(
+            || Ok(AppConfig::default()),
+            |toml_str| {
                 toml::from_str(&toml_str).map_err(|error| SyncwebError::operation("failed to parse app config", error))
-            }
-            None => Ok(AppConfig::default()),
-        }
+            },
+        )
     }
 
+    /// Save the application configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config cannot be serialized or the database cannot be written.
     pub fn save_app_config(&self, config: &AppConfig) -> Result<()> {
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         let blob = toml::to_string_pretty(config)
             .map_err(|error| SyncwebError::operation("failed to serialize app config", error))?;
         let connection = self
@@ -801,11 +935,15 @@ impl NodeDatabase {
                 params![blob, now],
             )
             .map_err(|error| SyncwebError::operation("failed to save app config", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Filters ─────────────────────────────────────────────
-
+    /// Load the filter engine state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read or the filter engine cannot be created.
     pub fn load_filter_engine(&self) -> Result<Option<FilterEngine>> {
         let connection = self
             .connection
@@ -825,6 +963,8 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to query filters", error))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|error| SyncwebError::operation("failed to read filter rows", error))?;
+        drop(stmt);
+        drop(connection);
 
         if rows.is_empty() {
             return Ok(None);
@@ -856,12 +996,17 @@ impl NodeDatabase {
         FilterEngine::new(filter_config).map(Some)
     }
 
+    /// Save filter rules to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
     pub fn save_filter_rules(&self, rules: &[FilterEntry]) -> Result<()> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let now = current_timestamp() as i64;
+        let now = current_timestamp().cast_signed();
         connection
             .execute("DELETE FROM filter_rules", [])
             .map_err(|error| SyncwebError::operation("failed to clear filter rules", error))?;
@@ -875,6 +1020,7 @@ impl NodeDatabase {
                 )
                 .map_err(|error| SyncwebError::operation("failed to save filter rule", error))?;
         }
+        drop(connection);
         Ok(())
     }
 }

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    editorial::Channel,
     error::{Result, SyncwebError},
     node::gossip_service::GossipService,
 };
@@ -22,6 +23,22 @@ const CATALOG_TOPIC_SEED: &[u8] = b"syncweb/public-package-catalog/v1";
 #[must_use]
 pub fn catalog_topic() -> TopicId {
     TopicId::from_bytes(*blake3::hash(CATALOG_TOPIC_SEED).as_bytes())
+}
+
+/// Derive a gossip topic ID from an editorial channel name.
+///
+/// Each channel forms a fully independent gossip swarm so that consumers
+/// can subscribe only to the curated views they trust.
+#[must_use]
+pub fn channel_topic_id(name: impl AsRef<str>) -> TopicId {
+    let seed = format!("syncweb/editorial/{}/v1", name.as_ref());
+    TopicId::from_bytes(*blake3::hash(seed.as_bytes()).as_bytes())
+}
+
+/// Shorthand for [`channel_topic_id`] that accepts a [`Channel`].
+#[must_use]
+pub fn channel_topic(channel: &Channel) -> TopicId {
+    channel_topic_id(&channel.name)
 }
 
 /// A gossip announcement for a publicly fetchable collection manifest.
@@ -173,6 +190,30 @@ impl PackageCatalog {
     /// Returns an error if the announcement is invalid or cannot be sent.
     pub async fn announce(&self, sender: &GossipSender, announcement: &PackageAnnouncement) -> Result<()> {
         self.gossip.publish(sender, announcement.to_bytes()?).await
+    }
+
+    /// Subscribe to a specific editorial channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the gossip subscription cannot be created.
+    pub async fn subscribe_channel(&self, channel: &Channel, bootstrap: Vec<PublicKey>) -> Result<GossipTopic> {
+        self.gossip.subscribe(channel_topic(channel), bootstrap).await
+    }
+
+    /// Subscribe to a channel and block until at least one bootstrap peer is
+    /// connected.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the gossip subscription cannot join its bootstrap
+    /// peers.
+    pub async fn subscribe_channel_and_join(
+        &self,
+        channel: &Channel,
+        bootstrap: Vec<PublicKey>,
+    ) -> Result<GossipTopic> {
+        self.gossip.subscribe_and_join(channel_topic(channel), bootstrap).await
     }
 
     /// Collect matching announcements until the timeout expires.

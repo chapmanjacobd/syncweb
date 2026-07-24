@@ -21,6 +21,7 @@
 //! - `sync`: The core synchronization engine and session management.
 //!
 pub mod daemon;
+pub mod editorial;
 pub mod error;
 pub mod filter;
 pub mod folder;

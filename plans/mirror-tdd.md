@@ -2,7 +2,7 @@
 
 ## Rationale
 
-The old `mirror` command only handled single-blob replication. That was merged into `download` (`syncweb download <ticket>`). A new `mirror` command should operate at a higher level: replicate **all blobs** owned by a provider, or all blobs in a network.
+The old `mirror` command only handled single-blob replication. That was merged into `download` (`syncweb download <ticket>`). A new `mirror` command should operate at a higher level: replicate all blobs owned by a provider, or all blobs in a network.
 
 ## Scope
 

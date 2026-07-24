@@ -17,6 +17,11 @@ pub struct StatsDatabase {
 }
 
 impl StatsDatabase {
+    /// Open (or create) the stats database at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or initialized.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db_path = path.as_ref();
         if let Some(parent) = db_path.parent() {
@@ -105,11 +110,15 @@ impl StatsDatabase {
                 [],
             )
             .map_err(|error| SyncwebError::operation("failed to seed schema version", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Bandwidth events (append-only) ─────────────────────
-
+    /// Record an upload bandwidth event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
     pub fn record_upload(&self, bytes: u64, files: u64, folder: Option<&str>, peer: Option<&str>) -> Result<()> {
         let connection = self
             .connection
@@ -120,12 +129,18 @@ impl StatsDatabase {
             .execute(
                 "INSERT INTO bandwidth_events(timestamp, direction, bytes, files, folder_namespace, peer)
              VALUES (?1, 'upload', ?2, ?3, ?4, ?5)",
-                params![now, bytes as i64, files as i64, folder, peer],
+                params![now, bytes.cast_signed(), files.cast_signed(), folder, peer],
             )
             .map_err(|error| SyncwebError::operation("failed to record upload event", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Record a download bandwidth event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
     pub fn record_download(&self, bytes: u64, files: u64, folder: Option<&str>, peer: Option<&str>) -> Result<()> {
         let connection = self
             .connection
@@ -136,12 +151,18 @@ impl StatsDatabase {
             .execute(
                 "INSERT INTO bandwidth_events(timestamp, direction, bytes, files, folder_namespace, peer)
              VALUES (?1, 'download', ?2, ?3, ?4, ?5)",
-                params![now, bytes as i64, files as i64, folder, peer],
+                params![now, bytes.cast_signed(), files.cast_signed(), folder, peer],
             )
             .map_err(|error| SyncwebError::operation("failed to record download event", error))?;
+        drop(connection);
         Ok(())
     }
 
+    /// Record a connection event for the given peer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
     pub fn record_connection(&self, peer: &str) -> Result<()> {
         let connection = self
             .connection
@@ -159,11 +180,15 @@ impl StatsDatabase {
                 params![period, peer],
             )
             .map_err(|error| SyncwebError::operation("failed to record connection", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Stats queries ────────────────────────────────────────
-
+    /// Return aggregated bandwidth statistics for the current period.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be queried.
     pub fn current_stats(&self) -> Result<BandwidthStats> {
         let connection = self
             .connection
@@ -206,9 +231,9 @@ impl StatsDatabase {
             per_folder.insert(
                 ns,
                 FolderStats {
-                    upload: upload as u64,
-                    download: download as u64,
-                    files_transferred: files as u64,
+                    upload: upload.cast_unsigned(),
+                    download: download.cast_unsigned(),
+                    files_transferred: files.cast_unsigned(),
                 },
             );
         }
@@ -236,24 +261,30 @@ impl StatsDatabase {
             per_peer.insert(
                 peer,
                 PeerStats {
-                    upload: upload as u64,
-                    download: download as u64,
-                    connection_count: conns as u64,
+                    upload: upload.cast_unsigned(),
+                    download: download.cast_unsigned(),
+                    connection_count: conns.cast_unsigned(),
                 },
             );
         }
 
+        drop(folder_stmt);
+        drop(peer_stmt);
+        drop(connection);
         Ok(BandwidthStats {
-            total_upload: total_upload as u64,
-            total_download: total_download as u64,
+            total_upload: total_upload.cast_unsigned(),
+            total_download: total_download.cast_unsigned(),
             per_folder,
             per_peer,
-            period_start: period_start as u64,
+            period_start: period_start.cast_unsigned(),
         })
     }
 
-    // ── Logging ─────────────────────────────────────────────
-
+    /// Append a daemon log entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
     pub fn append_log(&self, level: &str, module: Option<&str>, message: &str) -> Result<()> {
         let connection = self
             .connection
@@ -266,32 +297,43 @@ impl StatsDatabase {
                 params![now, level, module, message],
             )
             .map_err(|error| SyncwebError::operation("failed to append log entry", error))?;
+        drop(connection);
         Ok(())
     }
 
-    // ── Maintenance ──────────────────────────────────────────
-
+    /// Delete bandwidth events older than the given duration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
     pub fn purge_old_bandwidth(&self, older_than: Duration) -> Result<usize> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
-        let cutoff = current_timestamp() - older_than.as_secs() as i64;
+        let cutoff = current_timestamp().saturating_sub(older_than.as_secs().cast_signed());
         let deleted = connection
             .execute("DELETE FROM bandwidth_events WHERE timestamp < ?1", params![cutoff])
             .map_err(|error| SyncwebError::operation("failed to purge old bandwidth events", error))?;
+        drop(connection);
         Ok(deleted)
     }
 
+    /// Delete daemon log entries older than the given duration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
     pub fn purge_old_logs(&self, older_than: Duration) -> Result<usize> {
         let connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
-        let cutoff = current_timestamp() - older_than.as_secs() as i64;
+        let cutoff = current_timestamp().saturating_sub(older_than.as_secs().cast_signed());
         let deleted = connection
             .execute("DELETE FROM daemon_log WHERE timestamp < ?1", params![cutoff])
             .map_err(|error| SyncwebError::operation("failed to purge old log entries", error))?;
+        drop(connection);
         Ok(deleted)
     }
 }
@@ -299,11 +341,11 @@ impl StatsDatabase {
 fn current_timestamp() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
+        .map_or(0, |d| d.as_secs().cast_signed())
 }
 
 fn find_or_create_period(connection: &Connection, now: i64) -> std::result::Result<i64, rusqlite::Error> {
-    let period_start = now / 3600 * 3600;
+    let period_start = now.div_euclid(3600).saturating_mul(3600);
     connection.execute(
         "INSERT OR IGNORE INTO bandwidth_period(period_start, total_upload, total_download, closed)
          VALUES (?1, 0, 0, 0)",

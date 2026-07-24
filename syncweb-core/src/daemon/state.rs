@@ -534,8 +534,8 @@ mod tests {
         assert_eq!(loaded.unwrap().pid, 1);
 
         state_file.remove().unwrap();
-        let loaded = state_file.load().unwrap();
-        assert!(loaded.is_none());
+        let loaded_after_remove = state_file.load().unwrap();
+        assert!(loaded_after_remove.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

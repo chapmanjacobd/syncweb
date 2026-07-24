@@ -1,7 +1,7 @@
 # TDD Plan: `sort` command
 
 ## Divergence
-Name implies generic sorting. Actual: "Sort local files by discovery criteria" — but **niche, frecency, and peers criteria always score 0** because the CLI never populates those fields from network data. Criterias like `time`, `date`, `size` work fine since they use filesystem metadata.
+Name implies generic sorting. Actual: "Sort local files by discovery criteria" — but niche, frecency, and peers criteria always score 0 because the CLI never populates those fields from network data. Criterias like `time`, `date`, `size` work fine since they use filesystem metadata.
 
 ## Current scope
 - Pure local filesystem scan + in-memory sort
@@ -153,7 +153,7 @@ Currently the `ProviderLeaseTracker` learns about providers via:
 - Gossiped `ProviderLease` messages (signed leases from peers)
 - Local observations from successful fetches
 
-The `sort --enrich` command will use whatever data the tracker already has. To get **live** peer counts, the tracker must be subscribed to gossip for the relevant folders. This is already happening when the daemon runs with indexing enabled. No new gossip channels are needed — just wiring the existing data to the sort command.
+The `sort --enrich` command will use whatever data the tracker already has. To get live peer counts, the tracker must be subscribed to gossip for the relevant folders. This is already happening when the daemon runs with indexing enabled. No new gossip channels are needed — just wiring the existing data to the sort command.
 
 ## Files to modify
 

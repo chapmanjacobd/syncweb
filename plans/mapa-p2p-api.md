@@ -4,7 +4,7 @@
 
 mapa (`../mapa`) is a Kotlin Multiplatform collaborative mapping app. Its P2P
 sync layer lives in `core/src/sync.rs` as a Rust library loaded into the JVM
-via **UniFFI** (JNI bindings). This forces mapa to bundle `libmapa_core.so`,
+via UniFFI (JNI bindings). This forces mapa to bundle `libmapa_core.so`,
 depend on `cargo-ndk`, and carry an entire Rust build toolchain.
 
 The P2P API surface exposed through UniFFI is:
@@ -39,13 +39,13 @@ SyncEvent { author: String, payload: Vec<u8>, timestamp: u64 }
 ConnectedPeer { node_id: String, first_seen_secs: u64, last_seen_secs: u64 }
 ```
 
-syncweb is a pure Rust P2P file-sync tool using the **same Iroh stack**
+syncweb is a pure Rust P2P file-sync tool using the same Iroh stack
 (iroh 1.0, iroh-blobs, iroh-docs, iroh-gossip). It already has
 `DocsEngine`, `GossipService`, `BlobStore`, `IdentityManager`, and a daemon
 with Unix-socket IPC. Adding a WebSocket frontend that exposes the same
 Iroh primitives mapa needs is a thin layer.
 
-> **Scope note:** This plan covers only the Iroh-based P2P primitives.
+> Scope note: This plan covers only the Iroh-based P2P primitives.
 > GIS/OSM/analysis (MapaEngine, PBF parsing, MVT tiles, GeoParquet,
 > geometry utilities) stays in mapa and is out of scope for syncweb.
 
@@ -94,7 +94,7 @@ and translates binary frames into calls on these existing types.
 
 ## Binary WebSocket protocol — `v1`
 
-All frames are **binary** (`WebSocket.binaryType = "arraybuffer"` in
+All frames are binary (`WebSocket.binaryType = "arraybuffer"` in
 browser terms; `ByteArray` in Kotlin).
 
 ### Frame envelope
@@ -107,11 +107,11 @@ browser terms; `ByteArray` in Kotlin).
 └────────────────────┴──────────┴──────────────────────────┘
 ```
 
-- **tag**: Identifies the message kind (command request, command response,
+- tag: Identifies the message kind (command request, command response,
   or server-push event). See the tag table below.
-- **seq**: Request/response correlation ID. Commands set a non-zero
+- seq: Request/response correlation ID. Commands set a non-zero
   `seq`; the response echoes it. Server-push events always use `seq=0`.
-- **payload**: Tag-specific binary encoding described per-message below.
+- payload: Tag-specific binary encoding described per-message below.
 
 ### Tag assignments
 
@@ -139,11 +139,11 @@ browser terms; `ByteArray` in Kotlin).
 | 0x83 | push event    | server→client  | `node_status`                    |
 | 0x84 | push event    | server→client  | `gossip_event`                   |
 
-Tags 0x01–0x0F are commands (client→server). Tags 0x80–0x81 are
-responses (server→client) that echo the request `seq`. Tags 0x82–0x84
+Tags 0x01--0x0F are commands (client→server). Tags 0x80--0x81 are
+responses (server→client) that echo the request `seq`. Tags 0x82--0x84
 are unsolicited push events (server→client, `seq=0`).
 
-Tags 0x10–0x7F are reserved for additional commands. Tags 0x85–0xFF are
+Tags 0x10--0x7F are reserved for additional commands. Tags 0x85--0xFF are
 reserved for additional events/responses.
 
 ---
@@ -151,11 +151,11 @@ reserved for additional events/responses.
 ### Payload encoding rules
 
 Unless noted otherwise:
-- **u32 / u64**: big-endian fixed-width integer.
-- **string**: 2-byte big-endian u16 length prefix, then UTF-8 bytes.
-- **bytes**: 4-byte big-endian u32 length prefix, then raw bytes.
-- **peer_list**: 2-byte u16 count, then count × (string `node_id` + u64 `first_seen` + u64 `last_seen`).
-- **string_list**: 2-byte u16 count, then count × string.
+- u32 / u64: big-endian fixed-width integer.
+- string: 2-byte big-endian u16 length prefix, then UTF-8 bytes.
+- bytes: 4-byte big-endian u32 length prefix, then raw bytes.
+- peer_list: 2-byte u16 count, then count × (string `node_id` + u64 `first_seen` + u64 `last_seen`).
+- string_list: 2-byte u16 count, then count × string.
 
 ### Session handshake
 
@@ -684,7 +684,7 @@ lightweight bridge-only mode.
 
 ### Canonical port
 
-Default bridge port: **9192**. Derived from: 9 (map) + 192 (iroh/docs).
+Default bridge port: 9192. Derived from: 9 (map) + 192 (iroh/docs).
 Convention: the variable name `SYNCWEB_BRIDGE_PORT` in configs.
 
 ---
@@ -693,15 +693,15 @@ Convention: the variable name `SYNCWEB_BRIDGE_PORT` in configs.
 
 The bridge is a transport change only. Ownership semantics do not change:
 
-- **Events** are still protobuf-encoded `MapEvent` messages (defined in
+- Events are still protobuf-encoded `MapEvent` messages (defined in
   mapa's `proto/map_event.proto`). The bridge transports raw bytes—it
   does not inspect or parse them. Serialization/deserialization stays
   in Kotlin.
-- **Collection IDs** are free-form strings that mapa uses as keys into
+- Collection IDs are free-form strings that mapa uses as keys into
   the `doc_map`. The bridge creates an iroh-docs namespace per
   collection_id on first `append_event`.
-- **Gossip topics** are arbitrary byte strings truncated to 32 bytes.
-- **Tickets** are iroh-docs `DocTicket` strings (standard format).
+- Gossip topics are arbitrary byte strings truncated to 32 bytes.
+- Tickets are iroh-docs `DocTicket` strings (standard format).
 
 ---
 

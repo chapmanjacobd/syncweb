@@ -63,7 +63,7 @@ pub struct ContentFilter {
 }
 ```
 
-This filter selects **which entries** the command acts on.  It maps to
+This filter selects which entries the command acts on.  It maps to
 `syncweb_core::verify::VerifyFilter` and `syncweb_core::sync::AreaFilter`.
 
 ### `ProviderSelector` (new — for commands that fetch blobs from the network)
@@ -82,7 +82,7 @@ pub struct ProviderSelector {
 }
 ```
 
-This controls **where and how** blobs are fetched.  It maps to
+This controls where and how blobs are fetched.  It maps to
 `ProviderLease` / `ResilienceService` in the core.
 
 ### Composition
@@ -149,31 +149,31 @@ can reuse it.
 
 ### Phase 1 — adopt `ContentFilter` + `ProviderSelector` (high value)
 
-1. **`verify`** — already done in this branch.  Flatten into `ContentFilter`
+1. `verify` — already done in this branch.  Flatten into `ContentFilter`
    and `ProviderSelector` once those structs exist.
 
-2. **`health`** — add `#[command(flatten)] filter: ContentFilter`.
+2. `health` — add `#[command(flatten)] filter: ContentFilter`.
    The `health` command currently builds a `HealthReport` for every
    non-system entry in the folder.  With `ContentFilter` it can
    narrow to specific hashes, paths, or globs.
 
-3. **`download`** — flatten `ContentFilter` and `ProviderSelector`.
+3. `download` — flatten `ContentFilter` and `ProviderSelector`.
    The existing `--hash`, `--from`, `--min-providers` fields are
    already the same concepts; just replace them with the flattened
    structs.
 
 ### Phase 2 — less urgent but nice to have
 
-4. **`ls`** — flatten `ContentFilter`.  Currently `ls` accepts a
+4. `ls` — flatten `ContentFilter`.  Currently `ls` accepts a
    path and lists files in the store.  Adding hash/path/glob
    filtering would let users call `syncweb ls --hash <hash>` to
    locate which folder contains a given blob, or `syncweb ls --glob '*.md'`
    to list markdown files across the store.
 
-5. **`import`** — flatten `ContentFilter`.  Filter which local
+5. `import` — flatten `ContentFilter`.  Filter which local
    files to import into a folder.  `--glob '*.jpg'` or `--path-prefix 'photos/'`.
 
-6. **`indexing health`** — this already takes a bare `Hash` as a
+6. `indexing health` — this already takes a bare `Hash` as a
    positional argument.  It can adopt `ContentFilter` so that
    `syncweb indexing health --hash <h1> --hash <h2>` works
    consistently with other commands.

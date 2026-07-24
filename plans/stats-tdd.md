@@ -4,9 +4,9 @@
 Name "stats" implies general statistics. Actual: only bandwidth accounting (`BandwidthStats` with upload/download bytes per folder/peer).
 
 ## Decision
-- **Keep** `stats` as bandwidth accounting (name is reasonable for its actual purpose once scoped)
-- **Add** `filestats` subcommand for file-level statistics (counts, sizes, types, ages, distributions)
-- **Add** `syncstats` subcommand for sync-specific metrics (sync rounds, conflicts resolved, events processed)
+- Keep `stats` as bandwidth accounting (name is reasonable for its actual purpose once scoped)
+- Add `filestats` subcommand for file-level statistics (counts, sizes, types, ages, distributions)
+- Add `syncstats` subcommand for sync-specific metrics (sync rounds, conflicts resolved, events processed)
 
 ---
 

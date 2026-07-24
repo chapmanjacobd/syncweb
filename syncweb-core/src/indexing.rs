@@ -481,6 +481,36 @@ impl IndexingDatabase {
         })
     }
 
+    /// Return all known catalogs with their namespace identifiers and labels.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the catalog metadata cannot be read.
+    pub fn load_catalogs(&self) -> Result<Vec<(NamespaceId, String)>> {
+        use std::str::FromStr;
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare("SELECT namespace_id, label FROM indexed_catalogs ORDER BY subscribed_at DESC")
+                .map_err(|error| database_error("failed to prepare catalog listing", error))?;
+            let rows = statement
+                .query_map([], |row| {
+                    let namespace: String = row.get(0)?;
+                    let label: String = row.get(1)?;
+                    Ok((namespace, label))
+                })
+                .map_err(|error| database_error("failed to read indexed catalogs", error))?;
+            let mut catalogs = Vec::new();
+            for row in rows {
+                let (namespace, label) =
+                    row.map_err(|error| database_error("failed to read indexed catalog record", error))?;
+                let namespace_id = NamespaceId::from_str(&namespace)
+                    .map_err(|error| database_error("indexed catalog namespace is invalid", error))?;
+                catalogs.push((namespace_id, label));
+            }
+            Ok(catalogs)
+        })
+    }
+
     /// Return the number of records imported from catalogs.
     ///
     /// # Errors

@@ -157,7 +157,7 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
                 node.blob_store(),
                 node.docs_engine().author().await?,
             );
-            let mut state = load_indexing_state(data_dir)?;
+            let (_, mut state) = open_indexing_state(data_dir)?;
             let catalog_handle =
                 if let Some(existing) = state.catalogs.iter().find(|item| item.name == catalog).cloned() {
                     catalog_service.subscribe_namespace(existing.namespace).await?
@@ -175,7 +175,6 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             let ticket = catalog_service
                 .ticket(&catalog_handle, node.endpoint().addr(), false)
                 .await?;
-            save_indexing_state(data_dir, &state)?;
             print_status(
                 output_json,
                 serde_json::json!({
@@ -202,7 +201,7 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
         }
         IndexingCommand::Health { hash } => {
             let content_hash = parse_hash(&hash)?;
-            let state = load_indexing_state(data_dir)?;
+            let (_, state) = open_indexing_state(data_dir)?;
             let resilience =
                 open_indexing(data_dir)?.resilience_service(ResilienceConfig::new(ReplicationBudget::default()));
             let now = epoch_seconds();
@@ -248,7 +247,7 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             expires,
         } => {
             let hash = hash_source(&source)?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let link = if private {
                 let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
                 let link = PrivateLink::generate(hash, expires_at)?;
@@ -289,7 +288,7 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
                 ensure!(sequence == 0, "--sequence requires --name");
                 Link::Content(ContentLink::new(hash))
             };
-            save_indexing_state(data_dir, &state)?;
+            db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
             print_status(
                 output_json,
                 serde_json::json!({"status": "created", "link": link.to_string(), "hash": hash.to_string()}),
@@ -297,7 +296,7 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             )?;
         }
         LinkCommand::Resolve { link, version } => {
-            let state = load_indexing_state(data_dir)?;
+            let (_, state) = open_indexing_state(data_dir)?;
             let resolver = load_resolver(&state)?;
             let parsed = link.parse::<Link>()?;
             let resolution = if let Some(version_value) = version {
@@ -339,13 +338,13 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
                 return Ok(());
             }
             let parsed = link.parse::<PrivateLink>()?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let resolver = load_resolver(&state)?;
             resolver.revoke(&parsed)?;
             if !state.links.revoked.contains(&parsed) {
                 state.links.revoked.push(parsed);
             }
-            save_indexing_state(data_dir, &state)?;
+            db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
             print_status(
                 output_json,
                 serde_json::json!({"status": "revoked", "link": link}),
@@ -367,13 +366,13 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
                 expected_hash.is_none_or(|hash| hash == ticket.hash()),
                 "provider hash does not match collection"
             );
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let resolver = load_resolver(&state)?;
             resolver.register_mirror(ticket.clone())?;
             if !state.links.mirrors.contains(&provider) {
                 state.links.mirrors.push(provider.clone());
             }
-            save_indexing_state(data_dir, &state)?;
+            db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
             print_status(
                 output_json,
                 serde_json::json!({"status": "added", "hash": ticket.hash().to_string(), "provider": provider}),
@@ -529,7 +528,7 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
     let output_json = ctx.output_json;
     match command {
         TrustCommand::Show { subject } => {
-            let state = load_indexing_state(data_dir)?;
+            let (_, state) = open_indexing_state(data_dir)?;
             let indexing = open_indexing(data_dir)?;
             let wot = load_wot(&indexing, &state)?;
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
@@ -595,12 +594,12 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
             let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(365 * 24 * 60 * 60));
             let delegation = TrustDelegation::new(&delegate, scope, sequence, expires_at, &signing)?;
             let indexing = open_indexing(data_dir)?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let wot = load_wot(&indexing, &state)?;
             let inserted = wot.add_delegation(delegation.clone())?;
             if inserted {
                 state.delegations.push(delegation.clone());
-                save_indexing_state(data_dir, &state)?;
+                db.save_trust_delegations(&state.delegations)?;
             }
             print_status(
                 output_json,
@@ -662,7 +661,7 @@ fn handle_provider_show(ctx: &CliContext<'_>, provider: &str, hash: Option<&str>
     let output_json = ctx.output_json;
     let provider_key = parse_provider(provider)?;
     let scope = hash.map(parse_hash).transpose()?;
-    let state = load_indexing_state(data_dir)?;
+    let (_, state) = open_indexing_state(data_dir)?;
     let indexing = open_indexing(data_dir)?;
     let wot = load_wot(&indexing, &state)?;
     let reputation = load_reputation(&wot, &state)?;
@@ -708,7 +707,7 @@ fn handle_provider_list(ctx: &CliContext<'_>, hash: Option<&str>) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let scope = hash.map(parse_hash).transpose()?;
-    let state = load_indexing_state(data_dir)?;
+    let (_, state) = open_indexing_state(data_dir)?;
     let indexing = open_indexing(data_dir)?;
     let wot = load_wot(&indexing, &state)?;
     let reputation = load_reputation(&wot, &state)?;
@@ -773,14 +772,14 @@ fn handle_provider_ban(
     let provider_key = parse_provider(provider)?;
     let scope = hash.map(parse_hash).transpose()?;
     let ban_duration = duration.map(Duration::from_secs);
-    let mut state = load_indexing_state(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
     let resilience = load_resilience(&state)?;
     let ban = resilience.ban_provider(provider_key, reason, scope, ban_duration)?;
     state
         .provider_bans
         .retain(|existing| !(existing.provider == provider_key && existing.hash == ban.hash));
     state.provider_bans.push(ban.clone());
-    save_indexing_state(data_dir, &state)?;
+    db.save_provider_bans(&state.provider_bans)?;
     print_status(
         output_json,
         serde_json::json!({"status": "banned", "ban": ban}),
@@ -796,11 +795,11 @@ fn handle_provider_unban(ctx: &CliContext<'_>, provider: &str) -> Result<()> {
         return Ok(());
     }
     let provider_key = parse_provider(provider)?;
-    let mut state = load_indexing_state(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
     let removed = state.provider_bans.iter().any(|ban| ban.provider == provider_key);
     state.provider_bans.retain(|ban| ban.provider != provider_key);
     if removed {
-        save_indexing_state(data_dir, &state)?;
+        db.save_provider_bans(&state.provider_bans)?;
     }
     print_status(
         output_json,
@@ -823,7 +822,7 @@ fn handle_provider_trust_record(
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let signing = signing_key(&identity);
     let issuer = author_id(&signing.verifying_key());
-    let mut state = load_indexing_state(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
     let sequence = state
         .provider_trust
         .iter()
@@ -838,7 +837,7 @@ fn handle_provider_trust_record(
     let inserted = wot.apply_provider_trust(record.clone())?;
     if inserted {
         state.provider_trust.push(record.clone());
-        save_indexing_state(data_dir, &state)?;
+        db.save_provider_trust_records(&state.provider_trust)?;
     }
     print_status(
         output_json,
@@ -870,7 +869,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
             let signing = signing_key(&identity);
             let reporter = PublicKey::from_bytes(&signing.verifying_key().to_bytes())?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let next_sequence = sequence.unwrap_or_else(|| {
                 state
                     .trust_signals
@@ -904,7 +903,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
             }
             let stream_path = data_dir.join("trust-stream.json");
             fs::write(&stream_path, serde_json::to_vec_pretty(&state.trust_signals)?)?;
-            save_indexing_state(data_dir, &state)?;
+            db.save_provider_trust_signals(&state.trust_signals)?;
             print_status(
                 output_json,
                 serde_json::json!({
@@ -930,7 +929,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
             } else {
                 anyhow::bail!("invalid trust stream ticket or source: {ticket}");
             };
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let indexing = open_indexing(data_dir)?;
             let wot = load_wot(&indexing, &state)?;
             let mut reputation = load_reputation(&wot, &state)?;
@@ -947,7 +946,8 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
             if !state.trust_streams.contains(&ticket) {
                 state.trust_streams.push(ticket.clone());
             }
-            save_indexing_state(data_dir, &state)?;
+            db.save_provider_trust_signals(&state.trust_signals)?;
+            db.save_trust_streams(&state.trust_streams)?;
             print_status(
                 output_json,
                 serde_json::json!({
@@ -964,7 +964,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
 }
 
 async fn receive_trust_signals(data_dir: &Path, bootstrap: PublicKey) -> Result<Vec<ProviderTrustSignal>> {
-    let state = load_indexing_state(data_dir)?;
+    let (_, state) = open_indexing_state(data_dir)?;
     let indexing = open_indexing(data_dir)?;
     let wot = load_wot(&indexing, &state)?;
     let reputation = load_reputation(&wot, &state)?;
@@ -1029,7 +1029,7 @@ pub fn handle_attest(ctx: &CliContext<'_>, command: AttestArgs) -> Result<()> {
         &signing_key(&identity),
     )?;
     let indexing = open_indexing(data_dir)?;
-    let mut state = load_indexing_state(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
     let inserted = if state.attestations.contains(&attestation) {
         false
     } else {
@@ -1037,7 +1037,7 @@ pub fn handle_attest(ctx: &CliContext<'_>, command: AttestArgs) -> Result<()> {
     };
     if inserted {
         state.attestations.push(attestation.clone());
-        save_indexing_state(data_dir, &state)?;
+        db.save_attestations(&state.attestations)?;
     }
     print_status(
         output_json,
@@ -1055,10 +1055,10 @@ pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let content = parse_hash(&command.record)?;
-    let mut state = load_indexing_state(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
     let report = ReportRecord::new(content, command.reason, epoch_seconds());
     state.reports.push(report.clone());
-    save_indexing_state(data_dir, &state)?;
+    db.save_content_reports(&state.reports)?;
     print_status(
         output_json,
         serde_json::json!({"status": "reported", "content": content.to_string(), "reason": report.reason}),
@@ -1071,7 +1071,7 @@ pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Re
     let output_json = ctx.output_json;
     match command {
         ModerationCommand::List { content } => {
-            let state = load_indexing_state(data_dir)?;
+            let (_, state) = open_indexing_state(data_dir)?;
             let filter = content.map(|value| parse_hash(&value)).transpose()?;
             let records = state
                 .moderation
@@ -1097,7 +1097,7 @@ pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Re
             let content = parse_hash(&record)?;
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
             let signing = signing_key(&identity);
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             let sequence = state
                 .moderation
                 .iter()
@@ -1110,7 +1110,7 @@ pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Re
             let inserted = load_wot(&open_indexing(data_dir)?, &state)?.apply_moderation(moderation.clone())?;
             if inserted {
                 state.moderation.push(moderation.clone());
-                save_indexing_state(data_dir, &state)?;
+                db.save_moderation_records(&state.moderation)?;
             }
             print_status(
                 output_json,
@@ -1164,10 +1164,10 @@ fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
             let indexing = open_indexing(data_dir)?;
             let service = indexing.denylist_service();
             service.add(rule.clone())?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             if !state.denylist.contains(&rule) {
                 state.denylist.push(rule);
-                save_indexing_state(data_dir, &state)?;
+                db.save_denylist_rules(&state.denylist)?;
             }
             print_status(
                 output_json,
@@ -1178,7 +1178,7 @@ fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
         FilterCommand::Subscribe { source } => {
             let bytes = read_filter_source(&source)?;
             let list = FilterList::from_bytes(bytes)?;
-            let mut state = load_indexing_state(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
             list.verify_signature()?;
             let current_sequence = state
                 .federated_filters
@@ -1209,7 +1209,7 @@ fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
                         sequence: list.sequence,
                     });
                 }
-                save_indexing_state(data_dir, &state)?;
+                db.save_denylist_rules(&state.denylist)?;
             }
             print_status(
                 output_json,
@@ -1233,7 +1233,7 @@ fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
 
 fn open_wot_for_state(data_dir: &Path) -> Result<WotService> {
     let indexing = open_indexing(data_dir)?;
-    let state = load_indexing_state(data_dir)?;
+    let (_, state) = open_indexing_state(data_dir)?;
     load_wot(&indexing, &state)
 }
 
@@ -1334,8 +1334,13 @@ fn load_resolver(state: &IndexingState) -> Result<LinkResolver> {
     Ok(resolver)
 }
 
-fn load_indexing_state(data_dir: &Path) -> Result<IndexingState> {
+fn open_indexing_state(data_dir: &Path) -> Result<(IndexingDatabase, IndexingState)> {
     let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let catalogs = db
+        .load_catalogs()?
+        .into_iter()
+        .map(|(namespace, name)| CatalogState { name, namespace })
+        .collect();
     let denylist = db.load_denylist_rules()?;
     let (pointers, mirrors, revoked) = db.load_links()?;
     let leases = db.load_leases()?;
@@ -1347,7 +1352,8 @@ fn load_indexing_state(data_dir: &Path) -> Result<IndexingState> {
     let provider_trust = db.load_provider_trust_records()?;
     let trust_signals = db.load_provider_trust_signals()?;
     let trust_streams = db.load_trust_streams()?;
-    Ok(IndexingState {
+    let state = IndexingState {
+        catalogs,
         denylist,
         links: LinkState {
             pointers,
@@ -1364,23 +1370,8 @@ fn load_indexing_state(data_dir: &Path) -> Result<IndexingState> {
         trust_signals,
         trust_streams,
         ..Default::default()
-    })
-}
-
-fn save_indexing_state(data_dir: &Path, state: &IndexingState) -> Result<()> {
-    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-    db.save_denylist_rules(&state.denylist)?;
-    db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
-    db.save_leases(&state.leases)?;
-    db.save_trust_delegations(&state.delegations)?;
-    db.save_moderation_records(&state.moderation)?;
-    db.save_attestations(&state.attestations)?;
-    db.save_content_reports(&state.reports)?;
-    db.save_provider_bans(&state.provider_bans)?;
-    db.save_provider_trust_records(&state.provider_trust)?;
-    db.save_provider_trust_signals(&state.trust_signals)?;
-    db.save_trust_streams(&state.trust_streams)?;
-    Ok(())
+    };
+    Ok((db, state))
 }
 
 fn signing_key(identity: &IdentityManager) -> SigningKey {
@@ -1458,7 +1449,7 @@ fn collection_hash(data_dir: &Path, collection: &str) -> Result<Option<Hash>> {
             Link::Content(content_link) => content_link.hash,
             Link::Private(private_link) => private_link.manifest,
             Link::Name(_) => {
-                load_resolver(&load_indexing_state(data_dir)?)?
+                load_resolver(&open_indexing_state(data_dir)?.1)?
                     .resolve(&parsed_link)?
                     .manifest
             }

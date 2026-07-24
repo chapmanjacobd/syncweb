@@ -36,7 +36,7 @@ fn test_link_create_is_local_only() {
 #[test]
 fn test_link_resolve_never_fetches_network() {
     // Build a LinkResolver with empty state
-    let resolver = LinkResolver::new();
+    let resolver = LinkResolver::new_in_memory();
     // Create a link to a hash that doesn't exist anywhere
     let link = ContentLink::new(Hash::from_bytes([0u8; 32]));
     // Resolve succeeds because it only reads in-memory state
@@ -52,7 +52,7 @@ fn test_link_revoke_does_not_propagate() {
     // Alice revokes it locally
     resolver.revoke(&link)?;
     // Bob's resolver has no knowledge of the revocation
-    let bob_resolver = LinkResolver::new();
+    let bob_resolver = LinkResolver::new_in_memory();
     let bob_resolution = bob_resolver.resolve(&Link::Private(link.clone()))?;
     // Bob still resolves successfully — revocation not propagated
     assert_eq!(bob_resolution.manifest, hash);
@@ -121,7 +121,7 @@ async fn test_link_resolve_fetches_remote_pointer() -> anyhow::Result<()> {
     let link = Link::Name(NameLink { publisher: alice_id, alias: "docs".into() });
 
     // Bob's resolver should attempt to fetch from the network
-    let mut resolver = LinkResolver::new();
+    let mut resolver = LinkResolver::new_in_memory();
     resolver.add_provider_fetch(Box::new(|name_link: &NameLink| {
         // Connect to Alice's node, query the folder document
         Box::pin(async move { /* ... */ })

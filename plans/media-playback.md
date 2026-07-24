@@ -425,11 +425,15 @@ pub(crate) async fn serve_media(
     }
 
     // Open reader & get total size
-    // NOTE: BlobReader does NOT expose total size after creation.
-    // We need to get size from the blob store metadata, or import it
-    // during blob creation. For v1, store size alongside the hash.
     let reader = state.blob_store.reader(hash);
-    let total_size = /* get from metadata */;
+    
+    // NOTE: BlobReader does NOT expose total size after creation, and we cannot 
+    // easily look up docs metadata by hash without a reverse index.
+    // For v1, the client must pass the size in the query params.
+    let total_size = match params.get("size").and_then(|s| s.parse::<u64>().ok()) {
+        Some(s) => s,
+        None => return (StatusCode::BAD_REQUEST, "size query parameter required").into_response(),
+    };
 
     // Detect MIME
     let mime = detect_mime_from_query(&params)
@@ -455,7 +459,7 @@ pub(crate) async fn serve_media(
     // For on-demand fetch of missing chunks:
     // let reader = ensure_range_available(reader, range, &state.blob_store).await?;
 
-    let stream = reader_stream(reader, range_len);
+    let stream = tokio_util::io::ReaderStream::new(reader.take(range_len));
     let body = Body::from_stream(stream);
 
     let mut response = Response::builder()
@@ -491,8 +495,13 @@ the blob's first BLAKE3 chunk (as part of the Bao tree header). Options:
    `BlobStore::add_bytes()`, also store the `(hash, size)` pair in a
    local `HashMap` or SQLite table.
 
-Option 1 is idiomatic — syncweb already tracks content size in iroh-docs
-entries. The media endpoint would resolve the hash → docs entry → size.
+Option 1 is flawed because the media endpoint only receives a `hash`. Iroh docs
+does not maintain a `hash -> entry` reverse index, so finding the docs metadata
+for an arbitrary hash requires a full database scan.
+
+For v1, the simplest and most stateless approach is to require the client to pass
+the size explicitly: `GET /media/{hash}?mime=video/mp4&size=48234496`. The client
+(mapa) already knows the size from the `MapEvent` protobuf payload or docs metadata.
 
 ### On-demand fetch for partial blobs
 

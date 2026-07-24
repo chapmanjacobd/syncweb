@@ -16,10 +16,7 @@ use crate::{
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::FolderManager,
     fs::{FsWatcher, Importer},
-    node::{
-        identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
-    },
+    node::{identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
     storage::{node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
@@ -46,6 +43,7 @@ pub struct DaemonConfig {
     pub log_level: String,
     pub log_file: Option<PathBuf>,
     pub watch_debounce: Duration,
+    pub relay_mode: crate::node::iroh_node::RelayMode,
 }
 
 impl Default for DaemonConfig {
@@ -61,6 +59,7 @@ impl Default for DaemonConfig {
             log_level: "info".to_owned(),
             log_file: None,
             watch_debounce: Duration::from_millis(500),
+            relay_mode: crate::node::iroh_node::RelayMode::Default,
         }
     }
 }
@@ -110,13 +109,14 @@ impl Daemon {
         data_dir: &Path,
         node_db: &NodeDatabase,
         pid_lock: &PidLock,
+        relay_mode: crate::node::iroh_node::RelayMode,
     ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
         let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
             let _ = node_db.remove_lifecycle();
             let _ = pid_lock.release();
         })?;
         let node = Arc::new(
-            IrohNode::new(identity, data_dir.join("data"), RelayMode::Default)
+            IrohNode::new(identity, data_dir.join("data"), relay_mode)
                 .await
                 .inspect_err(|_| {
                     let _ = node_db.remove_lifecycle();
@@ -194,7 +194,7 @@ impl Daemon {
         }
 
         let (node, folder_manager, sync_engine) =
-            Self::open_identity_and_node(&config.data_dir, &node_db, &pid_lock).await?;
+            Self::open_identity_and_node(&config.data_dir, &node_db, &pid_lock, config.relay_mode.clone()).await?;
 
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
             Ok(value) => Arc::new(value),

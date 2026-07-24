@@ -1411,7 +1411,7 @@ impl IpcServer {
             .into_iter()
             .filter_map(|b| b.parse::<iroh::PublicKey>().ok())
             .collect();
-        let catalog = PackageCatalog::new(context.node.gossip_service());
+        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
         let topic = if bootstrap_nodes.is_empty() {
             match catalog.subscribe(bootstrap_nodes).await {
                 Ok(t) => t,

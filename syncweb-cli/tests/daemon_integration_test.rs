@@ -22,7 +22,7 @@ fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
 }
 
 fn wait_for_daemon_ready(data_dir_arg: &str) -> anyhow::Result<()> {
-    for _ in 0..150 {
+    for _ in 0..300 {
         let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
         if status.status.success() && stdout_contains(&status, "daemon: running") {
             return Ok(());

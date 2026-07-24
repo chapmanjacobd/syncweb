@@ -208,6 +208,12 @@ pub struct SyncStatsReport {
     pub total_conflicts: u64,
     pub per_folder: BTreeMap<String, SyncFolderStats>,
 }
+
+pub struct SyncFolderStats {
+    pub rounds: u64,
+    pub files_synced: u64,
+    pub conflicts_resolved: u64,
+}
 ```
 
 ### `syncweb-core/src/stats.rs` — Add `collect()` method
@@ -253,7 +259,12 @@ pub struct FileStatsArgs {
 ### `syncweb-cli/src/main.rs`
 
 - `handle_filestats` — scans path, collects `FileStatsReport`, prints summary table
-- `handle_syncstats` — reads from daemon or persisted sync log
+- `handle_syncstats` — checks if daemon is running. If so, sends `IpcCommand::GetSyncStats` to fetch live metrics. If not, reads from persisted sync log on disk.
+
+### `syncweb-core/src/daemon/ipc.rs`
+
+- Add `IpcCommand::GetSyncStats` variant
+- Handler returns the current `SyncStatsReport` from the daemon's `SyncStatsCollector`
 
 ---
 

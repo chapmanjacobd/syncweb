@@ -91,12 +91,12 @@ pub struct PublicSubscription {
 }
 
 impl PublicSubscription {
-    pub fn new(ticket: BlobTicket, bytes: &[u8]) -> Self {
+    pub fn new(ticket: BlobTicket, size: u64) -> Self {
         Self {
-            ticket,
             hash: ticket.hash(),
-            size: bytes.len() as u64,
-            label: String::from_utf8_lossy(&blake3::hash(bytes).as_bytes()[..8].to_vec())
+            ticket,
+            size,
+            label: String::from_utf8_lossy(&blake3::hash(ticket.hash().as_bytes()).as_bytes()[..8].to_vec())
                 .to_string(),
         }
     }
@@ -112,8 +112,8 @@ Update `FolderManager::subscribe_public()`:
 ```rust
 pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<PublicSubscription> {
     self.blob_store.fetch(&self.endpoint, ticket).await?;
-    let bytes = self.blob_store.get(ticket.hash()).await?;
-    Ok(PublicSubscription::new(ticket.clone(), &bytes))
+    let size = self.blob_store.stat(ticket.hash()).await?.size;
+    Ok(PublicSubscription::new(ticket.clone(), size))
 }
 ```
 
@@ -342,11 +342,11 @@ pub struct PublicSubscription {
 }
 
 impl PublicSubscription {
-    pub fn new(ticket: BlobTicket, bytes: &[u8]) -> Self {
+    pub fn new(ticket: BlobTicket, size: u64) -> Self {
         Self {
             hash: ticket.hash(),
             ticket,
-            size: bytes.len() as u64,
+            size,
             label: format_short_hash(&ticket.hash()),
         }
     }
@@ -370,12 +370,12 @@ fn format_short_hash(hash: &Hash) -> String {
 
 pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<PublicSubscription> {
     self.blob_store.fetch(&self.endpoint, ticket).await?;
-    let bytes = self.blob_store.get(ticket.hash()).await?;
+    let size = self.blob_store.stat(ticket.hash()).await?.size;
     self.subscriptions
         .write()
         .await
-        .insert(ticket.hash(), PublicSubscription::new(ticket.clone(), &bytes));
-    Ok(PublicSubscription::new(ticket.clone(), &bytes))
+        .insert(ticket.hash(), PublicSubscription::new(ticket.clone(), size));
+    Ok(PublicSubscription::new(ticket.clone(), size))
 }
 ```
 

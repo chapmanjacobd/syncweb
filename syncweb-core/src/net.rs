@@ -1,4 +1,5 @@
 pub mod bep_identity;
+pub mod neighbor_map;
 pub mod network;
 pub mod network_manager;
 pub mod relay;

@@ -82,19 +82,19 @@ fn test_mirror_provider_no_sharing_skips_leases() {
 
 ```rust
 #[test]
-fn test_mirror_network_discovers_all_providers() {
-    // Given: a network with providers P1, P2, P3
+fn test_mirror_network_discovers_all_namespaces() {
+    // Given: a network with doc namespaces N1, N2
     // When: mirror_network(network_id) is called
-    // Then: blobs from P1, P2, P3 are all discovered
+    // Then: all blobs referenced by entries in N1 and N2 are discovered
 }
 
 #[test]
-fn test_mirror_network_dry_run_reports_per_provider() {
-    // Given: a network with providers P1 (blobs A,B) and P2 (blob C)
+fn test_mirror_network_dry_run_reports_per_namespace() {
+    // Given: a network with namespace N1 (blobs A,B) and N2 (blob C)
     // When: mirror_network(network_id, dry_run=true)
-    // Then: output groups by provider:
-    //   P1: A, B
-    //   P2: C
+    // Then: output groups by namespace:
+    //   N1: A, B
+    //   N2: C
 }
 ```
 
@@ -144,7 +144,7 @@ fn test_cli_mirror_missing_args_fails_gracefully() {
 ## Implementation notes
 
 - Provider discovery depends on gossip infrastructure — `ProviderLeaseTracker` may need a `list_providers()` or `blobs_for_provider()` query
-- Network discovery depends on the doc/namespace sync layer — enumerate providers via document members
+- Network discovery depends on the doc/namespace sync layer — enumerate all document namespaces associated with the network and collect all blob hashes from their entries.
 - Progress can reuse `indicatif::ProgressBar` (similar to `handle_download`)
 - Checkpoint state lives in a JSON file (e.g. `mirror-state.json` alongside `indexing-state.json`)
 - Each blob uses the existing `ensure_replication` or `download_blob` path under the hood

@@ -224,21 +224,14 @@ fn handle_provider_trust_record(
     // ... local save ...
 
     if broadcast {
-        // Open node, broadcast as ProviderTrustSignal on existing gossip topic
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
+        // First try to broadcast via the running daemon using IPC
+        if let Ok(mut client) = DaemonClient::connect(data_dir).await {
+            let signal = ProviderTrustSignal::from_trust_record(&record)?;
+            client.send_command(IpcCommand::BroadcastTrustSignal(signal)).await?;
+        } else {
+            // Fallback: If daemon is offline, temporarily open node and broadcast
             let node = open_node(data_dir).await?;
-            let signal = ProviderTrustSignal::new_with_time(
-                record.provider,
-                match action {
-                    ProviderTrustAction::Vouch => SignalKind::Positive,
-                    ProviderTrustAction::Distrust => SignalKind::Negative,
-                    _ => return Err(...),
-                },
-                record.scope,
-                record.sequence,
-                &signing_key(&IdentityManager::new(data_dir.join("identity.key"))?),
-            )?;
+            let signal = ProviderTrustSignal::from_trust_record(&record)?;
             let gossip = ProviderReputationStore::default();
             let topic = gossip.subscribe_trust_stream(
                 node.gossip_service(), Vec::new()
@@ -246,11 +239,15 @@ fn handle_provider_trust_record(
             let (sender, _receiver) = GossipService::split(topic);
             gossip.publish_signal(node.gossip_service(), &sender, &signal).await?;
             node.stop().await?;
-            Ok(())
-        })?;
+        }
     }
     print_status(...)
 }
+
+#### `syncweb-core/src/daemon/ipc.rs`
+
+- Add `IpcCommand::BroadcastTrustSignal(ProviderTrustSignal)` variant
+- Daemon handler receives this, signs/verifies it (or just relays it if already signed), and broadcasts it to the trust stream gossip topic.
 ```
 
 ---

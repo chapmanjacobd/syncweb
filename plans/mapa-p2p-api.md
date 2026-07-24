@@ -4,8 +4,13 @@
 
 mapa (`../mapa`) is a Kotlin Multiplatform collaborative mapping app. Its P2P
 sync layer lives in `core/src/sync.rs` as a Rust library loaded into the JVM
-via UniFFI (JNI bindings). This forces mapa to bundle `libmapa_core.so`,
-depend on `cargo-ndk`, and carry an entire Rust build toolchain.
+via UniFFI (JNI bindings). This forces mapa to bundle `libmapa_core.so` and 
+deal with complex JNI lifecycle and memory boundary issues.
+
+By moving to a WebSocket bridge, mapa can run the `syncweb` daemon as a 
+standalone subprocess. While we still need to cross-compile `syncweb` for 
+Android (e.g. via `cargo-ndk`), we eliminate UniFFI codegen, JNI bridging, 
+and blocking FFI calls entirely.
 
 The P2P API surface exposed through UniFFI is:
 
@@ -592,10 +597,11 @@ After the WebSocket path is stable:
 1. Remove `core/build.gradle.kts` (UniFFI build step).
 2. Remove `core/src/` Rust sources (or split them into analysis-only
    and P2P; the P2P parts move entirely to syncweb).
-3. Remove `RustLibraryLoader` from `AnalyzerEngine.jvm.kt` (the
-   analysis engine stays in mapa via a separate decision).
+3. Remove `RustLibraryLoader` from `AnalyzerEngine.jvm.kt`.
 4. Remove `uniffi.mapa_core.*` imports.
-5. Remove prebuilt `.so` files from `app/shared/src/androidMain/jniLibs/`.
+5. Replace the UniFFI `.so` files in `app/shared/src/androidMain/jniLibs/` 
+   with standalone `syncweb` Android executables, and use Android's 
+   `ProcessBuilder` to spawn the daemon subprocess.
 
 ---
 

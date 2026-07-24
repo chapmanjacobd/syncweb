@@ -4,3 +4,4 @@ pub mod docs_engine;
 pub mod gossip_service;
 pub mod identity;
 pub mod iroh_node;
+pub mod signed_message;

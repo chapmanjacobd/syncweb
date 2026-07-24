@@ -2111,7 +2111,7 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
                 node.endpoint().id(),
             )?;
             let bootstrap_nodes = parse_bootstrap(bootstrap)?;
-            let catalog = PackageCatalog::new(node.gossip_service());
+            let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
             let topic = if bootstrap_nodes.is_empty() {
                 catalog.subscribe(bootstrap_nodes).await?
             } else {
@@ -2655,7 +2655,7 @@ async fn handle_package_search(
     }
     let bootstrap = parse_bootstrap(bootstrap_values)?;
     let node = open_node(data_dir).await?;
-    let catalog = PackageCatalog::new(node.gossip_service());
+    let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
     let mut topic = if bootstrap.is_empty() {
         catalog.subscribe(bootstrap).await?
     } else {

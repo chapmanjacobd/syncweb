@@ -310,12 +310,12 @@ async fn test_package_discovery() -> anyhow::Result<()> {
     let searcher = relay_node(&directory, "searcher", relay_map, relay_url, memory_lookup.clone()).await?;
 
     // Publisher subscribes to catalog (no bootstrap, it's the first peer)
-    let pub_catalog = PackageCatalog::new(publisher.gossip_service());
+    let pub_catalog = PackageCatalog::new(publisher.gossip_service(), publisher.endpoint());
     let pub_topic = pub_catalog.subscribe(vec![]).await?;
     let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(pub_topic);
 
     // Searcher subscribes with publisher as bootstrap and waits for join
-    let search_catalog = PackageCatalog::new(searcher.gossip_service());
+    let search_catalog = PackageCatalog::new(searcher.gossip_service(), searcher.endpoint());
     let mut search_topic = search_catalog.subscribe(vec![publisher.endpoint().id()]).await?;
     tokio::time::timeout(Duration::from_secs(30), search_topic.joined())
         .await

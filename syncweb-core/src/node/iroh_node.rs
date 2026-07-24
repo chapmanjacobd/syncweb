@@ -13,9 +13,11 @@ use super::identity::IdentityManager;
 use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
 #[non_exhaustive]
+#[derive(Clone, Debug)]
 pub enum RelayMode {
     Default,
     Custom { map: iroh::RelayMap, insecure: bool },
+    None,
 }
 
 pub struct IrohNode {
@@ -67,6 +69,9 @@ impl IrohNode {
                 }
                 b
             }
+            RelayMode::None => {
+                iroh::Endpoint::builder(iroh::endpoint::presets::N0).relay_mode(iroh::endpoint::RelayMode::Disabled)
+            }
         };
 
         let endpoint = builder
@@ -75,6 +80,20 @@ impl IrohNode {
             .bind()
             .await
             .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
+
+        // Register mDNS address lookup for local network peer discovery.
+        if let Ok(_mdns) = iroh_mdns_address_lookup::MdnsAddressLookup::builder()
+            .build(endpoint.id())
+            .map_err(|error| SyncwebError::operation("failed to build mDNS address lookup", error))
+            .and_then(|mdns| {
+                endpoint
+                    .address_lookup()
+                    .map_err(|error| SyncwebError::operation("no address lookup service available", error))
+                    .map(|lookup| lookup.add(mdns))
+            })
+        {
+            tracing::debug!("mDNS address lookup registered");
+        }
 
         let fs_blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
             .await

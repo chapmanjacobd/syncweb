@@ -137,13 +137,15 @@ fn test_sort_with_enrich_flag() -> anyhow::Result<()> {
 1. In `handle_sort`, when `--enrich` is set:
    - If daemon is available, send IPC to fetch peer/frequency data
    - If no daemon, log warning and skip enrichment
+   - Note: If the directory is not a daemon-managed folder, the daemon will return empty data, and the CLI will gracefully fall back to local-only values (zeros).
    - Call `sorter.enrich_peers()` and/or `sorter.enrich_niche()` before `sorter.sort()`
 
 ### `syncweb-core/src/daemon/ipc.rs`
 
 1. Add `IpcCommand::EnrichSort { path: PathBuf }` variant
-2. Handler queries `ProviderLeaseTracker` for peer counts on each blob in the folder
-3. Returns `HashMap<String, usize>` (relative path → peer count)
+2. Handler resolves the `path` to a managed folder (`namespace_id`). If the path is not part of a managed folder, return an empty map.
+3. If managed, query `ProviderLeaseTracker` for peer counts on each blob in the folder
+4. Returns `HashMap<String, usize>` (relative path → peer count)
 
 ---
 

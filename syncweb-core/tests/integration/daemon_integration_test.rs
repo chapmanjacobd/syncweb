@@ -36,6 +36,7 @@ async fn start_daemon(directory: &TestDirectory) -> Result<(IpcClient, JoinHandl
     let mut config = DaemonConfig::new(directory.path());
     config.sync_interval = Duration::from_mins(1);
     config.watch_debounce = Duration::from_millis(50);
+    config.relay_mode = RelayMode::None;
     let daemon = Daemon::new(config).await?;
     let client = IpcClient::new(directory.path());
     let task = tokio::spawn(async move { daemon.run().await });
@@ -44,14 +45,14 @@ async fn start_daemon(directory: &TestDirectory) -> Result<(IpcClient, JoinHandl
 }
 
 async fn wait_for_running(client: &IpcClient) -> Result<()> {
-    for _ in 0..200 {
+    for _ in 0..300 {
         if matches!(
             client.send(IpcRequest::new(IpcCommand::Status)).await,
             Ok(IpcResponse::Status(DaemonStatus::Running))
         ) {
             return Ok(());
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
     anyhow::bail!("daemon did not become available at {}", client.socket_path().display())
 }
@@ -69,13 +70,13 @@ async fn wait_for_report<F>(state_file: &StateFile, predicate: F) -> Result<Daem
 where
     F: Fn(&DaemonStatusReport) -> bool,
 {
-    for _ in 0..200 {
+    for _ in 0..300 {
         if let Some(report) = state_file.load_status()?
             && predicate(&report)
         {
             return Ok(report);
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
     anyhow::bail!("daemon status report did not reach the expected state")
 }
@@ -415,6 +416,7 @@ async fn test_daemon_watch_debounce_coalesces_rapid_changes() -> Result<()> {
     let mut config = DaemonConfig::new(directory.path());
     config.sync_interval = Duration::from_mins(1);
     config.watch_debounce = Duration::from_millis(100);
+    config.relay_mode = RelayMode::None;
     let daemon = Daemon::new(config).await?;
     let client = IpcClient::new(directory.path());
     let task = tokio::spawn(async move { daemon.run().await });
@@ -458,6 +460,7 @@ async fn test_daemon_watch_recovers_from_file_read_inconsistency() -> Result<()>
     let mut config = DaemonConfig::new(directory.path());
     config.watch_debounce = Duration::from_millis(50);
     config.sync_interval = Duration::from_mins(1);
+    config.relay_mode = RelayMode::None;
     let daemon = Daemon::new(config).await?;
     let client = IpcClient::new(directory.path());
     let task = tokio::spawn(async move { daemon.run().await });

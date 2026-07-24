@@ -70,18 +70,13 @@ async fn test_attestation_gossip_reaches_peers() -> anyhow::Result<()> {
     alice_gossip.subscribe(topic, vec![]).await?;
     let gossip_topic = alice_gossip.subscribe(topic, vec![]).await?;
     let (sender, _) = GossipService::split(gossip_topic);
-    alice_gossip.publish(&sender, attestation.to_bytes()?).await?;
+    sender.broadcast(attestation.to_bytes()?.into()).await?;
 
     // Bob receives the attestation
     let bob_gossip = bob.gossip_service();
-    bob_gossip.subscribe(topic, vec![alice.endpoint().id()]).await?;
     let received = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            if let Ok(Some(event)) = bob_gossip.try_recv(topic) {
-                return event;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        let mut receiver = bob_gossip.subscribe(topic, vec![alice.endpoint().id()]).await?.1;
+        receiver.recv().await.unwrap()
     }).await?;
 
     let received_attestation: Attestation = serde_json::from_slice(&received.content)?;
@@ -162,7 +157,7 @@ pub async fn publish_attestation(
     let topic = attestation_topic();
     let gossip_topic = gossip.subscribe(topic, vec![]).await?;
     let (sender, _) = GossipService::split(gossip_topic);
-    gossip.publish(&sender, serde_json::to_vec(attestation)?).await
+    sender.broadcast(serde_json::to_vec(attestation)?.into()).await
 }
 
 pub async fn subscribe_attestations(
@@ -175,26 +170,25 @@ pub async fn subscribe_attestations(
     Ok(receiver)
 }
 
-/// Collect all attestations for a content hash from gossip within a timeout.
 pub async fn collect_attestations(
     gossip: &GossipService,
     bootstrap: Vec<PublicKey>,
     content: &Hash,
     timeout_duration: Duration,
 ) -> Result<Vec<Attestation>> {
-    let receiver = subscribe_attestations(gossip, bootstrap).await?;
+    let mut receiver = subscribe_attestations(gossip, bootstrap).await?;
     let mut results = Vec::new();
-    let deadline = tokio::time::Instant::now() + timeout_duration;
-    while tokio::time::Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        if let Ok(Some(event)) = gossip.try_recv(attestation_topic()) {
+    
+    let _ = tokio::time::timeout(timeout_duration, async {
+        while let Ok(event) = receiver.recv().await {
             if let Ok(attestation) = serde_json::from_slice::<Attestation>(&event.content) {
                 if attestation.content == *content && attestation.verify_signature().is_ok() {
                     results.push(attestation);
                 }
             }
         }
-    }
+    }).await;
+    
     Ok(results)
 }
 ```

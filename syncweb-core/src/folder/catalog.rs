@@ -1,6 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
-use iroh::{PublicKey, address_lookup::memory::MemoryLookup};
+use ed25519_dalek::SigningKey;
+use iroh::{Endpoint, PublicKey, address_lookup::memory::MemoryLookup};
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_gossip::{
     TopicId,
@@ -15,6 +16,7 @@ use crate::{
     editorial::Channel,
     error::{Result, SyncwebError},
     node::gossip_service::GossipService,
+    node::signed_message::SignedMessage,
 };
 
 const CATALOG_TOPIC_SEED: &[u8] = b"syncweb/public-package-catalog/v1";
@@ -152,12 +154,16 @@ impl PackageAnnouncement {
 #[derive(Clone)]
 pub struct PackageCatalog {
     gossip: GossipService,
+    signing_key: SigningKey,
 }
 
 impl PackageCatalog {
     #[must_use]
-    pub fn new(gossip: &GossipService) -> Self {
-        Self { gossip: gossip.clone() }
+    pub fn new(gossip: &GossipService, endpoint: &Endpoint) -> Self {
+        Self {
+            gossip: gossip.clone(),
+            signing_key: SigningKey::from_bytes(&endpoint.secret_key().to_bytes()),
+        }
     }
 
     /// Subscribe to the public package catalog.
@@ -185,11 +191,16 @@ impl PackageCatalog {
 
     /// Broadcast an announcement to the public catalog.
     ///
+    /// The announcement is Ed25519-signed so receivers can cryptographically
+    /// verify its origin.
+    ///
     /// # Errors
     ///
     /// Returns an error if the announcement is invalid or cannot be sent.
     pub async fn announce(&self, sender: &GossipSender, announcement: &PackageAnnouncement) -> Result<()> {
-        self.gossip.publish(sender, announcement.to_bytes()?).await
+        let content = announcement.to_bytes()?;
+        let wire = SignedMessage::sign(&self.signing_key, &content);
+        self.gossip.publish(sender, wire).await
     }
 
     /// Subscribe to a specific editorial channel.
@@ -218,12 +229,14 @@ impl PackageCatalog {
 
     /// Collect matching announcements until the timeout expires.
     ///
+    /// Each announcement is verified: the Ed25519 signature is checked and the
+    /// claimed `publisher` field must match the signing key.
     /// A timeout is a normal end condition because gossip has no finite
     /// response boundary.
     ///
     /// # Errors
     ///
-    /// Returns an error if a received announcement is malformed.
+    /// Returns an error if a received announcement fails signature verification.
     pub async fn search(
         &self,
         topic: &mut GossipTopic,
@@ -236,7 +249,28 @@ impl PackageCatalog {
                 if let Event::Received(message) =
                     event.map_err(|error| SyncwebError::operation("package catalog event failed", error))?
                 {
-                    let announcement = PackageAnnouncement::from_bytes(message.content)?;
+                    // Verify the Ed25519 signature on the gossip message
+                    let (verifying_key, content) = SignedMessage::verify(&message.content).map_err(|error| {
+                        SyncwebError::operation("package catalog signature verification failed", error)
+                    })?;
+
+                    let announcement = PackageAnnouncement::from_bytes(content)?;
+
+                    // Verify that the claimed publisher matches the signing key
+                    let claimed_publisher: PublicKey = announcement
+                        .publisher
+                        .parse()
+                        .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid publisher key: {error}")))?;
+                    let actual_publisher = PublicKey::from_bytes(&verifying_key.to_bytes()).map_err(|error| {
+                        SyncwebError::InvalidIdentity(format!("derived NodeId from verifying key is invalid: {error}"))
+                    })?;
+                    if claimed_publisher != actual_publisher {
+                        return Err(SyncwebError::operation(
+                            "package catalog publisher mismatch",
+                            format!("claimed {claimed_publisher}, signed by {actual_publisher}"),
+                        ));
+                    }
+
                     if announcement.matches(query)
                         && !announcements.iter().any(|item: &PackageAnnouncement| {
                             item.collection_id == announcement.collection_id

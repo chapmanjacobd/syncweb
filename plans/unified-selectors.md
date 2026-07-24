@@ -132,18 +132,19 @@ merging them (which would risk breaking existing callers), the plan
 adds a bridge function in each crate:
 
 ```rust
-// in syncweb_core::sync (new)
-impl VerifyFilter {
-    pub fn to_area_filter(&self) -> Option<AreaFilter> { ... }
+// in syncweb-cli/src/cli/filter.rs (new)
+impl TryFrom<&ContentFilter> for VerifyFilter {
+    type Error = anyhow::Error;
+    fn try_from(filter: &ContentFilter) -> Result<Self, Self::Error> { ... }
 }
 
 // in syncweb_core::verify (new)
-// ContentFilter → VerifyFilter lives in the CLI layer already as build_verify_filter
+impl VerifyFilter {
+    pub fn to_area_filter(&self) -> Option<AreaFilter> { ... }
+}
 ```
 
-The `build_verify_filter` function in `main.rs` is moved into
-`syncweb_core::verify` as a public helper so the daemon IPC handler
-can reuse it.
+The `build_verify_filter` function in `main.rs` is moved into `syncweb-cli/src/cli/filter.rs` as the `TryFrom` implementation so the daemon IPC handler can receive a standard `VerifyFilter` instead of CLI structs.
 
 ## Commands to update
 
@@ -186,9 +187,6 @@ Already has the fields.  Needs:
 
 ```rust
 impl VerifyFilter {
-    /// Build from a CLI ContentFilter (string list → parsed hashes).
-    pub fn from_content_filter(filter: &ContentFilter) -> Self { ... }
-
     /// Convert to an AreaFilter for use with SubscribeParams.
     pub fn to_area_filter(&self) -> Option<sync::AreaFilter> { ... }
 }
@@ -219,7 +217,7 @@ conflict with existing positional or optional arguments.
 1. Extract `ContentFilter` and `ProviderSelector` structs into
    `cli/commands.rs` or a new `cli/filter.rs`.
 2. Move `build_verify_filter` from `main.rs` into
-   `syncweb_core::verify::VerifyFilter::from_content_filter`.
+   `impl TryFrom<&ContentFilter> for VerifyFilter` inside the CLI crate.
 3. Refactor `verify` to use the flattened structs.
 4. Refactor `health`, `download`, `ls`, `import` in order.
 5. Update daemon IPC handlers for each changed command.

@@ -31,10 +31,12 @@ hkdf.workspace = true
 uuid.workspace = true
 
 # Iroh stack
+dashmap.workspace = true
 iroh = { workspace = true, features = ["test-utils"] }
 iroh-blobs.workspace = true
 iroh-docs.workspace = true
 iroh-gossip.workspace = true
+iroh-mdns-address-lookup.workspace = true
 distributed-topic-tracker.workspace = true
 ed25519-dalek.workspace = true
 iroh-io.workspace = true

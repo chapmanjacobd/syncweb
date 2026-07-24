@@ -82,8 +82,11 @@ impl ProviderReputationStore {
     pub fn record_fetch_result(&mut self, provider: PublicKey, success: bool, kind: FetchFailureKind, now: u64) {
         // ... existing logic ...
         // ADD: persist to database after update
-        self.database.upsert_reputation(provider, &self.reputations[&provider])?;
-        self.database.upsert_ban(provider, self.auto_bans.get(&provider))?;
+        self.database.upsert_reputation(
+            provider, 
+            &self.reputations[&provider], 
+            self.auto_bans.get(&provider)
+        )?;
     }
 
     pub fn purge_stale(&mut self, now: u64, ttl: Duration) {
@@ -227,6 +230,7 @@ impl DenylistService {
         self.database.upsert_filter_list(list)?;
         // update in-memory cache
         // ... dedup by sequence ...
+        let changed = true; // placeholder for dedup logic
         Ok(changed)
     }
 }

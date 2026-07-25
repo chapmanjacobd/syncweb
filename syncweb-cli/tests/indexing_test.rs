@@ -89,7 +89,7 @@ fn mutable_links_advance_sequences_across_processes() -> Result<()> {
 fn attest_report_and_moderation_state_persist() -> Result<()> {
     let data_dir = data_dir("moderation");
 
-    let attested = run(&data_dir, &["attest", CONTENT_HASH, "--license", "MIT"])?;
+    let attested = run(&data_dir, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
     assert_success(&attested, "attest")?;
 
     let reported = run(&data_dir, &["report", CONTENT_HASH, "--reason", "test report"])?;

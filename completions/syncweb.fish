@@ -775,15 +775,33 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "provider" -d 'Manage provider trust and bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l license -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l provenance -d 'Provenance attestation type' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l derivative -d 'Derivative work attestation type' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l sequence -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -f -a "create" -d 'Sign and optionally broadcast a content attestation'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -f -a "verify" -d 'Verify attestations for content from the network'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l license -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l provenance -d 'Provenance attestation type' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l derivative -d 'Derivative work attestation type' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l sequence -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l broadcast -d 'Broadcast attestation via gossip'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l timeout -d 'Timeout in seconds for gossip collection' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from help" -f -a "create" -d 'Sign and optionally broadcast a content attestation'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from help" -f -a "verify" -d 'Verify attestations for content from the network'
+complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand report" -l reason -d 'Reason for the report' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand report" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand report" -l verbose -d 'Enable verbose structured logging'
@@ -913,5 +931,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_su
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "provider" -d 'Manage provider trust and bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from attest" -f -a "create" -d 'Sign and optionally broadcast a content attestation'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from attest" -f -a "verify" -d 'Verify attestations for content from the network'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from moderation" -f -a "ls" -d 'List local moderation records'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from moderation" -f -a "hide" -d 'Hide a content record locally'

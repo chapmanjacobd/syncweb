@@ -2103,10 +2103,6 @@ esac
 ;;
 (attest)
 _arguments "${_arguments_options[@]}" : \
-'(--provenance --derivative)--license=[]:LICENSE:_default' \
-'(--license --derivative)--provenance=[Provenance attestation type]:PROVENANCE:_default' \
-'(--license --provenance)--derivative=[Derivative work attestation type]:DERIVATIVE:_default' \
-'--sequence=[]:SEQUENCE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -2114,8 +2110,77 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':content -- Content hash to attest:_default' \
+":: :_syncweb__subcmd__attest_commands" \
+"*::: :->attest" \
 && ret=0
+
+    case $state in
+    (attest)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-attest-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+'(--provenance --derivative)--license=[]:LICENSE:_default' \
+'(--license --derivative)--provenance=[Provenance attestation type]:PROVENANCE:_default' \
+'(--license --provenance)--derivative=[Derivative work attestation type]:DERIVATIVE:_default' \
+'--sequence=[]:SEQUENCE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--broadcast[Broadcast attestation via gossip]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':content:_default' \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+'--timeout=[Timeout in seconds for gossip collection]:TIMEOUT:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':hash:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__attest__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-attest-help-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
 ;;
 (report)
 _arguments "${_arguments_options[@]}" : \
@@ -2796,7 +2861,27 @@ esac
 ;;
 (attest)
 _arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__attest_commands" \
+"*::: :->attest" \
 && ret=0
+
+    case $state in
+    (attest)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-attest-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (report)
 _arguments "${_arguments_options[@]}" : \
@@ -2899,8 +2984,46 @@ _syncweb_commands() {
 }
 (( $+functions[_syncweb__subcmd__attest_commands] )) ||
 _syncweb__subcmd__attest_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'create:Sign and optionally broadcast a content attestation' \
+'verify:Verify attestations for content from the network' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
     _describe -t commands 'syncweb attest commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__create_commands] )) ||
+_syncweb__subcmd__attest__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__help_commands] )) ||
+_syncweb__subcmd__attest__subcmd__help_commands() {
+    local commands; commands=(
+'create:Sign and optionally broadcast a content attestation' \
+'verify:Verify attestations for content from the network' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb attest help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__create_commands] )) ||
+_syncweb__subcmd__attest__subcmd__help__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest help create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__attest__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__verify_commands] )) ||
+_syncweb__subcmd__attest__subcmd__help__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest help verify commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__verify_commands] )) ||
+_syncweb__subcmd__attest__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest verify commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__automatic_commands] )) ||
 _syncweb__subcmd__automatic_commands() {
@@ -3109,8 +3232,21 @@ _syncweb__subcmd__help_commands() {
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__attest_commands] )) ||
 _syncweb__subcmd__help__subcmd__attest_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'create:Sign and optionally broadcast a content attestation' \
+'verify:Verify attestations for content from the network' \
+    )
     _describe -t commands 'syncweb help attest commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__attest__subcmd__create_commands] )) ||
+_syncweb__subcmd__help__subcmd__attest__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help attest create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__attest__subcmd__verify_commands] )) ||
+_syncweb__subcmd__help__subcmd__attest__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help attest verify commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__automatic_commands] )) ||
 _syncweb__subcmd__help__subcmd__automatic_commands() {

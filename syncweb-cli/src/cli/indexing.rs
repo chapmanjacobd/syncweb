@@ -3,6 +3,7 @@ use std::{
     io::IsTerminal,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::args::CliContext;
 use super::commands::{
-    AttestArgs, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
+    AttestCommand, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
     ProviderTrustCommand, ReportArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
@@ -39,7 +40,7 @@ use iroh_blobs::{
     ticket::BlobTicket,
 };
 use iroh_docs::NamespaceId;
-use iroh_gossip::api::Event;
+use iroh_gossip::{TopicId, api::Event};
 use n0_future::StreamExt;
 use syncweb_core::init::open_node;
 
@@ -1132,44 +1133,77 @@ fn read_trust_stream_source(source: &str) -> Result<Option<Vec<u8>>> {
     Ok(None)
 }
 
-pub fn handle_attest(ctx: &CliContext<'_>, command: AttestArgs) -> Result<()> {
+pub fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let value = command
-        .license
-        .map(|value| (AttestationKind::License, value))
-        .or_else(|| command.provenance.map(|value| (AttestationKind::Provenance, value)))
-        .or_else(|| command.derivative.map(|value| (AttestationKind::Derivative, value)))
-        .context("one of --license, --provenance, or --derivative is required")?;
-    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    let attestation = Attestation::new(
-        parse_hash(&command.content)?,
-        value.0,
-        value.1,
-        command.sequence,
-        &signing_key(&identity),
-    )?;
-    let indexing = open_indexing(data_dir)?;
-    let (db, mut state) = open_indexing_state(data_dir)?;
-    let inserted = if state.attestations.contains(&attestation) {
-        false
-    } else {
-        load_wot(&indexing, &state)?.append_attestation(attestation.clone())?
-    };
-    if inserted {
-        state.attestations.push(attestation.clone());
-        db.save_attestations(&state.attestations)?;
+    match command {
+        AttestCommand::Create {
+            content,
+            license,
+            provenance,
+            derivative,
+            sequence,
+            broadcast,
+        } => {
+            let value = license
+                .map(|value| (AttestationKind::License, value))
+                .or_else(|| provenance.map(|value| (AttestationKind::Provenance, value)))
+                .or_else(|| derivative.map(|value| (AttestationKind::Derivative, value)))
+                .context("one of --license, --provenance, or --derivative is required")?;
+            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+            let attestation = Attestation::new(
+                parse_hash(&content)?,
+                value.0,
+                value.1,
+                sequence,
+                &signing_key(&identity),
+            )?;
+            let indexing = open_indexing(data_dir)?;
+            let (db, mut state) = open_indexing_state(data_dir)?;
+            let inserted = if state.attestations.contains(&attestation) {
+                false
+            } else {
+                load_wot(&indexing, &state)?.append_attestation(attestation.clone())?
+            };
+            if inserted {
+                state.attestations.push(attestation.clone());
+                db.save_attestations(&state.attestations)?;
+            }
+
+            if broadcast {
+                let rt = tokio::runtime::Handle::current();
+                rt.block_on(publish_attestation(data_dir, &attestation))?;
+            }
+
+            print_status(
+                output_json,
+                serde_json::json!({
+                    "status": if inserted { "attested" } else { "unchanged" },
+                    "content": attestation.content.to_string(),
+                    "issuer": attestation.issuer,
+                    "value": attestation.value,
+                }),
+                format!("attested: {}\nvalue: {}", attestation.content, attestation.value),
+            )
+        }
+        AttestCommand::Verify { hash, timeout } => handle_attest_verify(data_dir, output_json, &hash, timeout),
     }
-    print_status(
-        output_json,
-        serde_json::json!({
-            "status": if inserted { "attested" } else { "unchanged" },
-            "content": attestation.content.to_string(),
-            "issuer": attestation.issuer,
-            "value": attestation.value,
-        }),
-        format!("attested: {}\nvalue: {}", attestation.content, attestation.value),
-    )
+}
+
+fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout: Option<u64>) -> Result<()> {
+    let content_hash = parse_hash(hash)?;
+    let timeout_duration = Duration::from_secs(timeout.unwrap_or(5));
+    let rt = tokio::runtime::Handle::current();
+    let attestations: Vec<Attestation> = rt.block_on(collect_attestations(data_dir, content_hash, timeout_duration))?;
+
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&attestations)?);
+    } else {
+        for att in &attestations {
+            println!("{}: {} (by {})", att.kind, att.value, att.issuer);
+        }
+    }
+    Ok(())
 }
 
 pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
@@ -1729,4 +1763,52 @@ const fn moderation_label(action: &ModerationAction) -> &'static str {
         ModerationAction::Restore => "restore",
         _ => "unknown",
     }
+}
+
+fn attestation_topic_id() -> TopicId {
+    TopicId::from_bytes(*blake3::hash(syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC).as_bytes())
+}
+
+async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let topic = node
+        .gossip_service()
+        .subscribe_and_join(attestation_topic_id(), Vec::new())
+        .await?;
+    let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+    let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
+        Arc::new(node.gossip_service().inner().clone()),
+        syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC,
+        sender,
+    );
+    topic_channel.publish(attestation).await?;
+    node.stop().await?;
+    Ok(())
+}
+
+async fn collect_attestations(
+    data_dir: &Path,
+    content_hash: Hash,
+    timeout_duration: Duration,
+) -> Result<Vec<Attestation>> {
+    let node = open_node(data_dir).await?;
+    let topic = node
+        .gossip_service()
+        .subscribe_and_join(attestation_topic_id(), Vec::new())
+        .await?;
+    let (sender, receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+    let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
+        Arc::new(node.gossip_service().inner().clone()),
+        syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC,
+        sender,
+    );
+    let result = topic_channel
+        .collect_for(
+            receiver,
+            move |a: &Attestation| a.content == content_hash,
+            timeout_duration,
+        )
+        .await?;
+    node.stop().await?;
+    Ok(result)
 }

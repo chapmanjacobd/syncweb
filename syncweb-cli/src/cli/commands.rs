@@ -111,7 +111,10 @@ pub enum Command {
         command: TrustCommand,
     },
     #[command(about = "Sign content provenance attestations")]
-    Attest(AttestArgs),
+    Attest {
+        #[command(subcommand)]
+        command: AttestCommand,
+    },
     #[command(about = "Submit a local moderation report")]
     Report(ReportArgs),
     #[command(about = "Manage local moderation decisions")]
@@ -936,6 +939,30 @@ pub struct AttestArgs {
     pub derivative: Option<String>,
     #[arg(long, default_value_t = 1)]
     pub sequence: u64,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AttestCommand {
+    #[command(about = "Sign and optionally broadcast a content attestation")]
+    Create {
+        content: String,
+        #[arg(long, conflicts_with_all = ["provenance", "derivative"])]
+        license: Option<String>,
+        #[arg(long, conflicts_with_all = ["license", "derivative"], help = "Provenance attestation type")]
+        provenance: Option<String>,
+        #[arg(long, conflicts_with_all = ["license", "provenance"], help = "Derivative work attestation type")]
+        derivative: Option<String>,
+        #[arg(long, default_value_t = 1)]
+        sequence: u64,
+        #[arg(long, help = "Broadcast attestation via gossip")]
+        broadcast: bool,
+    },
+    #[command(about = "Verify attestations for content from the network")]
+    Verify {
+        hash: String,
+        #[arg(long, help = "Timeout in seconds for gossip collection")]
+        timeout: Option<u64>,
+    },
 }
 
 #[derive(Debug, Args)]

@@ -6,6 +6,7 @@ use std::{
 };
 
 use iroh_docs::NamespaceId;
+use n0_future::StreamExt;
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
@@ -16,7 +17,12 @@ use crate::{
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
-    node::{identity::IdentityManager, iroh_node::IrohNode},
+    gossip::TopicChannel,
+    indexing::{
+        IndexingDatabase,
+        wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
+    },
+    node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
     storage::{node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
@@ -95,6 +101,7 @@ pub struct Daemon {
     pending_watch_events: Mutex<HashMap<String, PendingWatch>>,
     filter_engine: tokio::sync::RwLock<Option<FilterEngine>>,
     archive_pool: Arc<ManagedPool>,
+    attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 struct PendingWatch {
@@ -257,6 +264,7 @@ impl Daemon {
             pending_watch_events: Mutex::new(HashMap::new()),
             filter_engine: tokio::sync::RwLock::new(filter_engine),
             archive_pool,
+            attestation_listener: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -308,6 +316,7 @@ impl Daemon {
         if let Err(error) = self.run_cycle().await {
             tracing::error!(%error, "initial daemon cycle failed");
         }
+        self.spawn_attestation_listener().await;
         let result = self
             .run_event_loop(
                 &mut server_task,
@@ -845,6 +854,11 @@ impl Daemon {
                 .map_err(|error| SyncwebError::operation("daemon intent task failed", error))?;
         }
 
+        let attestation_handle = self.attestation_listener.lock().await.take();
+        if let Some(handle) = attestation_handle {
+            handle.abort();
+        }
+
         let node_result = self.node.stop().await;
         self.handle.set_status(DaemonStatus::Stopped).await;
         let remove_result = self.node_db.remove_lifecycle();
@@ -855,6 +869,18 @@ impl Daemon {
         remove_status_result?;
         release_result?;
         Ok(())
+    }
+
+    async fn spawn_attestation_listener(&self) {
+        let gossip_service = self.node.gossip_service().clone();
+        let data_dir = self.config.data_dir.clone();
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let handle = tokio::spawn(async move {
+            if let Err(error) = listen_for_attestations(gossip_service, data_dir, shutdown).await {
+                tracing::error!(%error, "attestation gossip listener failed");
+            }
+        });
+        *self.attestation_listener.lock().await = Some(handle);
     }
 
     async fn handle_signals(&self, shutdown: broadcast::Sender<()>) -> Result<()> {
@@ -902,4 +928,58 @@ fn current_minute() -> u16 {
 fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
     let message = error.to_string();
     message.contains("file changed during import") || message.contains("input path does not exist")
+}
+
+fn attestation_topic_id() -> iroh_gossip::TopicId {
+    iroh_gossip::TopicId::from_bytes(*blake3::hash(ATTESTATION_GOSSIP_TOPIC).as_bytes())
+}
+
+fn persist_incoming_attestation(att: &Attestation, db: &IndexingDatabase, existing: &mut Vec<Attestation>) {
+    if existing.contains(att) {
+        return;
+    }
+    existing.push(att.clone());
+    if let Err(error) = db.save_attestations(existing) {
+        tracing::warn!(%error, "failed to persist incoming attestation");
+    }
+    tracing::debug!(
+        content = %att.content,
+        issuer = %att.issuer,
+        kind = %att.kind,
+        "attestation received via gossip"
+    );
+}
+
+async fn listen_for_attestations(
+    gossip_service: GossipService,
+    data_dir: PathBuf,
+    mut shutdown: broadcast::Receiver<()>,
+) -> Result<()> {
+    let topic = gossip_service
+        .subscribe_and_join(attestation_topic_id(), Vec::new())
+        .await?;
+    let (sender, receiver) = GossipService::split(topic);
+    let topic_channel = TopicChannel::<Attestation>::new(
+        Arc::new(gossip_service.inner().clone()),
+        ATTESTATION_GOSSIP_TOPIC,
+        sender,
+    );
+    let mut stream = topic_channel.receive_from(receiver);
+    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let mut existing = db.load_attestations()?;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.recv() => {
+                tracing::info!("attestation listener shutting down");
+                break Ok(());
+            }
+            msg = stream.next() => {
+                let Some(att) = msg else {
+                    break Ok(());
+                };
+                persist_incoming_attestation(&att, &db, &mut existing);
+            }
+        }
+    }
 }

@@ -1441,10 +1441,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;trust;help;help'= {
         }
         &'syncweb;attest'= {
-            cand --license 'license'
-            cand --provenance 'Provenance attestation type'
-            cand --derivative 'Derivative work attestation type'
-            cand --sequence 'sequence'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1452,6 +1448,44 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand create 'Sign and optionally broadcast a content attestation'
+            cand verify 'Verify attestations for content from the network'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;attest;create'= {
+            cand --license 'license'
+            cand --provenance 'Provenance attestation type'
+            cand --derivative 'Derivative work attestation type'
+            cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --broadcast 'Broadcast attestation via gossip'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;attest;verify'= {
+            cand --timeout 'Timeout in seconds for gossip collection'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;attest;help'= {
+            cand create 'Sign and optionally broadcast a content attestation'
+            cand verify 'Verify attestations for content from the network'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;attest;help;create'= {
+        }
+        &'syncweb;attest;help;verify'= {
+        }
+        &'syncweb;attest;help;help'= {
         }
         &'syncweb;report'= {
             cand --reason 'Reason for the report'
@@ -1820,6 +1854,12 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;trust;stream;publish'= {
         }
         &'syncweb;help;attest'= {
+            cand create 'Sign and optionally broadcast a content attestation'
+            cand verify 'Verify attestations for content from the network'
+        }
+        &'syncweb;help;attest;create'= {
+        }
+        &'syncweb;help;attest;verify'= {
         }
         &'syncweb;help;report'= {
         }

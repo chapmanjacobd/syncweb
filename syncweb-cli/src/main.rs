@@ -149,7 +149,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
         }
-        Command::Attest(command) => cli::indexing::handle_attest(&ctx, command)?,
+        Command::Attest { command } => cli::indexing::handle_attest(&ctx, command)?,
         Command::Report(command) => cli::indexing::handle_report(&ctx, command)?,
         Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command)?,
         Command::Start(_)

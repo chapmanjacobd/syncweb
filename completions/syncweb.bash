@@ -148,6 +148,24 @@ _syncweb() {
             syncweb,watch)
                 cmd="syncweb__subcmd__watch"
                 ;;
+            syncweb__subcmd__attest,create)
+                cmd="syncweb__subcmd__attest__subcmd__create"
+                ;;
+            syncweb__subcmd__attest,help)
+                cmd="syncweb__subcmd__attest__subcmd__help"
+                ;;
+            syncweb__subcmd__attest,verify)
+                cmd="syncweb__subcmd__attest__subcmd__verify"
+                ;;
+            syncweb__subcmd__attest__subcmd__help,create)
+                cmd="syncweb__subcmd__attest__subcmd__help__subcmd__create"
+                ;;
+            syncweb__subcmd__attest__subcmd__help,help)
+                cmd="syncweb__subcmd__attest__subcmd__help__subcmd__help"
+                ;;
+            syncweb__subcmd__attest__subcmd__help,verify)
+                cmd="syncweb__subcmd__attest__subcmd__help__subcmd__verify"
+                ;;
             syncweb__subcmd__collection,add)
                 cmd="syncweb__subcmd__collection__subcmd__add"
                 ;;
@@ -327,6 +345,12 @@ _syncweb() {
                 ;;
             syncweb__subcmd__help,watch)
                 cmd="syncweb__subcmd__help__subcmd__watch"
+                ;;
+            syncweb__subcmd__help__subcmd__attest,create)
+                cmd="syncweb__subcmd__help__subcmd__attest__subcmd__create"
+                ;;
+            syncweb__subcmd__help__subcmd__attest,verify)
+                cmd="syncweb__subcmd__help__subcmd__attest__subcmd__verify"
                 ;;
             syncweb__subcmd__help__subcmd__collection,add)
                 cmd="syncweb__subcmd__help__subcmd__collection__subcmd__add"
@@ -968,8 +992,26 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__attest)
-            opts="-h --license --provenance --derivative --sequence --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help create verify help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__create)
+            opts="-h --license --provenance --derivative --sequence --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -987,6 +1029,84 @@ _syncweb() {
                     return 0
                     ;;
                 --sequence)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__help)
+            opts="create verify help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__help__subcmd__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__help__subcmd__verify)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__attest__subcmd__verify)
+            opts="-h --timeout --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --timeout)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1590,8 +1710,36 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__attest)
-            opts=""
+            opts="create verify"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__attest__subcmd__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__attest__subcmd__verify)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

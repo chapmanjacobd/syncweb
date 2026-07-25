@@ -954,6 +954,17 @@ pub enum AttestationKind {
     Other(String),
 }
 
+impl std::fmt::Display for AttestationKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::License => write!(f, "License"),
+            Self::Provenance => write!(f, "Provenance"),
+            Self::Derivative => write!(f, "Derivative"),
+            Self::Other(value) => write!(f, "{value}"),
+        }
+    }
+}
+
 /// A signed license, provenance, or derivative attestation.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -1865,6 +1876,9 @@ impl SignedGossipMessage for Attestation {
         self.verify_signature()
     }
 }
+
+/// Deterministic gossip topic for broadcasting attestations.
+pub const ATTESTATION_GOSSIP_TOPIC: &[u8] = b"syncweb/attestations/v1";
 
 fn current_epoch_seconds() -> u64 {
     SystemTime::now()

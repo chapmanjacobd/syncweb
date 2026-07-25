@@ -4991,6 +4991,7 @@ dependencies = [
  "anyhow",
  "async-compression",
  "async-recursion",
+ "async-trait",
  "base32",
  "blake3",
  "bytes",

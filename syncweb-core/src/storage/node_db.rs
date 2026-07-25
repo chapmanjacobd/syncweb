@@ -150,6 +150,11 @@ impl NodeDatabase {
                 pattern TEXT NOT NULL,
                 priority INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS public_subscriptions (
+                hash TEXT PRIMARY KEY,
+                size INTEGER NOT NULL,
+                subscribed_at INTEGER NOT NULL
             );",
             )
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
@@ -1020,6 +1025,106 @@ impl NodeDatabase {
                 )
                 .map_err(|error| SyncwebError::operation("failed to save filter rule", error))?;
         }
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load all public subscription hashes and their sizes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn load_subscriptions(&self) -> Result<HashSet<iroh_blobs::Hash>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT hash FROM public_subscriptions")
+            .map_err(|error| SyncwebError::operation("failed to prepare subscription query", error))?;
+        let hashes: HashSet<iroh_blobs::Hash> = stmt
+            .query_map([], |row| {
+                let text: String = row.get(0)?;
+                Ok(text)
+            })
+            .map_err(|error| SyncwebError::operation("failed to query subscriptions", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read subscription rows", error))?
+            .into_iter()
+            .filter_map(|h| h.parse::<iroh_blobs::Hash>().ok())
+            .collect();
+        drop(stmt);
+        drop(connection);
+        Ok(hashes)
+    }
+
+    /// Load subscription hashes with their cached sizes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn load_subscriptions_with_sizes(&self) -> Result<Vec<(iroh_blobs::Hash, u64)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT hash, size FROM public_subscriptions")
+            .map_err(|error| SyncwebError::operation("failed to prepare subscription query", error))?;
+        let results: Vec<(iroh_blobs::Hash, u64)> = stmt
+            .query_map([], |row| {
+                let text: String = row.get(0)?;
+                let size: i64 = row.get(1)?;
+                Ok((text, size))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query subscriptions", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read subscription rows", error))?
+            .into_iter()
+            .filter_map(|(h, size)| {
+                let hash = h.parse::<iroh_blobs::Hash>().ok()?;
+                Some((hash, size.cast_unsigned()))
+            })
+            .collect();
+        drop(stmt);
+        drop(connection);
+        Ok(results)
+    }
+
+    /// Persist a public blob subscription.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn save_subscription(&self, hash: &iroh_blobs::Hash, size: u64) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO public_subscriptions(hash, size, subscribed_at) VALUES (?1, ?2, ?3)",
+                params![hash.to_string(), size.cast_signed(), now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save subscription", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Remove a public blob subscription.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn remove_subscription(&self, hash: &iroh_blobs::Hash) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute("DELETE FROM public_subscriptions WHERE hash = ?1", params![hash.to_string()])
+            .map_err(|error| SyncwebError::operation("failed to remove subscription", error))?;
         drop(connection);
         Ok(())
     }

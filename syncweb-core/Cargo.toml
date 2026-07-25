@@ -46,6 +46,7 @@ notify.workspace = true
 regex.workspace = true
 semver.workspace = true
 async-recursion.workspace = true
+async-trait = "0.1"
 async-compression.workspace = true
 rusqlite.workspace = true
 libc.workspace = true

@@ -14,7 +14,7 @@ use tokio::{
 use crate::{
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
-    folder::FolderManager,
+    folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
     node::{identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
@@ -234,7 +234,8 @@ impl Daemon {
             node.clone(),
             archive_pool.clone(),
         )
-        .with_folder_manager(folder_manager.clone());
+        .with_folder_manager(folder_manager.clone())
+        .with_node_db(node_db.clone());
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
 
         Ok(Self {
@@ -294,6 +295,7 @@ impl Daemon {
             "daemon runtime initialized"
         );
         self.load_folders().await?;
+        self.load_subscriptions().await?;
         self.start_watching().await?;
         let server = self.ipc_server.clone();
         let mut server_task = tokio::spawn(async move { server.serve().await });
@@ -756,6 +758,23 @@ impl Daemon {
             {
                 registry.add(FolderEntry::new(namespace, PathBuf::new()))?;
             }
+        }
+        drop(registry);
+        Ok(())
+    }
+
+    async fn load_subscriptions(&self) -> Result<()> {
+        let subscriptions = self.node_db.load_subscriptions_with_sizes()?;
+        if subscriptions.is_empty() {
+            return Ok(());
+        }
+        let hashes: Vec<_> = subscriptions.iter().map(|(hash, _)| *hash).collect();
+        self.folder_manager.seed_subscriptions(hashes).await;
+
+        let mut registry = self.handle.folder_registry.write().await;
+        for (hash, size) in subscriptions {
+            let subscription = PublicSubscription::new(hash, None, size);
+            registry.add_subscription(subscription);
         }
         drop(registry);
         Ok(())

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use iroh::address_lookup::memory::MemoryLookup;
+use n0_future::StreamExt;
 use syncweb_core::{
     folder::{Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
     node::{
@@ -144,7 +145,7 @@ async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::R
 }
 
 #[tokio::test]
-async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Result<()> {
+async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-folder-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
     let memory_lookup = MemoryLookup::new();
@@ -181,15 +182,11 @@ async fn test_public_blob_subscription_creates_readonly_folder() -> anyhow::Resu
 
     let hash = first.blob_store().add_bytes(b"public subscription").await?;
     let ticket = first.blob_store().ticket(first.endpoint(), hash);
-    let folder = FolderManager::new(&second).subscribe_public(&ticket).await?;
-    anyhow::ensure!(folder.mode() == SyncMode::PublicReadOnly);
-    let entry = second
-        .docs_engine()
-        .get(folder.doc(), folder.author(), "public/content")
-        .await?
-        .context("public content entry")?;
-    anyhow::ensure!(entry.content_hash() == hash);
+    let subscribed_hash = FolderManager::new(&second).subscribe_public(&ticket).await?;
+    anyhow::ensure!(subscribed_hash == hash);
     anyhow::ensure!(second.blob_store().get(hash).await? == b"public subscription".as_slice());
+    // No doc namespace should have been created
+    anyhow::ensure!(second.docs_engine().inner().list().await?.count().await == 0);
 
     first.stop().await?;
     second.stop().await?;

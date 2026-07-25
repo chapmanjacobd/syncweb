@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap, HashSet, hash_map::Entry},
     str::FromStr,
     sync::Arc,
 };
@@ -25,6 +25,7 @@ pub struct FolderManager {
     blob_store: crate::node::blob_store::BlobStore,
     docs_engine: crate::node::docs_engine::DocsEngine,
     folders: Arc<RwLock<HashMap<NamespaceId, SyncwebFolder>>>,
+    subscriptions: Arc<RwLock<HashSet<iroh_blobs::Hash>>>,
 }
 
 impl FolderManager {
@@ -37,6 +38,7 @@ impl FolderManager {
             blob_store: node.blob_store().clone(),
             docs_engine: node.docs_engine().clone(),
             folders: Arc::new(RwLock::new(HashMap::new())),
+            subscriptions: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -77,40 +79,18 @@ impl FolderManager {
         Ok(folder)
     }
 
-    /// Subscribe to a public blob ticket by creating a local read-only
-    /// namespace containing the fetched content.
+    /// Subscribe to a public blob ticket.
+    /// Fetches the blob and returns its hash. Does NOT create an Iroh doc
+    /// namespace.
     ///
     /// # Errors
     ///
-    /// Returns an error if the blob cannot be fetched or the local namespace
-    /// cannot be created.
-    pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<SyncwebFolder> {
+    /// Returns an error if the blob cannot be fetched.
+    pub async fn subscribe_public(&self, ticket: &BlobTicket) -> Result<iroh_blobs::Hash> {
+        let hash = ticket.hash();
         self.blob_store.fetch(&self.endpoint, ticket).await?;
-        let bytes = self.blob_store.get(ticket.hash()).await?;
-        let doc = self.docs_engine.create_namespace().await?;
-        let author = self.docs_engine.author().await?;
-        self.docs_engine
-            .set(&doc, author, MODE_KEY, SyncMode::PublicReadOnly.to_string())
-            .await?;
-        self.docs_engine
-            .set_blob(
-                &doc,
-                author,
-                b"public/content",
-                ticket.hash(),
-                u64::try_from(bytes.len())
-                    .map_err(|error| SyncwebError::operation("public blob is too large", error))?,
-            )
-            .await?;
-        let folder = SyncwebFolder::new(
-            doc,
-            author,
-            self.blob_store.clone(),
-            self.docs_engine.clone(),
-            SyncMode::PublicReadOnly,
-        );
-        self.folders.write().await.insert(folder.namespace_id(), folder.clone());
-        Ok(folder)
+        self.subscriptions.write().await.insert(hash);
+        Ok(hash)
     }
 
     /// # Errors
@@ -129,6 +109,29 @@ impl FolderManager {
         let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
         self.folders.write().await.insert(namespace_id, folder.clone());
         Ok(folder)
+    }
+
+    /// Return all managed public subscription hashes.
+    #[must_use]
+    pub async fn subscriptions(&self) -> Vec<iroh_blobs::Hash> {
+        self.subscriptions.read().await.iter().copied().collect()
+    }
+
+    /// Seed the subscription set from persisted hashes (e.g. loaded from SQLite
+    /// on startup).
+    pub async fn seed_subscriptions(&self, hashes: impl IntoIterator<Item = iroh_blobs::Hash>) {
+        self.subscriptions.write().await.extend(hashes);
+    }
+
+    /// Drop (unsubscribe from) a public blob subscription.
+    pub async fn drop_subscription(&self, hash: &iroh_blobs::Hash) {
+        self.subscriptions.write().await.remove(hash);
+    }
+
+    /// Check whether a public subscription for the given hash exists.
+    #[must_use]
+    pub async fn has_subscription(&self, hash: &iroh_blobs::Hash) -> bool {
+        self.subscriptions.read().await.contains(hash)
     }
 
     /// # Errors

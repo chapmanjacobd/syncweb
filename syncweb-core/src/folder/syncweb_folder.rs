@@ -1,5 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
+use async_trait::async_trait;
 use iroh::PublicKey;
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::{
@@ -12,6 +13,7 @@ use crate::error::{Result, SyncwebError};
 use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
 use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotId, SnapshotStore};
 
+use super::public_subscription::{EntryLike, FolderLike};
 use super::SyncMode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -300,6 +302,42 @@ impl SyncwebFolder {
     /// Returns an error if the public-sharing pin cannot be removed.
     pub async fn unpublish_blob(&self, hash: Hash) -> Result<()> {
         self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await
+    }
+}
+
+#[async_trait]
+impl FolderLike for SyncwebFolder {
+    fn namespace_id(&self) -> String {
+        self.namespace_id.to_string()
+    }
+
+    fn label(&self) -> String {
+        self.namespace_id.to_string()
+    }
+
+    fn kind(&self) -> &'static str {
+        "folder"
+    }
+
+    fn path(&self) -> Option<&Path> {
+        None
+    }
+
+    async fn list_entries(&self) -> Result<Vec<EntryLike>> {
+        let entries = self.docs_engine.list_latest(&self.doc).await?;
+        let mut result = Vec::with_capacity(entries.len());
+        for entry in entries {
+            if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            let path = String::from_utf8_lossy(entry.key()).to_string();
+            result.push(EntryLike {
+                path,
+                hash: entry.content_hash(),
+                size: entry.content_len(),
+            });
+        }
+        Ok(result)
     }
 }
 

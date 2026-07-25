@@ -18,12 +18,13 @@ use crate::{
     filter::{FilterConfig, FilterEngine},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderManager, PackageAnnouncement, PackageCatalog,
-        SyncMode,
+        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, SyncMode,
+        PackageAnnouncement, PackageCatalog,
     },
     fs::Importer,
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
+    storage::node_db::NodeDatabase,
     sync::{
         ActiveSession, FetchCandidate, FetchStrategy, HealthReport, SubscribeParams, SyncEngine, SyncEvent,
         cancel_session,
@@ -111,6 +112,9 @@ pub enum IpcCommand {
         namespace: String,
         params: SubscribeParams,
     },
+    SubscribePublic {
+        ticket: String,
+    },
     CreateFolder {
         path: PathBuf,
         mode: String,
@@ -181,11 +185,17 @@ pub enum IpcResponse {
 pub struct FolderStatus {
     pub namespace: String,
     pub path: PathBuf,
+    #[serde(default = "default_kind")]
+    pub kind: String,
     pub session_active: bool,
     pub last_sync_at: Option<u64>,
     pub sync_count: u64,
     pub entries_synced: u64,
     pub errors: Vec<String>,
+}
+
+fn default_kind() -> String {
+    "folder".to_owned()
 }
 
 /// A folder managed by the daemon.
@@ -219,6 +229,7 @@ impl FolderEntry {
         FolderStatus {
             namespace: self.namespace.to_string(),
             path: self.path.clone(),
+            kind: "folder".to_owned(),
             session_active: self.session.is_some() || crate::sync::is_active(self.namespace),
             last_sync_at: self.last_sync_at,
             sync_count: self.sync_count,
@@ -228,10 +239,11 @@ impl FolderEntry {
     }
 }
 
-/// Registry of folders currently managed by the daemon.
+/// Registry of folders and subscriptions currently managed by the daemon.
 #[derive(Default)]
 pub struct FolderRegistry {
     folders: HashMap<String, FolderEntry>,
+    subscriptions: HashMap<String, PublicSubscription>,
 }
 
 impl FolderRegistry {
@@ -277,21 +289,50 @@ impl FolderRegistry {
         self.folders.remove(&namespace.to_string())
     }
 
+    /// Add a subscription to the registry.
+    pub fn add_subscription(&mut self, subscription: PublicSubscription) {
+        let key = subscription.namespace_id();
+        self.subscriptions.insert(key, subscription);
+    }
+
+    /// Remove a subscription by its namespace ID (e.g. `"blob:<hash>"`).
+    pub fn remove_subscription(&mut self, namespace_id: &str) -> Option<PublicSubscription> {
+        self.subscriptions.remove(namespace_id)
+    }
+
+    #[must_use]
+    pub fn subscription_statuses(&self) -> Vec<FolderStatus> {
+        self.subscriptions
+            .values()
+            .map(|sub| FolderStatus {
+                namespace: sub.namespace_id(),
+                path: PathBuf::new(),
+                kind: "subscription".to_owned(),
+                session_active: false,
+                last_sync_at: None,
+                sync_count: 0,
+                entries_synced: sub.size(),
+                errors: Vec::new(),
+            })
+            .collect()
+    }
+
     #[must_use]
     pub fn statuses(&self) -> Vec<FolderStatus> {
         let mut statuses: Vec<_> = self.folders.values().map(FolderEntry::status).collect();
+        statuses.extend(self.subscription_statuses());
         statuses.sort_by(|left, right| left.namespace.cmp(&right.namespace));
         statuses
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.folders.len()
+        self.folders.len() + self.subscriptions.len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.folders.is_empty()
+        self.folders.is_empty() && self.subscriptions.is_empty()
     }
 
     pub fn record_import(&mut self, namespace: iroh_docs::NamespaceId, entries: u64, timestamp: u64) {
@@ -441,6 +482,7 @@ pub struct IpcServer {
     daemon_handle: DaemonHandle,
     archive_context: Option<Arc<ArchiveContext>>,
     folder_manager: Option<FolderManager>,
+    node_db: Option<NodeDatabase>,
 }
 
 #[derive(Clone)]
@@ -457,6 +499,7 @@ impl IpcServer {
             daemon_handle,
             archive_context: None,
             folder_manager: None,
+            node_db: None,
         }
     }
 
@@ -473,6 +516,7 @@ impl IpcServer {
             daemon_handle,
             archive_context: Some(Arc::new(ArchiveContext { node, pool })),
             folder_manager: None,
+            node_db: None,
         }
     }
 
@@ -480,6 +524,13 @@ impl IpcServer {
     #[must_use]
     pub fn with_folder_manager(mut self, folder_manager: FolderManager) -> Self {
         self.folder_manager = Some(folder_manager);
+        self
+    }
+
+    /// Set the node database for persistence.
+    #[must_use]
+    pub fn with_node_db(mut self, node_db: NodeDatabase) -> Self {
+        self.node_db = Some(node_db);
         self
     }
 
@@ -566,6 +617,7 @@ impl IpcServer {
             IpcCommand::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
             IpcCommand::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
             IpcCommand::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
+            IpcCommand::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
             IpcCommand::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
             IpcCommand::HealthCheck { path } => self.handle_health_check(path).await,
             IpcCommand::VerifyIntegrity {
@@ -579,7 +631,7 @@ impl IpcServer {
                 self.handle_verify_integrity(path, hash, path_filter, glob_filter, fix, from)
                     .await
             }
-            IpcCommand::Unsubscribe { namespace } => Self::handle_unsubscribe(&namespace),
+            IpcCommand::Unsubscribe { namespace } => self.handle_unsubscribe_command(&namespace).await,
             IpcCommand::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
             IpcCommand::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
             IpcCommand::SnapshotCreate {
@@ -917,6 +969,51 @@ impl IpcServer {
         }
     }
 
+    async fn handle_subscribe_public(&self, ticket: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon subscribe-public IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let blob_ticket = match ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
+            Ok(t) => t,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid blob ticket: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        match manager.subscribe_public(&blob_ticket).await {
+            Ok(hash) => {
+                let provider = Some(blob_ticket.addr().clone());
+                let size = match context.node.blob_store().get(hash).await {
+                    Ok(bytes) => u64::try_from(bytes.len()).unwrap_or_default(),
+                    Err(error) => return response_from_error(error),
+                };
+                let subscription = PublicSubscription::new(hash, provider, size);
+                let namespace = subscription.namespace_id();
+                self.daemon_handle
+                    .folder_registry
+                    .write()
+                    .await
+                    .add_subscription(subscription);
+                if let Some(ref node_db) = self.node_db {
+                    if let Err(error) = node_db.save_subscription(&hash, size) {
+                        tracing::warn!(%hash, %error, "failed to persist subscription");
+                    }
+                }
+                IpcResponse::Ok {
+                    message: format!("subscribed: {namespace}\nhash: {hash}\nsize: {size}"),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
     async fn handle_create_folder(&self, path: PathBuf, mode: String) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -1154,22 +1251,45 @@ impl IpcServer {
         result
     }
 
-    fn handle_unsubscribe(namespace: &str) -> IpcResponse {
-        match iroh_docs::NamespaceId::from_str(namespace) {
-            Ok(namespace_id) => {
-                if cancel_session(namespace_id) {
-                    IpcResponse::Ok {
-                        message: format!("unsubscribed: {namespace}"),
-                    }
-                } else {
-                    IpcResponse::Error {
-                        message: format!("no active session for {namespace}"),
+    async fn handle_unsubscribe_command(&self, namespace: &str) -> IpcResponse {
+        if namespace.starts_with("blob:") {
+            self.daemon_handle.folder_registry.write().await.remove_subscription(namespace);
+            if let Some(ref manager) = self.folder_manager {
+                if let Some(hash_str) = namespace.strip_prefix("blob:") {
+                    if let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>() {
+                        manager.drop_subscription(&hash).await;
                     }
                 }
             }
-            Err(error) => IpcResponse::Error {
-                message: format!("invalid namespace: {error}"),
-            },
+            if let Some(ref node_db) = self.node_db {
+                if let Some(hash_str) = namespace.strip_prefix("blob:") {
+                    if let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>() {
+                        if let Err(error) = node_db.remove_subscription(&hash) {
+                            tracing::warn!(%hash, %error, "failed to remove subscription from database");
+                        }
+                    }
+                }
+            }
+            IpcResponse::Ok {
+                message: format!("unsubscribed: {namespace}"),
+            }
+        } else {
+            match iroh_docs::NamespaceId::from_str(namespace) {
+                Ok(namespace_id) => {
+                    if cancel_session(namespace_id) {
+                        IpcResponse::Ok {
+                            message: format!("unsubscribed: {namespace}"),
+                        }
+                    } else {
+                        IpcResponse::Error {
+                            message: format!("no active session for {namespace}"),
+                        }
+                    }
+                }
+                Err(error) => IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                },
+            }
         }
     }
 
@@ -1875,6 +1995,13 @@ mod tests {
         let enc7 = serde_json::to_vec(&req7).expect("serialize");
         let dec7: IpcRequest = serde_json::from_slice(&enc7).expect("deserialize");
         assert!(matches!(dec7.command, IpcCommand::CollectionPublish { .. }));
+
+        let req8 = IpcRequest::new(IpcCommand::SubscribePublic {
+            ticket: "blob_ticket".to_owned(),
+        });
+        let enc8 = serde_json::to_vec(&req8).expect("serialize");
+        let dec8: IpcRequest = serde_json::from_slice(&enc8).expect("deserialize");
+        assert!(matches!(dec8.command, IpcCommand::SubscribePublic { .. }));
     }
 
     #[tokio::test]

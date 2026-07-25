@@ -26,6 +26,7 @@ pub mod error;
 pub mod filter;
 pub mod folder;
 pub mod fs;
+pub mod gossip;
 pub mod indexing;
 pub mod init;
 pub mod net;

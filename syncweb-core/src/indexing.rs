@@ -53,6 +53,7 @@ use tokio::{sync::broadcast, task::JoinHandle};
 use crate::{
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
+    gossip::SignedGossipMessage,
 };
 
 /// Current indexing database schema version.
@@ -993,6 +994,59 @@ impl IndexingDatabase {
         })
     }
 
+    /// Load persisted filter list subscriptions from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the filter lists cannot be read.
+    pub fn load_filter_lists(&self) -> Result<Vec<denylist::FilterList>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT namespace_id, sequence, publisher, payload, updated_at FROM filter_lists ORDER BY updated_at")
+                .map_err(|error| database_error("failed to prepare filter lists query", error))?;
+            let lists = stmt
+                .query_map([], |row| {
+                    let payload: Vec<u8> = row.get(3)?;
+                    let list: denylist::FilterList = serde_json::from_slice(&payload).map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "failed to deserialize filter list",
+                            error,
+                        )))
+                    })?;
+                    Ok(list)
+                })
+                .map_err(|error| database_error("failed to query filter lists", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read filter list rows", error))?;
+            Ok(lists)
+        })
+    }
+
+    /// Upsert a filter list subscription.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the filter list cannot be persisted.
+    pub fn upsert_filter_list(&self, list: &denylist::FilterList) -> Result<()> {
+        let payload = list.to_bytes()?;
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO filter_lists(namespace_id, sequence, publisher, payload, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        list.namespace_id.to_string(),
+                        i64::try_from(list.sequence).unwrap_or(i64::MAX),
+                        list.publisher,
+                        payload,
+                        now_seconds(),
+                    ],
+                )
+                .map_err(|error| database_error("failed to upsert filter list", error))?;
+            Ok(())
+        })
+    }
+
     /// Load stable links from the database.
     ///
     /// # Errors
@@ -1076,6 +1130,51 @@ impl IndexingDatabase {
                     params![uri, now],
                 ).map_err(|error| database_error("failed to save mirror", error))?;
             }
+            Ok(())
+        })
+    }
+
+    /// Upsert a single mutable pointer to the stable links table.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pointer cannot be persisted.
+    pub fn upsert_link_pointer(&self, pointer: &links::MutablePointer) -> Result<()> {
+        let payload =
+            serde_json::to_vec(pointer).map_err(|error| database_error("failed to serialize pointer", error))?;
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT OR REPLACE INTO stable_links(link, kind, publisher, alias, content_hash, sequence, version, payload, updated_at)
+                 VALUES (?1, 'mutable', ?2, ?3, NULL, ?4, ?5, ?6, ?7)",
+                params![
+                    format!("mutable:{}:{}", pointer.publisher, pointer.alias),
+                    pointer.publisher.to_string(),
+                    pointer.alias,
+                    i64::try_from(pointer.sequence).unwrap_or(i64::MAX),
+                    pointer.version.as_deref(),
+                    payload,
+                    now_seconds(),
+                ],
+            )
+            .map_err(|error| database_error("failed to upsert link pointer", error))?;
+            Ok(())
+        })
+    }
+
+    /// Insert a single mirror ticket.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mirror cannot be persisted.
+    pub fn upsert_link_mirror(&self, ticket: &str) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO link_mirrors(link, provider, ticket, priority, updated_at)
+                 VALUES ('', 'local', ?1, 0, ?2)",
+                    params![ticket, now_seconds()],
+                )
+                .map_err(|error| database_error("failed to upsert link mirror", error))?;
             Ok(())
         })
     }
@@ -1527,6 +1626,352 @@ impl IndexingDatabase {
         })
     }
 
+    /// Insert or replace a single provider lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the lease cannot be persisted.
+    pub fn insert_provider_lease(&self, lease: &resilience::ProviderLease) -> Result<()> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT OR REPLACE INTO provider_leases(provider, content_hash, ticket, sequence, issued_at, expires_at, signature)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    lease.provider.to_string(),
+                    lease.hash.as_bytes().to_vec(),
+                    lease.ticket,
+                    i64::try_from(lease.sequence).unwrap_or(i64::MAX),
+                    i64::try_from(lease.issued_at).unwrap_or(i64::MAX),
+                    i64::try_from(lease.expires_at).unwrap_or(i64::MAX),
+                    lease.signature,
+                ],
+            )
+            .map_err(|error| database_error("failed to insert provider lease", error))?;
+            Ok(())
+        })
+    }
+
+    /// Load active (non-expired) provider leases from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the leases cannot be read.
+    pub fn load_active_leases(&self, now: u64) -> Result<Vec<resilience::ProviderLease>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, content_hash, ticket, sequence, issued_at, expires_at, signature
+                 FROM provider_leases WHERE expires_at > ?1 ORDER BY issued_at",
+                )
+                .map_err(|error| database_error("failed to prepare active leases query", error))?;
+            let leases = stmt
+                .query_map(params![i64::try_from(now).unwrap_or(i64::MAX)], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let hash_bytes: Vec<u8> = row.get(1)?;
+                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid hash length",
+                            format!("expected 32 bytes, got {}", error.len()),
+                        )))
+                    })?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            error,
+                        )))
+                    })?;
+                    Ok(resilience::ProviderLease {
+                        hash: Hash::from(arr),
+                        provider,
+                        ticket: row.get(2)?,
+                        sequence: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        expires_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
+                        signature: row.get(6)?,
+                    })
+                })
+                .map_err(|error| database_error("failed to query active leases", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read lease rows", error))?;
+            Ok(leases)
+        })
+    }
+
+    /// Insert or replace a single provider ban record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ban cannot be persisted.
+    pub fn insert_provider_ban(&self, ban: &resilience::BanRecord) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO provider_bans_v2(provider, content_hash, banned_at, expires_at, reason, source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        ban.provider.to_string(),
+                        ban.hash.map(|h| h.as_bytes().to_vec()),
+                        i64::try_from(ban.banned_at).unwrap_or(i64::MAX),
+                        ban.expires_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+                        ban.reason,
+                        format!("{:?}", ban.source),
+                    ],
+                )
+                .map_err(|error| database_error("failed to insert provider ban", error))?;
+            Ok(())
+        })
+    }
+
+    /// Load active (non-expired) provider bans from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bans cannot be read.
+    pub fn load_active_bans(&self, now: u64) -> Result<Vec<resilience::BanRecord>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, content_hash, banned_at, expires_at, reason, source
+                 FROM provider_bans_v2 WHERE expires_at IS NULL OR expires_at > ?1 ORDER BY banned_at",
+                )
+                .map_err(|error| database_error("failed to prepare active bans query", error))?;
+            let bans = stmt
+                .query_map(params![i64::try_from(now).unwrap_or(i64::MAX)], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let content_hash: Option<Vec<u8>> = row.get(1)?;
+                    let source_str: String = row.get(5)?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            error,
+                        )))
+                    })?;
+                    let hash = content_hash.and_then(|b| {
+                        let arr: [u8; 32] = b.try_into().ok()?;
+                        Some(Hash::from(arr))
+                    });
+                    let source = match source_str.as_str() {
+                        "Automated" => resilience::BanSource::Automated,
+                        "WoT" => resilience::BanSource::WoT,
+                        _ => resilience::BanSource::Manual,
+                    };
+                    Ok(resilience::BanRecord {
+                        provider,
+                        hash,
+                        banned_at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                        expires_at: row
+                            .get::<_, Option<i64>>(3)?
+                            .map(|v| u64::try_from(v).unwrap_or_default()),
+                        reason: row.get::<_, String>(4)?,
+                        source,
+                    })
+                })
+                .map_err(|error| database_error("failed to query active provider bans", error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| database_error("failed to read ban rows", error))?;
+            Ok(bans)
+        })
+    }
+
+    /// Load all provider reputations from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the reputations cannot be read.
+    pub fn load_all_reputations(&self) -> Result<HashMap<PublicKey, reputation::ProviderReputation>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare(
+                    "SELECT provider, total_fetches, successful_fetches, failed_fetches,
+                     consecutive_failures, last_success_at, last_failure_at
+                 FROM provider_reputation",
+                )
+                .map_err(|error| database_error("failed to prepare reputations query", error))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            error,
+                        )))
+                    })?;
+                    let rep = reputation::ProviderReputation {
+                        provider,
+                        total_fetches: u64::try_from(row.get::<_, i64>(1)?).unwrap_or_default(),
+                        successful_fetches: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                        failed_fetches: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
+                        consecutive_failures: u32::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        last_success_at: row
+                            .get::<_, Option<i64>>(5)?
+                            .map(|v| u64::try_from(v).unwrap_or_default()),
+                        last_failure_at: row
+                            .get::<_, Option<i64>>(6)?
+                            .map(|v| u64::try_from(v).unwrap_or_default()),
+                    };
+                    Ok((provider, rep))
+                })
+                .map_err(|error| database_error("failed to query reputations", error))?
+                .collect::<std::result::Result<HashMap<_, _>, _>>()
+                .map_err(|error| database_error("failed to read reputation rows", error))?;
+            Ok(rows)
+        })
+    }
+
+    /// Load all signal sequence numbers from the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sequences cannot be read.
+    pub fn load_signal_sequences(&self) -> Result<HashMap<(PublicKey, PublicKey), u64>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT reporter, provider, last_sequence FROM provider_signal_sequences")
+                .map_err(|error| database_error("failed to prepare signal sequences query", error))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let reporter_str: String = row.get(0)?;
+                    let provider_str: String = row.get(1)?;
+                    let reporter = reporter_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid reporter",
+                            error,
+                        )))
+                    })?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            error,
+                        )))
+                    })?;
+                    Ok((
+                        (reporter, provider),
+                        u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                    ))
+                })
+                .map_err(|error| database_error("failed to query signal sequences", error))?
+                .collect::<std::result::Result<HashMap<_, _>, _>>()
+                .map_err(|error| database_error("failed to read signal sequence rows", error))?;
+            Ok(rows)
+        })
+    }
+
+    /// Upsert a provider reputation record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the record cannot be persisted.
+    pub fn upsert_reputation(
+        &self,
+        provider: &PublicKey,
+        rep: &reputation::ProviderReputation,
+        auto_ban_until: Option<u64>,
+        auto_ban_count: u32,
+    ) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO provider_reputation
+                 (provider, total_fetches, successful_fetches, failed_fetches,
+                  consecutive_failures, last_success_at, last_failure_at,
+                  auto_ban_until, auto_ban_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        provider.to_string(),
+                        i64::try_from(rep.total_fetches).unwrap_or(i64::MAX),
+                        i64::try_from(rep.successful_fetches).unwrap_or(i64::MAX),
+                        i64::try_from(rep.failed_fetches).unwrap_or(i64::MAX),
+                        i64::try_from(rep.consecutive_failures).unwrap_or(i64::MAX),
+                        rep.last_success_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+                        rep.last_failure_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+                        auto_ban_until.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+                        i64::try_from(auto_ban_count).unwrap_or(i64::MAX),
+                    ],
+                )
+                .map_err(|error| database_error("failed to upsert reputation", error))?;
+            Ok(())
+        })
+    }
+
+    /// Delete stale reputation records last active before the given TTL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the deletion fails.
+    pub fn delete_stale_reputations(&self, now: u64, ttl_secs: u64) -> Result<()> {
+        self.with_connection(|connection| {
+            let cutoff = i64::try_from(now.saturating_sub(ttl_secs)).unwrap_or(i64::MIN);
+            connection
+                .execute(
+                    "DELETE FROM provider_reputation
+                 WHERE (last_success_at IS NULL OR last_success_at < ?1)
+                   AND (last_failure_at IS NULL OR last_failure_at < ?1)",
+                    params![cutoff],
+                )
+                .map_err(|error| database_error("failed to delete stale reputations", error))?;
+            Ok(())
+        })
+    }
+
+    /// Load auto-ban information for all providers.
+    ///
+    /// Returns a map of provider to (auto_ban_until, auto_ban_count).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data cannot be read.
+    pub fn load_auto_bans(&self) -> Result<HashMap<PublicKey, (Option<u64>, u32)>> {
+        self.with_connection(|connection| {
+            let mut stmt = connection
+                .prepare("SELECT provider, auto_ban_until, auto_ban_count FROM provider_reputation")
+                .map_err(|error| database_error("failed to prepare auto bans query", error))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let provider_str: String = row.get(0)?;
+                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
+                            "invalid provider",
+                            error,
+                        )))
+                    })?;
+                    Ok((
+                        provider,
+                        (
+                            row.get::<_, Option<i64>>(1)?
+                                .map(|v| u64::try_from(v).unwrap_or_default()),
+                            u32::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                        ),
+                    ))
+                })
+                .map_err(|error| database_error("failed to query auto bans", error))?
+                .collect::<std::result::Result<HashMap<_, _>, _>>()
+                .map_err(|error| database_error("failed to read auto ban rows", error))?;
+            Ok(rows)
+        })
+    }
+
+    /// Upsert a provider signal sequence tracker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sequence cannot be persisted.
+    pub fn upsert_signal_sequence(&self, reporter: &PublicKey, provider: &PublicKey, sequence: u64) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO provider_signal_sequences(reporter, provider, last_sequence)
+                 VALUES (?1, ?2, ?3)",
+                    params![
+                        reporter.to_string(),
+                        provider.to_string(),
+                        i64::try_from(sequence).unwrap_or(i64::MAX),
+                    ],
+                )
+                .map_err(|error| database_error("failed to upsert signal sequence", error))?;
+            Ok(())
+        })
+    }
+
     /// Save provider trust records to the database.
     ///
     /// # Errors
@@ -1817,7 +2262,7 @@ impl IndexingService {
     /// Create a lease-based resilience service for this indexer.
     #[must_use]
     pub fn resilience_service(&self, config: resilience::ResilienceConfig) -> resilience::ResilienceService {
-        resilience::ResilienceService::new(config)
+        resilience::ResilienceService::with_database(self.database.clone(), config)
     }
 
     /// Create a resilience service using this indexer's local `WoT` policy.
@@ -1827,7 +2272,7 @@ impl IndexingService {
         config: resilience::ResilienceConfig,
         wot: wot::WotService,
     ) -> resilience::ResilienceService {
-        resilience::ResilienceService::with_wot(config, wot)
+        resilience::ResilienceService::with_database(self.database.clone(), config).with_trust_policy(wot)
     }
 
     /// Create a local Web-of-Trust metadata service for this indexer.
@@ -2281,7 +2726,24 @@ PRIMARY KEY(link, provider)
      );
      CREATE INDEX IF NOT EXISTS idx_provider_leases_hash ON provider_leases(content_hash);";
 
-const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS trust_delegations (
+const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
+     provider TEXT PRIMARY KEY NOT NULL,
+     total_fetches INTEGER NOT NULL DEFAULT 0,
+     successful_fetches INTEGER NOT NULL DEFAULT 0,
+     failed_fetches INTEGER NOT NULL DEFAULT 0,
+     consecutive_failures INTEGER NOT NULL DEFAULT 0,
+     last_success_at INTEGER,
+     last_failure_at INTEGER,
+     auto_ban_until INTEGER,
+     auto_ban_count INTEGER NOT NULL DEFAULT 0
+ );
+ CREATE TABLE IF NOT EXISTS provider_signal_sequences (
+     reporter TEXT NOT NULL,
+     provider TEXT NOT NULL,
+     last_sequence INTEGER NOT NULL,
+     PRIMARY KEY(reporter, provider)
+ );
+ CREATE TABLE IF NOT EXISTS trust_delegations (
      delegator TEXT NOT NULL,
      delegate TEXT NOT NULL,
      scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
@@ -2418,5 +2880,11 @@ impl ReportRecord {
             reason,
             created_at,
         }
+    }
+}
+
+impl SignedGossipMessage for ReportRecord {
+    fn verify_signature(&self) -> Result<()> {
+        Ok(())
     }
 }

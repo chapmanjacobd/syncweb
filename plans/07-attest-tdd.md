@@ -237,7 +237,7 @@ subcommands, and mark the old `Attest(AttestArgs)` as deprecated via a custom
 `display_name` or hidden attribute. The dispatch code checks if the old variant was
 matched and prints a deprecation warning before delegating to the new handler.
 
-**Deprecation wiring:**
+Deprecation wiring:
 ```rust
 // In syncweb-cli/src/main.rs dispatch:
 TopLevelCommand::Attest(args) => {

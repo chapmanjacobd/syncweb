@@ -1,9 +1,10 @@
 .PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme
+.SILENT:
 
 all: fmt flint test lint build manpage completions readme
 
 fmt:
-	cargo fmt --all
+	cargo fmt -q --all
 
 flint:
 	@EXIT_CODE=0; \
@@ -11,8 +12,8 @@ flint:
 	fd -eMD -tf -x sed -i 's|–|--|g'
 	fd -eMD -tf -x sed -i 's|\*\*||g'
 
-	cargo fix --broken-code --allow-dirty || EXIT_CODE=$$?; \
-	cargo clippy --fix --allow-dirty || EXIT_CODE=$$?; \
+	cargo fix -q --broken-code --allow-dirty || EXIT_CODE=$$?; \
+	cargo clippy -q --fix --allow-dirty || EXIT_CODE=$$?; \
 	rg -i --no-heading --no-line-number -F '#[expect' | grep -v Makefile || true; \
 	rg -i --no-heading --no-line-number -F '#[allow' | grep -v Makefile || true; \
 	rg -i --no-heading --no-line-number -F '#![expect' | grep -v Makefile || true; \
@@ -20,23 +21,23 @@ flint:
 	exit $$EXIT_CODE
 
 lint:
-	cargo clippy --all-targets --all-features --color always --message-format=short
+	cargo clippy -q --all-targets --all-features --color always --message-format=short
 
 test:
 	cargo nextest run --show-progress only --no-fail-fast
 
 test0:
-	cargo test --all-targets --all-features --quiet
-	cargo test --doc
+	cargo test -q --all-targets --all-features
+	cargo test -q --doc
 
 bench:
-	cargo bench --all-features
+	cargo bench -q --all-features
 
 build:
-	cargo build --all-targets --all-features
+	cargo build -q --all-targets --all-features
 
 check:
-	cargo check --all-targets --all-features
+	cargo check -q --all-targets --all-features
 
 clean:
 	cargo clean

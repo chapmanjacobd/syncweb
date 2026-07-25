@@ -28,6 +28,7 @@ use tokio::{sync::watch, task::JoinHandle};
 use crate::{
     error::{Result, SyncwebError},
     indexing::{
+        IndexingDatabase,
         reputation::{ProviderReputationStore, ReputationConfig},
         wot::{ProviderTrustDecision, WotService},
     },
@@ -780,6 +781,21 @@ impl ProviderLeaseTracker {
         record
     }
 
+    /// Apply a persisted ban record to in-memory state.
+    ///
+    /// Used when hydrating bans from the database on construction.
+    pub fn apply_ban_record(&mut self, record: BanRecord) {
+        match record.hash {
+            Some(scope_hash) => {
+                let bans = self.hash_bans.entry(scope_hash).or_default();
+                insert_ban(bans, record);
+            }
+            None => {
+                insert_ban(&mut self.bans, record);
+            }
+        }
+    }
+
     /// Remove a global or hash-scoped ban.
     pub fn unban_provider(&mut self, provider: PublicKey, scope: Option<Hash>) -> bool {
         match scope {
@@ -1253,6 +1269,7 @@ pub struct ResilienceService {
     generations: Arc<Mutex<HashMap<Hash, watch::Sender<u64>>>>,
     reputation: Arc<Mutex<ProviderReputationStore>>,
     wot: Option<WotService>,
+    database: Option<IndexingDatabase>,
 }
 
 impl std::fmt::Debug for ResilienceService {
@@ -1275,6 +1292,35 @@ impl ResilienceService {
             generations: Arc::new(Mutex::new(HashMap::new())),
             reputation: Arc::new(Mutex::new(ProviderReputationStore::default())),
             wot: None,
+            database: None,
+        }
+    }
+
+    /// Create a resilience service backed by an indexing database.
+    ///
+    /// Active leases and bans are hydrated from the database on construction.
+    /// Mutations are persisted through the database on every operation.
+    #[must_use]
+    pub fn with_database(database: IndexingDatabase, config: ResilienceConfig) -> Self {
+        let now = current_epoch_seconds();
+        let leases = database.load_active_leases(now).unwrap_or_default();
+        let bans = database.load_active_bans(now).unwrap_or_default();
+        let mut tracker = ProviderLeaseTracker::with_max_failures_per_provider(config.max_failures_per_provider);
+        for lease in &leases {
+            let _ = tracker.track_at(lease.clone(), now);
+        }
+        for ban in &bans {
+            tracker.apply_ban_record(ban.clone());
+        }
+        let reputation =
+            ProviderReputationStore::with_database(database.clone(), ReputationConfig::default()).unwrap_or_default();
+        Self {
+            config,
+            tracker: Arc::new(Mutex::new(tracker)),
+            generations: Arc::new(Mutex::new(HashMap::new())),
+            reputation: Arc::new(Mutex::new(reputation)),
+            wot: None,
+            database: Some(database),
         }
     }
 
@@ -1335,8 +1381,11 @@ impl ResilienceService {
             .tracker
             .lock()
             .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
-            .track(lease)?;
+            .track(lease.clone())?;
         if update.changed() {
+            if let Some(ref database) = self.database {
+                let _ = database.insert_provider_lease(&lease);
+            }
             self.bump_generation(hash)?;
         }
         Ok(update)
@@ -1404,6 +1453,9 @@ impl ResilienceService {
                 duration,
                 current_epoch_seconds(),
             );
+        if let Some(ref database) = self.database {
+            let _ = database.insert_provider_ban(&record);
+        }
         if let Some(scope_hash) = scope {
             self.bump_generation(scope_hash)?;
         }

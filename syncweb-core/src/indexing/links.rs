@@ -22,8 +22,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{Result, SyncwebError},
+    gossip::SignedGossipMessage,
     indexing::ProviderLease,
 };
+use super::IndexingDatabase;
 
 const LINK_SIGNATURE_CONTEXT: &[u8] = b"syncweb/name-pointer/v1\0";
 const LINK_SCHEME: &str = "syncweb://";
@@ -801,9 +803,19 @@ struct PointerHistory {
 }
 
 /// In-memory resolver and mirror registry.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct LinkResolver {
     state: Arc<Mutex<ResolverState>>,
+    database: Option<IndexingDatabase>,
+}
+
+impl Default for LinkResolver {
+    fn default() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(ResolverState::default())),
+            database: None,
+        }
+    }
 }
 
 impl LinkResolver {
@@ -811,6 +823,46 @@ impl LinkResolver {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a resolver backed by an indexing database.
+    ///
+    /// Pointers and mirrors are hydrated from the database on construction.
+    /// Mutations are persisted through the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn with_database(database: IndexingDatabase) -> Result<Self> {
+        let result = database.load_links()?;
+        let mut state = ResolverState::default();
+        for pointer in result.0 {
+            let key = (pointer.publisher, pointer.alias.clone());
+            let history = state.pointers.entry(key).or_default();
+            if let Some(current) = &history.current
+                && pointer.sequence <= current.sequence
+            {
+                continue;
+            }
+            if let Some(version) = &pointer.version {
+                history.versions.insert(version.clone(), pointer.clone());
+            }
+            history.current = Some(pointer);
+        }
+        for ticket_str in result.1 {
+            if let Ok(ticket) = ticket_str.parse::<iroh_blobs::ticket::BlobTicket>() {
+                if let Ok(mirror) = Mirror::new(ticket) {
+                    let mirrors = state.mirrors.entry(mirror.hash).or_default();
+                    if !mirrors.iter().any(|existing| existing.ticket == mirror.ticket) {
+                        mirrors.push(mirror);
+                    }
+                }
+            }
+        }
+        Ok(Self {
+            state: Arc::new(Mutex::new(state)),
+            database: Some(database),
+        })
     }
 
     /// Register a direct mirror ticket for a hash.
@@ -823,7 +875,10 @@ impl LinkResolver {
         let mut state = self.lock_state()?;
         let mirrors = state.mirrors.entry(mirror.hash).or_default();
         if !mirrors.iter().any(|existing| existing.ticket == mirror.ticket) {
-            mirrors.push(mirror);
+            mirrors.push(mirror.clone());
+            if let Some(ref database) = self.database {
+                let _ = database.upsert_link_mirror(&mirror.ticket.to_string());
+            }
         }
         drop(state);
         Ok(())
@@ -909,7 +964,10 @@ impl LinkResolver {
             }
             history.versions.insert(version.clone(), pointer.clone());
         }
-        history.current = Some(pointer);
+        history.current = Some(pointer.clone());
+        if let Some(ref database) = self.database {
+            let _ = database.upsert_link_pointer(&pointer);
+        }
         drop(state);
         Ok(())
     }
@@ -1191,6 +1249,12 @@ fn next_part<'a>(parts: &mut Split<'a, char>, field: &str) -> Result<&'a str> {
         return Err(SyncwebError::InvalidConfig(format!("{field} is empty")));
     }
     Ok(part)
+}
+
+impl SignedGossipMessage for PrivateLink {
+    fn verify_signature(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

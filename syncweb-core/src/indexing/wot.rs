@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Result, SyncwebError},
+    gossip::SignedGossipMessage,
     indexing::{IndexingDatabase, IndexingService},
 };
 
@@ -1766,6 +1767,12 @@ fn parse_author(author: &str) -> Result<VerifyingKey> {
     })?;
     VerifyingKey::from_bytes(&key_bytes)
         .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid Web-of-Trust author key: {error}")))
+}
+
+impl SignedGossipMessage for Attestation {
+    fn verify_signature(&self) -> Result<()> {
+        self.verify_signature()
+    }
 }
 
 fn current_epoch_seconds() -> u64 {

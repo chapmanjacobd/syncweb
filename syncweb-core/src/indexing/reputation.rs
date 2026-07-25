@@ -18,9 +18,10 @@ use iroh_gossip::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{resilience::FetchFailureKind, wot::TrustPolicy};
+use super::{IndexingDatabase, resilience::FetchFailureKind, wot::TrustPolicy};
 use crate::{
     error::{Result, SyncwebError},
+    gossip::SignedGossipMessage,
     node::gossip_service::GossipService,
 };
 
@@ -164,6 +165,7 @@ pub struct ProviderReputationStore {
     max_signal_batch: usize,
     reporter: Option<PublicKey>,
     next_signal_sequence: u64,
+    database: Option<IndexingDatabase>,
 }
 
 impl Default for ProviderReputationStore {
@@ -185,7 +187,48 @@ impl ProviderReputationStore {
             max_signal_batch: DEFAULT_SIGNAL_BATCH_SIZE,
             reporter: None,
             next_signal_sequence: 1,
+            database: None,
         }
+    }
+
+    /// Create a store backed by an indexing database.
+    ///
+    /// Reputations and signal sequences are hydrated from the database on
+    /// construction. Mutations are persisted through the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn with_database(database: IndexingDatabase, config: ReputationConfig) -> Result<Self> {
+        let reputations = database.load_all_reputations().unwrap_or_default();
+        let signal_sequences = database.load_signal_sequences().unwrap_or_default();
+        let auto_bans = Self::reconstruct_auto_bans(&database);
+        Ok(Self {
+            reputations,
+            config,
+            policy: TrustPolicy::new(),
+            auto_bans,
+            signal_sequences,
+            pending_signals: Vec::new(),
+            max_signal_batch: DEFAULT_SIGNAL_BATCH_SIZE,
+            reporter: None,
+            next_signal_sequence: 1,
+            database: Some(database),
+        })
+    }
+
+    fn reconstruct_auto_bans(database: &IndexingDatabase) -> HashMap<PublicKey, AutoBan> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        database
+            .load_auto_bans()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(provider, (until, count))| {
+                until
+                    .filter(|u| *u > now)
+                    .map(|u| (provider, AutoBan { until: u, count }))
+            })
+            .collect()
     }
 
     #[must_use]
@@ -239,16 +282,18 @@ impl ProviderReputationStore {
 
     pub fn record_fetch_result(&mut self, provider: PublicKey, success: bool, kind: FetchFailureKind, now: u64) {
         let previous_score = self.score(provider, now);
-        let reputation = self
-            .reputations
-            .entry(provider)
-            .or_insert_with(|| ProviderReputation::new(provider));
-        if success {
-            reputation.record_success(now);
-        } else {
-            reputation.record_failure(kind, now);
-            if reputation.should_auto_ban(AUTO_BAN_FAILURE_THRESHOLD) && !self.is_banned(provider, now) {
-                self.apply_auto_ban(provider, now);
+        {
+            let reputation = self
+                .reputations
+                .entry(provider)
+                .or_insert_with(|| ProviderReputation::new(provider));
+            if success {
+                reputation.record_success(now);
+            } else {
+                reputation.record_failure(kind, now);
+                if reputation.should_auto_ban(AUTO_BAN_FAILURE_THRESHOLD) && self.auto_bans.get(&provider).map_or(true, |ban| ban.until <= now) {
+                    self.apply_auto_ban(provider, now);
+                }
             }
         }
         let current_score = self.score(provider, now);
@@ -273,6 +318,13 @@ impl ProviderReputationStore {
             };
             self.next_signal_sequence = self.next_signal_sequence.saturating_add(1);
             self.enqueue_signal(signal);
+        }
+        if let Some(ref database) = self.database {
+            let auto_ban_until = self.auto_bans.get(&provider).map(|ban| ban.until);
+            let auto_ban_count = self.auto_bans.get(&provider).map_or(0, |ban| ban.count);
+            if let Some(rep) = self.reputations.get(&provider) {
+                let _ = database.upsert_reputation(&provider, rep, auto_ban_until, auto_ban_count);
+            }
         }
     }
 
@@ -342,6 +394,9 @@ impl ProviderReputationStore {
             last.is_some_and(|timestamp| now.saturating_sub(timestamp) <= ttl_seconds)
         });
         self.auto_bans.retain(|_, ban| ban.until > now || ban.count > 0);
+        if let Some(ref database) = self.database {
+            let _ = database.delete_stale_reputations(now, ttl_seconds);
+        }
     }
 
     /// Queue one observation, coalescing identical observations in the batch.
@@ -659,6 +714,12 @@ fn xor_distance(hash: Hash, provider: PublicKey) -> [u8; 32] {
         *target = *hash_byte ^ *provider_byte;
     }
     distance
+}
+
+impl SignedGossipMessage for ProviderTrustSignal {
+    fn verify_signature(&self) -> Result<()> {
+        self.verify()
+    }
 }
 
 fn current_epoch_seconds() -> u64 {

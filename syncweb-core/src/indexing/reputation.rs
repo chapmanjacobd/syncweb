@@ -18,7 +18,11 @@ use iroh_gossip::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{IndexingDatabase, resilience::FetchFailureKind, wot::TrustPolicy};
+use super::{
+    IndexingDatabase,
+    resilience::FetchFailureKind,
+    wot::{ProviderTrustAction, ProviderTrustRecord, TrustPolicy},
+};
 use crate::{
     error::{Result, SyncwebError},
     gossip::SignedGossipMessage,
@@ -600,6 +604,35 @@ impl ProviderTrustSignal {
         let mut created = Self::new(provider, kind, hash, reporter, current_epoch_seconds(), sequence)?;
         created.sign(signing_key)?;
         Ok(created)
+    }
+
+    /// Create a signed trust signal from a local provider trust record.
+    ///
+    /// Maps `ProviderTrustAction::Vouch` to `ObservedSuccess` (positive
+    /// observation) and `ProviderTrustAction::Distrust` to `ObservedFailure`
+    /// (negative observation). Only vouch and distrust records can be
+    /// converted; `Trust`, `Warn`, and other actions return an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the action is not vouch/distrust or when signing
+    /// fails.
+    pub fn from_trust_record(record: &ProviderTrustRecord, signing_key: &SigningKey) -> Result<Self> {
+        Self::new_with_time(
+            record.provider,
+            match record.action {
+                ProviderTrustAction::Vouch => TrustSignalKind::ObservedSuccess,
+                ProviderTrustAction::Distrust => TrustSignalKind::ObservedFailure,
+                ProviderTrustAction::Trust | ProviderTrustAction::Warn => {
+                    return Err(SyncwebError::InvalidConfig(
+                        "only vouch/distrust records can be converted to trust signals".into(),
+                    ));
+                }
+            },
+            record.scope,
+            record.sequence,
+            signing_key,
+        )
     }
 
     /// # Errors

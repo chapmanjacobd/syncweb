@@ -1850,6 +1850,7 @@ _arguments "${_arguments_options[@]}" : \
 '--scope=[]:SCOPE:_default' \
 '--reason=[]:REASON:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--broadcast[Broadcast vouch via gossip trust stream]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1864,6 +1865,7 @@ _arguments "${_arguments_options[@]}" : \
 '--scope=[]:SCOPE:_default' \
 '--reason=[]:REASON:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--broadcast[Broadcast distrust via gossip trust stream]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

@@ -98,11 +98,10 @@ impl<T: SignedGossipMessage + Send + Sync> TopicChannel<T> {
     /// # Errors
     ///
     /// Returns an empty vector on timeout (not an error).
-    #[expect(clippy::future_not_send)]
     pub async fn collect_for(
         &self,
         stream: impl Stream<Item = std::result::Result<Event, ApiError>> + Send + 'static,
-        filter: impl Fn(&T) -> bool + Send + 'static,
+        filter: impl Fn(&T) -> bool + Send + Sync + 'static,
         timeout_duration: std::time::Duration,
     ) -> Result<Vec<T>> {
         let mut filtered = Box::pin(self.receive_from(stream));

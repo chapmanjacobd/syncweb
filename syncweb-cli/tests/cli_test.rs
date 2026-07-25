@@ -1274,3 +1274,117 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&data_dir)?;
     Ok(())
 }
+
+#[test]
+fn trust_provider_vouch_help_shows_broadcast_flag() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["trust", "provider", "vouch", "--help"])
+        .output()
+        .context("run syncweb trust provider vouch --help")?;
+    ensure!(output.status.success());
+    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(help.contains("--broadcast"), "vouch help should show --broadcast flag");
+    ensure!(
+        help.contains("Broadcast vouch via gossip trust stream"),
+        "vouch help should describe --broadcast"
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_distrust_help_shows_broadcast_flag() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["trust", "provider", "distrust", "--help"])
+        .output()
+        .context("run syncweb trust provider distrust --help")?;
+    ensure!(output.status.success());
+    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        help.contains("--broadcast"),
+        "distrust help should show --broadcast flag"
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_vouch_with_broadcast() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-vouch-broadcast-{}", uuid::Uuid::new_v4()));
+    let key = iroh::SecretKey::generate();
+    let fake_key = hex::encode(key.public().as_bytes());
+    let vouch = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "vouch",
+            &fake_key,
+            "--reason",
+            "good provider",
+            "--broadcast",
+        ])
+        .output()
+        .context("run syncweb trust provider vouch --broadcast")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        vouch.status.success(),
+        "trust provider vouch --broadcast should succeed: {:?}",
+        String::from_utf8_lossy(&vouch.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_distrust_with_broadcast() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-distrust-broadcast-{}", uuid::Uuid::new_v4()));
+    let key = iroh::SecretKey::generate();
+    let fake_key = hex::encode(key.public().as_bytes());
+    let distrust = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "distrust",
+            &fake_key,
+            "--reason",
+            "bad provider",
+            "--broadcast",
+        ])
+        .output()
+        .context("run syncweb trust provider distrust --broadcast")?;
+    let _ = std::fs::remove_dir_all(&directory);
+    ensure!(
+        distrust.status.success(),
+        "trust provider distrust --broadcast should succeed: {:?}",
+        String::from_utf8_lossy(&distrust.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn trust_provider_vouch_without_broadcast_still_local() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-vouch-local-{}", uuid::Uuid::new_v4()));
+    let key = iroh::SecretKey::generate();
+    let fake_key = hex::encode(key.public().as_bytes());
+    let vouch = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            directory.to_str().context("UTF-8 path")?,
+            "trust",
+            "provider",
+            "vouch",
+            &fake_key,
+            "--reason",
+            "good provider",
+        ])
+        .output()
+        .context("run syncweb trust provider vouch (no broadcast)")?;
+    ensure!(
+        vouch.status.success(),
+        "trust provider vouch without --broadcast should succeed: {:?}",
+        String::from_utf8_lossy(&vouch.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+    Ok(())
+}

@@ -23,6 +23,7 @@ mod mirror_test;
 mod network_test;
 mod package_test;
 mod partial_fetch_test;
+mod provider_trust_gossip_test;
 mod relay_test;
 mod reputation_test;
 mod scanner_test;

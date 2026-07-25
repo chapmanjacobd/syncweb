@@ -22,6 +22,7 @@ use crate::{
         PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
+    indexing::{ProviderReputationStore, ProviderTrustSignal},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
     storage::node_db::NodeDatabase,
@@ -162,6 +163,7 @@ pub enum IpcCommand {
         sequence: u64,
         bootstrap: Vec<String>,
     },
+    BroadcastTrustSignal(ProviderTrustSignal),
 }
 
 /// A response returned by the daemon control channel.
@@ -650,6 +652,12 @@ impl IpcServer {
                 self.handle_collection_publish(path, namespace, sequence, bootstrap)
                     .await
             }
+            IpcCommand::BroadcastTrustSignal(signal) => match self.handle_broadcast_trust_signal(signal).await {
+                Ok(()) => IpcResponse::Ok {
+                    message: "trust signal broadcast".to_owned(),
+                },
+                Err(error) => response_from_error(error),
+            },
         }
     }
 
@@ -1609,6 +1617,23 @@ impl IpcServer {
             ));
         }
         Ok(manifests)
+    }
+
+    async fn handle_broadcast_trust_signal(&self, signal: ProviderTrustSignal) -> Result<()> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation(
+                "broadcast trust signal IPC is unavailable",
+                "server has no node context",
+            )
+        })?;
+        let gossip_store = ProviderReputationStore::default();
+        let topic = gossip_store
+            .subscribe_trust_stream(context.node.gossip_service(), Vec::new())
+            .await?;
+        let (sender, _receiver) = GossipService::split(topic);
+        gossip_store
+            .publish_signal(context.node.gossip_service(), &sender, &signal)
+            .await
     }
 }
 

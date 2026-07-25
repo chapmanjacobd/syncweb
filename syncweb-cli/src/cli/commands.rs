@@ -892,6 +892,8 @@ pub enum ProviderTrustCommand {
         scope: Option<String>,
         #[arg(long, default_value = "locally vouched provider")]
         reason: String,
+        #[arg(long, help = "Broadcast vouch via gossip trust stream")]
+        broadcast: bool,
     },
     #[command(about = "Distrust a provider")]
     Distrust {
@@ -900,6 +902,8 @@ pub enum ProviderTrustCommand {
         scope: Option<String>,
         #[arg(long, default_value = "locally distrusted provider")]
         reason: String,
+        #[arg(long, help = "Broadcast distrust via gossip trust stream")]
+        broadcast: bool,
     },
 }
 

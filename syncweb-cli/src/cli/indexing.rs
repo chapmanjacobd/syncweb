@@ -696,7 +696,7 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
         } => handle_trust_revoke_delegation(data_dir, output_json, &publisher, requested_scope)?,
         TrustCommand::Provider {
             command: provider_command,
-        } => handle_provider_trust(ctx, provider_command)?,
+        } => handle_provider_trust(ctx, provider_command).await?,
         TrustCommand::Stream {
             command: stream_command,
         } => handle_trust_stream(ctx, stream_command).await?,
@@ -704,7 +704,7 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
     Ok(())
 }
 
-fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) -> Result<()> {
+async fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) -> Result<()> {
     match command {
         ProviderTrustCommand::Show { provider, hash } => {
             handle_provider_show(ctx, &provider, hash.as_deref())?;
@@ -725,12 +725,34 @@ fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) ->
             provider,
             scope,
             reason,
-        } => handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Vouch)?,
+            broadcast,
+        } => {
+            handle_provider_trust_record(
+                ctx,
+                &provider,
+                scope.as_deref(),
+                reason,
+                ProviderTrustAction::Vouch,
+                broadcast,
+            )
+            .await?;
+        }
         ProviderTrustCommand::Distrust {
             provider,
             scope,
             reason,
-        } => handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Distrust)?,
+            broadcast,
+        } => {
+            handle_provider_trust_record(
+                ctx,
+                &provider,
+                scope.as_deref(),
+                reason,
+                ProviderTrustAction::Distrust,
+                broadcast,
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -887,12 +909,13 @@ fn handle_provider_unban(ctx: &CliContext<'_>, provider: &str) -> Result<()> {
     )
 }
 
-fn handle_provider_trust_record(
+async fn handle_provider_trust_record(
     ctx: &CliContext<'_>,
     provider: &str,
     scope: Option<&str>,
     reason: String,
     action: ProviderTrustAction,
+    broadcast: bool,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -918,6 +941,25 @@ fn handle_provider_trust_record(
         state.provider_trust.push(record.clone());
         db.save_provider_trust_records(&state.provider_trust)?;
     }
+
+    if broadcast {
+        let signal = ProviderTrustSignal::from_trust_record(&record, &signing)?;
+        let node = open_node(data_dir).await?;
+        let result = async {
+            let gossip_store = ProviderReputationStore::default();
+            let topic = gossip_store
+                .subscribe_trust_stream(node.gossip_service(), Vec::new())
+                .await?;
+            let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+            gossip_store
+                .publish_signal(node.gossip_service(), &sender, &signal)
+                .await
+        }
+        .await;
+        node.stop().await?;
+        result?;
+    }
+
     print_status(
         output_json,
         serde_json::json!({

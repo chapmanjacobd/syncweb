@@ -5678,7 +5678,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__provider__subcmd__distrust)
-            opts="-h --scope --reason --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --scope --reason --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5878,7 +5878,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__provider__subcmd__vouch)
-            opts="-h --scope --reason --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --scope --reason --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

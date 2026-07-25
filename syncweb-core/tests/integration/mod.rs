@@ -20,6 +20,7 @@ mod indexing_test;
 mod iroh_node_test;
 mod lazy_fetch_test;
 mod mirror_test;
+mod moderation_test;
 mod network_test;
 mod package_test;
 mod partial_fetch_test;

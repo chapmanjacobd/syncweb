@@ -17,7 +17,7 @@ use crate::test_utils::TestDirectory;
 fn indexing_database_initializes_fts_schema() -> anyhow::Result<()> {
     let database = IndexingDatabase::in_memory()?;
 
-    anyhow::ensure!(database.schema_version()? == "1");
+    anyhow::ensure!(database.schema_version()? == "2");
     anyhow::ensure!(database.has_fts5()?);
     anyhow::ensure!(database.has_table("indexed_folders")?);
     anyhow::ensure!(database.has_table("indexed_entries")?);

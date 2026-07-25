@@ -415,6 +415,9 @@ _syncweb() {
             syncweb__subcmd__help__subcmd__moderation,ls)
                 cmd="syncweb__subcmd__help__subcmd__moderation__subcmd__ls"
                 ;;
+            syncweb__subcmd__help__subcmd__moderation,report)
+                cmd="syncweb__subcmd__help__subcmd__moderation__subcmd__report"
+                ;;
             syncweb__subcmd__help__subcmd__network,create)
                 cmd="syncweb__subcmd__help__subcmd__network__subcmd__create"
                 ;;
@@ -652,6 +655,9 @@ _syncweb() {
             syncweb__subcmd__moderation,ls)
                 cmd="syncweb__subcmd__moderation__subcmd__ls"
                 ;;
+            syncweb__subcmd__moderation,report)
+                cmd="syncweb__subcmd__moderation__subcmd__report"
+                ;;
             syncweb__subcmd__moderation__subcmd__help,help)
                 cmd="syncweb__subcmd__moderation__subcmd__help__subcmd__help"
                 ;;
@@ -660,6 +666,9 @@ _syncweb() {
                 ;;
             syncweb__subcmd__moderation__subcmd__help,ls)
                 cmd="syncweb__subcmd__moderation__subcmd__help__subcmd__ls"
+                ;;
+            syncweb__subcmd__moderation__subcmd__help,report)
+                cmd="syncweb__subcmd__moderation__subcmd__help__subcmd__report"
                 ;;
             syncweb__subcmd__network,create)
                 cmd="syncweb__subcmd__network__subcmd__create"
@@ -2298,7 +2307,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__moderation)
-            opts="ls hide"
+            opts="ls hide report"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2326,6 +2335,20 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__moderation__subcmd__ls)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__moderation__subcmd__report)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -3992,7 +4015,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__moderation)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help ls hide help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help ls hide report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -4010,7 +4033,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__moderation__subcmd__help)
-            opts="ls hide help"
+            opts="ls hide report help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -4065,6 +4088,20 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__moderation__subcmd__help__subcmd__report)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__moderation__subcmd__hide)
             opts="-h --reason --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -4094,6 +4131,28 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__moderation__subcmd__report)
+            opts="-h --reason --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --reason)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

@@ -64,7 +64,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand provider 'Manage blob provider registrations'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
-            cand report 'Submit a local moderation report'
+            cand report 'Submit a local moderation report (deprecated: use ''moderation report'')'
             cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -1507,6 +1507,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand ls 'List local moderation records'
             cand hide 'Hide a content record locally'
+            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;moderation;ls'= {
@@ -1528,14 +1529,28 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;moderation;report'= {
+            cand --reason 'Reason for the report'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --broadcast 'Also broadcast to peers via gossip'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;moderation;help'= {
             cand ls 'List local moderation records'
             cand hide 'Hide a content record locally'
+            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;moderation;help;ls'= {
         }
         &'syncweb;moderation;help;hide'= {
+        }
+        &'syncweb;moderation;help;report'= {
         }
         &'syncweb;moderation;help;help'= {
         }
@@ -1597,7 +1612,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand provider 'Manage blob provider registrations'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
-            cand report 'Submit a local moderation report'
+            cand report 'Submit a local moderation report (deprecated: use ''moderation report'')'
             cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
@@ -1866,10 +1881,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;moderation'= {
             cand ls 'List local moderation records'
             cand hide 'Hide a content record locally'
+            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
         }
         &'syncweb;help;moderation;ls'= {
         }
         &'syncweb;help;moderation;hide'= {
+        }
+        &'syncweb;help;moderation;report'= {
         }
         &'syncweb;help;completions'= {
         }

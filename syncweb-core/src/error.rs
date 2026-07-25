@@ -70,6 +70,12 @@ pub enum SyncwebError {
     #[error("namespace could not be opened")]
     NamespaceNotAvailable,
 
+    #[error("missing cryptographic signature: {0}")]
+    MissingSignature(String),
+
+    #[error("invalid cryptographic signature: {0}")]
+    InvalidSignature(String),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

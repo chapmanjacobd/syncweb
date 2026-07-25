@@ -42,7 +42,9 @@ use iroh_blobs::{
 use iroh_docs::NamespaceId;
 use iroh_gossip::{TopicId, api::Event};
 use n0_future::StreamExt;
-use syncweb_core::init::open_node;
+use syncweb_core::{
+    gossip::TopicChannel, indexing::REPORT_GOSSIP_TOPIC, init::open_node, node::gossip_service::GossipService,
+};
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
 const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
@@ -1207,6 +1209,7 @@ fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout:
 }
 
 pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
+    eprintln!("warning: 'report' is deprecated; use 'moderation report' instead");
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let content = parse_hash(&command.record)?;
@@ -1277,8 +1280,61 @@ pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Re
                 format!("hidden: {content}"),
             )?;
         }
+        ModerationCommand::Report {
+            record,
+            reason,
+            broadcast,
+        } => {
+            handle_moderation_report(ctx, &record, &reason, broadcast)?;
+        }
     }
     Ok(())
+}
+
+fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, broadcast: bool) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let content = parse_hash(record)?;
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let signing = signing_key(&identity);
+    let (db, mut state) = open_indexing_state(data_dir)?;
+
+    let report = ReportRecord::new(content, reason.to_owned(), epoch_seconds()).sign_with(&signing)?;
+    state.reports.push(report.clone());
+    db.save_content_reports(&state.reports)?;
+
+    if broadcast {
+        let rt = tokio::runtime::Handle::current();
+        let owned_dir = data_dir.to_path_buf();
+        rt.block_on(async {
+            let node = open_node(&owned_dir).await?;
+            let topic = node
+                .gossip_service()
+                .subscribe_and_join(report_topic_id(), Vec::new())
+                .await?;
+            let (sender, _receiver) = GossipService::split(topic);
+            let topic_channel = TopicChannel::<ReportRecord>::new(
+                Arc::new(node.gossip_service().inner().clone()),
+                REPORT_GOSSIP_TOPIC,
+                sender,
+            );
+            topic_channel.publish(&report).await?;
+            node.stop().await?;
+            Ok::<_, anyhow::Error>(())
+        })?;
+    }
+
+    print_status(
+        output_json,
+        serde_json::json!({
+            "status": "reported",
+            "content": content.to_string(),
+            "reason": report.reason,
+            "reporter": report.reporter,
+            "signature": report.signature,
+        }),
+        format!("reported: {content}\nreason: {}", report.reason),
+    )
 }
 
 fn handle_meta(ctx: &CliContext<'_>, command: MetaCommand) -> Result<()> {
@@ -1767,6 +1823,10 @@ const fn moderation_label(action: &ModerationAction) -> &'static str {
 
 fn attestation_topic_id() -> TopicId {
     TopicId::from_bytes(*blake3::hash(syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC).as_bytes())
+}
+
+fn report_topic_id() -> TopicId {
+    TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
 }
 
 async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {

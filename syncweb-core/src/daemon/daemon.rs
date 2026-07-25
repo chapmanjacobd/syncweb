@@ -19,7 +19,7 @@ use crate::{
     fs::{FsWatcher, Importer},
     gossip::TopicChannel,
     indexing::{
-        IndexingDatabase,
+        IndexingDatabase, REPORT_GOSSIP_TOPIC, ReportRecord,
         wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
     },
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
@@ -102,6 +102,7 @@ pub struct Daemon {
     filter_engine: tokio::sync::RwLock<Option<FilterEngine>>,
     archive_pool: Arc<ManagedPool>,
     attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 struct PendingWatch {
@@ -265,6 +266,7 @@ impl Daemon {
             filter_engine: tokio::sync::RwLock::new(filter_engine),
             archive_pool,
             attestation_listener: tokio::sync::Mutex::new(None),
+            report_listener: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -317,6 +319,7 @@ impl Daemon {
             tracing::error!(%error, "initial daemon cycle failed");
         }
         self.spawn_attestation_listener().await;
+        self.spawn_report_listener().await;
         let result = self
             .run_event_loop(
                 &mut server_task,
@@ -859,6 +862,11 @@ impl Daemon {
             handle.abort();
         }
 
+        let report_handle = self.report_listener.lock().await.take();
+        if let Some(handle) = report_handle {
+            handle.abort();
+        }
+
         let node_result = self.node.stop().await;
         self.handle.set_status(DaemonStatus::Stopped).await;
         let remove_result = self.node_db.remove_lifecycle();
@@ -881,6 +889,18 @@ impl Daemon {
             }
         });
         *self.attestation_listener.lock().await = Some(handle);
+    }
+
+    async fn spawn_report_listener(&self) {
+        let gossip_service = self.node.gossip_service().clone();
+        let data_dir = self.config.data_dir.clone();
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let handle = tokio::spawn(async move {
+            if let Err(error) = listen_for_reports(gossip_service, data_dir, shutdown).await {
+                tracing::error!(%error, "report gossip listener failed");
+            }
+        });
+        *self.report_listener.lock().await = Some(handle);
     }
 
     async fn handle_signals(&self, shutdown: broadcast::Sender<()>) -> Result<()> {
@@ -982,4 +1002,54 @@ async fn listen_for_attestations(
             }
         }
     }
+}
+
+fn report_topic_id() -> iroh_gossip::TopicId {
+    iroh_gossip::TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
+}
+
+async fn listen_for_reports(
+    gossip_service: GossipService,
+    data_dir: PathBuf,
+    mut shutdown: broadcast::Receiver<()>,
+) -> Result<()> {
+    let topic = gossip_service.subscribe_and_join(report_topic_id(), Vec::new()).await?;
+    let (sender, receiver) = GossipService::split(topic);
+    let topic_channel =
+        TopicChannel::<ReportRecord>::new(Arc::new(gossip_service.inner().clone()), REPORT_GOSSIP_TOPIC, sender);
+    let mut stream = topic_channel.receive_from(receiver);
+    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let mut existing = db.load_content_reports()?;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.recv() => {
+                tracing::info!("report listener shutting down");
+                break Ok(());
+            }
+            msg = stream.next() => {
+                if !handle_report_message(msg, &mut existing, &db) {
+                    break Ok(());
+                }
+            }
+        }
+    }
+}
+
+fn handle_report_message(msg: Option<ReportRecord>, existing: &mut Vec<ReportRecord>, db: &IndexingDatabase) -> bool {
+    let Some(report) = msg else {
+        return false;
+    };
+    tracing::debug!(
+        content = %report.content,
+        reason = %report.reason,
+        "report received via gossip"
+    );
+    if !existing.contains(&report) {
+        existing.push(report);
+        if let Err(error) = db.save_content_reports(existing) {
+            tracing::warn!(%error, "failed to persist incoming report");
+        }
+    }
+    true
 }

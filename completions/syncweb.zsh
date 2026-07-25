@@ -2239,6 +2239,20 @@ _arguments "${_arguments_options[@]}" : \
 ':record:_default' \
 && ret=0
 ;;
+(report)
+_arguments "${_arguments_options[@]}" : \
+'--reason=[Reason for the report]:REASON:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--broadcast[Also broadcast to peers via gossip]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':record -- Content hash to report:_default' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__moderation__subcmd__help_commands" \
@@ -2256,6 +2270,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (hide)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(report)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2907,6 +2925,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(report)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -2974,7 +2996,7 @@ _syncweb_commands() {
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
-'report:Submit a local moderation report' \
+'report:Submit a local moderation report (deprecated\: use '\''moderation report'\'')' \
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -3222,7 +3244,7 @@ _syncweb__subcmd__help_commands() {
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
-'report:Submit a local moderation report' \
+'report:Submit a local moderation report (deprecated\: use '\''moderation report'\'')' \
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -3473,6 +3495,7 @@ _syncweb__subcmd__help__subcmd__moderation_commands() {
     local commands; commands=(
 'ls:List local moderation records' \
 'hide:Hide a content record locally' \
+'report:Sign and submit a moderation report (broadcasts via gossip)' \
     )
     _describe -t commands 'syncweb help moderation commands' commands "$@"
 }
@@ -3485,6 +3508,11 @@ _syncweb__subcmd__help__subcmd__moderation__subcmd__hide_commands() {
 _syncweb__subcmd__help__subcmd__moderation__subcmd__ls_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help moderation ls commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__moderation__subcmd__report_commands] )) ||
+_syncweb__subcmd__help__subcmd__moderation__subcmd__report_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help moderation report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__network_commands] )) ||
 _syncweb__subcmd__help__subcmd__network_commands() {
@@ -4115,6 +4143,7 @@ _syncweb__subcmd__moderation_commands() {
     local commands; commands=(
 'ls:List local moderation records' \
 'hide:Hide a content record locally' \
+'report:Sign and submit a moderation report (broadcasts via gossip)' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb moderation commands' commands "$@"
@@ -4124,6 +4153,7 @@ _syncweb__subcmd__moderation__subcmd__help_commands() {
     local commands; commands=(
 'ls:List local moderation records' \
 'hide:Hide a content record locally' \
+'report:Sign and submit a moderation report (broadcasts via gossip)' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb moderation help commands' commands "$@"
@@ -4143,6 +4173,11 @@ _syncweb__subcmd__moderation__subcmd__help__subcmd__ls_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb moderation help ls commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__moderation__subcmd__help__subcmd__report_commands] )) ||
+_syncweb__subcmd__moderation__subcmd__help__subcmd__report_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb moderation help report commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__moderation__subcmd__hide_commands] )) ||
 _syncweb__subcmd__moderation__subcmd__hide_commands() {
     local commands; commands=()
@@ -4152,6 +4187,11 @@ _syncweb__subcmd__moderation__subcmd__hide_commands() {
 _syncweb__subcmd__moderation__subcmd__ls_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb moderation ls commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__moderation__subcmd__report_commands] )) ||
+_syncweb__subcmd__moderation__subcmd__report_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb moderation report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network_commands] )) ||
 _syncweb__subcmd__network_commands() {

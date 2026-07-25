@@ -42,6 +42,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::{Entry, NamespaceId, engine::LiveEvent};
@@ -57,7 +58,7 @@ use crate::{
 };
 
 /// Current indexing database schema version.
-pub const SCHEMA_VERSION: &str = "1";
+pub const SCHEMA_VERSION: &str = "2";
 const EVENT_CAPACITY: usize = 256;
 
 /// A content entry known to the local indexing service.
@@ -1503,14 +1504,17 @@ impl IndexingDatabase {
                 .execute("DELETE FROM content_reports_v2", [])
                 .map_err(|error| database_error("failed to clear content reports", error))?;
             for r in reports {
+                let reporter = r.reporter.as_deref().unwrap_or("cli");
                 connection
                     .execute(
-                        "INSERT INTO content_reports_v2(content_hash, reporter, reason, scope, created_at)
-                     VALUES (?1, 'cli', ?2, 'global', ?3)",
+                        "INSERT INTO content_reports_v2(content_hash, reporter, reason, scope, created_at, signature)
+                     VALUES (?1, ?2, ?3, 'global', ?4, ?5)",
                         params![
                             r.content.as_bytes().to_vec(),
+                            reporter,
                             r.reason,
                             i64::try_from(r.created_at).unwrap_or(i64::MAX),
+                            r.signature,
                         ],
                     )
                     .map_err(|error| database_error("failed to save content report", error))?;
@@ -1527,7 +1531,10 @@ impl IndexingDatabase {
     pub fn load_content_reports(&self) -> Result<Vec<ReportRecord>> {
         self.with_connection(|connection| {
             let mut stmt = connection
-                .prepare("SELECT content_hash, reason, created_at FROM content_reports_v2 ORDER BY created_at")
+                .prepare(
+                    "SELECT content_hash, reason, created_at, reporter, signature
+                     FROM content_reports_v2 ORDER BY created_at",
+                )
                 .map_err(|error| database_error("failed to prepare reports query", error))?;
             let reports = stmt
                 .query_map([], |row| {
@@ -1542,6 +1549,8 @@ impl IndexingDatabase {
                         content: Hash::from(arr),
                         reason: row.get::<_, String>(1)?,
                         created_at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                        reporter: row.get::<_, Option<String>>(3)?,
+                        signature: row.get::<_, Option<String>>(4)?,
                     })
                 })
                 .map_err(|error| database_error("failed to query content reports", error))?
@@ -2783,14 +2792,15 @@ const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
          signature TEXT,
          PRIMARY KEY(content_hash, issuer, kind)
      );
-     CREATE TABLE IF NOT EXISTS content_reports_v2 (
-         content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-         reporter TEXT NOT NULL,
-         reason TEXT NOT NULL,
-         scope TEXT NOT NULL DEFAULT 'global',
-         created_at INTEGER NOT NULL,
-         PRIMARY KEY(content_hash, reporter, reason)
-     );
+      CREATE TABLE IF NOT EXISTS content_reports_v2 (
+          content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+          reporter TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          scope TEXT NOT NULL DEFAULT 'global',
+          created_at INTEGER NOT NULL,
+          signature TEXT,
+          PRIMARY KEY(content_hash, reporter, reason)
+      );
      CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
          id INTEGER PRIMARY KEY AUTOINCREMENT,
          provider TEXT NOT NULL,
@@ -2837,6 +2847,7 @@ fn initialize_connection(connection: &Connection) -> Result<()> {
         .pragma_update(None, "foreign_keys", "ON")
         .map_err(|error| database_error("failed to enable indexing foreign keys", error))?;
     initialize_schema(connection)?;
+    migrate_database(connection)?;
     connection
         .execute(
             "INSERT INTO index_metadata(key, value)
@@ -2845,6 +2856,36 @@ fn initialize_connection(connection: &Connection) -> Result<()> {
             [SCHEMA_VERSION],
         )
         .map_err(|error| database_error("failed to persist indexing schema version", error))?;
+    Ok(())
+}
+
+/// Run one-shot migrations from earlier schema versions.
+fn migrate_database(connection: &Connection) -> Result<()> {
+    let version: String = connection
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    match version.as_str() {
+        "" | "1" => {
+            // Migration: add signature column to content_reports_v2
+            let has_col: bool = connection
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('content_reports_v2') WHERE name='signature'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !has_col {
+                connection
+                    .execute_batch("ALTER TABLE content_reports_v2 ADD COLUMN signature TEXT")
+                    .map_err(|error| database_error("failed to add signature column to content_reports_v2", error))?;
+            }
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -2871,13 +2912,22 @@ fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
     let _ = events.send(event);
 }
 
+/// Deterministic gossip topic for broadcasting signed moderation reports.
+pub const REPORT_GOSSIP_TOPIC: &[u8] = b"syncweb/reports/v1";
+
 /// A content report stored in the indexing database.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+///
+/// Reports may be cryptographically signed by the reporter's node key.
+/// Unsigned reports (reporter == `None`, signature == `None`) are legacy
+/// records from the pre-signing era or from CLI usage without a node key.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ReportRecord {
     pub content: Hash,
     pub reason: String,
     pub created_at: u64,
+    pub reporter: Option<String>,
+    pub signature: Option<String>,
 }
 
 impl ReportRecord {
@@ -2887,12 +2937,79 @@ impl ReportRecord {
             content,
             reason,
             created_at,
+            reporter: None,
+            signature: None,
         }
+    }
+
+    /// Sign this report with the node's Ed25519 signing key.
+    ///
+    /// Sets `reporter` to the hex-encoded verifying key and `signature` to
+    /// the hex-encoded Ed25519 signature over the canonical payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the canonical signing payload cannot be serialized.
+    pub fn sign_with(mut self, signing_key: &SigningKey) -> Result<Self> {
+        let payload = self.signing_payload()?;
+        let sig = signing_key.sign(&payload);
+        self.reporter = Some(hex::encode(signing_key.verifying_key().to_bytes()));
+        self.signature = Some(hex::encode(sig.to_bytes()));
+        Ok(self)
+    }
+
+    /// Verify the report's signature against the given public key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the signature is missing, malformed, or invalid.
+    pub fn verify(&self, public_key: &VerifyingKey) -> Result<()> {
+        let sig_hex = self
+            .signature
+            .as_ref()
+            .ok_or_else(|| SyncwebError::MissingSignature("report has no signature".into()))?;
+        let sig_bytes = hex::decode(sig_hex).map_err(|e| SyncwebError::operation("report signature hex decode", e))?;
+        let sig_len = sig_bytes.len();
+        let sig: [u8; 64] = sig_bytes.try_into().map_err(|_v| {
+            SyncwebError::InvalidSignature(format!(
+                "report signature has wrong length (expected 64, got {sig_len})"
+            ))
+        })?;
+        let signature = Signature::from_bytes(&sig);
+        public_key
+            .verify(&self.signing_payload()?, &signature)
+            .map_err(|e| SyncwebError::InvalidSignature(format!("report signature does not match: {e}")))
+    }
+
+    /// Canonical payload for signing: `(content_hash_bytes, reason, created_at)`.
+    ///
+    /// The reporter and signature fields are excluded — the reporter IS the
+    /// signer, and the signature cannot sign itself.
+    fn signing_payload(&self) -> Result<Vec<u8>> {
+        let canonical = (self.content.as_bytes(), &self.reason, self.created_at);
+        serde_json::to_vec(&canonical).map_err(|e| SyncwebError::operation("canonical report serialization", e))
     }
 }
 
 impl SignedGossipMessage for ReportRecord {
     fn verify_signature(&self) -> Result<()> {
-        Ok(())
+        match &self.reporter {
+            Some(reporter_hex) => {
+                let bytes = hex::decode(reporter_hex).map_err(|e| SyncwebError::operation("decode reporter key", e))?;
+                let key_len = bytes.len();
+                let key_bytes: [u8; 32] = bytes.try_into().map_err(|_v| {
+                    SyncwebError::InvalidSignature(format!(
+                        "reporter key has wrong length (expected 32, got {key_len})"
+                    ))
+                })?;
+                let public_key = VerifyingKey::from_bytes(&key_bytes)
+                    .map_err(|e| SyncwebError::InvalidSignature(format!("invalid reporter key: {e}")))?;
+                self.verify(&public_key)
+            }
+            None => {
+                // Unsigned legacy report — accept without verification
+                Ok(())
+            }
+        }
     }
 }

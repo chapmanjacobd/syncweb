@@ -115,7 +115,7 @@ pub enum Command {
         #[command(subcommand)]
         command: AttestCommand,
     },
-    #[command(about = "Submit a local moderation report")]
+    #[command(about = "Submit a local moderation report (deprecated: use 'moderation report')")]
     Report(ReportArgs),
     #[command(about = "Manage local moderation decisions")]
     Moderation {
@@ -982,5 +982,14 @@ pub enum ModerationCommand {
         record: String,
         #[arg(long, default_value = "hidden by local policy")]
         reason: String,
+    },
+    #[command(about = "Sign and submit a moderation report (broadcasts via gossip)")]
+    Report {
+        #[arg(help = "Content hash to report")]
+        record: String,
+        #[arg(long, help = "Reason for the report")]
+        reason: String,
+        #[arg(long, help = "Also broadcast to peers via gossip")]
+        broadcast: bool,
     },
 }

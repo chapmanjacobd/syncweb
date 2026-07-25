@@ -199,9 +199,11 @@ pub struct TrustDelegation {
     pub delegator: String,
     pub delegate: String,
     pub scope: Option<Hash>,
+    pub max_depth: Option<u32>,
     pub sequence: u64,
     pub issued_at: u64,
     pub expires_at: u64,
+    pub revoked_at: Option<u64>,
     pub signature: Option<String>,
 }
 
@@ -248,13 +250,26 @@ impl TrustDelegation {
             delegator: author_id(&signing_key.verifying_key()),
             delegate: author_id(delegate),
             scope,
+            max_depth: None,
             sequence,
             issued_at,
             expires_at,
+            revoked_at: None,
             signature: None,
         };
         delegation.sign(signing_key)?;
         Ok(delegation)
+    }
+
+    /// Set a maximum delegation chain depth and re-sign.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the signing key does not match the delegator.
+    pub fn with_max_depth(mut self, max_depth: u32, signing_key: &SigningKey) -> Result<Self> {
+        self.max_depth = Some(max_depth);
+        self.sign(signing_key)?;
+        Ok(self)
     }
 
     /// Sign the delegation with its declared delegator.
@@ -290,6 +305,11 @@ impl TrustDelegation {
     /// Returns an error if the signature is invalid or the delegation expired.
     pub fn verify_at(&self, now: u64) -> Result<()> {
         self.verify_signature()?;
+        if self.revoked_at.is_some_and(|revoked_at| revoked_at <= now) {
+            return Err(SyncwebError::InvalidConfig(
+                "trust delegation has been revoked".to_owned(),
+            ));
+        }
         if self.expires_at <= now {
             return Err(SyncwebError::InvalidConfig("trust delegation has expired".to_owned()));
         }
@@ -390,6 +410,46 @@ impl TrustPolicy {
         self.add_delegation_at(delegation, current_epoch_seconds())
     }
 
+    /// Revoke an active delegation matching the delegate, scope, and delegator.
+    ///
+    /// Returns `true` if any delegation was marked revoked.
+    ///
+    /// # Errors
+    ///
+    /// This method does not return errors.
+    pub fn revoke_delegation(&mut self, delegator: &str, delegate: &str, scope: Option<&Hash>) -> Result<bool> {
+        self.revoke_delegation_at(delegator, delegate, scope, current_epoch_seconds())
+    }
+
+    /// Revoke a delegation using an explicit revocation time.
+    ///
+    /// Returns `true` if any delegation was marked revoked.
+    ///
+    /// # Errors
+    ///
+    /// This method does not return errors.
+    pub fn revoke_delegation_at(
+        &mut self,
+        delegator: &str,
+        delegate: &str,
+        scope: Option<&Hash>,
+        at: u64,
+    ) -> Result<bool> {
+        let mut changed = false;
+        if let Some(delegations) = self.delegations.get_mut(delegator) {
+            for delegation in delegations.iter_mut() {
+                if delegation.delegate == delegate
+                    && delegation.scope.as_ref() == scope
+                    && delegation.revoked_at.is_none()
+                {
+                    delegation.revoked_at = Some(at);
+                    changed = true;
+                }
+            }
+        }
+        Ok(changed)
+    }
+
     /// Add a signed delegation using an explicit validation time.
     ///
     /// # Errors
@@ -449,7 +509,7 @@ impl TrustPolicy {
         if self.roots.contains(author) {
             return TrustDecision::TrustedRoot;
         }
-        if self.reaches_trusted_root(author, content, now, &mut HashSet::new()) {
+        if self.reaches_trusted_root(author, content, now, 0, &mut HashSet::new()) {
             TrustDecision::TrustedDelegation
         } else {
             TrustDecision::Untrusted
@@ -473,6 +533,7 @@ impl TrustPolicy {
         target: &str,
         content: Option<&Hash>,
         now: u64,
+        depth: u32,
         visited: &mut HashSet<String>,
     ) -> bool {
         if self.revoked_authors.contains(target) {
@@ -487,13 +548,18 @@ impl TrustPolicy {
         self.delegations.iter().any(|(delegator, delegations)| {
             delegations.iter().any(|delegation| {
                 if delegation.delegate != target
+                    || delegation.revoked_at.is_some_and(|revoked_at| revoked_at <= now)
                     || delegation.expires_at <= now
                     || (delegation.scope.is_some() && delegation.scope.as_ref() != content)
                 {
                     return false;
                 }
+                let next_depth = depth.saturating_add(1);
+                if delegation.max_depth.is_some_and(|max_depth| next_depth > max_depth) {
+                    return false;
+                }
                 let mut branch_visited = visited.clone();
-                self.reaches_trusted_root(delegator, content, now, &mut branch_visited)
+                self.reaches_trusted_root(delegator, content, now, next_depth, &mut branch_visited)
             })
         })
     }
@@ -1304,6 +1370,31 @@ impl WotService {
             .lock()
             .map_err(|error| SyncwebError::operation("Web-of-Trust policy lock poisoned", error))?
             .add_delegation_at(delegation, now)
+    }
+
+    /// Revoke a delegation matching the delegate, scope, and delegator.
+    ///
+    /// Returns `true` if any delegation was marked revoked.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy lock is poisoned.
+    pub fn revoke_delegation(&self, delegator: &str, delegate: &str, scope: Option<&Hash>) -> Result<bool> {
+        self.revoke_delegation_at(delegator, delegate, scope, current_epoch_seconds())
+    }
+
+    /// Revoke a delegation using an explicit revocation time.
+    ///
+    /// Returns `true` if any delegation was marked revoked.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy lock is poisoned.
+    pub fn revoke_delegation_at(&self, delegator: &str, delegate: &str, scope: Option<&Hash>, at: u64) -> Result<bool> {
+        self.policy
+            .lock()
+            .map_err(|error| SyncwebError::operation("Web-of-Trust policy lock poisoned", error))?
+            .revoke_delegation_at(delegator, delegate, scope, at)
     }
 
     /// Apply a signed manual provider trust record from a trusted issuer.

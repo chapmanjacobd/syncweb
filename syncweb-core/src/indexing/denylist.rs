@@ -472,10 +472,8 @@ impl DenylistService {
             .write()
             .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?
             .sync_filter_list(list)?;
-        if changed {
-            if let Some(ref database) = self.database {
-                let _ = database.upsert_filter_list(list);
-            }
+        if changed && let Some(ref database) = self.database {
+            let _ = database.upsert_filter_list(list);
         }
         Ok(changed)
     }

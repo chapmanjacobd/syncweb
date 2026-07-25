@@ -1123,7 +1123,10 @@ impl NodeDatabase {
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
         connection
-            .execute("DELETE FROM public_subscriptions WHERE hash = ?1", params![hash.to_string()])
+            .execute(
+                "DELETE FROM public_subscriptions WHERE hash = ?1",
+                params![hash.to_string()],
+            )
             .map_err(|error| SyncwebError::operation("failed to remove subscription", error))?;
         drop(connection);
         Ok(())

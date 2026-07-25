@@ -1375,7 +1375,7 @@ impl ResilienceService {
     ///
     /// Returns an error if the lease is invalid or the service state lock is
     /// poisoned.
-    pub fn record_lease(&self, lease: ProviderLease) -> Result<LeaseUpdate> {
+    pub fn record_lease(&self, lease: &ProviderLease) -> Result<LeaseUpdate> {
         let hash = lease.hash;
         let update = self
             .tracker
@@ -1384,7 +1384,7 @@ impl ResilienceService {
             .track(lease.clone())?;
         if update.changed() {
             if let Some(ref database) = self.database {
-                let _ = database.insert_provider_lease(&lease);
+                let _ = database.insert_provider_lease(lease);
             }
             self.bump_generation(hash)?;
         }
@@ -1397,7 +1397,7 @@ impl ResilienceService {
     ///
     /// Returns an error if the lease is invalid or the service state lock is
     /// poisoned.
-    pub fn track_lease(&self, lease: ProviderLease) -> Result<LeaseUpdate> {
+    pub fn track_lease(&self, lease: &ProviderLease) -> Result<LeaseUpdate> {
         self.record_lease(lease)
     }
 
@@ -1407,7 +1407,7 @@ impl ResilienceService {
     ///
     /// Returns an error if the lease is invalid or the service state lock is
     /// poisoned.
-    pub fn ingest_lease(&self, lease: ProviderLease) -> Result<LeaseUpdate> {
+    pub fn ingest_lease(&self, lease: &ProviderLease) -> Result<LeaseUpdate> {
         self.record_lease(lease)
     }
 
@@ -1954,7 +1954,7 @@ impl ResilienceService {
                     event.map_err(|error| SyncwebError::operation("provider lease gossip event failed", error))?
                 {
                     let lease = ProviderLease::from_bytes(message.content)?;
-                    self.record_lease(lease)?;
+                    self.record_lease(&lease)?;
                     tracked = tracked.saturating_add(1);
                 }
             }
@@ -2163,7 +2163,7 @@ mod tests {
         let (second_lease, _) = signed_lease(2, hash, 1)?;
         let budget = ReplicationBudget::new(3).with_max_jitter(Duration::from_secs(1));
         let service = ResilienceService::with_budget(budget);
-        service.record_lease(first_lease)?;
+        service.record_lease(&first_lease)?;
         let delay = service.jitter_delay(hash, first_key.public());
         if delay.is_zero() {
             return Ok(());
@@ -2171,7 +2171,7 @@ mod tests {
         let waiting = service.clone();
         let task = tokio::spawn(async move { waiting.wait_for_fetch_slot(hash, first_key.public()).await });
         tokio::time::sleep(Duration::from_millis(10)).await;
-        service.record_lease(second_lease)?;
+        service.record_lease(&second_lease)?;
         anyhow::ensure!(
             task.await
                 .map_err(|error| SyncwebError::operation("fetch wait task failed", error))??
@@ -2190,7 +2190,7 @@ mod tests {
         let (_, local_key) = signed_lease(2, local_only, 1)?;
 
         let service = ResilienceService::with_budget(ReplicationBudget::new(1));
-        service.record_lease(lease.clone())?;
+        service.record_lease(&lease)?;
         service.observe_provider(local_only, local_key.public())?;
 
         let health = service.health(&hash)?;
@@ -2219,7 +2219,7 @@ mod tests {
         );
 
         let high_budget = ResilienceService::with_budget(ReplicationBudget::new(3));
-        high_budget.record_lease(lease)?;
+        high_budget.record_lease(&lease)?;
         anyhow::ensure!(
             high_budget.needs_replication(&hash)?,
             "min_providers=3 is not satisfied by one verified lease"

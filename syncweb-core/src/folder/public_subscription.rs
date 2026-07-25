@@ -7,6 +7,7 @@ use crate::error::Result;
 
 /// Lightweight metadata for a folder or subscription entry.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct EntryLike {
     pub path: String,
     pub hash: Hash,
@@ -34,19 +35,23 @@ pub struct PublicSubscription {
 }
 
 impl PublicSubscription {
-    pub fn new(hash: Hash, provider: Option<iroh::EndpointAddr>, size: u64) -> Self {
+    #[must_use]
+    pub const fn new(hash: Hash, provider: Option<iroh::EndpointAddr>, size: u64) -> Self {
         Self { hash, provider, size }
     }
 
-    pub fn hash(&self) -> Hash {
+    #[must_use]
+    pub const fn hash(&self) -> Hash {
         self.hash
     }
 
-    pub fn size(&self) -> u64 {
+    #[must_use]
+    pub const fn size(&self) -> u64 {
         self.size
     }
 
-    pub fn provider(&self) -> Option<&iroh::EndpointAddr> {
+    #[must_use]
+    pub const fn provider(&self) -> Option<&iroh::EndpointAddr> {
         self.provider.as_ref()
     }
 
@@ -54,11 +59,12 @@ impl PublicSubscription {
     /// Returns `None` if no provider was recorded with this subscription.
     #[must_use]
     pub fn ticket(&self) -> Option<iroh_blobs::ticket::BlobTicket> {
-        self.provider.as_ref().map(|addr| {
-            iroh_blobs::ticket::BlobTicket::new(addr.clone(), self.hash, iroh_blobs::BlobFormat::Raw)
-        })
+        self.provider
+            .as_ref()
+            .map(|addr| iroh_blobs::ticket::BlobTicket::new(addr.clone(), self.hash, iroh_blobs::BlobFormat::Raw))
     }
 
+    #[must_use]
     pub fn label(&self) -> String {
         let hex = self.hash.to_string();
         format!("{}..", &hex[..hex.len().min(12)])

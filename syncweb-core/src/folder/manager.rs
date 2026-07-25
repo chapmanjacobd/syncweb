@@ -117,7 +117,7 @@ impl FolderManager {
         self.subscriptions.read().await.iter().copied().collect()
     }
 
-    /// Seed the subscription set from persisted hashes (e.g. loaded from SQLite
+    /// Seed the subscription set from persisted hashes (e.g. loaded from `SQLite`
     /// on startup).
     pub async fn seed_subscriptions(&self, hashes: impl IntoIterator<Item = iroh_blobs::Hash>) {
         self.subscriptions.write().await.extend(hashes);

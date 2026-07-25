@@ -1366,6 +1366,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
             [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -1385,6 +1386,18 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--expires', '--expires', [CompletionResultType]::ParameterName, 'expires')
             [CompletionResult]::new('--scope', '--scope', [CompletionResultType]::ParameterName, 'scope')
             [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
+            [CompletionResult]::new('--max-depth', '--max-depth', [CompletionResultType]::ParameterName, 'Maximum delegation chain depth (1 = delegate only)')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;trust;revoke-delegation' {
+            [CompletionResult]::new('--scope', '--scope', [CompletionResultType]::ParameterName, 'scope')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -1566,6 +1579,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;trust;help' {
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
             [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -1575,6 +1589,9 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;trust;help;delegate' {
+            break
+        }
+        'syncweb;trust;help;revoke-delegation' {
             break
         }
         'syncweb;trust;help;provider' {
@@ -2053,6 +2070,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;help;trust' {
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
             [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
+            [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
             [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
             break
@@ -2061,6 +2079,9 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;trust;delegate' {
+            break
+        }
+        'syncweb;help;trust;revoke-delegation' {
             break
         }
         'syncweb;help;trust;provider' {

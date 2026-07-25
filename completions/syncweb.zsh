@@ -1750,6 +1750,20 @@ _arguments "${_arguments_options[@]}" : \
 '--expires=[]:EXPIRES:_default' \
 '--scope=[]:SCOPE:_default' \
 '--sequence=[]:SEQUENCE:_default' \
+'--max-depth=[Maximum delegation chain depth (1 = delegate only)]:MAX_DEPTH:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':publisher:_default' \
+&& ret=0
+;;
+(revoke-delegation)
+_arguments "${_arguments_options[@]}" : \
+'--scope=[]:SCOPE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -2002,6 +2016,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (delegate)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(revoke-delegation)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2699,6 +2717,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (delegate)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(revoke-delegation)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -3567,6 +3589,7 @@ _syncweb__subcmd__help__subcmd__trust_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'revoke-delegation:Revoke a trust delegation' \
 'provider:Manage provider trust and bans' \
 'stream:Publish or subscribe to provider trust signals' \
     )
@@ -3618,6 +3641,11 @@ _syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban_commands(
 _syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help trust provider vouch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__revoke-delegation_commands] )) ||
+_syncweb__subcmd__help__subcmd__trust__subcmd__revoke-delegation_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help trust revoke-delegation commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__show_commands] )) ||
 _syncweb__subcmd__help__subcmd__trust__subcmd__show_commands() {
@@ -4449,6 +4477,7 @@ _syncweb__subcmd__trust_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'revoke-delegation:Revoke a trust delegation' \
 'provider:Manage provider trust and bans' \
 'stream:Publish or subscribe to provider trust signals' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -4465,6 +4494,7 @@ _syncweb__subcmd__trust__subcmd__help_commands() {
     local commands; commands=(
 'show:Show trust and moderation state' \
 'delegate:Delegate trust to a publisher identity' \
+'revoke-delegation:Revoke a trust delegation' \
 'provider:Manage provider trust and bans' \
 'stream:Publish or subscribe to provider trust signals' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -4522,6 +4552,11 @@ _syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban_commands(
 _syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust help provider vouch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__revoke-delegation_commands] )) ||
+_syncweb__subcmd__trust__subcmd__help__subcmd__revoke-delegation_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust help revoke-delegation commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__show_commands] )) ||
 _syncweb__subcmd__trust__subcmd__help__subcmd__show_commands() {
@@ -4636,6 +4671,11 @@ _syncweb__subcmd__trust__subcmd__provider__subcmd__unban_commands() {
 _syncweb__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust provider vouch commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__trust__subcmd__revoke-delegation_commands] )) ||
+_syncweb__subcmd__trust__subcmd__revoke-delegation_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb trust revoke-delegation commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust__subcmd__show_commands] )) ||
 _syncweb__subcmd__trust__subcmd__show_commands() {

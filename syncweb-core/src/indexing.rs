@@ -1264,14 +1264,16 @@ impl IndexingDatabase {
                 .map_err(|error| database_error("failed to clear trust delegations", error))?;
             for d in delegations {
                 connection.execute(
-                    "INSERT INTO trust_delegations(delegator, delegate, scope, sequence, issued_at, expires_at, signature)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO trust_delegations(delegator, delegate, scope, max_depth, sequence, issued_at, expires_at, revoked_at, signature)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
                         d.delegator, d.delegate,
                         d.scope.map(|h| h.as_bytes().to_vec()),
+                        d.max_depth.map(i64::from),
                         i64::try_from(d.sequence).unwrap_or(i64::MAX),
                         i64::try_from(d.issued_at).unwrap_or(i64::MAX),
                         i64::try_from(d.expires_at).unwrap_or(i64::MAX),
+                        d.revoked_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
                         d.signature,
                     ],
                 ).map_err(|error| database_error("failed to save delegation", error))?;
@@ -1289,7 +1291,7 @@ impl IndexingDatabase {
         self.with_connection(|connection| {
             let mut stmt = connection
                 .prepare(
-                    "SELECT delegator, delegate, scope, sequence, issued_at, expires_at, signature
+                    "SELECT delegator, delegate, scope, max_depth, sequence, issued_at, expires_at, revoked_at, signature
                  FROM trust_delegations ORDER BY issued_at",
                 )
                 .map_err(|error| database_error("failed to prepare delegations query", error))?;
@@ -1300,14 +1302,18 @@ impl IndexingDatabase {
                         let arr: [u8; 32] = b.try_into().ok()?;
                         Some(Hash::from(arr))
                     });
+                    let max_depth: Option<i64> = row.get(3)?;
+                    let revoked_at: Option<i64> = row.get(7)?;
                     Ok(wot::TrustDelegation {
                         delegator: row.get::<_, String>(0)?,
                         delegate: row.get::<_, String>(1)?,
                         scope: hash,
-                        sequence: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
-                        issued_at: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
-                        expires_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
-                        signature: row.get(6)?,
+                        max_depth: max_depth.map(|v| u32::try_from(v).unwrap_or(u32::MAX)),
+                        sequence: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                        issued_at: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
+                        expires_at: u64::try_from(row.get::<_, i64>(6)?).unwrap_or_default(),
+                        revoked_at: revoked_at.map(|v| u64::try_from(v).unwrap_or(u64::MAX)),
+                        signature: row.get(8)?,
                     })
                 })
                 .map_err(|error| database_error("failed to query delegations", error))?
@@ -1881,11 +1887,11 @@ impl IndexingDatabase {
                         i64::try_from(rep.total_fetches).unwrap_or(i64::MAX),
                         i64::try_from(rep.successful_fetches).unwrap_or(i64::MAX),
                         i64::try_from(rep.failed_fetches).unwrap_or(i64::MAX),
-                        i64::try_from(rep.consecutive_failures).unwrap_or(i64::MAX),
+                        i64::from(rep.consecutive_failures),
                         rep.last_success_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
                         rep.last_failure_at.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
                         auto_ban_until.map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
-                        i64::try_from(auto_ban_count).unwrap_or(i64::MAX),
+                        i64::from(auto_ban_count),
                     ],
                 )
                 .map_err(|error| database_error("failed to upsert reputation", error))?;
@@ -1915,7 +1921,7 @@ impl IndexingDatabase {
 
     /// Load auto-ban information for all providers.
     ///
-    /// Returns a map of provider to (auto_ban_until, auto_ban_count).
+    /// Returns a map of provider to (`auto_ban_until`, `auto_ban_count`).
     ///
     /// # Errors
     ///
@@ -2747,9 +2753,11 @@ const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
      delegator TEXT NOT NULL,
      delegate TEXT NOT NULL,
      scope BLOB CHECK(scope IS NULL OR length(scope) = 32),
+     max_depth INTEGER,
      sequence INTEGER NOT NULL,
      issued_at INTEGER NOT NULL,
      expires_at INTEGER NOT NULL,
+     revoked_at INTEGER,
      signature TEXT,
      PRIMARY KEY(delegator, delegate, sequence)
  );

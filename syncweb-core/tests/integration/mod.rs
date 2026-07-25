@@ -35,4 +35,5 @@ mod sort_test;
 mod stat_test;
 mod sync_test;
 mod topic_tracker_test;
+mod trust_delegate_test;
 mod wot_test;

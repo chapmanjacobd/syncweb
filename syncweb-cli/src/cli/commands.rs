@@ -839,6 +839,14 @@ pub enum TrustCommand {
         scope: Option<String>,
         #[arg(long, default_value_t = 1)]
         sequence: u64,
+        #[arg(long, help = "Maximum delegation chain depth (1 = delegate only)")]
+        max_depth: Option<u32>,
+    },
+    #[command(about = "Revoke a trust delegation")]
+    RevokeDelegation {
+        publisher: String,
+        #[arg(long)]
+        scope: Option<String>,
     },
     #[command(about = "Manage provider trust and bans")]
     Provider {

@@ -255,7 +255,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
     let resilience = indexing.resilience_service(ResilienceConfig::new(
         ReplicationBudget::new(2).with_max_jitter(Duration::ZERO),
     ));
-    resilience.record_lease(lease)?;
+    resilience.record_lease(&lease)?;
     let result = resilience
         .ensure_replication(subscriber.endpoint(), subscriber.blob_store(), hash)
         .await?;

@@ -18,8 +18,8 @@ use crate::{
     filter::{FilterConfig, FilterEngine},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, SyncMode,
-        PackageAnnouncement, PackageCatalog,
+        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PackageAnnouncement,
+        PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
     node::{gossip_service::GossipService, iroh_node::IrohNode},
@@ -327,7 +327,7 @@ impl FolderRegistry {
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.folders.len() + self.subscriptions.len()
+        self.folders.len().saturating_add(self.subscriptions.len())
     }
 
     #[must_use]
@@ -1001,10 +1001,10 @@ impl IpcServer {
                     .write()
                     .await
                     .add_subscription(subscription);
-                if let Some(ref node_db) = self.node_db {
-                    if let Err(error) = node_db.save_subscription(&hash, size) {
-                        tracing::warn!(%hash, %error, "failed to persist subscription");
-                    }
+                if let Some(ref node_db) = self.node_db
+                    && let Err(error) = node_db.save_subscription(&hash, size)
+                {
+                    tracing::warn!(%hash, %error, "failed to persist subscription");
                 }
                 IpcResponse::Ok {
                     message: format!("subscribed: {namespace}\nhash: {hash}\nsize: {size}"),
@@ -1253,22 +1253,23 @@ impl IpcServer {
 
     async fn handle_unsubscribe_command(&self, namespace: &str) -> IpcResponse {
         if namespace.starts_with("blob:") {
-            self.daemon_handle.folder_registry.write().await.remove_subscription(namespace);
-            if let Some(ref manager) = self.folder_manager {
-                if let Some(hash_str) = namespace.strip_prefix("blob:") {
-                    if let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>() {
-                        manager.drop_subscription(&hash).await;
-                    }
-                }
+            self.daemon_handle
+                .folder_registry
+                .write()
+                .await
+                .remove_subscription(namespace);
+            if let Some(ref manager) = self.folder_manager
+                && let Some(hash_str) = namespace.strip_prefix("blob:")
+                && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
+            {
+                manager.drop_subscription(&hash).await;
             }
-            if let Some(ref node_db) = self.node_db {
-                if let Some(hash_str) = namespace.strip_prefix("blob:") {
-                    if let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>() {
-                        if let Err(error) = node_db.remove_subscription(&hash) {
-                            tracing::warn!(%hash, %error, "failed to remove subscription from database");
-                        }
-                    }
-                }
+            if let Some(ref node_db) = self.node_db
+                && let Some(hash_str) = namespace.strip_prefix("blob:")
+                && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
+                && let Err(error) = node_db.remove_subscription(&hash)
+            {
+                tracing::warn!(%hash, %error, "failed to remove subscription from database");
             }
             IpcResponse::Ok {
                 message: format!("unsubscribed: {namespace}"),

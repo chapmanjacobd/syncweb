@@ -291,7 +291,9 @@ impl ProviderReputationStore {
                 reputation.record_success(now);
             } else {
                 reputation.record_failure(kind, now);
-                if reputation.should_auto_ban(AUTO_BAN_FAILURE_THRESHOLD) && self.auto_bans.get(&provider).map_or(true, |ban| ban.until <= now) {
+                if reputation.should_auto_ban(AUTO_BAN_FAILURE_THRESHOLD)
+                    && self.auto_bans.get(&provider).is_none_or(|ban| ban.until <= now)
+                {
                     self.apply_auto_ban(provider, now);
                 }
             }

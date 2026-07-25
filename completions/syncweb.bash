@@ -475,6 +475,9 @@ _syncweb() {
             syncweb__subcmd__help__subcmd__trust,provider)
                 cmd="syncweb__subcmd__help__subcmd__trust__subcmd__provider"
                 ;;
+            syncweb__subcmd__help__subcmd__trust,revoke-delegation)
+                cmd="syncweb__subcmd__help__subcmd__trust__subcmd__revoke__subcmd__delegation"
+                ;;
             syncweb__subcmd__help__subcmd__trust,show)
                 cmd="syncweb__subcmd__help__subcmd__trust__subcmd__show"
                 ;;
@@ -829,6 +832,9 @@ _syncweb() {
             syncweb__subcmd__trust,provider)
                 cmd="syncweb__subcmd__trust__subcmd__provider"
                 ;;
+            syncweb__subcmd__trust,revoke-delegation)
+                cmd="syncweb__subcmd__trust__subcmd__revoke__subcmd__delegation"
+                ;;
             syncweb__subcmd__trust,show)
                 cmd="syncweb__subcmd__trust__subcmd__show"
                 ;;
@@ -843,6 +849,9 @@ _syncweb() {
                 ;;
             syncweb__subcmd__trust__subcmd__help,provider)
                 cmd="syncweb__subcmd__trust__subcmd__help__subcmd__provider"
+                ;;
+            syncweb__subcmd__trust__subcmd__help,revoke-delegation)
+                cmd="syncweb__subcmd__trust__subcmd__help__subcmd__revoke__subcmd__delegation"
                 ;;
             syncweb__subcmd__trust__subcmd__help,show)
                 cmd="syncweb__subcmd__trust__subcmd__help__subcmd__show"
@@ -2757,7 +2766,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__trust)
-            opts="show delegate provider stream"
+            opts="show delegate revoke-delegation provider stream"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2871,6 +2880,20 @@ _syncweb() {
         syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__trust__subcmd__revoke__subcmd__delegation)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -5345,7 +5368,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help show delegate provider stream help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help show delegate revoke-delegation provider stream help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5363,7 +5386,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__delegate)
-            opts="-h --expires --scope --sequence --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --expires --scope --sequence --max-depth --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5381,6 +5404,10 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                --max-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -5393,7 +5420,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__help)
-            opts="show delegate provider stream help"
+            opts="show delegate revoke-delegation provider stream help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5521,6 +5548,20 @@ _syncweb() {
         syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__help__subcmd__revoke__subcmd__delegation)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -5848,6 +5889,28 @@ _syncweb() {
                     return 0
                     ;;
                 --reason)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__trust__subcmd__revoke__subcmd__delegation)
+            opts="-h --scope --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --scope)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

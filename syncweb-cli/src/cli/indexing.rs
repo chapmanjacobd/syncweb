@@ -207,7 +207,7 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             let now = epoch_seconds();
             for lease in state.leases {
                 if !lease.is_expired_at(now) {
-                    resilience.record_lease(lease)?;
+                    resilience.record_lease(&lease)?;
                 }
             }
             let health = resilience.health(&content_hash)?;
@@ -414,7 +414,7 @@ pub async fn download_blob(
         for ticket in tickets {
             let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
             let lease = ProviderLease::new(ticket.hash(), ticket.to_string(), 0, expires_at)?;
-            resilience.record_lease(lease)?;
+            resilience.record_lease(&lease)?;
         }
 
         let result = resilience
@@ -522,99 +522,178 @@ async fn direct_fetch_to_path(data_dir: &Path, ticket: &BlobTicket, hash: Hash, 
     Ok(())
 }
 
+fn handle_trust_show(data_dir: &Path, output_json: bool, subject: &str) -> Result<()> {
+    let (_, state) = open_indexing_state(data_dir)?;
+    let indexing = open_indexing(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let own_author = author_id(&signing_key(&identity).verifying_key());
+    let (trust, content, moderation, metadata, attestations) = if let Ok(hash) = subject.parse::<Hash>() {
+        let metadata = wot
+            .search("", 10_000)?
+            .into_iter()
+            .filter(|entry| entry.content == hash)
+            .collect::<Vec<_>>();
+        let _moderation = wot.moderation(&hash)?;
+        let decision = wot.moderation_decision(&ModerationContext::new(hash))?;
+        let attestations = state
+            .attestations
+            .iter()
+            .filter(|entry| entry.content == hash)
+            .cloned()
+            .collect::<Vec<_>>();
+        (
+            wot.policy()?.evaluate_for(&own_author, Some(&hash)),
+            Some(hash),
+            Some(decision),
+            metadata,
+            attestations,
+        )
+    } else {
+        let publisher = parse_verifying_key(subject)?;
+        (
+            wot.policy()?.evaluate(&author_id(&publisher)),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+    };
+    print_status(
+        output_json,
+        serde_json::json!({
+            "subject": subject,
+            "trust": trust_label(trust),
+            "content": content.map(|hash| hash.to_string()),
+            "moderation": moderation.as_ref().map(moderation_label),
+            "metadata": metadata,
+            "attestations": attestations,
+        }),
+        format!(
+            "subject: {subject}\ntrust: {}\nmoderation: {}",
+            trust_label(trust),
+            moderation.as_ref().map_or("-", moderation_label)
+        ),
+    )?;
+    Ok(())
+}
+
+fn handle_trust_delegate(
+    data_dir: &Path,
+    output_json: bool,
+    publisher: &str,
+    expires: Option<u64>,
+    requested_scope: Option<String>,
+    sequence: u64,
+    max_depth: Option<u32>,
+) -> Result<()> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let signing = signing_key(&identity);
+    let delegate = parse_verifying_key(publisher)?;
+    let scope = requested_scope.map(|value| parse_hash(&value)).transpose()?;
+    let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(365 * 24 * 60 * 60));
+    let mut delegation = TrustDelegation::new(&delegate, scope, sequence, expires_at, &signing)?;
+    if let Some(depth) = max_depth {
+        delegation = delegation.with_max_depth(depth, &signing)?;
+    }
+    let indexing = open_indexing(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let inserted = wot.add_delegation(delegation.clone())?;
+    if inserted {
+        state.delegations.push(delegation.clone());
+        db.save_trust_delegations(&state.delegations)?;
+    }
+    print_status(
+        output_json,
+        serde_json::json!({
+            "status": if inserted { "delegated" } else { "unchanged" },
+            "publisher": delegation.delegate,
+            "expires_at": delegation.expires_at,
+            "scope": delegation.scope.map(|hash| hash.to_string()),
+            "max_depth": delegation.max_depth,
+        }),
+        format!(
+            "delegated: {}\nexpires_at: {}{}",
+            delegation.delegate,
+            delegation.expires_at,
+            delegation
+                .max_depth
+                .map_or(String::new(), |d| format!("\nmax_depth: {d}"))
+        ),
+    )?;
+    Ok(())
+}
+
+fn handle_trust_revoke_delegation(
+    data_dir: &Path,
+    output_json: bool,
+    publisher: &str,
+    requested_scope: Option<String>,
+) -> Result<()> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let signing = signing_key(&identity);
+    let delegator = author_id(&signing.verifying_key());
+    let delegate = hex::encode(parse_verifying_key(publisher)?.to_bytes());
+    let scope = requested_scope.map(|value| parse_hash(&value)).transpose()?;
+    let indexing = open_indexing(data_dir)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
+    let wot = load_wot(&indexing, &state)?;
+    let revoked = wot.revoke_delegation(&delegator, &delegate, scope.as_ref())?;
+    if revoked {
+        for delegation in &mut state.delegations {
+            if delegation.delegator == delegator
+                && delegation.delegate == delegate
+                && delegation.scope.as_ref() == scope.as_ref()
+                && delegation.revoked_at.is_none()
+            {
+                delegation.revoked_at = Some(epoch_seconds());
+            }
+        }
+        db.save_trust_delegations(&state.delegations)?;
+    }
+    print_status(
+        output_json,
+        serde_json::json!({
+            "status": if revoked { "revoked" } else { "unchanged" },
+            "delegator": delegator,
+            "delegate": delegate,
+            "scope": scope.map(|hash| hash.to_string()),
+        }),
+        format!(
+            "{}: {delegate}{}",
+            if revoked { "revoked" } else { "unchanged" },
+            scope.map_or(String::new(), |s| format!(" (scope: {s})")),
+        ),
+    )?;
+    Ok(())
+}
+
 #[async_recursion]
 pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
-        TrustCommand::Show { subject } => {
-            let (_, state) = open_indexing_state(data_dir)?;
-            let indexing = open_indexing(data_dir)?;
-            let wot = load_wot(&indexing, &state)?;
-            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-            let own_author = author_id(&signing_key(&identity).verifying_key());
-            let (trust, content, moderation, metadata, attestations) = if let Ok(hash) = subject.parse::<Hash>() {
-                let metadata = wot
-                    .search("", 10_000)?
-                    .into_iter()
-                    .filter(|entry| entry.content == hash)
-                    .collect::<Vec<_>>();
-                let _moderation = wot.moderation(&hash)?;
-                let decision = wot.moderation_decision(&ModerationContext::new(hash))?;
-                let attestations = state
-                    .attestations
-                    .iter()
-                    .filter(|entry| entry.content == hash)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                (
-                    wot.policy()?.evaluate_for(&own_author, Some(&hash)),
-                    Some(hash),
-                    Some(decision),
-                    metadata,
-                    attestations,
-                )
-            } else {
-                let publisher = parse_verifying_key(&subject)?;
-                (
-                    wot.policy()?.evaluate(&author_id(&publisher)),
-                    None,
-                    None,
-                    Vec::new(),
-                    Vec::new(),
-                )
-            };
-            print_status(
-                output_json,
-                serde_json::json!({
-                    "subject": subject,
-                    "trust": trust_label(trust),
-                    "content": content.map(|hash| hash.to_string()),
-                    "moderation": moderation.as_ref().map(moderation_label),
-                    "metadata": metadata,
-                    "attestations": attestations,
-                }),
-                format!(
-                    "subject: {subject}\ntrust: {}\nmoderation: {}",
-                    trust_label(trust),
-                    moderation.as_ref().map_or("-", moderation_label)
-                ),
-            )?;
-        }
+        TrustCommand::Show { subject } => handle_trust_show(data_dir, output_json, &subject)?,
         TrustCommand::Delegate {
             publisher,
             expires,
             scope: requested_scope,
             sequence,
-        } => {
-            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-            let signing = signing_key(&identity);
-            let delegate = parse_verifying_key(&publisher)?;
-            let scope = requested_scope.map(|value| parse_hash(&value)).transpose()?;
-            let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(365 * 24 * 60 * 60));
-            let delegation = TrustDelegation::new(&delegate, scope, sequence, expires_at, &signing)?;
-            let indexing = open_indexing(data_dir)?;
-            let (db, mut state) = open_indexing_state(data_dir)?;
-            let wot = load_wot(&indexing, &state)?;
-            let inserted = wot.add_delegation(delegation.clone())?;
-            if inserted {
-                state.delegations.push(delegation.clone());
-                db.save_trust_delegations(&state.delegations)?;
-            }
-            print_status(
-                output_json,
-                serde_json::json!({
-                    "status": if inserted { "delegated" } else { "unchanged" },
-                    "publisher": delegation.delegate,
-                    "expires_at": delegation.expires_at,
-                    "scope": delegation.scope.map(|hash| hash.to_string()),
-                }),
-                format!(
-                    "delegated: {}\nexpires_at: {}",
-                    delegation.delegate, delegation.expires_at
-                ),
-            )?;
-        }
+            max_depth,
+        } => handle_trust_delegate(
+            data_dir,
+            output_json,
+            &publisher,
+            expires,
+            requested_scope,
+            sequence,
+            max_depth,
+        )?,
+        TrustCommand::RevokeDelegation {
+            publisher,
+            scope: requested_scope,
+        } => handle_trust_revoke_delegation(data_dir, output_json, &publisher, requested_scope)?,
         TrustCommand::Provider {
             command: provider_command,
         } => handle_provider_trust(ctx, provider_command)?,
@@ -1266,7 +1345,7 @@ fn load_resilience(state: &IndexingState) -> Result<ResilienceService> {
     let now = epoch_seconds();
     for lease in &state.leases {
         if !lease.is_expired_at(now) {
-            resilience.record_lease(lease.clone())?;
+            resilience.record_lease(lease)?;
         }
     }
     for ban in &state.provider_bans {
@@ -1323,7 +1402,7 @@ fn load_resolver(state: &IndexingState) -> Result<LinkResolver> {
             .then_with(|| left.sequence.cmp(&right.sequence))
     });
     for pointer in pointers {
-        resolver.publish(pointer)?;
+        resolver.publish(&pointer)?;
     }
     for mirror in &state.links.mirrors {
         resolver.register_mirror(mirror.parse()?)?;

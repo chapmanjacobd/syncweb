@@ -13,8 +13,8 @@ use crate::error::{Result, SyncwebError};
 use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
 use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotId, SnapshotStore};
 
-use super::public_subscription::{EntryLike, FolderLike};
 use super::SyncMode;
+use super::public_subscription::{EntryLike, FolderLike};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]

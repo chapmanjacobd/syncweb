@@ -20,12 +20,12 @@ use iroh_blobs::{Hash, ticket::BlobTicket};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::IndexingDatabase;
 use crate::{
     error::{Result, SyncwebError},
     gossip::SignedGossipMessage,
     indexing::ProviderLease,
 };
-use super::IndexingDatabase;
 
 const LINK_SIGNATURE_CONTEXT: &[u8] = b"syncweb/name-pointer/v1\0";
 const LINK_SCHEME: &str = "syncweb://";
@@ -850,12 +850,12 @@ impl LinkResolver {
             history.current = Some(pointer);
         }
         for ticket_str in result.1 {
-            if let Ok(ticket) = ticket_str.parse::<iroh_blobs::ticket::BlobTicket>() {
-                if let Ok(mirror) = Mirror::new(ticket) {
-                    let mirrors = state.mirrors.entry(mirror.hash).or_default();
-                    if !mirrors.iter().any(|existing| existing.ticket == mirror.ticket) {
-                        mirrors.push(mirror);
-                    }
+            if let Ok(ticket) = ticket_str.parse::<iroh_blobs::ticket::BlobTicket>()
+                && let Ok(mirror) = Mirror::new(ticket)
+            {
+                let mirrors = state.mirrors.entry(mirror.hash).or_default();
+                if !mirrors.iter().any(|existing| existing.ticket == mirror.ticket) {
+                    mirrors.push(mirror);
                 }
             }
         }
@@ -943,7 +943,7 @@ impl LinkResolver {
     ///
     /// Returns an error if the pointer is unsigned, invalid, or older than
     /// the current pointer.
-    pub fn publish(&self, pointer: MutablePointer) -> Result<()> {
+    pub fn publish(&self, pointer: &MutablePointer) -> Result<()> {
         pointer.verify_signature()?;
         let key = (pointer.publisher, pointer.alias.clone());
         let mut state = self.lock_state()?;
@@ -966,7 +966,7 @@ impl LinkResolver {
         }
         history.current = Some(pointer.clone());
         if let Some(ref database) = self.database {
-            let _ = database.upsert_link_pointer(&pointer);
+            let _ = database.upsert_link_pointer(pointer);
         }
         drop(state);
         Ok(())
@@ -977,7 +977,7 @@ impl LinkResolver {
     /// # Errors
     ///
     /// Returns an error if the pointer is invalid or not monotonic.
-    pub fn register_pointer(&self, pointer: MutablePointer) -> Result<()> {
+    pub fn register_pointer(&self, pointer: &MutablePointer) -> Result<()> {
         self.publish(pointer)
     }
 
@@ -986,7 +986,7 @@ impl LinkResolver {
     /// # Errors
     ///
     /// Returns an error if the pointer is invalid or not monotonic.
-    pub fn update(&self, pointer: MutablePointer) -> Result<()> {
+    pub fn update(&self, pointer: &MutablePointer) -> Result<()> {
         self.publish(pointer)
     }
 
@@ -1299,7 +1299,7 @@ mod tests {
         let resolver = LinkResolver::new();
         let first = pointer(1, "dataset", hash_one, 1, "1.0.0").expect("pointer should build");
         let name = first.link().expect("pointer should have a link");
-        resolver.publish(first.clone()).expect("first pointer should publish");
+        resolver.publish(&first).expect("first pointer should publish");
         assert_eq!(
             resolver
                 .resolve(&Link::Name(name.clone()))
@@ -1312,7 +1312,7 @@ mod tests {
             .expect("version should resolve");
         assert_eq!(pinned.manifest, hash_one);
         let second = pointer(1, "dataset", hash_two, 2, "2.0.0").expect("pointer should build");
-        resolver.publish(second).expect("second pointer should publish");
+        resolver.publish(&second).expect("second pointer should publish");
         assert_eq!(
             resolver
                 .resolve(&Link::Name(name.clone()))
@@ -1320,7 +1320,7 @@ mod tests {
                 .manifest,
             hash_two
         );
-        assert!(resolver.publish(first).is_err());
+        assert!(resolver.publish(&first).is_err());
         assert_eq!(
             resolver
                 .resolve_version(&name, "1.0.0")
@@ -1352,7 +1352,7 @@ mod tests {
 
         let resolver = LinkResolver::new();
         let name = pointer.link().expect("pointer should have a link");
-        resolver.publish(pointer).expect("pointer should publish");
+        resolver.publish(&pointer).expect("pointer should publish");
         let resolution = resolver.resolve(&Link::Name(name)).expect("name should resolve");
         assert_eq!(resolution.manifest_hash(), hash);
         assert_eq!(resolution.providers.len(), 1);

@@ -718,16 +718,17 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from help" -f -a "add" -d 'Register a blob ticket as an alternate provider'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -f -a "show" -d 'Show trust and moderation state'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -f -a "delegate" -d 'Delegate trust to a publisher identity'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -f -a "provider" -d 'Manage provider trust and bans'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate provider stream help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "show" -d 'Show trust and moderation state'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "delegate" -d 'Delegate trust to a publisher identity'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "provider" -d 'Manage provider trust and bans'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l json -d 'Emit machine-readable JSON where supported'
@@ -736,11 +737,18 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l expires -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l scope -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l sequence -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l max-depth -d 'Maximum delegation chain depth (1 = delegate only)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l scope -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l json -d 'Emit machine-readable JSON where supported'
@@ -763,6 +771,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "show" -d 'Show trust and moderation state'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "delegate" -d 'Delegate trust to a publisher identity'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "provider" -d 'Manage provider trust and bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
@@ -901,6 +910,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_su
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from provider" -f -a "add" -d 'Register a blob ticket as an alternate provider'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "show" -d 'Show trust and moderation state'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "delegate" -d 'Delegate trust to a publisher identity'
+complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "provider" -d 'Manage provider trust and bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from trust" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help; and __fish_seen_subcommand_from moderation" -f -a "ls" -d 'List local moderation records'

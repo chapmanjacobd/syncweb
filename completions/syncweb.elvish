@@ -1210,6 +1210,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand revoke-delegation 'Revoke a trust delegation'
             cand provider 'Manage provider trust and bans'
             cand stream 'Publish or subscribe to provider trust signals'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -1227,6 +1228,17 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --expires 'expires'
             cand --scope 'scope'
             cand --sequence 'sequence'
+            cand --max-depth 'Maximum delegation chain depth (1 = delegate only)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;trust;revoke-delegation'= {
+            cand --scope 'scope'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1385,6 +1397,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;trust;help'= {
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand revoke-delegation 'Revoke a trust delegation'
             cand provider 'Manage provider trust and bans'
             cand stream 'Publish or subscribe to provider trust signals'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -1392,6 +1405,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;trust;help;show'= {
         }
         &'syncweb;trust;help;delegate'= {
+        }
+        &'syncweb;trust;help;revoke-delegation'= {
         }
         &'syncweb;trust;help;provider'= {
             cand show 'Show provider reputation, bans, and trust records'
@@ -1764,12 +1779,15 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;trust'= {
             cand show 'Show trust and moderation state'
             cand delegate 'Delegate trust to a publisher identity'
+            cand revoke-delegation 'Revoke a trust delegation'
             cand provider 'Manage provider trust and bans'
             cand stream 'Publish or subscribe to provider trust signals'
         }
         &'syncweb;help;trust;show'= {
         }
         &'syncweb;help;trust;delegate'= {
+        }
+        &'syncweb;help;trust;revoke-delegation'= {
         }
         &'syncweb;help;trust;provider'= {
             cand show 'Show provider reputation, bans, and trust records'

@@ -27,7 +27,7 @@ async fn test_mirror_fetches_and_pins_blob() -> Result<()> {
     // Budget > verified providers forces ensure_replication to fetch
     let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(2)));
     let lease = ProviderLease::signed(hash, ticket.to_string(), 1, u64::MAX, provider.endpoint().secret_key())?;
-    resilience.record_lease(lease)?;
+    resilience.record_lease(&lease)?;
 
     let result = resilience
         .ensure_replication(consumer.endpoint(), consumer.blob_store(), hash)
@@ -62,7 +62,7 @@ async fn test_mirror_short_circuits_when_budget_met() -> Result<()> {
     // Budget == verified providers → no fetch needed, returns early
     let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(1)));
     let lease = ProviderLease::signed(hash, ticket.to_string(), 1, u64::MAX, provider.endpoint().secret_key())?;
-    resilience.record_lease(lease)?;
+    resilience.record_lease(&lease)?;
 
     let result = resilience
         .ensure_replication(consumer.endpoint(), consumer.blob_store(), hash)
@@ -103,7 +103,7 @@ async fn test_mirror_pins_when_already_local() -> Result<()> {
     // Budget > verified forces the code past the budget check
     let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(2)));
     let lease = ProviderLease::signed(hash, ticket.to_string(), 1, u64::MAX, provider.endpoint().secret_key())?;
-    resilience.record_lease(lease)?;
+    resilience.record_lease(&lease)?;
 
     let result = resilience
         .ensure_replication(consumer.endpoint(), consumer.blob_store(), hash)

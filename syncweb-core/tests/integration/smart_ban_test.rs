@@ -131,7 +131,7 @@ fn test_ban_and_trust_interplay() -> Result<()> {
     let content = hash(11);
     let provider_key = provider(12);
     let resilience = ResilienceService::new(ResilienceConfig::default());
-    resilience.record_lease(lease(12, content)?)?;
+    resilience.record_lease(&lease(12, content)?)?;
     let wot = WotService::in_memory(TrustPolicy::with_root(&key(13)))?;
     let trusted = ProviderTrustRecord::new_with_time(
         provider_key,
@@ -200,8 +200,8 @@ fn test_full_replication_with_smart_ban() -> Result<()> {
     let failed = provider(19);
     let successful = provider(20);
     let resilience = ResilienceService::new(ResilienceConfig::default());
-    resilience.record_lease(lease(19, content)?)?;
-    resilience.record_lease(lease(20, content)?)?;
+    resilience.record_lease(&lease(19, content)?)?;
+    resilience.record_lease(&lease(20, content)?)?;
     resilience.record_failure(
         content,
         failed,
@@ -256,8 +256,8 @@ fn test_resilience_respects_provider_trust_distrust() -> Result<()> {
     ensure!(wot.evaluate_provider_trust(distrusted, None, 10)? == ProviderTrustDecision::Distrusted);
 
     let resilience = ResilienceService::with_wot(ResilienceConfig::default(), wot);
-    resilience.record_lease(lease(30, content)?)?;
-    resilience.record_lease(lease(31, content)?)?;
+    resilience.record_lease(&lease(30, content)?)?;
+    resilience.record_lease(&lease(31, content)?)?;
     let ranked = resilience.responsible_providers(&content)?;
     ensure!(!ranked.contains(&distrusted), "distrusted provider should be excluded");
     Ok(())
@@ -274,8 +274,8 @@ fn test_resilience_respects_provider_trust_trust() -> Result<()> {
     wot.apply_provider_trust(trust)?;
 
     let resilience = ResilienceService::with_wot(ResilienceConfig::default(), wot);
-    resilience.record_lease(lease(41, content)?)?;
-    resilience.record_lease(lease(42, content)?)?;
+    resilience.record_lease(&lease(41, content)?)?;
+    resilience.record_lease(&lease(42, content)?)?;
     let ranked = resilience.responsible_providers(&content)?;
     ensure!(
         ranked.first() == Some(&trusted),
@@ -293,9 +293,9 @@ fn test_resilience_reputation_weighted_selection() -> Result<()> {
     let mut rep_config = ReputationConfig::default();
     rep_config.min_samples = 1;
     let resilience = ResilienceService::with_reputation(config, rep_config, None);
-    resilience.record_lease(lease(50, content)?)?;
-    resilience.record_lease(lease(51, content)?)?;
-    resilience.record_lease(lease(52, content)?)?;
+    resilience.record_lease(&lease(50, content)?)?;
+    resilience.record_lease(&lease(51, content)?)?;
+    resilience.record_lease(&lease(52, content)?)?;
     let rank_store = resilience.reputation_store();
     {
         let mut store = rank_store.lock().map_err(|e| anyhow::anyhow!("lock poisoned: {e}"))?;
@@ -316,7 +316,7 @@ fn test_resilience_reputation_weighted_selection() -> Result<()> {
 fn test_resilience_no_wot_service() -> Result<()> {
     let content = hash(60);
     let resilience = ResilienceService::new(ResilienceConfig::default());
-    resilience.record_lease(lease(60, content)?)?;
+    resilience.record_lease(&lease(60, content)?)?;
     let ranked = resilience.responsible_providers(&content)?;
     ensure!(ranked.len() == 1, "without WoT, all providers should be returned");
     Ok(())

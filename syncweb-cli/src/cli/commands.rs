@@ -812,6 +812,8 @@ pub enum LinkCommand {
         private: bool,
         #[arg(long, help = "Private-link expiration as a Unix timestamp")]
         expires: Option<u64>,
+        #[arg(long, help = "Namespace (folder) to publish the link into")]
+        publish: Option<String>,
     },
     #[command(about = "Resolve a stable link")]
     Resolve {
@@ -820,7 +822,11 @@ pub enum LinkCommand {
         version: Option<String>,
     },
     #[command(about = "Revoke a private capability link")]
-    Revoke { link: String },
+    Revoke {
+        link: String,
+        #[arg(long, help = "Broadcast revocation to peers via gossip")]
+        broadcast: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

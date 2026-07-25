@@ -9,6 +9,8 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
+    future::Future,
+    pin::Pin,
     str::{FromStr, Split},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -657,6 +659,18 @@ pub struct LinkResolution {
 }
 
 impl LinkResolution {
+    /// Create a new resolution containing just a manifest hash.
+    #[must_use]
+    pub const fn new(manifest: Hash) -> Self {
+        Self {
+            manifest,
+            version: None,
+            sequence: None,
+            providers: Vec::new(),
+            tickets: Vec::new(),
+        }
+    }
+
     /// Return the resolved hash.
     #[must_use]
     pub const fn hash(&self) -> Hash {
@@ -802,11 +816,25 @@ struct PointerHistory {
     versions: BTreeMap<String, MutablePointer>,
 }
 
+/// Provider fetch hook for network-aware resolution.
+pub type ProviderFetch =
+    Arc<dyn Fn(NameLink) -> Pin<Box<dyn Future<Output = Result<LinkResolution>> + Send>> + Send + Sync>;
+
 /// In-memory resolver and mirror registry.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LinkResolver {
     state: Arc<Mutex<ResolverState>>,
     database: Option<IndexingDatabase>,
+    provider_fetch: Option<ProviderFetch>,
+}
+
+impl fmt::Debug for LinkResolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkResolver")
+            .field("state", &self.state)
+            .field("database", &self.database)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for LinkResolver {
@@ -814,6 +842,7 @@ impl Default for LinkResolver {
         Self {
             state: Arc::new(Mutex::new(ResolverState::default())),
             database: None,
+            provider_fetch: None,
         }
     }
 }
@@ -823,6 +852,41 @@ impl LinkResolver {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a resolver with a provider fetch hook for network resolution.
+    ///
+    /// The fetch function is called when a name link cannot be resolved
+    /// locally, allowing the caller to query remote peers via iroh-docs.
+    #[must_use]
+    pub fn with_provider_fetch(fetch: ProviderFetch) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(ResolverState::default())),
+            database: None,
+            provider_fetch: Some(fetch),
+        }
+    }
+
+    /// Attempt to resolve a name link by querying remote peers.
+    ///
+    /// Returns `None` if no provider fetch hook is registered or the link
+    /// is not a name link. The caller is responsible for falling back to
+    /// local resolution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the remote fetch fails.
+    pub async fn resolve_remote(&self, link: &Link) -> Result<Option<LinkResolution>> {
+        match link {
+            Link::Name(name) => {
+                if let Some(ref fetch) = self.provider_fetch {
+                    fetch(name.clone()).await.map(Some)
+                } else {
+                    Ok(None)
+                }
+            }
+            Link::Content(_) | Link::Private(_) => Ok(None),
+        }
     }
 
     /// Create a resolver backed by an indexing database.
@@ -859,9 +923,13 @@ impl LinkResolver {
                 }
             }
         }
+        for link in result.2 {
+            state.revoked.insert(link.revocation_key());
+        }
         Ok(Self {
             state: Arc::new(Mutex::new(state)),
             database: Some(database),
+            provider_fetch: None,
         })
     }
 
@@ -1255,6 +1323,15 @@ impl SignedGossipMessage for PrivateLink {
     fn verify_signature(&self) -> Result<()> {
         Ok(())
     }
+}
+
+/// Deterministic gossip topic for broadcasting link revocations.
+pub const REVOCATION_GOSSIP_TOPIC: &[u8] = b"syncweb/link-revocations/v1";
+
+/// Deterministic gossip topic ID for link revocations.
+#[must_use]
+pub fn revocation_topic_id() -> iroh_gossip::TopicId {
+    iroh_gossip::TopicId::from_bytes(*blake3::hash(REVOCATION_GOSSIP_TOPIC).as_bytes())
 }
 
 #[cfg(test)]

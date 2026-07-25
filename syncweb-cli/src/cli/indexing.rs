@@ -22,10 +22,10 @@ use syncweb_core::{
     indexing::{
         Attestation, AttestationKind, BanRecord, CatalogRecord, ContentLink, DenylistRule, FilterList,
         IndexingDatabase, IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext,
-        ModerationRecord, MutablePointer, PrivateLink, ProviderLease, ProviderReputationStore, ProviderTrustAction,
-        ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget, ReportRecord,
-        ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision, TrustDelegation, TrustPolicy,
-        TrustSignalKind, WotService,
+        ModerationRecord, MutablePointer, NameLink, PrivateLink, ProviderLease, ProviderReputationStore,
+        ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget,
+        ReportRecord, ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision, TrustDelegation,
+        TrustPolicy, TrustSignalKind, WotService,
     },
     node::identity::IdentityManager,
 };
@@ -237,7 +237,7 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
     Ok(())
 }
 
-pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
+pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
@@ -248,55 +248,18 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             sequence,
             private,
             expires,
+            publish,
         } => {
-            let hash = hash_source(&source)?;
-            let (db, mut state) = open_indexing_state(data_dir)?;
-            let link = if private {
-                let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
-                let link = PrivateLink::generate(hash, expires_at)?;
-                state.links.revoked.retain(|existing| existing != &link);
-                Link::Private(link)
-            } else if let Some(alias) = name {
-                let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-                let signing_key = signing_key(&identity);
-                let pointer_sequence = if sequence == 0 {
-                    state
-                        .links
-                        .pointers
-                        .iter()
-                        .filter(|pointer| pointer.publisher == identity.node_id() && pointer.alias == alias)
-                        .map(|pointer| pointer.sequence)
-                        .max()
-                        .unwrap_or(0)
-                        .saturating_add(1)
-                } else {
-                    sequence
-                };
-                let mut pointer = MutablePointer::signed_with_secret_key(
-                    identity.node_id(),
-                    alias,
-                    hash,
-                    pointer_sequence,
-                    identity.secret_key(),
-                )?;
-                if let Some(version_value) = version {
-                    pointer = pointer.with_version(version_value);
-                    pointer.sign(&signing_key)?;
-                }
-                let link = pointer.link()?;
-                state.links.pointers.push(pointer);
-                Link::Name(link)
-            } else {
-                ensure!(version.is_none(), "--version requires --name");
-                ensure!(sequence == 0, "--sequence requires --name");
-                Link::Content(ContentLink::new(hash))
+            let opts = LinkCreateOptions {
+                source,
+                name,
+                version,
+                sequence,
+                private,
+                expires,
+                publish,
             };
-            db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
-            print_status(
-                output_json,
-                serde_json::json!({"status": "created", "link": link.to_string(), "hash": hash.to_string()}),
-                format!("link: {link}\nhash: {hash}"),
-            )?;
+            handle_link_create(ctx, opts).await?;
         }
         LinkCommand::Resolve { link, version } => {
             let (_, state) = open_indexing_state(data_dir)?;
@@ -335,7 +298,7 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
                 ),
             )?;
         }
-        LinkCommand::Revoke { link } => {
+        LinkCommand::Revoke { link, broadcast } => {
             if !confirm_destructive("revoke this link", output_json)? {
                 println!("aborted");
                 return Ok(());
@@ -345,9 +308,25 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             let resolver = load_resolver(&state)?;
             resolver.revoke(&parsed)?;
             if !state.links.revoked.contains(&parsed) {
-                state.links.revoked.push(parsed);
+                state.links.revoked.push(parsed.clone());
             }
             db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
+
+            if broadcast {
+                let node = open_node(data_dir).await?;
+                let topic_id = revocation_topic_id();
+                let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+                let (sender, _receiver) = GossipService::split(topic);
+                let topic_channel = TopicChannel::<PrivateLink>::new(
+                    Arc::new(node.gossip_service().inner().clone()),
+                    syncweb_core::indexing::REVOCATION_GOSSIP_TOPIC,
+                    sender,
+                );
+                topic_channel.publish(&parsed).await?;
+                tracing::info!(manifest = %parsed.manifest, "revocation broadcast via gossip");
+                node.stop().await?;
+            }
+
             print_status(
                 output_json,
                 serde_json::json!({"status": "revoked", "link": link}),
@@ -355,6 +334,134 @@ pub fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+struct LinkCreateOptions {
+    source: PathBuf,
+    name: Option<String>,
+    version: Option<String>,
+    sequence: u64,
+    private: bool,
+    expires: Option<u64>,
+    publish: Option<String>,
+}
+
+fn create_private_link(hash: Hash, expires: Option<u64>, state: &mut IndexingState) -> Result<Link> {
+    let expires_at = expires.unwrap_or_else(|| epoch_seconds().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
+    let link = PrivateLink::generate(hash, expires_at)?;
+    state.links.revoked.retain(|existing| existing != &link);
+    Ok(Link::Private(link))
+}
+
+fn create_named_link(
+    alias: String,
+    hash: Hash,
+    version: Option<String>,
+    sequence: u64,
+    state: &mut IndexingState,
+    data_dir: &Path,
+) -> Result<Link> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let signing_key = signing_key(&identity);
+    let pointer_sequence = if sequence == 0 {
+        state
+            .links
+            .pointers
+            .iter()
+            .filter(|pointer| pointer.publisher == identity.node_id() && pointer.alias == alias)
+            .map(|pointer| pointer.sequence)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1)
+    } else {
+        sequence
+    };
+    let mut pointer = MutablePointer::signed_with_secret_key(
+        identity.node_id(),
+        alias,
+        hash,
+        pointer_sequence,
+        identity.secret_key(),
+    )?;
+    if let Some(version_value) = version {
+        pointer = pointer.with_version(version_value);
+        pointer.sign(&signing_key)?;
+    }
+    let link = pointer.link()?;
+    state.links.pointers.push(pointer);
+    Ok(Link::Name(link))
+}
+
+async fn publish_name_link(
+    name_link: &NameLink,
+    folder: &SyncwebFolder,
+    state: &IndexingState,
+    namespace: NamespaceId,
+) -> Result<()> {
+    let pointer = state
+        .links
+        .pointers
+        .iter()
+        .find(|p| p.publisher == name_link.publisher && p.alias == name_link.alias);
+    if let Some(p) = pointer {
+        let payload = serde_json::to_vec(p)?;
+        folder
+            .set_blob(format!("sys/links/mutable/{}", p.alias), payload)
+            .await?;
+        tracing::info!(alias = %p.alias, namespace = %namespace, "published mutable pointer to folder");
+    }
+    Ok(())
+}
+
+async fn publish_link(namespace_str: String, link: &Link, state: &IndexingState, data_dir: &Path) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = namespace_str.parse::<NamespaceId>()?;
+    let folder = manager.get(namespace).await?;
+    match link {
+        Link::Name(name_link) => publish_name_link(name_link, &folder, state, namespace).await?,
+        Link::Private(private_link) => {
+            let payload = serde_json::to_vec(private_link)?;
+            folder
+                .set_blob(format!("sys/links/private/{}", private_link.capability), payload)
+                .await?;
+            tracing::info!(namespace = %namespace, "published private link to folder");
+        }
+        Link::Content(_) => {
+            tracing::warn!("--publish has no effect on immutable content links");
+        }
+        _ => {}
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let hash = hash_source(&opts.source)?;
+    let (db, mut state) = open_indexing_state(data_dir)?;
+    let link = if opts.private {
+        create_private_link(hash, opts.expires, &mut state)?
+    } else if let Some(alias) = opts.name {
+        create_named_link(alias, hash, opts.version, opts.sequence, &mut state, data_dir)?
+    } else {
+        ensure!(opts.version.is_none(), "--version requires --name");
+        ensure!(opts.sequence == 0, "--sequence requires --name");
+        Link::Content(ContentLink::new(hash))
+    };
+    db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
+
+    if let Some(namespace_str) = opts.publish {
+        publish_link(namespace_str, &link, &state, data_dir).await?;
+    }
+
+    print_status(
+        output_json,
+        serde_json::json!({"status": "created", "link": link.to_string(), "hash": hash.to_string()}),
+        format!("link: {link}\nhash: {hash}"),
+    )?;
     Ok(())
 }
 
@@ -1827,6 +1934,10 @@ fn attestation_topic_id() -> TopicId {
 
 fn report_topic_id() -> TopicId {
     TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
+}
+
+fn revocation_topic_id() -> TopicId {
+    TopicId::from_bytes(*blake3::hash(syncweb_core::indexing::REVOCATION_GOSSIP_TOPIC).as_bytes())
 }
 
 async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {

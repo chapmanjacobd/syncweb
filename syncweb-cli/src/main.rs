@@ -144,7 +144,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
-        Command::Link { command } => cli::indexing::handle_link(&ctx, command)?,
+        Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;

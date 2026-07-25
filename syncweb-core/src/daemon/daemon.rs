@@ -20,6 +20,7 @@ use crate::{
     gossip::TopicChannel,
     indexing::{
         IndexingDatabase, REPORT_GOSSIP_TOPIC, ReportRecord,
+        links::{MutablePointer, PrivateLink, REVOCATION_GOSSIP_TOPIC},
         wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
     },
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
@@ -103,6 +104,7 @@ pub struct Daemon {
     archive_pool: Arc<ManagedPool>,
     attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    revocation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 struct PendingWatch {
@@ -267,6 +269,7 @@ impl Daemon {
             archive_pool,
             attestation_listener: tokio::sync::Mutex::new(None),
             report_listener: tokio::sync::Mutex::new(None),
+            revocation_listener: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -320,6 +323,7 @@ impl Daemon {
         }
         self.spawn_attestation_listener().await;
         self.spawn_report_listener().await;
+        self.spawn_revocation_listener().await;
         let result = self
             .run_event_loop(
                 &mut server_task,
@@ -867,6 +871,11 @@ impl Daemon {
             handle.abort();
         }
 
+        let revocation_handle = self.revocation_listener.lock().await.take();
+        if let Some(handle) = revocation_handle {
+            handle.abort();
+        }
+
         let node_result = self.node.stop().await;
         self.handle.set_status(DaemonStatus::Stopped).await;
         let remove_result = self.node_db.remove_lifecycle();
@@ -901,6 +910,18 @@ impl Daemon {
             }
         });
         *self.report_listener.lock().await = Some(handle);
+    }
+
+    async fn spawn_revocation_listener(&self) {
+        let gossip_service = self.node.gossip_service().clone();
+        let data_dir = self.config.data_dir.clone();
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let handle = tokio::spawn(async move {
+            if let Err(error) = listen_for_revocations(gossip_service, data_dir, shutdown).await {
+                tracing::error!(%error, "revocation gossip listener failed");
+            }
+        });
+        *self.revocation_listener.lock().await = Some(handle);
     }
 
     async fn handle_signals(&self, shutdown: broadcast::Sender<()>) -> Result<()> {
@@ -1006,6 +1027,63 @@ async fn listen_for_attestations(
 
 fn report_topic_id() -> iroh_gossip::TopicId {
     iroh_gossip::TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
+}
+
+fn revocation_topic_id() -> iroh_gossip::TopicId {
+    iroh_gossip::TopicId::from_bytes(*blake3::hash(REVOCATION_GOSSIP_TOPIC).as_bytes())
+}
+
+async fn listen_for_revocations(
+    gossip_service: GossipService,
+    data_dir: PathBuf,
+    mut shutdown: broadcast::Receiver<()>,
+) -> Result<()> {
+    let topic = gossip_service
+        .subscribe_and_join(revocation_topic_id(), Vec::new())
+        .await?;
+    let (sender, receiver) = GossipService::split(topic);
+    let topic_channel = TopicChannel::<PrivateLink>::new(
+        Arc::new(gossip_service.inner().clone()),
+        REVOCATION_GOSSIP_TOPIC,
+        sender,
+    );
+    let mut stream = topic_channel.receive_from(receiver);
+    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let (pointers, mirrors, mut revoked) = db.load_links()?;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.recv() => {
+                tracing::info!("revocation listener shutting down");
+                break Ok(());
+            }
+            msg = stream.next() => {
+                handle_revocation_message(msg, &mut revoked, &pointers, &mirrors, &db);
+            }
+        }
+    }
+}
+
+fn handle_revocation_message(
+    msg: Option<PrivateLink>,
+    revoked: &mut Vec<PrivateLink>,
+    pointers: &[MutablePointer],
+    mirrors: &[String],
+    db: &IndexingDatabase,
+) {
+    let Some(revocation) = msg else {
+        return;
+    };
+    if !revoked.contains(&revocation) {
+        revoked.push(revocation.clone());
+        tracing::debug!(
+            manifest = %revocation.manifest,
+            "revocation received via gossip"
+        );
+        if let Err(error) = db.save_links(pointers, mirrors, revoked) {
+            tracing::warn!(%error, "failed to persist incoming revocation");
+        }
+    }
 }
 
 async fn listen_for_reports(

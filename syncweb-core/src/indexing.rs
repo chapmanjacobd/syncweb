@@ -14,8 +14,8 @@ pub use catalog::{Catalog, CatalogMetadata, CatalogRecord, CatalogService};
 pub use denylist::{Denied, DenyReason, Denylist, DenylistRule, DenylistService, FilterContext, FilterList};
 pub use links::{
     CapabilityLink, ContentLink, ImmutableLink, Link, LinkResolution, LinkResolver, Mirror, MutableLink,
-    MutablePointer, NameLink, PrivateLink, ResolveOptions, ResolvedLink, SignedMutablePointer, SyncwebLink,
-    current_epoch_seconds, fetch_from_mirrors,
+    MutablePointer, NameLink, PrivateLink, ProviderFetch, REVOCATION_GOSSIP_TOPIC, ResolveOptions, ResolvedLink,
+    SignedMutablePointer, SyncwebLink, current_epoch_seconds, fetch_from_mirrors, revocation_topic_id,
 };
 pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use reputation::{
@@ -58,7 +58,7 @@ use crate::{
 };
 
 /// Current indexing database schema version.
-pub const SCHEMA_VERSION: &str = "2";
+pub const SCHEMA_VERSION: &str = "3";
 const EVENT_CAPACITY: usize = 256;
 
 /// A content entry known to the local indexing service.
@@ -1085,7 +1085,22 @@ impl IndexingDatabase {
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|error| database_error("failed to read mirror rows", error))?;
 
-            let revoked = Vec::new();
+            let mut revoked = Vec::new();
+            if let Ok(mut rev_stmt) = connection.prepare("SELECT manifest, capability, revoked_at FROM revoked_links")
+                && let Ok(rev_rows) = rev_stmt.query_map([], |row| {
+                    let manifest_bytes: Vec<u8> = row.get(0)?;
+                    let capability: String = row.get(1)?;
+                    let manifests: [u8; 32] = manifest_bytes.try_into().unwrap_or([0_u8; 32]);
+                    let hash = Hash::from_bytes(manifests);
+                    Ok((hash, capability))
+                })
+            {
+                for row in rev_rows.flatten() {
+                    if let Ok(link) = PrivateLink::new(row.0, row.1, u64::MAX) {
+                        revoked.push(link);
+                    }
+                }
+            }
             Ok((pointers, mirrors, revoked))
         })
     }
@@ -1099,13 +1114,15 @@ impl IndexingDatabase {
         &self,
         pointers: &[links::MutablePointer],
         mirrors: &[String],
-        _revoked: &[links::PrivateLink],
+        revoked: &[links::PrivateLink],
     ) -> Result<()> {
         self.with_connection(|connection| {
             connection.execute("DELETE FROM stable_links", [])
                 .map_err(|error| database_error("failed to clear stable links", error))?;
             connection.execute("DELETE FROM link_mirrors", [])
                 .map_err(|error| database_error("failed to clear link mirrors", error))?;
+            connection.execute("DELETE FROM revoked_links", [])
+                .map_err(|error| database_error("failed to clear revoked links", error))?;
             let now = now_seconds();
             for pointer in pointers {
                 let payload = serde_json::to_vec(pointer)
@@ -1130,6 +1147,13 @@ impl IndexingDatabase {
                      VALUES ('', 'local', ?1, 0, ?2)",
                     params![uri, now],
                 ).map_err(|error| database_error("failed to save mirror", error))?;
+            }
+            for link in revoked {
+                connection.execute(
+                    "INSERT OR REPLACE INTO revoked_links(manifest, capability, revoked_at)
+                     VALUES (?1, ?2, ?3)",
+                    params![link.manifest.as_bytes(), link.capability, now],
+                ).map_err(|error| database_error("failed to save revoked link", error))?;
             }
             Ok(())
         })
@@ -2707,6 +2731,12 @@ priority INTEGER NOT NULL DEFAULT 0,
 updated_at INTEGER NOT NULL,
 PRIMARY KEY(link, provider)
 );
+CREATE TABLE IF NOT EXISTS revoked_links (
+     manifest BLOB NOT NULL CHECK(length(manifest) = 32),
+     capability TEXT NOT NULL,
+     revoked_at INTEGER NOT NULL,
+     PRIMARY KEY(manifest, capability)
+);
      CREATE TABLE IF NOT EXISTS denylist_rules (
          rule_type TEXT NOT NULL,
          rule_value BLOB NOT NULL,
@@ -2883,6 +2913,19 @@ fn migrate_database(connection: &Connection) -> Result<()> {
                     .execute_batch("ALTER TABLE content_reports_v2 ADD COLUMN signature TEXT")
                     .map_err(|error| database_error("failed to add signature column to content_reports_v2", error))?;
             }
+        }
+        "2" => {
+            // Migration: add revoked_links table
+            connection
+                .execute_batch(
+                    "CREATE TABLE IF NOT EXISTS revoked_links (
+                        manifest BLOB NOT NULL CHECK(length(manifest) = 32),
+                        capability TEXT NOT NULL,
+                        revoked_at INTEGER NOT NULL,
+                        PRIMARY KEY(manifest, capability)
+                    )",
+                )
+                .map_err(|error| database_error("failed to create revoked_links table", error))?;
         }
         _ => {}
     }

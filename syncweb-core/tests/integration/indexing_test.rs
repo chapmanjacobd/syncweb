@@ -4,7 +4,10 @@ use anyhow::Context;
 use iroh_blobs::Hash;
 use syncweb_core::{
     folder::{FolderManager, SyncMode},
-    indexing::{IndexingDatabase, IndexingEvent, IndexingService, ProviderLease, ReplicationBudget, ResilienceConfig},
+    indexing::{
+        IndexingDatabase, IndexingEvent, IndexingService, ProviderLease, ReplicationBudget, ResilienceConfig,
+        SCHEMA_VERSION,
+    },
     node::{
         identity::IdentityManager,
         iroh_node::{IrohNode, RelayMode},
@@ -17,7 +20,7 @@ use crate::test_utils::TestDirectory;
 fn indexing_database_initializes_fts_schema() -> anyhow::Result<()> {
     let database = IndexingDatabase::in_memory()?;
 
-    anyhow::ensure!(database.schema_version()? == "2");
+    anyhow::ensure!(database.schema_version()? == SCHEMA_VERSION);
     anyhow::ensure!(database.has_fts5()?);
     anyhow::ensure!(database.has_table("indexed_folders")?);
     anyhow::ensure!(database.has_table("indexed_entries")?);

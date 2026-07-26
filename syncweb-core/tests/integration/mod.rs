@@ -33,6 +33,7 @@ mod search_test;
 mod session_test;
 mod smart_ban_test;
 mod snapshot_test;
+mod sort_enrich_test;
 mod sort_test;
 mod stat_test;
 mod sync_test;

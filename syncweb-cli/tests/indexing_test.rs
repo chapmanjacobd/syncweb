@@ -92,7 +92,10 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
     let attested = run(&data_dir, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
     assert_success(&attested, "attest")?;
 
-    let reported = run(&data_dir, &["moderation", "report", CONTENT_HASH, "--reason", "test report"])?;
+    let reported = run(
+        &data_dir,
+        &["moderation", "report", CONTENT_HASH, "--reason", "test report"],
+    )?;
     assert_success(&reported, "moderation report")?;
 
     let hidden = run(&data_dir, &["moderation", "hide", CONTENT_HASH])?;

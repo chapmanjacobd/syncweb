@@ -163,6 +163,9 @@ pub enum IpcCommand {
         sequence: u64,
         bootstrap: Vec<String>,
     },
+    EnrichSort {
+        path: PathBuf,
+    },
     BroadcastTrustSignal(ProviderTrustSignal),
 }
 
@@ -178,6 +181,7 @@ pub enum IpcResponse {
     ImportFilesComplete { entries: u64 },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
+    EnrichData(HashMap<String, usize>),
     Error { message: String },
 }
 
@@ -594,37 +598,65 @@ impl IpcServer {
         }
     }
 
+    async fn handle_status(&self) -> IpcResponse {
+        IpcResponse::Status(self.daemon_handle.state.read().await.status)
+    }
+
+    async fn handle_list_folders(&self) -> IpcResponse {
+        let folders = self.daemon_handle.folder_registry.read().await.statuses();
+        IpcResponse::FolderList(folders)
+    }
+
+    fn handle_set_log_level(level: &str) -> IpcResponse {
+        IpcResponse::Ok {
+            message: format!("log level set to {level}"),
+        }
+    }
+
+    async fn handle_import_archive_response(
+        &self,
+        input: PathBuf,
+        target: PathBuf,
+        filter: Option<FilterConfig>,
+    ) -> IpcResponse {
+        match self.handle_import_archive(input, target, filter).await {
+            Ok(result) => IpcResponse::ImportComplete(Box::new(result)),
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_export_archive_response(
+        &self,
+        namespace: String,
+        version: Option<String>,
+        output: PathBuf,
+    ) -> IpcResponse {
+        match self.handle_export_archive(namespace, version, output).await {
+            Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
+            Err(error) => response_from_error(error),
+        }
+    }
+
     /// Handle one decoded request without requiring a socket.
     pub async fn handle_request(&self, request: IpcRequest) -> IpcResponse {
         match request.command {
-            IpcCommand::Status => IpcResponse::Status(self.daemon_handle.state.read().await.status),
-            IpcCommand::ListFolders => {
-                let folders = self.daemon_handle.folder_registry.read().await.statuses();
-                IpcResponse::FolderList(folders)
-            }
+            IpcCommand::Status => self.handle_status().await,
+            IpcCommand::ListFolders => self.handle_list_folders().await,
             IpcCommand::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
             IpcCommand::RemoveFolder { namespace } => self.handle_remove_folder(namespace).await,
             IpcCommand::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
-            IpcCommand::SetLogLevel { level } => IpcResponse::Ok {
-                message: format!("log level set to {level}"),
-            },
+            IpcCommand::SetLogLevel { level } => Self::handle_set_log_level(&level),
             IpcCommand::ReloadConfig => self.handle_reload_config(),
             IpcCommand::Shutdown { force } => self.handle_shutdown(force),
             IpcCommand::ImportArchive { input, target, filter } => {
-                match self.handle_import_archive(input, target, filter).await {
-                    Ok(result) => IpcResponse::ImportComplete(Box::new(result)),
-                    Err(error) => response_from_error(error),
-                }
+                self.handle_import_archive_response(input, target, filter).await
             }
             IpcCommand::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
             IpcCommand::ExportArchive {
                 namespace,
                 version,
                 output,
-            } => match self.handle_export_archive(namespace, version, output).await {
-                Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
-                Err(error) => response_from_error(error),
-            },
+            } => self.handle_export_archive_response(namespace, version, output).await,
             IpcCommand::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
             IpcCommand::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
             IpcCommand::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
@@ -662,6 +694,7 @@ impl IpcServer {
                 self.handle_collection_publish(path, namespace, sequence, bootstrap)
                     .await
             }
+            IpcCommand::EnrichSort { path } => self.handle_enrich_sort(path).await,
             IpcCommand::BroadcastTrustSignal(signal) => match self.handle_broadcast_trust_signal(signal).await {
                 Ok(()) => IpcResponse::Ok {
                     message: "trust signal broadcast".to_owned(),
@@ -1143,6 +1176,49 @@ impl IpcServer {
                 report.total, report.well_seeded, report.under_seeded, report.unseeded,
             ),
         }
+    }
+
+    async fn handle_enrich_sort(&self, path: PathBuf) -> IpcResponse {
+        let Some(context) = self.archive_context.clone() else {
+            return IpcResponse::EnrichData(HashMap::new());
+        };
+        let manager = FolderManager::new(&context.node);
+        let Ok(folder) = resolve_folder_for_daemon(&manager, &path).await else {
+            return IpcResponse::EnrichData(HashMap::new());
+        };
+        let Ok(entries) = context.node.docs_engine().list_latest(folder.doc()).await else {
+            return IpcResponse::EnrichData(HashMap::new());
+        };
+        let mut hashes = Vec::new();
+        let mut path_map: Vec<(String, iroh_blobs::Hash)> = Vec::new();
+        for entry in entries {
+            if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            let Ok(path_str) = String::from_utf8(entry.key().to_vec()) else {
+                continue;
+            };
+            let hash = entry.content_hash();
+            path_map.push((path_str, hash));
+            hashes.push(hash);
+        }
+
+        let peer_counts: HashMap<iroh_blobs::Hash, usize> =
+            self.resilience.as_ref().map_or_else(HashMap::new, |resilience| {
+                resilience.health_batch(&hashes).map_or_else(
+                    |_| HashMap::new(),
+                    |health_map| health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
+                )
+            });
+
+        let result: HashMap<String, usize> = path_map
+            .into_iter()
+            .map(|(path_str, hash)| {
+                let count = peer_counts.get(&hash).copied().unwrap_or(0);
+                (path_str, count)
+            })
+            .collect();
+        IpcResponse::EnrichData(result)
     }
 
     async fn handle_verify_integrity(
@@ -1823,7 +1899,8 @@ impl IpcClient {
                 | IpcResponse::DownloadComplete { .. }
                 | IpcResponse::ImportFilesComplete { .. }
                 | IpcResponse::ImportComplete(_)
-                | IpcResponse::ExportComplete(_) => Err(SyncwebError::operation(
+                | IpcResponse::ExportComplete(_)
+                | IpcResponse::EnrichData(_) => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),

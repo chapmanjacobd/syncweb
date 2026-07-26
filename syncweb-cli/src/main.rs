@@ -3355,6 +3355,7 @@ fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) ->
 
 fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -> Result<()> {
     let output_json = ctx.output_json;
+    let data_dir = ctx.data_dir;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
     let mut sortable: Vec<SortEntry> = entries.into_iter().map(sort_entry).collect();
 
@@ -3377,6 +3378,7 @@ fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -
         .transpose()?;
     config.min_depth = command.min_depth;
     config.max_depth = command.max_depth;
+    config.enrich = command.enrich;
 
     // Parse depth constraints
     if !command.depth.is_empty() {
@@ -3390,6 +3392,49 @@ fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -
     }
 
     let sorter = Sorter::new(config);
+
+    // Enrich with daemon data if --enrich is set
+    if command.enrich {
+        if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+            let response = tokio::runtime::Runtime::new()
+                .map_err(|e| anyhow::anyhow!("failed to create runtime for enrich sort: {e}"))?
+                .block_on(async {
+                    client
+                        .send(IpcRequest::new(IpcCommand::EnrichSort {
+                            path: command.path.clone(),
+                        }))
+                        .await
+                })?;
+            match response {
+                IpcResponse::EnrichData(peer_map) => {
+                    let needs_niche = command.by.eq_ignore_ascii_case("niche");
+                    let needs_frecency = command.by.eq_ignore_ascii_case("frecency");
+                    let needs_peers = command.by.eq_ignore_ascii_case("peers");
+                    if needs_peers || needs_niche || needs_frecency {
+                        sorter.enrich_peers(&mut sortable, &peer_map);
+                    }
+                    if needs_niche {
+                        sorter.enrich_niche(&mut sortable);
+                    }
+                }
+                IpcResponse::Error { message } => {
+                    eprintln!("warning: daemon enrichment failed: {message}");
+                }
+                IpcResponse::Ok { .. }
+                | IpcResponse::Status(_)
+                | IpcResponse::FolderList(_)
+                | IpcResponse::DownloadComplete { .. }
+                | IpcResponse::ImportFilesComplete { .. }
+                | IpcResponse::ImportComplete(_)
+                | IpcResponse::ExportComplete(_)
+                | _ => {
+                    eprintln!("warning: daemon returned unexpected response; enrichment skipped");
+                }
+            }
+        } else {
+            eprintln!("warning: daemon is not running; enrichment requires a running daemon");
+        }
+    }
 
     // Filter by seeders first
     sortable = sorter.filter_seeders(sortable);

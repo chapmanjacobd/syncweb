@@ -68,6 +68,7 @@ pub struct SortConfig {
     pub limit_size: Option<u64>,
     pub min_depth: Option<usize>,
     pub max_depth: Option<usize>,
+    pub enrich: bool,
 }
 
 impl Default for SortConfig {
@@ -81,6 +82,7 @@ impl Default for SortConfig {
             limit_size: None,
             min_depth: None,
             max_depth: None,
+            enrich: false,
         }
     }
 }
@@ -303,6 +305,35 @@ impl Sorter {
                 true
             })
             .collect()
+    }
+
+    /// Populate `entry.peers` from a path→count map.
+    pub fn enrich_peers(&self, entries: &mut [SortEntry], peer_map: &HashMap<String, usize>) {
+        for entry in entries.iter_mut() {
+            if let Some(count) = peer_map.get(&entry.path.to_string_lossy().to_string()) {
+                entry.peers = *count;
+            }
+        }
+    }
+
+    /// Compute `entry.niche` from `entry.peers` using `config.niche` as ideal count.
+    /// Formula: `1.0 / (1.0 + |peers - ideal|)`
+    pub fn enrich_niche(&self, entries: &mut [SortEntry]) {
+        let ideal = self.config.niche;
+        for entry in entries.iter_mut() {
+            let distance = entry.peers.abs_diff(ideal);
+            let dist_u32 = u32::try_from(distance).unwrap_or(u32::MAX);
+            entry.niche = f64::from(dist_u32.saturating_add(1_u32)).recip();
+        }
+    }
+
+    /// Populate `entry.frequency` from a path→access-count map.
+    pub fn enrich_frequency(&self, entries: &mut [SortEntry], freq_map: &HashMap<String, u64>) {
+        for entry in entries.iter_mut() {
+            if let Some(count) = freq_map.get(&entry.path.to_string_lossy().to_string()) {
+                entry.frequency = *count;
+            }
+        }
     }
 
     /// Sort entries by multiple criteria.

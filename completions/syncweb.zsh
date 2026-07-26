@@ -344,6 +344,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--enrich[Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -395,8 +396,9 @@ _arguments "${_arguments_options[@]}" : \
 (import)
 _arguments "${_arguments_options[@]}" : \
 '--folder=[Folder namespace; defaults to the only managed folder]:FOLDER:_default' \
-'--threads=[Import threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--enrich[Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

@@ -4,7 +4,7 @@
 .SH NAME
 import \- Import local files into a synchronized folder
 .SH SYNOPSIS
-\fBimport\fR [\fB\-\-folder\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPATH\fR> 
+\fBimport\fR [\fB\-\-folder\fR] [\fB\-\-threads\fR] [\fB\-\-enrich\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPATH\fR> 
 .SH DESCRIPTION
 Import local files into a synchronized folder
 .SH OPTIONS
@@ -13,7 +13,10 @@ Import local files into a synchronized folder
 Folder namespace; defaults to the only managed folder
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
-Import threads (1 disables parallelism, 0 uses all available CPUs)
+Scanner threads (1 disables parallelism, 0 uses all available CPUs)
+.TP
+\fB\-\-enrich\fR
+Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

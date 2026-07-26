@@ -343,6 +343,11 @@ pub struct SortArgs {
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+    #[arg(
+        long,
+        help = "Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting"
+    )]
+    pub enrich: bool,
 }
 
 #[derive(Debug, Args)]
@@ -410,9 +415,14 @@ pub struct ImportArgs {
     #[arg(
         long,
         default_value_t = 0,
-        help = "Import threads (1 disables parallelism, 0 uses all available CPUs)"
+        help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+    #[arg(
+        long,
+        help = "Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting"
+    )]
+    pub enrich: bool,
 }
 
 #[derive(Debug, Args)]

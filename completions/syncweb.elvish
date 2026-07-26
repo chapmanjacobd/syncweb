@@ -308,6 +308,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --max-depth 'Alternative max depth notation'
             cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --enrich 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -349,8 +350,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;import'= {
             cand --folder 'Folder namespace; defaults to the only managed folder'
-            cand --threads 'Import threads (1 disables parallelism, 0 uses all available CPUs)'
+            cand --threads 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --enrich 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

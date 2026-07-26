@@ -240,6 +240,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l min-depth -d 'A
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-depth -d 'Alternative max depth notation' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l enrich -d 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -267,8 +268,9 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l json -d 'Em
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l folder -d 'Folder namespace; defaults to the only managed folder' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l threads -d 'Import threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l enrich -d 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

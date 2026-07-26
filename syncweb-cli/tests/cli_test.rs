@@ -446,6 +446,34 @@ fn test_sort_algorithms() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_sort_with_enrich_flag() -> anyhow::Result<()> {
+    let source = cli_test_dir("sort-enrich");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("a.txt"), b"content_a").context("write")?;
+    std::fs::write(source.join("b.txt"), b"content_b").context("write")?;
+
+    // --enrich with no daemon should warn and fall back to local-only sorting
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "sort",
+            source.to_str().context("UTF-8 path")?,
+            "--by",
+            "peers",
+            "--enrich",
+        ])
+        .output()
+        .context("run syncweb sort --by peers --enrich")?;
+    ensure!(
+        output.status.success(),
+        "sort --enrich should still succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
 fn test_stat_detailed() -> anyhow::Result<()> {
     let source = cli_test_dir("stat-detail");
     std::fs::create_dir_all(&source).context("create dir")?;

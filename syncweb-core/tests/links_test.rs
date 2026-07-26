@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use iroh::SecretKey;
+use iroh::address_lookup::memory::MemoryLookup;
 use iroh_blobs::Hash;
 use n0_future::StreamExt;
 use syncweb_core::{
@@ -14,7 +15,11 @@ use syncweb_core::{
         ContentLink, Link, LinkResolution, LinkResolver, MutablePointer, PrivateLink, REVOCATION_GOSSIP_TOPIC,
         revocation_topic_id,
     },
-    node::gossip_service::GossipService,
+    node::{
+        gossip_service::GossipService,
+        identity::IdentityManager,
+        iroh_node::{IrohNode, RelayMode},
+    },
 };
 
 const fn test_hash(byte: u8) -> Hash {
@@ -24,6 +29,21 @@ const fn test_hash(byte: u8) -> Hash {
 fn test_pointer(seed: u8, alias: &str, hash: Hash, sequence: u64) -> anyhow::Result<MutablePointer> {
     let secret = SecretKey::from_bytes(&[seed; 32]);
     MutablePointer::signed_with_secret_key(secret.public(), alias, hash, sequence, &secret).map_err(anyhow::Error::from)
+}
+
+async fn test_node(
+    directory: &test_utils::TestDirectory,
+    name: &str,
+    relay_map: Option<iroh::RelayMap>,
+    address_lookup: Option<MemoryLookup>,
+) -> anyhow::Result<IrohNode> {
+    let root = directory.path().join(name);
+    let identity = IdentityManager::new(root.join("identity.key"))?;
+    let relay_mode = relay_map.map_or(RelayMode::Default, |map| RelayMode::Custom { map, insecure: true });
+    match address_lookup {
+        Some(lookup) => Ok(IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup).await?),
+        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode).await?),
+    }
 }
 
 #[test]
@@ -70,13 +90,22 @@ fn test_link_revoke_does_not_propagate() {
 }
 
 /// Two-node test: Alice creates a folder, publishes a mutable pointer to
-/// the folder doc, Bob joins the folder. Requires sync infrastructure.
+/// the folder doc, Bob joins the folder.
 #[tokio::test]
-#[ignore = "requires relay server and sync setup"]
 async fn test_link_publish_mutable_to_folder_doc() -> anyhow::Result<()> {
     let directory = test_utils::TestDirectory::new("link-publish")?;
-    let alice = test_utils::test_node(&directory, "alice").await?;
-    let bob = test_utils::test_node(&directory, "bob").await?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+    let alice = test_node(
+        &directory,
+        "alice",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await?;
+    let bob = test_node(&directory, "bob", Some(relay_map), Some(memory_lookup.clone())).await?;
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(alice.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(bob.endpoint().id()).with_relay_url(relay_url));
 
     let alice_manager = FolderManager::new(&alice);
     let folder = alice_manager.create(SyncMode::SendReceive).await?;
@@ -114,11 +143,20 @@ async fn test_link_publish_mutable_to_folder_doc() -> anyhow::Result<()> {
 
 /// Two-node test: Alice creates a private link and publishes it to a folder doc.
 #[tokio::test]
-#[ignore = "requires relay server and sync setup"]
 async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
     let directory = test_utils::TestDirectory::new("link-publish-private")?;
-    let alice = test_utils::test_node(&directory, "alice").await?;
-    let bob = test_utils::test_node(&directory, "bob").await?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+    let alice = test_node(
+        &directory,
+        "alice",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await?;
+    let bob = test_node(&directory, "bob", Some(relay_map), Some(memory_lookup.clone())).await?;
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(alice.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(bob.endpoint().id()).with_relay_url(relay_url));
 
     let alice_manager = FolderManager::new(&alice);
     let folder = alice_manager.create(SyncMode::SendReceive).await?;
@@ -157,11 +195,20 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
 /// Two-node gossip test: Alice publishes a revocation via gossip.
 /// Bob receives it after subscribing to the same topic.
 #[tokio::test]
-#[ignore = "requires relay server for gossip propagation"]
 async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
     let directory = test_utils::TestDirectory::new("link-revoke-gossip")?;
-    let alice = test_utils::test_node(&directory, "alice").await?;
-    let bob = test_utils::test_node(&directory, "bob").await?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+    let alice = test_node(
+        &directory,
+        "alice",
+        Some(relay_map.clone()),
+        Some(memory_lookup.clone()),
+    )
+    .await?;
+    let bob = test_node(&directory, "bob", Some(relay_map), Some(memory_lookup.clone())).await?;
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(alice.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(bob.endpoint().id()).with_relay_url(relay_url));
 
     let hash = alice.blob_store().add_bytes(b"shared").await?;
     let link = PrivateLink::generate(hash, 4_000_000_000)?;
@@ -169,7 +216,7 @@ async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
     let topic_id = revocation_topic_id();
 
     // Alice subscribes to the revocation topic
-    let alice_topic = alice.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+    let alice_topic = alice.gossip_service().subscribe(topic_id, Vec::new()).await?;
     let (alice_sender, _alice_receiver) = GossipService::split(alice_topic);
     let alice_channel = TopicChannel::<PrivateLink>::new(
         Arc::new(alice.gossip_service().inner().clone()),
@@ -177,8 +224,15 @@ async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
         alice_sender,
     );
 
-    // Bob subscribes to receive revocations
-    let bob_topic = bob.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+    // Bob subscribes to receive revocations, bootstrapping to Alice
+    let mut bob_topic = bob
+        .gossip_service()
+        .subscribe(topic_id, vec![alice.endpoint().id()])
+        .await?;
+    tokio::time::timeout(Duration::from_secs(30), bob_topic.joined())
+        .await
+        .context("Bob's gossip join timed out")?
+        .context("Bob's gossip join failed")?;
     let (bob_sender, bob_receiver) = GossipService::split(bob_topic);
     let bob_channel = TopicChannel::<PrivateLink>::new(
         Arc::new(bob.gossip_service().inner().clone()),
@@ -191,7 +245,7 @@ async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
     alice_channel.publish(&link).await?;
 
     // Bob should receive it within a timeout
-    let received = tokio::time::timeout(Duration::from_secs(10), async {
+    let received = tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if let Some(msg) = bob_stream.next().await {
                 return msg;

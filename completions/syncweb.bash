@@ -3243,7 +3243,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__import)
-            opts="-h --folder --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --folder --threads --enrich --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5387,7 +5387,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__sort)
-            opts="-h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --depth --min-depth --max-depth --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --depth --min-depth --max-depth --threads --enrich --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

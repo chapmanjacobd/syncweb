@@ -22,7 +22,7 @@ use crate::{
         PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
-    indexing::{ProviderReputationStore, ProviderTrustSignal},
+    indexing::{ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
     storage::node_db::NodeDatabase,
@@ -485,6 +485,7 @@ pub struct IpcServer {
     archive_context: Option<Arc<ArchiveContext>>,
     folder_manager: Option<FolderManager>,
     node_db: Option<NodeDatabase>,
+    resilience: Option<ResilienceService>,
 }
 
 #[derive(Clone)]
@@ -502,6 +503,7 @@ impl IpcServer {
             archive_context: None,
             folder_manager: None,
             node_db: None,
+            resilience: None,
         }
     }
 
@@ -519,6 +521,7 @@ impl IpcServer {
             archive_context: Some(Arc::new(ArchiveContext { node, pool })),
             folder_manager: None,
             node_db: None,
+            resilience: None,
         }
     }
 
@@ -533,6 +536,13 @@ impl IpcServer {
     #[must_use]
     pub fn with_node_db(mut self, node_db: NodeDatabase) -> Self {
         self.node_db = Some(node_db);
+        self
+    }
+
+    /// Attach a resilience service for live peer-count queries.
+    #[must_use]
+    pub fn with_resilience(mut self, resilience: ResilienceService) -> Self {
+        self.resilience = Some(resilience);
         self
     }
 
@@ -1074,6 +1084,8 @@ impl IpcServer {
     }
 
     async fn handle_health_check(&self, path: PathBuf) -> IpcResponse {
+        use std::collections::HashMap;
+
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -1092,6 +1104,7 @@ impl IpcServer {
             Err(error) => return response_from_error(error),
         };
         let mut candidates = Vec::new();
+        let mut hashes = Vec::new();
         for entry in entries {
             if entry.key().starts_with(b"sys/") {
                 continue;
@@ -1104,19 +1117,26 @@ impl IpcServer {
                     };
                 }
             };
-            let local = match folder.has_local(entry.content_hash()).await {
+            let hash = entry.content_hash();
+            let local = match folder.has_local(hash).await {
                 Ok(l) => l,
                 Err(error) => return response_from_error(error),
             };
-            candidates.push(FetchCandidate::new(
-                path_str,
-                entry.content_hash(),
-                entry.content_len(),
-                0,
-                local,
-            ));
+            candidates.push(FetchCandidate::new(path_str, hash, entry.content_len(), 0, local));
+            hashes.push(hash);
         }
-        let report = HealthReport::from_candidates(&candidates, 4);
+
+        let peer_counts: HashMap<iroh_blobs::Hash, usize> = match &self.resilience {
+            Some(resilience) => match resilience.health_batch(&hashes) {
+                Ok(health_map) => health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
+                Err(error) => {
+                    return response_from_error(error);
+                }
+            },
+            None => HashMap::new(),
+        };
+
+        let report = HealthReport::from_candidates_with_peer_counts(&candidates, &peer_counts, 4);
         IpcResponse::Ok {
             message: format!(
                 "total: {}, well-seeded: {}, under-seeded: {}, unseeded: {}",

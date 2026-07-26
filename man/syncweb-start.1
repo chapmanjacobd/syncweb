@@ -4,7 +4,7 @@
 .SH NAME
 start \- Start the local syncweb daemon
 .SH SYNOPSIS
-\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Start the local syncweb daemon
 .SH OPTIONS
@@ -23,6 +23,9 @@ Write daemon logs to this file
 .TP
 \fB\-\-sync\-interval\fR \fI<SYNC_INTERVAL>\fR
 
+.TP
+\fB\-\-no\-relay\fR
+Disable Iroh relay mode (no relay server connections)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

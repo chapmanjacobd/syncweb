@@ -304,46 +304,6 @@ In practice, the `<video>` tag does not issue `If-None-Match` for media
 
 ---
 
-### WebRTC alternative (future consideration)
-
-For real-time streaming between peers without a local server intermediary,
-WebRTC DataChannels can carry bytes directly.
-
-```
-Peer A (has blob)  ←──WebRTC DataChannel──→  Peer B (browser)
-```
-
-How it would work:
-
-1. A JavaScript/WASM bridge on peer B requests a blob range from peer A
-   over the WebRTC signaling channel.
-2. Peer A reads the range from its blob store via `BlobReader`, sends
-   chunks over a DataChannel (binary mode, `arraybuffer`).
-3. Peer B reassembles chunks and feeds them to a
-   [`MediaSource`](https://developer.mozilla.org/en-US/docs/Web/API/MediaSource)
-   buffer.
-
-Challenges:
-
-- `<video>` does not consume WebRTC natively. You need a `MediaSource` +
-  `SourceBuffer` JavaScript shim that receives chunks over a DataChannel
-  and appends them.
-- The JS shim must implement its own range-request-to-chunk protocol — the
-  browser won't auto-negotiate byte ranges.
-- Seeking requires signaling a new range request to peer A, waiting for
-  response, flushing the `SourceBuffer`, and re-appending.
-- WebRTC setup requires ICE/STUN/TURN — nontrivial in a local-first
-  context (though LAN-only works without STUN).
-- WebRTC in Android WebView requires additional permissions and API levels.
-
-When WebRTC makes sense:
-
-- Off-grid/air-gap scenarios (BLE + WiFi Direct handoff, as mapa already
-  explores).
-- When no local syncweb service is running and you want direct browser-to-
-  peer streaming.
-- When latency is critical (live streaming).
-
 For v1, HTTP range requests are the right primitive. They leverage
 the browser's native media pipeline, require zero JavaScript, and work
 with every `<video>` tag on every platform.

@@ -1523,6 +1523,44 @@ impl ResilienceService {
             .health(hash, self.config.budget.observation_ttl))
     }
 
+    /// Query health for many hashes at once using a reverse index.
+    ///
+    /// This is O(n + m) where n = total provider leases and m = queried
+    /// hashes, instead of O(n * m) for calling `health()` per hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn health_batch(&self, hashes: &[Hash]) -> Result<HashMap<Hash, AvailabilityHealth>> {
+        let tracker = self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?;
+        let now = current_epoch_seconds();
+        let mut by_hash: HashMap<Hash, usize> = HashMap::new();
+        for (hash, provider_leases) in &tracker.leases {
+            for lease in provider_leases.values() {
+                if !lease.is_expired_at(now) && !tracker.is_banned(lease.provider, hash, now) {
+                    let counter = by_hash.entry(*hash).or_default();
+                    *counter = counter.saturating_add(1);
+                }
+            }
+        }
+        Ok(hashes
+            .iter()
+            .map(|hash| {
+                let verified = by_hash.get(hash).copied().unwrap_or(0);
+                let health = AvailabilityHealth {
+                    verified,
+                    local: 0,
+                    verified_providers: Vec::new(),
+                    local_providers: Vec::new(),
+                };
+                (*hash, health)
+            })
+            .collect())
+    }
+
     /// Return whether a blob is below the configured verified lease budget.
     ///
     /// # Errors

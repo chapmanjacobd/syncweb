@@ -49,6 +49,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-threads=[]:MAX_THREADS:_default' \
 '--sync-interval=[]:SYNC_INTERVAL:_default' \
 '--bg[Run in the background (daemon mode)]' \
+'--no-relay[Disable Iroh relay mode (no relay server connections)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1582,6 +1583,7 @@ _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '--sequence=[]:SEQUENCE:_default' \
 '--expires=[Private-link expiration as a Unix timestamp]:EXPIRES:_default' \
+'--publish=[Namespace (folder) to publish the link into]:PUBLISH:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '(--name)--private[]' \
 '--verbose[Enable verbose structured logging]' \
@@ -1609,6 +1611,7 @@ _arguments "${_arguments_options[@]}" : \
 (revoke)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--broadcast[Broadcast revocation to peers via gossip]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

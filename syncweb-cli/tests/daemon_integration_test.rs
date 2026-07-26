@@ -21,15 +21,26 @@ fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
     String::from_utf8(output.stdout.clone()).is_ok_and(|s| s.contains(needle))
 }
 
+fn daemon_start_bg(data_dir_arg: &str) -> anyhow::Result<std::process::Output> {
+    syncweb(&["--data-dir", data_dir_arg, "start", "--bg", "--no-relay"])
+}
+
 fn wait_for_daemon_ready(data_dir_arg: &str) -> anyhow::Result<()> {
-    for _ in 0..300 {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    let mut last_diagnostic = String::new();
+
+    for _ in 0..150 {
         let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
         if status.status.success() && stdout_contains(&status, "daemon: running") {
             return Ok(());
         }
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        if !status.stderr.is_empty() {
+            last_diagnostic = String::from_utf8_lossy(&status.stderr).to_string();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
     }
-    anyhow::bail!("timed out waiting for daemon to become ready");
+    anyhow::bail!("timed out waiting for daemon to become ready. last stderr: {last_diagnostic}");
 }
 
 #[test]
@@ -87,7 +98,7 @@ fn test_daemon_start_and_stop() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-lifecycle")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success(), "daemon start should succeed");
 
     let mut daemon_ready = false;
@@ -125,7 +136,7 @@ fn test_create_routes_through_daemon() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-create-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success(), "daemon start should succeed");
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -150,7 +161,7 @@ fn test_daemon_shutdown_alias() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-shutdown-alias")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -195,7 +206,7 @@ fn test_daemon_reload_via_ipc() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-reload")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -214,7 +225,7 @@ fn test_daemon_sync_via_ipc() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-sync")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -233,7 +244,7 @@ fn test_daemon_folders_via_ipc() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-folders")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -253,7 +264,7 @@ fn test_daemon_init_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-init-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -277,7 +288,7 @@ fn test_daemon_health_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-health-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -314,7 +325,7 @@ fn test_daemon_multiple_ipc_commands() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-multi-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -352,7 +363,7 @@ fn test_cli_default_is_daemon_mode() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-default-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -383,7 +394,7 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-subscribe-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -420,7 +431,7 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-publish-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -459,7 +470,7 @@ fn test_daemon_leave_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-leave-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -496,7 +507,7 @@ fn test_daemon_unsubscribe_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-unsubscribe-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -535,7 +546,7 @@ fn test_daemon_verify_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-verify-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -572,7 +583,7 @@ fn test_daemon_snapshot_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-snapshot-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -720,7 +731,7 @@ fn test_daemon_unwatch_via_ipc() -> anyhow::Result<()> {
     let dir = cli_test_dir("daemon-unwatch-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
@@ -770,7 +781,7 @@ fn test_daemon_two_instances_cannot_start() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-dual-start")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
-    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg"])?;
+    let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 

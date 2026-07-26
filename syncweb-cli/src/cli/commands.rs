@@ -494,6 +494,8 @@ pub struct StartArgs {
     pub max_threads: Option<usize>,
     #[arg(long, value_parser = clap::value_parser!(u64))]
     pub sync_interval: Option<u64>,
+    #[arg(long, help = "Disable Iroh relay mode (no relay server connections)")]
+    pub no_relay: bool,
 }
 
 #[derive(Debug, Args)]

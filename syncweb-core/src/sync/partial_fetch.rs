@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use iroh_blobs::Hash;
@@ -206,5 +207,26 @@ impl HealthReport {
             unseeded,
             least_seeded,
         }
+    }
+
+    /// Build a report with real peer counts from a `hash -> verified_count` map.
+    ///
+    /// Each candidate's `peer_count` is overridden with the value from
+    /// `peer_counts` when present. This lets the health display reflect live
+    /// provider-lease data instead of always showing zero.
+    #[must_use]
+    pub fn from_candidates_with_peer_counts(
+        candidates: &[FetchCandidate],
+        peer_counts: &HashMap<Hash, usize>,
+        well_seeded_threshold: usize,
+    ) -> Self {
+        let enriched: Vec<FetchCandidate> = candidates
+            .iter()
+            .map(|c| {
+                let peers = peer_counts.get(&c.hash).copied().unwrap_or(c.peer_count);
+                FetchCandidate::new(&c.path, c.hash, c.size, peers, c.local)
+            })
+            .collect();
+        Self::from_candidates(&enriched, well_seeded_threshold)
     }
 }

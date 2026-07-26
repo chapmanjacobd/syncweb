@@ -3827,7 +3827,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__link__subcmd__create)
-            opts="-h --name --version --sequence --private --expires --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --name --version --sequence --private --expires --publish --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3846,6 +3846,10 @@ _syncweb() {
                     return 0
                     ;;
                 --expires)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --publish)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -3953,7 +3957,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__link__subcmd__revoke)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5437,7 +5441,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__start)
-            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --verbose --json --embedded --no-daemon --help"
+            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --no-relay --verbose --json --embedded --no-daemon --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

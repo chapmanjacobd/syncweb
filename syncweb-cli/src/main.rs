@@ -331,6 +331,11 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     daemon_config.sync_interval = args.sync_interval.map_or(Duration::from_mins(1), Duration::from_secs);
     daemon_config.rayon_threads = args.max_threads.unwrap_or(app_config.parallel.threads);
     daemon_config.log_file = args.log_file;
+    daemon_config.relay_mode = if args.no_relay {
+        syncweb_core::node::iroh_node::RelayMode::None
+    } else {
+        syncweb_core::node::iroh_node::RelayMode::Default
+    };
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     if output_json {
@@ -382,6 +387,9 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs) -> Result<
     if let Some(sync_interval) = args.sync_interval {
         command.arg("--sync-interval").arg(sync_interval.to_string());
     }
+    if args.no_relay {
+        command.arg("--no-relay");
+    }
     command.spawn().context("spawn syncweb daemon")
 }
 
@@ -407,6 +415,7 @@ async fn daemon_client_or_start(
                 log_file: None,
                 max_threads: None,
                 sync_interval: None,
+                no_relay: false,
             },
         )?)
     } else {
@@ -1068,21 +1077,37 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
     let folder = resolve_folder(&manager, &command.path).await?;
     let entries = node.docs_engine().list_latest(folder.doc()).await?;
     let mut candidates = Vec::new();
+    let mut hashes = Vec::new();
     for entry in entries {
         if entry.key().starts_with(b"sys/") {
             continue;
         }
         let path = String::from_utf8(entry.key().to_vec())
             .map_err(|error| anyhow::anyhow!("folder entry path is not UTF-8: {error}"))?;
+        let hash = entry.content_hash();
         candidates.push(FetchCandidate::new(
             path,
-            entry.content_hash(),
+            hash,
             entry.content_len(),
             0,
-            folder.has_local(entry.content_hash()).await?,
+            folder.has_local(hash).await?,
         ));
+        hashes.push(hash);
     }
-    let report = HealthReport::from_candidates(&candidates, 4);
+
+    let peer_counts = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite")).map_or_else(
+        |_| std::collections::HashMap::new(),
+        |indexing| {
+            let resilience = indexing.resilience_service(syncweb_core::indexing::ResilienceConfig::new(
+                syncweb_core::indexing::ReplicationBudget::default(),
+            ));
+            resilience.health_batch(&hashes).map_or_else(
+                |_| std::collections::HashMap::new(),
+                |health_map| health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
+            )
+        },
+    );
+    let report = HealthReport::from_candidates_with_peer_counts(&candidates, &peer_counts, 4);
     if output_json {
         println!(
             "{}",
@@ -1839,6 +1864,7 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
             log_file: None,
             max_threads: None,
             sync_interval: None,
+            no_relay: false,
         },
     )
     .await

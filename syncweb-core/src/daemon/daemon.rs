@@ -19,8 +19,9 @@ use crate::{
     fs::{FsWatcher, Importer},
     gossip::TopicChannel,
     indexing::{
-        IndexingDatabase, REPORT_GOSSIP_TOPIC, ReportRecord,
+        IndexingDatabase, IndexingService, REPORT_GOSSIP_TOPIC, ReportRecord,
         links::{MutablePointer, PrivateLink, REVOCATION_GOSSIP_TOPIC},
+        resilience::{ReplicationBudget, ResilienceConfig},
         wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
     },
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
@@ -238,7 +239,10 @@ impl Daemon {
             sync_sender,
             initial_handle.reload_requested.clone(),
         );
-        let ipc_server = IpcServer::with_archive_context(
+        let resilience = IndexingService::new(config.data_dir.join("indexing.sqlite"))
+            .ok()
+            .map(|indexing| indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default())));
+        let mut ipc_server = IpcServer::with_archive_context(
             daemon_socket_path(&config.data_dir),
             handle.clone(),
             node.clone(),
@@ -246,6 +250,10 @@ impl Daemon {
         )
         .with_folder_manager(folder_manager.clone())
         .with_node_db(node_db.clone());
+        ipc_server = match resilience {
+            Some(service) => ipc_server.with_resilience(service),
+            None => ipc_server,
+        };
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
 
         Ok(Self {

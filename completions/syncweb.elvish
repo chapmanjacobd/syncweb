@@ -85,6 +85,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --max-threads 'max-threads'
             cand --sync-interval 'sync-interval'
             cand --bg 'Run in the background (daemon mode)'
+            cand --no-relay 'Disable Iroh relay mode (no relay server connections)'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -1130,6 +1131,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --version 'version'
             cand --sequence 'sequence'
             cand --expires 'Private-link expiration as a Unix timestamp'
+            cand --publish 'Namespace (folder) to publish the link into'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --private 'private'
             cand --verbose 'Enable verbose structured logging'
@@ -1151,6 +1153,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;link;revoke'= {
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --broadcast 'Broadcast revocation to peers via gossip'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

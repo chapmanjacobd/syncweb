@@ -1,7 +1,7 @@
 .PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme
 .SILENT:
 
-all: fmt flint test lint build manpage completions readme
+all: flint test lint fmt build manpage completions readme
 
 fmt:
 	cargo fmt -q --all

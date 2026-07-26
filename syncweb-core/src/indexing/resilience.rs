@@ -1073,6 +1073,41 @@ impl ProviderLeaseTracker {
         self.leases(hash).len()
     }
 
+    /// Return all providers that have an active lease for any blob.
+    #[must_use]
+    pub fn list_providers(&self) -> Vec<PublicKey> {
+        let now = current_epoch_seconds();
+        let mut seen = HashSet::new();
+        for (hash, providers) in &self.leases {
+            for lease in providers.values() {
+                if !lease.is_expired_at(now) && !self.is_banned(lease.provider, hash, now) {
+                    seen.insert(lease.provider);
+                }
+            }
+        }
+        let mut providers: Vec<PublicKey> = seen.into_iter().collect();
+        providers.sort_by_key(std::string::ToString::to_string);
+        providers
+    }
+
+    /// Return all blob hashes for which the given provider has an active lease.
+    #[must_use]
+    pub fn blobs_for_provider(&self, provider: &PublicKey) -> Vec<Hash> {
+        let now = current_epoch_seconds();
+        let mut seen = HashSet::new();
+        for (hash, providers) in &self.leases {
+            for lease in providers.values() {
+                if lease.provider == *provider && !lease.is_expired_at(now) && !self.is_banned(*provider, hash, now) {
+                    seen.insert(*hash);
+                    break;
+                }
+            }
+        }
+        let mut hashes: Vec<Hash> = seen.into_iter().collect();
+        hashes.sort_by_key(std::string::ToString::to_string);
+        hashes
+    }
+
     /// Build a verified-vs-local availability report.
     #[must_use]
     pub fn health(&self, hash: &Hash, observation_ttl: Duration) -> AvailabilityHealth {
@@ -1586,6 +1621,32 @@ impl ResilienceService {
             .into_iter()
             .take(self.config.budget.responsible_peers)
             .collect())
+    }
+
+    /// Return all providers with active leases across all blobs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn list_providers(&self) -> Result<Vec<PublicKey>> {
+        Ok(self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .list_providers())
+    }
+
+    /// Return all blob hashes that the given provider has an active lease for.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the service state lock is poisoned.
+    pub fn blobs_for_provider(&self, provider: &PublicKey) -> Result<Vec<Hash>> {
+        Ok(self
+            .tracker
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider lease tracker lock poisoned", error))?
+            .blobs_for_provider(provider))
     }
 
     /// Record a fetch failure in the shared provider tracker.
@@ -2527,6 +2588,98 @@ mod tests {
                 .await
                 .is_err(),
             "hash mismatches should be rejected"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn list_providers_returns_all_unique_providers_with_active_leases() -> Result<()> {
+        let mut tracker = ProviderLeaseTracker::default();
+        let hash_a = Hash::new(b"blob-a");
+        let hash_b = Hash::new(b"blob-b");
+        let hash_c = Hash::new(b"blob-c");
+
+        let first = signed_lease(1, hash_a, 1)?;
+        let second = signed_lease(2, hash_a, 1)?;
+        let third = signed_lease(1, hash_b, 1)?;
+        let fourth = signed_lease(3, hash_c, 1)?;
+
+        let key_first = first.1.public();
+        let key_fourth = fourth.1.public();
+
+        tracker.track(first.0)?;
+        tracker.track(second.0)?;
+        tracker.track(third.0)?;
+        tracker.track(fourth.0)?;
+
+        let providers = tracker.list_providers();
+        anyhow::ensure!(providers.len() == 3, "three unique providers expected");
+        anyhow::ensure!(providers.contains(&key_first), "provider 1 should be listed");
+        anyhow::ensure!(providers.contains(&key_fourth), "provider 3 should be listed");
+        Ok(())
+    }
+
+    #[test]
+    fn list_providers_empty_when_no_leases() {
+        let tracker = ProviderLeaseTracker::default();
+        assert!(tracker.list_providers().is_empty());
+    }
+
+    #[test]
+    fn blobs_for_provider_returns_all_hashes_for_given_provider() -> Result<()> {
+        let mut tracker = ProviderLeaseTracker::default();
+        let hash_a = Hash::new(b"blob-a");
+        let hash_b = Hash::new(b"blob-b");
+        let hash_c = Hash::new(b"blob-c");
+
+        let (lease_a, sk1) = signed_lease(1, hash_a, 1)?;
+        let (lease_b, _sk_b) = signed_lease(1, hash_b, 2)?;
+        let (lease_c, sk2) = signed_lease(2, hash_c, 1)?;
+
+        tracker.track(lease_a)?;
+        tracker.track(lease_b)?;
+        tracker.track(lease_c)?;
+
+        let prov1_blobs = tracker.blobs_for_provider(&sk1.public());
+        anyhow::ensure!(prov1_blobs.len() == 2, "provider 1 should have 2 blobs");
+        anyhow::ensure!(prov1_blobs.contains(&hash_a));
+        anyhow::ensure!(prov1_blobs.contains(&hash_b));
+
+        let prov2_blobs = tracker.blobs_for_provider(&sk2.public());
+        anyhow::ensure!(prov2_blobs.len() == 1, "provider 2 should have 1 blob");
+        anyhow::ensure!(prov2_blobs.contains(&hash_c));
+
+        Ok(())
+    }
+
+    #[test]
+    fn blobs_for_provider_empty_when_provider_unknown() {
+        let tracker = ProviderLeaseTracker::default();
+        let unknown = SecretKey::from_bytes(&[99; 32]).public();
+        assert!(tracker.blobs_for_provider(&unknown).is_empty());
+    }
+
+    #[test]
+    fn blobs_for_provider_excludes_banned_leases() -> Result<()> {
+        let mut tracker = ProviderLeaseTracker::default();
+        let hash = Hash::new(b"some-blob");
+        let sk = SecretKey::from_bytes(&[1; 32]);
+        let now = current_epoch_seconds();
+        let far_future = now.saturating_add(86_400 * 365);
+        let ticket_str = BlobTicket::new(EndpointAddr::new(sk.public()), hash, BlobFormat::Raw).to_string();
+        let mut lease = ProviderLease::new_with_times(hash, &ticket_str, 1, now, far_future)?;
+        lease.sign_with_secret_key(&sk)?;
+        tracker.track(lease)?;
+
+        anyhow::ensure!(
+            tracker.blobs_for_provider(&sk.public()).len() == 1,
+            "lease should be active"
+        );
+
+        tracker.ban_provider(sk.public(), None, "test", BanSource::Automated, None, now);
+        anyhow::ensure!(
+            tracker.blobs_for_provider(&sk.public()).is_empty(),
+            "banned provider should have no blobs"
         );
         Ok(())
     }

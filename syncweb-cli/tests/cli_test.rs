@@ -1416,3 +1416,28 @@ fn trust_provider_vouch_without_broadcast_still_local() -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&directory);
     Ok(())
 }
+
+#[test]
+fn mirror_help_output_lists_mirror_command() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["mirror", "--help"])
+        .output()
+        .context("run syncweb mirror --help")?;
+    ensure!(output.status.success(), "mirror --help should succeed");
+    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(help.contains("provider"), "help should mention provider");
+    ensure!(help.contains("--network"), "help should mention --network");
+    ensure!(help.contains("--dry-run"), "help should mention --dry-run");
+    ensure!(help.contains("--no-sharing"), "help should mention --no-sharing");
+    Ok(())
+}
+
+#[test]
+fn mirror_without_args_fails_gracefully() -> anyhow::Result<()> {
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["mirror"])
+        .output()
+        .context("run syncweb mirror without args")?;
+    ensure!(!output.status.success(), "mirror without args should fail");
+    Ok(())
+}

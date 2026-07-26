@@ -2,21 +2,27 @@
 .el .ds Aq '
 .TH mirror 1  "mirror " 
 .SH NAME
-mirror \- Fetch and pin a blob from provider(s) to replicate content locally
+mirror \- Mirror all blobs from a provider or network
 .SH SYNOPSIS
-\fBmirror\fR <\fB\-\-hash\fR> [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBmirror\fR [\fB\-\-network\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-dry\-run\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPROVIDER\fR] 
 .SH DESCRIPTION
-Fetch and pin a blob from provider(s) to replicate content locally
+Mirror all blobs from a provider or network
 .SH OPTIONS
 .TP
-\fB\-\-hash\fR \fI<HASH>\fR
-Content hash to mirror
+\fB\-\-network\fR \fI<NETWORK>\fR
+Network name or ID to mirror all blobs across
 .TP
-\fB\-\-from\fR \fI<FROM>\fR
-Blob ticket(s) for providers (can repeat)
+\fB\-\-min\-providers\fR \fI<MIN_PROVIDERS>\fR [default: 3]
+Minimum replication budget per blob (default 3)
 .TP
-\fB\-\-min\-providers\fR \fI<MIN_PROVIDERS>\fR [default: 2]
-Minimum providers for healthy replication
+\fB\-\-no\-sharing\fR
+Skip lease announcements after mirroring
+.TP
+\fB\-\-dry\-run\fR
+Report what would be mirrored without fetching
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
+.TP
+[\fIPROVIDER\fR]
+Provider ID (PublicKey hex) to mirror blobs from

@@ -1673,6 +1673,23 @@ esac
     ;;
 esac
 ;;
+(mirror)
+_arguments "${_arguments_options[@]}" : \
+'--network=[Network name or ID to mirror all blobs across]:NETWORK:_default' \
+'--min-providers=[Minimum replication budget per blob (default 3)]:MIN_PROVIDERS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--no-sharing[Skip lease announcements after mirroring]' \
+'--no-seeding[Skip lease announcements after mirroring]' \
+'--dry-run[Report what would be mirrored without fetching]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::provider -- Provider ID (PublicKey hex) to mirror blobs from:_default' \
+&& ret=0
+;;
 (provider)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -2775,6 +2792,10 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(mirror)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (provider)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__provider_commands" \
@@ -3000,6 +3021,7 @@ _syncweb_commands() {
 'network:Network connectivity utilities' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
+'mirror:Mirror all blobs from a provider or network' \
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
@@ -3253,6 +3275,7 @@ _syncweb__subcmd__help_commands() {
 'network:Network connectivity utilities' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
+'mirror:Mirror all blobs from a provider or network' \
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
@@ -3505,6 +3528,11 @@ _syncweb__subcmd__help__subcmd__ls_commands() {
 _syncweb__subcmd__help__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help manpages commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__mirror_commands] )) ||
+_syncweb__subcmd__help__subcmd__mirror_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__help__subcmd__moderation_commands() {
@@ -4148,6 +4176,11 @@ _syncweb__subcmd__ls_commands() {
 _syncweb__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb manpages commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__mirror_commands] )) ||
+_syncweb__subcmd__mirror_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__moderation_commands] )) ||
 _syncweb__subcmd__moderation_commands() {

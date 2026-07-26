@@ -29,6 +29,7 @@ pub mod fs;
 pub mod gossip;
 pub mod indexing;
 pub mod init;
+pub mod mirror;
 pub mod net;
 pub mod node;
 pub mod parsing;

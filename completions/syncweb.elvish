@@ -62,6 +62,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand network 'Network connectivity utilities'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
+            cand mirror 'Mirror all blobs from a provider or network'
             cand provider 'Manage blob provider registrations'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
@@ -1188,6 +1189,20 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;link;help;help'= {
         }
+        &'syncweb;mirror'= {
+            cand --network 'Network name or ID to mirror all blobs across'
+            cand --min-providers 'Minimum replication budget per blob (default 3)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --no-sharing 'Skip lease announcements after mirroring'
+            cand --no-seeding 'Skip lease announcements after mirroring'
+            cand --dry-run 'Report what would be mirrored without fetching'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;provider'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1616,6 +1631,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand network 'Network connectivity utilities'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
+            cand mirror 'Mirror all blobs from a provider or network'
             cand provider 'Manage blob provider registrations'
             cand trust 'Inspect and delegate local trust'
             cand attest 'Sign content provenance attestations'
@@ -1829,6 +1845,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;link;resolve'= {
         }
         &'syncweb;help;link;revoke'= {
+        }
+        &'syncweb;help;mirror'= {
         }
         &'syncweb;help;provider'= {
             cand add 'Register a blob ticket as an alternate provider'

@@ -16,9 +16,9 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext},
     commands::{
-        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, NetworkCommand,
-        PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
+        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MirrorArgs,
+        NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -36,6 +36,7 @@ use syncweb_core::{
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::{InitResult, open_node},
+    mirror::{MirrorContext, MirrorEvent, MirrorOptions, mirror_network, mirror_provider},
     net::{NetworkManager, NetworkOptions, TransportFallback},
     node::{
         identity::{DeviceId, IdentityManager},
@@ -146,6 +147,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
+        Command::Mirror(command) => handle_mirror(&ctx, command).await?,
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
@@ -861,6 +863,107 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
     }
 
     download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, &command).await
+}
+
+async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> {
+    use syncweb_core::indexing::{ReplicationBudget, ResilienceConfig, ResilienceService};
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let node = open_node(data_dir).await?;
+    let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(command.min_providers)));
+    let options = MirrorOptions::new(command.min_providers)
+        .with_dry_run(command.dry_run)
+        .with_no_sharing(command.no_sharing);
+
+    let provider = match command.provider.as_deref() {
+        Some(p) => Some(
+            p.parse::<iroh::PublicKey>()
+                .map_err(|e| anyhow::anyhow!("invalid provider ID: {e}"))?,
+        ),
+        None => None,
+    };
+
+    let result = if let Some(ref network_str) = command.network {
+        let network_mgr =
+            syncweb_core::net::NetworkManager::new(open_node_db(data_dir)?, node.endpoint().secret_key().public())?;
+        let network = network_mgr
+            .get_by_name(network_str)
+            .or_else(|| {
+                network_str
+                    .parse::<syncweb_core::net::NetworkId>()
+                    .ok()
+                    .and_then(|id| network_mgr.get(&id))
+            })
+            .ok_or_else(|| anyhow::anyhow!("network {network_str:?} not found"))?;
+        let ns_ids: Vec<iroh_docs::NamespaceId> = network.folders.iter().copied().collect();
+        if ns_ids.is_empty() {
+            anyhow::bail!("network {network_str:?} has no folders to mirror");
+        }
+        let mctx = MirrorContext::new(
+            node.endpoint(),
+            node.blob_store(),
+            &resilience,
+            Some(node.docs_engine()),
+            Some(&ns_ids),
+            provider,
+            &options,
+            Some(tx),
+        );
+        mirror_network(mctx).await?
+    } else if let Some(ref prov) = provider {
+        mirror_provider(
+            node.endpoint(),
+            node.blob_store(),
+            &resilience,
+            prov,
+            &options,
+            Some(tx),
+        )
+        .await?
+    } else {
+        anyhow::bail!("either a provider ID or --network is required");
+    };
+
+    if output_json {
+        println!("{}", serde_json::json!(&result));
+    } else {
+        let pb = ProgressBar::new(u64::try_from(result.total_blobs).unwrap_or(u64::MAX));
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner} {msg} {bar} {pos}/{len} ({eta})")?
+                .progress_chars("=> "),
+        );
+        pb.set_message("mirroring...");
+        while let Some(event) = rx.recv().await {
+            match event {
+                MirrorEvent::Discovered { total } => {
+                    pb.set_length(u64::try_from(total).unwrap_or(u64::MAX));
+                }
+                MirrorEvent::Fetching { hash, index, .. } => {
+                    pb.set_position(u64::try_from(index).unwrap_or(0));
+                    pb.set_message(format!("fetching {hash}"));
+                }
+                MirrorEvent::Pinned { .. } => {
+                    pb.inc(1);
+                }
+                MirrorEvent::Failed { hash, error } => {
+                    pb.println(format!("failed: {hash}: {error}"));
+                }
+                MirrorEvent::Skipped { .. } | _ => {}
+            }
+        }
+        pb.finish_and_clear();
+        println!(
+            "mirror complete: {} total, {} pinned, {} skipped, {} failed",
+            result.total_blobs, result.pinned, result.skipped, result.failed
+        );
+    }
+
+    let _ = node.stop().await;
+    Ok(())
 }
 
 #[async_recursion]

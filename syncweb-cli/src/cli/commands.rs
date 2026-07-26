@@ -102,6 +102,8 @@ pub enum Command {
         #[command(subcommand)]
         command: LinkCommand,
     },
+    #[command(about = "Mirror all blobs from a provider or network")]
+    Mirror(MirrorArgs),
     #[command(about = "Manage blob provider registrations")]
     Provider {
         #[command(subcommand)]
@@ -405,6 +407,24 @@ pub struct DownloadArgs {
     pub no_sharing: bool,
     #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
     pub min_providers: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct MirrorArgs {
+    #[arg(help = "Provider ID (PublicKey hex) to mirror blobs from")]
+    pub provider: Option<String>,
+    #[arg(long, help = "Network name or ID to mirror all blobs across")]
+    pub network: Option<String>,
+    #[arg(long, default_value_t = 3, help = "Minimum replication budget per blob (default 3)")]
+    pub min_providers: usize,
+    #[arg(
+        long,
+        visible_alias = "no-seeding",
+        help = "Skip lease announcements after mirroring"
+    )]
+    pub no_sharing: bool,
+    #[arg(long, help = "Report what would be mirrored without fetching")]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]

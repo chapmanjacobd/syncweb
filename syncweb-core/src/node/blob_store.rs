@@ -13,6 +13,7 @@ use n0_future::StreamExt;
 use std::path::Path;
 
 use crate::error::{Result, SyncwebError};
+use crate::net::NetworkContext;
 
 #[derive(Clone)]
 pub struct BlobStore {
@@ -248,6 +249,28 @@ impl BlobStore {
             .await
             .map_err(|error| SyncwebError::operation("failed to fetch blob", error))?;
         Ok(())
+    }
+
+    /// Fetch a blob with network access control gating.
+    ///
+    /// Checks via `NetworkContext` that the local node can access the blob
+    /// through at least one network membership before downloading.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AccessDenied` if the blob is not associated with any network
+    /// the local node belongs to. Returns other errors if the fetch itself fails.
+    pub async fn download_with_network(
+        &self,
+        endpoint: &Endpoint,
+        ticket: &BlobTicket,
+        ctx: &NetworkContext,
+    ) -> Result<()> {
+        let hash = ticket.hash();
+        if !ctx.can_access_blob(&hash)? {
+            return Err(SyncwebError::access_denied("blob not accessible in any network"));
+        }
+        self.fetch(endpoint, ticket).await
     }
 
     /// Force-fetch a blob from a remote peer, re-downloading even if the blob

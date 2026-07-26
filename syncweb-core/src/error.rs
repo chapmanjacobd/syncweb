@@ -76,6 +76,9 @@ pub enum SyncwebError {
     #[error("invalid cryptographic signature: {0}")]
     InvalidSignature(String),
 
+    #[error("access denied: {0}")]
+    AccessDenied(String),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -93,6 +96,10 @@ impl SyncwebError {
             context: context.into(),
             detail: source.to_string(),
         }
+    }
+
+    pub fn access_denied(reason: impl Into<String>) -> Self {
+        Self::AccessDenied(reason.into())
     }
 }
 

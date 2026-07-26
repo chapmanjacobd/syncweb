@@ -24,6 +24,7 @@ use crate::{
         resilience::{ReplicationBudget, ResilienceConfig},
         wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
     },
+    net::{NetworkLogger, NetworkManager},
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
     storage::{node_db::NodeDatabase, stats_db::StatsDatabase},
@@ -103,6 +104,8 @@ pub struct Daemon {
     pending_watch_events: Mutex<HashMap<String, PendingWatch>>,
     filter_engine: tokio::sync::RwLock<Option<FilterEngine>>,
     archive_pool: Arc<ManagedPool>,
+    network_logger: NetworkLogger,
+    network_manager: tokio::sync::RwLock<NetworkManager>,
     attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     revocation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
@@ -144,6 +147,63 @@ impl Daemon {
         Ok((node, folder_manager, sync_engine))
     }
 
+    /// Open node and stats databases and acquire the process lock.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a database cannot be opened or the lock is held by
+    /// another process.
+    fn init_databases(config: &DaemonConfig) -> Result<(NodeDatabase, StatsDatabase, PidLock)> {
+        let node_db = NodeDatabase::open(config.data_dir.join("node.db"))?;
+        let stats_db = StatsDatabase::open(config.data_dir.join("stats.db"))?;
+        let pid_lock = PidLock::new(&config.data_dir);
+        if !pid_lock.try_acquire()? {
+            return Err(SyncwebError::operation(
+                "daemon already running",
+                config.data_dir.display(),
+            ));
+        }
+        Ok((node_db, stats_db, pid_lock))
+    }
+
+    /// Load app config, schedule manager, filter engine, and write initial lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading config, filters, or saving the lifecycle fails.
+    fn load_app_state(
+        node_db: &NodeDatabase,
+        pid_lock: &PidLock,
+        data_dir: &Path,
+    ) -> Result<(Option<ScheduleManager>, Option<FilterEngine>, DaemonState)> {
+        let app_config = node_db.load_app_config().inspect_err(|_error| {
+            let _ = pid_lock.release();
+        })?;
+        let use_schedule = app_config.schedule != crate::schedule::ScheduleConfig::default();
+        let schedule_manager = match ScheduleManager::from_config(&app_config.schedule) {
+            Ok(s) if use_schedule => Some(s),
+            Ok(_) => None,
+            Err(error) => {
+                let _ = pid_lock.release();
+                return Err(error);
+            }
+        };
+        let filter_engine = node_db.load_filter_engine().inspect_err(|_error| {
+            let _ = pid_lock.release();
+        })?;
+        let initial_state = DaemonState::new(
+            std::process::id(),
+            String::new(),
+            current_timestamp(),
+            data_dir,
+            DaemonStatus::Starting,
+        );
+        node_db.save_lifecycle(&initial_state).inspect_err(|_error| {
+            let _ = pid_lock.release();
+        })?;
+        Ok((schedule_manager, filter_engine, initial_state))
+    }
+
     /// Create a daemon, acquire its process lock, and persist its running
     /// state.
     ///
@@ -153,66 +213,20 @@ impl Daemon {
     /// cannot be opened, or configuration cannot be parsed.
     pub async fn new(config: DaemonConfig) -> Result<Self> {
         std::fs::create_dir_all(&config.data_dir)?;
+        let (node_db, stats_db, pid_lock) = Self::init_databases(&config)?;
+        let (schedule_manager, filter_engine, initial_state) =
+            Self::load_app_state(&node_db, &pid_lock, &config.data_dir)?;
 
-        let node_db = match NodeDatabase::open(config.data_dir.join("node.db")) {
-            Ok(value) => value,
-            Err(error) => return Err(error),
-        };
-        let stats_db = match StatsDatabase::open(config.data_dir.join("stats.db")) {
-            Ok(value) => value,
-            Err(error) => return Err(error),
-        };
-        let pid_lock = PidLock::new(&config.data_dir);
-        if !pid_lock.try_acquire()? {
-            return Err(SyncwebError::operation(
-                "daemon already running",
-                config.data_dir.display(),
-            ));
-        }
-
-        let app_config = match node_db.load_app_config() {
-            Ok(value) => value,
-            Err(error) => {
-                pid_lock.release()?;
-                return Err(error);
-            }
-        };
-        let schedule_manager = match ScheduleManager::from_config(&app_config.schedule) {
-            Ok(value) if app_config.schedule != crate::schedule::ScheduleConfig::default() => Some(value),
-            Ok(_) => None,
-            Err(error) => {
-                pid_lock.release()?;
-                return Err(error);
-            }
-        };
-        let filter_engine = match node_db.load_filter_engine() {
-            Ok(value) => value,
-            Err(error) => {
-                pid_lock.release()?;
-                return Err(error);
-            }
-        };
-        let initial_state = DaemonState::new(
-            std::process::id(),
-            String::new(),
-            current_timestamp(),
-            &config.data_dir,
-            DaemonStatus::Starting,
-        );
-        if let Err(error) = node_db.save_lifecycle(&initial_state) {
-            pid_lock.release()?;
-            return Err(error);
-        }
-
-        let (node, folder_manager, sync_engine) =
+        let (node, folder_manager, mut sync_engine) =
             Self::open_identity_and_node(&config.data_dir, &node_db, &pid_lock, config.relay_mode.clone()).await?;
+        sync_engine = sync_engine.with_node_db(node_db.clone());
 
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
             Ok(value) => Arc::new(value),
             Err(error) => {
-                let _cleanup_node = node.stop().await;
-                let _cleanup_state = node_db.remove_lifecycle();
-                let _cleanup_lock = pid_lock.release();
+                let _ = node.stop().await;
+                let _ = node_db.remove_lifecycle();
+                let _ = pid_lock.release();
                 return Err(SyncwebError::operation("failed to create daemon thread pool", error));
             }
         };
@@ -225,9 +239,9 @@ impl Daemon {
             let running_state = state.clone();
             drop(state);
             if let Err(error) = node_db.save_lifecycle(&running_state) {
-                let _cleanup_node = node.stop().await;
-                let _cleanup_state = node_db.remove_lifecycle();
-                let _cleanup_lock = pid_lock.release();
+                let _ = node.stop().await;
+                let _ = node_db.remove_lifecycle();
+                let _ = pid_lock.release();
                 return Err(error);
             }
         }
@@ -242,19 +256,23 @@ impl Daemon {
         let resilience = IndexingService::new(config.data_dir.join("indexing.sqlite"))
             .ok()
             .map(|indexing| indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default())));
-        let mut ipc_server = IpcServer::with_archive_context(
-            daemon_socket_path(&config.data_dir),
-            handle.clone(),
-            node.clone(),
-            archive_pool.clone(),
-        )
-        .with_folder_manager(folder_manager.clone())
-        .with_node_db(node_db.clone());
+        let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
+        let network_logger = NetworkLogger::new(stats_db.clone());
+        let local_node_id = node.endpoint().id();
+        let nm_result = Self::create_network_manager(&node_db, &local_node_id, &network_logger);
+        let network_manager = match nm_result {
+            Ok(nm) => nm,
+            Err(error) => {
+                tracing::warn!("failed to create network manager with logger: {error}");
+                NetworkManager::new(node_db.clone(), local_node_id)?
+            }
+        };
+        let mut ipc_server = Self::build_ipc_server(&config, &handle, &node, &archive_pool, &folder_manager, &node_db);
         ipc_server = match resilience {
             Some(service) => ipc_server.with_resilience(service),
             None => ipc_server,
         };
-        let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
+        ipc_server = ipc_server.with_network_manager(Arc::new(tokio::sync::RwLock::new(network_manager.clone())));
 
         Ok(Self {
             config,
@@ -275,10 +293,38 @@ impl Daemon {
             pending_watch_events: Mutex::new(HashMap::new()),
             filter_engine: tokio::sync::RwLock::new(filter_engine),
             archive_pool,
+            network_logger,
+            network_manager: tokio::sync::RwLock::new(network_manager),
             attestation_listener: tokio::sync::Mutex::new(None),
             report_listener: tokio::sync::Mutex::new(None),
             revocation_listener: tokio::sync::Mutex::new(None),
         })
+    }
+
+    fn create_network_manager(
+        node_db: &NodeDatabase,
+        local_node_id: &iroh::PublicKey,
+        network_logger: &NetworkLogger,
+    ) -> Result<NetworkManager> {
+        NetworkManager::with_logger(node_db.clone(), *local_node_id, network_logger.clone())
+    }
+
+    fn build_ipc_server(
+        config: &DaemonConfig,
+        handle: &DaemonHandle,
+        node: &Arc<IrohNode>,
+        archive_pool: &Arc<ManagedPool>,
+        folder_manager: &FolderManager,
+        node_db: &NodeDatabase,
+    ) -> IpcServer {
+        IpcServer::with_archive_context(
+            daemon_socket_path(&config.data_dir),
+            handle.clone(),
+            node.clone(),
+            archive_pool.clone(),
+        )
+        .with_folder_manager(folder_manager.clone())
+        .with_node_db(node_db.clone())
     }
 
     /// Run the daemon until IPC or operating-system shutdown is requested.
@@ -318,6 +364,8 @@ impl Daemon {
         self.load_folders().await?;
         self.load_subscriptions().await?;
         self.start_watching().await?;
+        self.subscribe_network_gossip().await;
+        self.spawn_membership_listeners().await;
         let server = self.ipc_server.clone();
         let mut server_task = tokio::spawn(async move { server.serve().await });
         let mut shutdown = self.handle.shutdown_sender.subscribe();
@@ -332,6 +380,7 @@ impl Daemon {
         self.spawn_attestation_listener().await;
         self.spawn_report_listener().await;
         self.spawn_revocation_listener().await;
+        self.spawn_maintenance_task();
         let result = self
             .run_event_loop(
                 &mut server_task,
@@ -448,11 +497,21 @@ impl Daemon {
                 return Ok(());
             }
         }
+        let network_id = {
+            let guard = self.network_manager.read().await;
+            guard.network_for_folder(&namespace)?
+        };
+        let session_id = network_id.as_ref().and_then(|net_id| {
+            self.network_logger
+                .record_sync_start(net_id, &namespace.to_string())
+                .ok()
+        });
         let sync = self.sync_engine.clone();
         let supervisor = self.intent_supervisor;
         let shutdown = self.handle.shutdown_sender.subscribe();
         let controls = self.intent_controls.clone();
         let filter = self.filter_engine.read().await.clone();
+        let network_logger = self.network_logger.clone();
         let folder_name = self
             .handle
             .folder_registry
@@ -475,7 +534,7 @@ impl Daemon {
         });
         let (ready_sender, ready_receiver) = oneshot::channel();
         let task = tokio::spawn(async move {
-            match supervisor
+            let result = supervisor
                 .supervise_with_controls_and_ready(
                     &sync,
                     namespace,
@@ -483,11 +542,28 @@ impl Daemon {
                     shutdown,
                     SupervisionOptions::with_ready(controls, filter, ready_sender),
                 )
-                .await
+                .await;
+            if network_id.is_some()
+                && let Some(sid) = session_id
             {
-                Ok(result) => {
-                    if let Some(error) = result.last_error {
-                        tracing::warn!(%namespace, retry_count = result.retry_count, %error, "supervised intent stopped");
+                match &result {
+                    Ok(supervised) => {
+                        let has_error = supervised.last_error.is_some();
+                        let files = 0;
+                        let bytes = 0;
+                        let errors = u64::from(has_error);
+                        let status = if has_error { "failed" } else { "completed" };
+                        let _ = network_logger.record_sync_finish(sid, files, bytes, errors, status);
+                    }
+                    Err(_) => {
+                        let _ = network_logger.record_sync_finish(sid, 0, 0, 1, "failed");
+                    }
+                }
+            }
+            match &result {
+                Ok(supervised) => {
+                    if let Some(error) = &supervised.last_error {
+                        tracing::warn!(%namespace, retry_count = supervised.retry_count, %error, "supervised intent stopped");
                     }
                 }
                 Err(error) => tracing::error!(%namespace, %error, "supervised intent failed"),
@@ -930,6 +1006,154 @@ impl Daemon {
             }
         });
         *self.revocation_listener.lock().await = Some(handle);
+    }
+
+    /// Spawn a background task that periodically vacuums databases with
+    /// excessive freelist pages.
+    fn spawn_maintenance_task(&self) {
+        let node_db = self.node_db.clone();
+        let stats_db = self.stats_db.clone();
+        let mut shutdown = self.handle.shutdown_sender.subscribe();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_hours(24));
+            loop {
+                tokio::select! {
+                    _ = shutdown.recv() => {
+                        tracing::info!("maintenance task shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        let dbs: [&dyn crate::storage::Vacuumable; 2] = [&node_db, &stats_db];
+                        for db in dbs {
+                            match db.freelist_count() {
+                                Ok(count) if count > 100 => {
+                                    tracing::info!(freelist = %count, "running vacuum");
+                                    if let Err(error) = db.vacuum() {
+                                        tracing::warn!(%error, "maintenance vacuum failed");
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(error) => tracing::warn!(%error, "maintenance freelist query failed"),
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async fn subscribe_network_gossip(&self) {
+        let networks: Vec<_> = {
+            let guard = self.network_manager.read().await;
+            guard.list().into_iter().cloned().collect::<Vec<_>>()
+        };
+        for network in &networks {
+            let network_id = network.id;
+            let topic = network.topic;
+            let members: Vec<_> = network
+                .members
+                .iter()
+                .copied()
+                .filter(|m| *m != self.node.endpoint().id())
+                .collect();
+            match self.node.gossip_service().subscribe(topic, members).await {
+                Ok(_topic) => {
+                    tracing::debug!(%network_id, "subscribed to network gossip topic");
+                }
+                Err(error) => {
+                    tracing::warn!(%network_id, %error, "failed to subscribe to network gossip topic");
+                }
+            }
+        }
+    }
+
+    async fn spawn_membership_listeners(&self) {
+        let networks: Vec<_> = {
+            let guard = self.network_manager.read().await;
+            guard.list().into_iter().cloned().collect::<Vec<_>>()
+        };
+        let docs_engine = self.node.docs_engine().clone();
+        let blob_store = self.node.blob_store().clone();
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let local_pk = self.node.endpoint().id();
+        let node_db = self.node_db.clone();
+        for network in networks {
+            let Some(ref doc_ticket_str) = network.doc_ticket else {
+                continue;
+            };
+            let Ok(doc_ticket) = doc_ticket_str.parse::<iroh_docs::DocTicket>() else {
+                tracing::warn!(network_id = %network.id, "invalid doc_ticket in network");
+                continue;
+            };
+            let de = docs_engine.clone();
+            let bs = blob_store.clone();
+            let mut member_shutdown = shutdown.resubscribe();
+            let network_id = network.id;
+            let local_key_str = local_pk.to_string();
+            let db = node_db.clone();
+            tokio::spawn(async move {
+                let doc = match de.import_ticket(doc_ticket).await {
+                    Ok(doc) => doc,
+                    Err(error) => {
+                        tracing::warn!(%network_id, %error, "failed to import membership doc from ticket");
+                        return;
+                    }
+                };
+                if let Err(error) = de.start_sync(&doc, Vec::new()).await {
+                    tracing::warn!(%network_id, %error, "failed to start membership doc sync");
+                }
+                let mut stream = match de.watch(&doc).await {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        tracing::warn!(%network_id, %error, "failed to watch membership doc");
+                        return;
+                    }
+                };
+                loop {
+                    tokio::select! {
+                        _ = member_shutdown.recv() => {
+                            tracing::debug!(%network_id, "membership listener shutting down");
+                            break;
+                        }
+                        event = stream.next() => {
+                            let Some(event_result) = event else {
+                                break;
+                            };
+                            match event_result {
+                                Ok(iroh_docs::engine::LiveEvent::InsertLocal { entry } | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. }) => {
+                                    if entry.key() == b"sys/network/members" {
+                                        let hash = entry.content_hash();
+                                        let Ok(content) = bs.get(hash).await else { continue; };
+                                        match serde_json::from_slice::<crate::net::membership_doc::SignedMemberList>(&content) {
+                                            Ok(member_list) => {
+                                                if let Err(error) = member_list.verify() {
+                                                    tracing::warn!(%network_id, %error, "invalid membership list signature");
+                                                    continue;
+                                                }
+                                                let is_member = member_list.members.iter().any(|m| m.key == local_key_str);
+                                                if is_member {
+                                                    tracing::debug!(%network_id, members = member_list.members.len(), "membership updated");
+                                                } else {
+                                                    tracing::warn!(%network_id, "local node was removed from network");
+                                                    let _ = db.delete_network(network_id);
+                                                }
+                                            }
+                                            Err(error) => {
+                                                tracing::warn!(%network_id, %error, "failed to parse membership list");
+                                            }
+                                        }
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    tracing::warn!(%network_id, %error, "membership doc event error");
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     async fn handle_signals(&self, shutdown: broadcast::Sender<()>) -> Result<()> {

@@ -6,6 +6,7 @@ use std::{
 };
 
 use iroh::PublicKey;
+use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
@@ -21,6 +22,20 @@ use crate::{
     net::network::{Network, NetworkId, network_topic, parse_public_key},
     storage::config::Config as AppConfig,
 };
+
+/// Parameters for upserting a sync entry progress record.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct SyncEntryParams<'a> {
+    pub namespace_id: &'a str,
+    pub session_id: &'a str,
+    pub entry_key: &'a [u8],
+    pub hash: &'a [u8],
+    pub size: u64,
+    pub status: &'a str,
+    pub retries: u32,
+    pub error_message: Option<&'a str>,
+}
 
 #[derive(Clone, Debug)]
 pub struct NodeDatabase {
@@ -48,6 +63,138 @@ impl NodeDatabase {
         Ok(db)
     }
 
+    /// Returns the SQL statements to create the database schema.
+    const fn create_schema_sql() -> &'static str {
+        "CREATE TABLE IF NOT EXISTS schema_version (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS daemon_lifecycle (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            pid INTEGER NOT NULL,
+            node_id TEXT NOT NULL,
+            started_at INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('starting','running','stopping','stopped')),
+            data_dir TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS daemon_status (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            pid INTEGER NOT NULL,
+            node_id TEXT NOT NULL,
+            started_at INTEGER NOT NULL,
+            uptime_seconds INTEGER NOT NULL,
+            upload_total INTEGER NOT NULL DEFAULT 0,
+            download_total INTEGER NOT NULL DEFAULT 0,
+            upload_rate INTEGER NOT NULL DEFAULT 0,
+            download_rate INTEGER NOT NULL DEFAULT 0,
+            has_schedule INTEGER NOT NULL DEFAULT 0,
+            in_active_window INTEGER NOT NULL DEFAULT 0,
+            next_window_start INTEGER,
+            rayon_threads INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS folder_status_reports (
+            namespace_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            session_active INTEGER NOT NULL DEFAULT 0,
+            last_sync_at INTEGER,
+            entries_synced INTEGER NOT NULL DEFAULT 0,
+            errors_json TEXT NOT NULL DEFAULT '[]',
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(namespace_id)
+        );
+        CREATE TABLE IF NOT EXISTS networks (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL DEFAULT '',
+            owner TEXT NOT NULL,
+            shared_secret BLOB,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS network_members (
+            network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
+            member TEXT NOT NULL,
+            PRIMARY KEY(network_id, member)
+        );
+        CREATE TABLE IF NOT EXISTS network_folders (
+            network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
+            namespace_id TEXT NOT NULL,
+            PRIMARY KEY(network_id, namespace_id)
+        );
+        CREATE TABLE IF NOT EXISTS installed_collections (
+            collection_id TEXT PRIMARY KEY,
+            manifest_hash TEXT NOT NULL,
+            current_version TEXT NOT NULL,
+            installed_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS collection_versions (
+            collection_id TEXT NOT NULL REFERENCES installed_collections(collection_id) ON DELETE CASCADE,
+            version TEXT NOT NULL,
+            install_path TEXT NOT NULL,
+            PRIMARY KEY(collection_id, version)
+        );
+        CREATE TABLE IF NOT EXISTS app_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS filter_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            namespace_id TEXT,
+            rule_type TEXT NOT NULL,
+            pattern TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS public_subscriptions (
+            hash TEXT PRIMARY KEY,
+            size INTEGER NOT NULL,
+            subscribed_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workspace_manifests (
+            source_path TEXT NOT NULL,
+            manifest_bytes BLOB NOT NULL,
+            collection_id TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(source_path)
+        );
+        CREATE TABLE IF NOT EXISTS blob_folders (
+            content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+            namespace_id TEXT NOT NULL,
+            entry_key BLOB NOT NULL,
+            added_at INTEGER NOT NULL,
+            PRIMARY KEY(content_hash, namespace_id, entry_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_blob_folders_hash ON blob_folders(content_hash);
+        CREATE TABLE IF NOT EXISTS sync_checkpoints (
+            namespace_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            total_entries INTEGER NOT NULL DEFAULT 0,
+            processed_entries INTEGER NOT NULL DEFAULT 0,
+            failed_entries INTEGER NOT NULL DEFAULT 0,
+            bytes_total INTEGER,
+            bytes_transferred INTEGER NOT NULL DEFAULT 0,
+            started_at INTEGER NOT NULL,
+            last_updated_at INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','completed','failed','cancelled')),
+            PRIMARY KEY(namespace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS sync_entry_progress (
+            namespace_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            entry_key BLOB NOT NULL,
+            hash BLOB NOT NULL,
+            size INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','downloading','completed','failed','skipped')),
+            retries INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(namespace_id, session_id, entry_key),
+            FOREIGN KEY(namespace_id, session_id) REFERENCES sync_checkpoints(namespace_id, session_id) ON DELETE CASCADE
+        );"
+    }
+
     /// Initialize the database schema, creating tables and indexes if they don't exist.
     ///
     /// # Errors
@@ -68,96 +215,9 @@ impl NodeDatabase {
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|error| SyncwebError::operation("failed to enable foreign keys", error))?;
         connection
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS schema_version (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS daemon_lifecycle (
-                id INTEGER PRIMARY KEY CHECK(id = 1),
-                pid INTEGER NOT NULL,
-                node_id TEXT NOT NULL,
-                started_at INTEGER NOT NULL,
-                status TEXT NOT NULL CHECK(status IN ('starting','running','stopping','stopped')),
-                data_dir TEXT NOT NULL,
-                updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS daemon_status (
-                id INTEGER PRIMARY KEY CHECK(id = 1),
-                pid INTEGER NOT NULL,
-                node_id TEXT NOT NULL,
-                started_at INTEGER NOT NULL,
-                uptime_seconds INTEGER NOT NULL,
-                upload_total INTEGER NOT NULL DEFAULT 0,
-                download_total INTEGER NOT NULL DEFAULT 0,
-                upload_rate INTEGER NOT NULL DEFAULT 0,
-                download_rate INTEGER NOT NULL DEFAULT 0,
-                has_schedule INTEGER NOT NULL DEFAULT 0,
-                in_active_window INTEGER NOT NULL DEFAULT 0,
-                next_window_start INTEGER,
-                rayon_threads INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS folder_status_reports (
-                namespace_id TEXT NOT NULL,
-                path TEXT NOT NULL,
-                session_active INTEGER NOT NULL DEFAULT 0,
-                last_sync_at INTEGER,
-                entries_synced INTEGER NOT NULL DEFAULT 0,
-                errors_json TEXT NOT NULL DEFAULT '[]',
-                updated_at INTEGER NOT NULL,
-                PRIMARY KEY(namespace_id)
-            );
-            CREATE TABLE IF NOT EXISTS networks (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                label TEXT NOT NULL DEFAULT '',
-                owner TEXT NOT NULL,
-                shared_secret BLOB,
-                created_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS network_members (
-                network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
-                member TEXT NOT NULL,
-                PRIMARY KEY(network_id, member)
-            );
-            CREATE TABLE IF NOT EXISTS network_folders (
-                network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
-                namespace_id TEXT NOT NULL,
-                PRIMARY KEY(network_id, namespace_id)
-            );
-            CREATE TABLE IF NOT EXISTS installed_collections (
-                collection_id TEXT PRIMARY KEY,
-                manifest_hash TEXT NOT NULL,
-                current_version TEXT NOT NULL,
-                installed_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS collection_versions (
-                collection_id TEXT NOT NULL REFERENCES installed_collections(collection_id) ON DELETE CASCADE,
-                version TEXT NOT NULL,
-                install_path TEXT NOT NULL,
-                PRIMARY KEY(collection_id, version)
-            );
-            CREATE TABLE IF NOT EXISTS app_config (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS filter_rules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                namespace_id TEXT,
-                rule_type TEXT NOT NULL,
-                pattern TEXT NOT NULL,
-                priority INTEGER NOT NULL DEFAULT 0,
-                updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS public_subscriptions (
-                hash TEXT PRIMARY KEY,
-                size INTEGER NOT NULL,
-                subscribed_at INTEGER NOT NULL
-            );",
-            )
+            .execute_batch(Self::create_schema_sql())
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
+        let _ = connection.execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT");
         connection
             .execute(
                 "INSERT INTO schema_version(key, value) VALUES ('version', '1')
@@ -482,7 +542,7 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
         let now = current_timestamp().cast_signed();
         connection.execute(
-            "INSERT INTO networks(id, name, label, owner, shared_secret, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO networks(id, name, label, owner, shared_secret, created_at, doc_ticket) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 network.id.to_string(),
                 network.name,
@@ -490,6 +550,7 @@ impl NodeDatabase {
                 network.owner.to_string(),
                 network.shared_secret.as_ref().map(|s| s.to_vec()),
                 now,
+                network.doc_ticket,
             ],
         ).map_err(|error| SyncwebError::operation("failed to create network", error))?;
         for member in &network.members {
@@ -624,7 +685,7 @@ impl NodeDatabase {
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
         let mut stmt = connection
-            .prepare("SELECT id, name, label, owner, shared_secret FROM networks ORDER BY name")
+            .prepare("SELECT id, name, label, owner, shared_secret, doc_ticket FROM networks ORDER BY name")
             .map_err(|error| SyncwebError::operation("failed to prepare network query", error))?;
         let networks = stmt
             .query_map([], |row| {
@@ -634,6 +695,7 @@ impl NodeDatabase {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<Vec<u8>>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
                 ))
             })
             .map_err(|error| SyncwebError::operation("failed to query networks", error))?
@@ -648,7 +710,7 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to prepare folder query", error))?;
 
         let mut result = Vec::new();
-        for (id_str, name, label, owner_str, shared_secret_bytes) in networks {
+        for (id_str, name, label, owner_str, shared_secret_bytes, doc_ticket) in networks {
             let network_id = NetworkId::from_str(&id_str)
                 .map_err(|error| SyncwebError::operation("invalid network ID in database", error))?;
             let owner = parse_public_key(&owner_str)?;
@@ -688,6 +750,7 @@ impl NodeDatabase {
                 members,
                 folders,
                 shared_secret,
+                doc_ticket,
             });
         }
         drop(stmt);
@@ -1130,5 +1193,589 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to remove subscription", error))?;
         drop(connection);
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Workspace manifest methods (replaces .syncweb-collection.json)
+    // ------------------------------------------------------------------
+
+    /// Save a workspace manifest (serialized bytes) keyed by source path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn save_workspace_manifest(&self, source_path: &str, manifest_bytes: &[u8], collection_id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO workspace_manifests(source_path, manifest_bytes, collection_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4)",
+                params![source_path, manifest_bytes, collection_id, now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save workspace manifest", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load a workspace manifest by source path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn load_workspace_manifest(&self, source_path: &str) -> Result<Option<Vec<u8>>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let result: Option<Vec<u8>> = connection
+            .query_row(
+                "SELECT manifest_bytes FROM workspace_manifests WHERE source_path = ?1",
+                params![source_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to load workspace manifest", error))?;
+        drop(connection);
+        Ok(result)
+    }
+
+    /// Delete a workspace manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_workspace_manifest(&self, source_path: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM workspace_manifests WHERE source_path = ?1",
+                params![source_path],
+            )
+            .map_err(|error| SyncwebError::operation("failed to delete workspace manifest", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Blob-folder index methods (network access control)
+    // ------------------------------------------------------------------
+
+    /// Record a blob→folder association.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn record_blob_folder(&self, content_hash: &[u8; 32], namespace_id: &str, entry_key: &[u8]) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO blob_folders(content_hash, namespace_id, entry_key, added_at)
+             VALUES (?1, ?2, ?3, ?4)",
+                params![content_hash.as_slice(), namespace_id, entry_key, now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to record blob folder association", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Remove a blob→folder association.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn remove_blob_folder(&self, content_hash: &[u8; 32], namespace_id: &str, entry_key: &[u8]) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM blob_folders WHERE content_hash = ?1 AND namespace_id = ?2 AND entry_key = ?3",
+                params![content_hash.as_slice(), namespace_id, entry_key],
+            )
+            .map_err(|error| SyncwebError::operation("failed to remove blob folder association", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Check if a blob hash is accessible in any network the local node belongs to.
+    /// Check if a blob is accessible in any network the member belongs to.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn can_access_blob(&self, hash: &Hash, member: &str) -> Result<bool> {
+        self.can_access_blob_in_network(hash.as_bytes(), member)
+    }
+
+    /// Check if a blob (by raw hash bytes) is accessible in any network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn can_access_blob_in_network(&self, content_hash: &[u8; 32], member: &str) -> Result<bool> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let exists: bool = connection
+            .query_row(
+                "SELECT 1 FROM blob_folders bf
+             JOIN network_folders nf ON bf.namespace_id = nf.namespace_id
+             JOIN network_members nm ON nf.network_id = nm.network_id
+             WHERE bf.content_hash = ?1 AND nm.member = ?2
+             LIMIT 1",
+                params![content_hash.as_slice(), member],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to check blob access", error))?
+            .is_some();
+        drop(connection);
+        Ok(exists)
+    }
+
+    /// Check if the local node can access a folder namespace through any network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn can_access_folder(&self, namespace_id: &str, member: &str) -> Result<bool> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let exists: bool = connection
+            .query_row(
+                "SELECT 1 FROM network_folders nf
+             JOIN network_members nm ON nf.network_id = nm.network_id
+             WHERE nf.namespace_id = ?1 AND nm.member = ?2
+             LIMIT 1",
+                params![namespace_id, member],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to check folder access", error))?
+            .is_some();
+        drop(connection);
+        Ok(exists)
+    }
+
+    /// List all namespace IDs associated with a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn folders_for_network(&self, network_id: &str) -> Result<Vec<String>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT namespace_id FROM network_folders WHERE network_id = ?1")
+            .map_err(|error| SyncwebError::operation("failed to prepare folders query", error))?;
+        let folders: Vec<String> = stmt
+            .query_map(params![network_id], |row| row.get(0))
+            .map_err(|error| SyncwebError::operation("failed to query folders", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read folder rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(folders)
+    }
+
+    /// List all network IDs that contain a given folder namespace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn networks_for_folder(&self, namespace_id: &str) -> Result<Vec<String>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT network_id FROM network_folders WHERE namespace_id = ?1")
+            .map_err(|error| SyncwebError::operation("failed to prepare networks query", error))?;
+        let networks: Vec<String> = stmt
+            .query_map(params![namespace_id], |row| row.get(0))
+            .map_err(|error| SyncwebError::operation("failed to query networks", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read network rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(networks)
+    }
+
+    /// List all member `PublicKey` strings for a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn members_of_network(&self, network_id: &str) -> Result<Vec<String>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT member FROM network_members WHERE network_id = ?1")
+            .map_err(|error| SyncwebError::operation("failed to prepare members query", error))?;
+        let members: Vec<String> = stmt
+            .query_map(params![network_id], |row| row.get(0))
+            .map_err(|error| SyncwebError::operation("failed to query members", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read member rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(members)
+    }
+
+    // ------------------------------------------------------------------
+    // Sync checkpoint methods
+    // ------------------------------------------------------------------
+
+    /// Create a new sync checkpoint session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn create_sync_checkpoint(&self, namespace_id: &str, session_id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO sync_checkpoints(namespace_id, session_id, started_at, last_updated_at, status)
+             VALUES (?1, ?2, ?3, ?4, 'running')",
+                params![namespace_id, session_id, now, now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to create sync checkpoint", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Upsert a sync entry progress record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn upsert_sync_entry(&self, p: &SyncEntryParams<'_>) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO sync_entry_progress(namespace_id, session_id, entry_key, hash, size, status, retries, error_message, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(namespace_id, session_id, entry_key) DO UPDATE SET
+                status = excluded.status,
+                retries = excluded.retries,
+                error_message = excluded.error_message,
+                updated_at = excluded.updated_at",
+                params![p.namespace_id, p.session_id, p.entry_key, p.hash, p.size.cast_signed(), p.status, p.retries.cast_signed(), p.error_message, now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to upsert sync entry", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// List sync entries for a session filtered by status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn list_sync_entries(
+        &self,
+        namespace_id: &str,
+        session_id: &str,
+        status: &str,
+    ) -> Result<Vec<crate::sync::checkpoint::EntryProgress>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare(
+                "SELECT entry_key, hash, size, status, retries, error_message
+             FROM sync_entry_progress
+             WHERE namespace_id = ?1 AND session_id = ?2 AND status = ?3",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare sync entry query", error))?;
+        let entries = stmt
+            .query_map(params![namespace_id, session_id, status], |row| {
+                let entry_key: Vec<u8> = row.get(0)?;
+                let hash_bytes: Vec<u8> = row.get(1)?;
+                let hash_str = String::from_utf8_lossy(&hash_bytes);
+                let hash = hash_str.parse::<iroh_blobs::Hash>().unwrap_or(iroh_blobs::Hash::EMPTY);
+                let size: i64 = row.get(2)?;
+                let status_str: String = row.get(3)?;
+                let retries: i64 = row.get(4)?;
+                let error_message: Option<String> = row.get(5)?;
+                Ok(crate::sync::checkpoint::EntryProgress {
+                    entry_key,
+                    hash,
+                    size: size.cast_unsigned(),
+                    status: status_str,
+                    retries: u32::try_from(retries).unwrap_or(0),
+                    error_message,
+                })
+            })
+            .map_err(|error| SyncwebError::operation("failed to query sync entries", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read sync entry rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(entries)
+    }
+
+    /// Get checkpoint progress for a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_checkpoint_progress(
+        &self,
+        namespace_id: &str,
+        session_id: &str,
+    ) -> Result<crate::sync::checkpoint::CheckpointProgress> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let (total, completed, failed, skipped, pending, bytes_transferred, bytes_total): (
+            i64, i64, i64, i64, i64, i64, Option<i64>,
+        ) = connection
+            .query_row(
+                "SELECT
+                (SELECT COUNT(*) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2),
+                COALESCE((SELECT COUNT(*) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2 AND status = 'completed'), 0),
+                COALESCE((SELECT COUNT(*) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2 AND status = 'failed'), 0),
+                COALESCE((SELECT COUNT(*) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2 AND status = 'skipped'), 0),
+                COALESCE((SELECT COUNT(*) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2 AND status = 'pending'), 0),
+                COALESCE((SELECT SUM(size) FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2 AND status = 'completed'), 0),
+                (SELECT bytes_total FROM sync_checkpoints WHERE namespace_id = ?1 AND session_id = ?2)",
+                params![namespace_id, session_id],
+                |row| Ok((
+                    row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?
+                )),
+            )
+            .map_err(|error| SyncwebError::operation("failed to query checkpoint progress", error))?;
+        drop(connection);
+        let percentage = if total > 0 {
+            let sum = completed.checked_add(skipped).unwrap_or(0);
+            let pct_int = sum.checked_mul(100).and_then(|n| n.checked_div(total)).unwrap_or(0);
+            f64::from(i32::try_from(pct_int).unwrap_or(0))
+        } else {
+            0.0
+        };
+        Ok(crate::sync::checkpoint::CheckpointProgress {
+            total: usize::try_from(total).unwrap_or(0),
+            completed: usize::try_from(completed).unwrap_or(0),
+            failed: usize::try_from(failed).unwrap_or(0),
+            skipped: usize::try_from(skipped).unwrap_or(0),
+            pending: usize::try_from(pending).unwrap_or(0),
+            bytes_transferred: bytes_transferred.cast_unsigned(),
+            bytes_total: bytes_total.map(i64::cast_unsigned),
+            percentage,
+        })
+    }
+
+    /// Update checkpoint status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn update_checkpoint_status(&self, namespace_id: &str, session_id: &str, status: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "UPDATE sync_checkpoints SET status = ?1, last_updated_at = ?2
+             WHERE namespace_id = ?3 AND session_id = ?4",
+                params![status, now, namespace_id, session_id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to update checkpoint status", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Find the most recent unfinished checkpoint for a namespace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn find_unfinished_checkpoint(&self, namespace_id: &str) -> Result<Option<String>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let result: Option<String> = connection
+            .query_row(
+                "SELECT session_id FROM sync_checkpoints
+             WHERE namespace_id = ?1 AND status IN ('running', 'pending')
+             ORDER BY started_at DESC LIMIT 1",
+                params![namespace_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to find unfinished checkpoint", error))?;
+        drop(connection);
+        Ok(result)
+    }
+
+    /// Delete a sync checkpoint and its entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_sync_checkpoint(&self, namespace_id: &str, session_id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM sync_entry_progress WHERE namespace_id = ?1 AND session_id = ?2",
+                params![namespace_id, session_id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to delete sync entry progress", error))?;
+        connection
+            .execute(
+                "DELETE FROM sync_checkpoints WHERE namespace_id = ?1 AND session_id = ?2",
+                params![namespace_id, session_id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to delete sync checkpoint", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Clean up stale (dangling) checkpoints older than the given number of seconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn clean_stale_checkpoints(&self, max_age_secs: i64) -> Result<usize> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let cutoff = current_timestamp().cast_signed().saturating_sub(max_age_secs);
+        let deleted = connection
+            .execute(
+                "DELETE FROM sync_checkpoints WHERE last_updated_at < ?1 AND status NOT IN ('completed')",
+                params![cutoff],
+            )
+            .map_err(|error| SyncwebError::operation("failed to clean stale checkpoints", error))?;
+        drop(connection);
+        Ok(deleted)
+    }
+
+    // ------------------------------------------------------------------
+    // Database maintenance methods
+    // ------------------------------------------------------------------
+
+    /// Run VACUUM to reclaim space.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub fn vacuum(&self) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute_batch("VACUUM")
+            .map_err(|error| SyncwebError::operation("vacuum failed", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Return estimated database size in bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file metadata cannot be read.
+    pub fn size_on_disk(&self) -> Result<u64> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let db_path: String = connection
+            .query_row("PRAGMA database_list", [], |row| row.get(2))
+            .map_err(|error| SyncwebError::operation("failed to query database path", error))?;
+        drop(connection);
+        std::fs::metadata(&db_path)
+            .map(|meta| meta.len())
+            .map_err(|error| SyncwebError::operation("failed to get database file size", error))
+    }
+
+    /// Return the freelist page count (indicates whether VACUUM would help).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub fn freelist_count(&self) -> Result<i64> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let count: i64 = connection
+            .pragma_query_value(None, "freelist_count", |row| row.get(0))
+            .map_err(|error| SyncwebError::operation("failed to query freelist count", error))?;
+        drop(connection);
+        Ok(count)
+    }
+
+    /// Run `integrity_check` PRAGMA. Returns list of errors (empty = healthy).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub fn check_integrity(&self) -> Result<Vec<String>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("PRAGMA integrity_check")
+            .map_err(|error| SyncwebError::operation("failed to prepare integrity check", error))?;
+        let errors: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| SyncwebError::operation("failed to run integrity check", error))?
+            .filter_map(std::result::Result::ok)
+            .filter(|s| s != "ok")
+            .collect();
+        drop(stmt);
+        drop(connection);
+        Ok(errors)
+    }
+}
+
+impl crate::storage::Vacuumable for NodeDatabase {
+    fn vacuum(&self) -> Result<()> {
+        self.vacuum()
+    }
+
+    fn freelist_count(&self) -> Result<i64> {
+        self.freelist_count()
     }
 }

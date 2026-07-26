@@ -162,11 +162,33 @@ pub enum IpcCommand {
         namespace: String,
         sequence: u64,
         bootstrap: Vec<String>,
+        #[serde(default)]
+        manifest_bytes: Option<Vec<u8>>,
     },
     EnrichSort {
         path: PathBuf,
     },
     BroadcastTrustSignal(ProviderTrustSignal),
+    NetworkInvite {
+        network_id: String,
+        device: String,
+    },
+    NetworkKick {
+        network_id: String,
+        device: String,
+    },
+    NetworkLeave {
+        network_id: String,
+    },
+    NetworkCreate {
+        name: String,
+        label: String,
+        invite_only: bool,
+        doc_ticket: Option<String>,
+    },
+    NetworkJoin {
+        ticket: String,
+    },
 }
 
 /// A response returned by the daemon control channel.
@@ -490,6 +512,7 @@ pub struct IpcServer {
     folder_manager: Option<FolderManager>,
     node_db: Option<NodeDatabase>,
     resilience: Option<ResilienceService>,
+    network_manager: Option<std::sync::Arc<tokio::sync::RwLock<crate::net::NetworkManager>>>,
 }
 
 #[derive(Clone)]
@@ -508,6 +531,7 @@ impl IpcServer {
             folder_manager: None,
             node_db: None,
             resilience: None,
+            network_manager: None,
         }
     }
 
@@ -526,6 +550,7 @@ impl IpcServer {
             folder_manager: None,
             node_db: None,
             resilience: None,
+            network_manager: None,
         }
     }
 
@@ -547,6 +572,16 @@ impl IpcServer {
     #[must_use]
     pub fn with_resilience(mut self, resilience: ResilienceService) -> Self {
         self.resilience = Some(resilience);
+        self
+    }
+
+    /// Attach a network manager for daemon-side network operations.
+    #[must_use]
+    pub fn with_network_manager(
+        mut self,
+        network_manager: std::sync::Arc<tokio::sync::RwLock<crate::net::NetworkManager>>,
+    ) -> Self {
+        self.network_manager = Some(network_manager);
         self
     }
 
@@ -637,34 +672,74 @@ impl IpcServer {
         }
     }
 
+    async fn handle_network_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if let IpcCommand::NetworkInvite { network_id, device } = cmd {
+            return self.handle_network_invite(network_id, device).await;
+        }
+        if let IpcCommand::NetworkKick { network_id, device } = cmd {
+            return self.handle_network_kick(network_id, device).await;
+        }
+        if let IpcCommand::NetworkLeave { network_id } = cmd {
+            return self.handle_network_leave(network_id).await;
+        }
+        if let IpcCommand::NetworkCreate {
+            name,
+            label,
+            invite_only,
+            doc_ticket,
+        } = cmd
+        {
+            return self.handle_network_create(name, label, invite_only, doc_ticket).await;
+        }
+        if let IpcCommand::NetworkJoin { ticket } = cmd {
+            return self.handle_network_join(ticket).await;
+        }
+        if let IpcCommand::BroadcastTrustSignal(signal) = cmd {
+            return self.handle_broadcast_trust_signal_response(signal).await;
+        }
+        unreachable!()
+    }
+
+    async fn handle_simple_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if matches!(cmd, IpcCommand::Status) {
+            return self.handle_status().await;
+        }
+        if matches!(cmd, IpcCommand::ListFolders) {
+            return self.handle_list_folders().await;
+        }
+        if matches!(cmd, IpcCommand::ReloadConfig) {
+            return self.handle_reload_config();
+        }
+        unreachable!()
+    }
+
     /// Handle one decoded request without requiring a socket.
     pub async fn handle_request(&self, request: IpcRequest) -> IpcResponse {
+        use IpcCommand as C;
         match request.command {
-            IpcCommand::Status => self.handle_status().await,
-            IpcCommand::ListFolders => self.handle_list_folders().await,
-            IpcCommand::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
-            IpcCommand::RemoveFolder { namespace } => self.handle_remove_folder(namespace).await,
-            IpcCommand::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
-            IpcCommand::SetLogLevel { level } => Self::handle_set_log_level(&level),
-            IpcCommand::ReloadConfig => self.handle_reload_config(),
-            IpcCommand::Shutdown { force } => self.handle_shutdown(force),
-            IpcCommand::ImportArchive { input, target, filter } => {
+            C::Status | C::ListFolders | C::ReloadConfig => self.handle_simple_group(request.command).await,
+            C::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
+            C::RemoveFolder { namespace } => self.handle_remove_folder(namespace).await,
+            C::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
+            C::SetLogLevel { level } => Self::handle_set_log_level(&level),
+            C::Shutdown { force } => self.handle_shutdown(force),
+            C::ImportArchive { input, target, filter } => {
                 self.handle_import_archive_response(input, target, filter).await
             }
-            IpcCommand::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
-            IpcCommand::ExportArchive {
+            C::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
+            C::ExportArchive {
                 namespace,
                 version,
                 output,
             } => self.handle_export_archive_response(namespace, version, output).await,
-            IpcCommand::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
-            IpcCommand::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
-            IpcCommand::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
-            IpcCommand::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
-            IpcCommand::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
-            IpcCommand::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
-            IpcCommand::HealthCheck { path } => self.handle_health_check(path).await,
-            IpcCommand::VerifyIntegrity {
+            C::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
+            C::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
+            C::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
+            C::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
+            C::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
+            C::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
+            C::HealthCheck { path } => self.handle_health_check(path).await,
+            C::VerifyIntegrity {
                 path,
                 hash,
                 path_filter,
@@ -675,32 +750,42 @@ impl IpcServer {
                 self.handle_verify_integrity(path, hash, path_filter, glob_filter, fix, from)
                     .await
             }
-            IpcCommand::Unsubscribe { namespace } => self.handle_unsubscribe_command(&namespace).await,
-            IpcCommand::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
-            IpcCommand::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
-            IpcCommand::SnapshotCreate {
+            C::Unsubscribe { namespace } => self.handle_unsubscribe_command(&namespace).await,
+            C::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
+            C::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
+            C::SnapshotCreate {
                 path,
                 description,
                 threads,
             } => self.handle_snapshot_create(path, description, threads).await,
-            IpcCommand::SnapshotList { path } => self.handle_snapshot_list(path).await,
-            IpcCommand::SnapshotDelete { id } => self.handle_snapshot_delete(id).await,
-            IpcCommand::CollectionPublish {
+            C::SnapshotList { path } => self.handle_snapshot_list(path).await,
+            C::SnapshotDelete { id } => self.handle_snapshot_delete(id).await,
+            C::CollectionPublish {
                 path,
                 namespace,
                 sequence,
                 bootstrap,
+                manifest_bytes,
             } => {
-                self.handle_collection_publish(path, namespace, sequence, bootstrap)
+                self.handle_collection_publish(path, namespace, sequence, bootstrap, manifest_bytes)
                     .await
             }
-            IpcCommand::EnrichSort { path } => self.handle_enrich_sort(path).await,
-            IpcCommand::BroadcastTrustSignal(signal) => match self.handle_broadcast_trust_signal(signal).await {
-                Ok(()) => IpcResponse::Ok {
-                    message: "trust signal broadcast".to_owned(),
-                },
-                Err(error) => response_from_error(error),
+            C::EnrichSort { path } => self.handle_enrich_sort(path).await,
+            C::NetworkInvite { .. }
+            | C::NetworkKick { .. }
+            | C::NetworkLeave { .. }
+            | C::NetworkCreate { .. }
+            | C::NetworkJoin { .. }
+            | C::BroadcastTrustSignal(..) => self.handle_network_group(request.command).await,
+        }
+    }
+
+    async fn handle_broadcast_trust_signal_response(&self, signal: ProviderTrustSignal) -> IpcResponse {
+        match self.handle_broadcast_trust_signal(signal).await {
+            Ok(()) => IpcResponse::Ok {
+                message: "trust signal broadcast".to_owned(),
             },
+            Err(error) => response_from_error(error),
         }
     }
 
@@ -1548,12 +1633,131 @@ impl IpcServer {
         }
     }
 
+    async fn handle_network_invite(&self, network_id: String, device: String) -> IpcResponse {
+        let Some(ref net_mgr) = self.network_manager else {
+            return IpcResponse::Error {
+                message: "network manager not available in IPC server".to_owned(),
+            };
+        };
+        let net_id = match network_id.parse::<crate::net::NetworkId>() {
+            Ok(id) => id,
+            Err(e) => return response_from_error(e),
+        };
+        let peer = match device.parse::<iroh::PublicKey>() {
+            Ok(pk) => pk,
+            Err(e) => {
+                return IpcResponse::Error {
+                    message: format!("invalid device ID: {e}"),
+                };
+            }
+        };
+        let result = net_mgr.write().await.invite(net_id, peer);
+        match result {
+            Ok(ticket) => IpcResponse::Ok {
+                message: ticket.to_string(),
+            },
+            Err(e) => response_from_error(e),
+        }
+    }
+
+    async fn handle_network_kick(&self, network_id: String, device: String) -> IpcResponse {
+        let Some(ref net_mgr) = self.network_manager else {
+            return IpcResponse::Error {
+                message: "network manager not available in IPC server".to_owned(),
+            };
+        };
+        let net_id = match network_id.parse::<crate::net::NetworkId>() {
+            Ok(id) => id,
+            Err(e) => return response_from_error(e),
+        };
+        let peer = match device.parse::<iroh::PublicKey>() {
+            Ok(pk) => pk,
+            Err(e) => {
+                return IpcResponse::Error {
+                    message: format!("invalid device ID: {e}"),
+                };
+            }
+        };
+        let result = net_mgr.write().await.kick(net_id, &peer);
+        match result {
+            Ok(()) => IpcResponse::Ok {
+                message: "member kicked".to_owned(),
+            },
+            Err(e) => response_from_error(e),
+        }
+    }
+
+    async fn handle_network_leave(&self, network_id: String) -> IpcResponse {
+        let Some(ref net_mgr) = self.network_manager else {
+            return IpcResponse::Error {
+                message: "network manager not available in IPC server".to_owned(),
+            };
+        };
+        let net_id = match network_id.parse::<crate::net::NetworkId>() {
+            Ok(id) => id,
+            Err(e) => return response_from_error(e),
+        };
+        let result = net_mgr.write().await.leave(net_id);
+        match result {
+            Ok(()) => IpcResponse::Ok {
+                message: "left network".to_owned(),
+            },
+            Err(e) => response_from_error(e),
+        }
+    }
+
+    async fn handle_network_create(
+        &self,
+        name: String,
+        label: String,
+        invite_only: bool,
+        doc_ticket: Option<String>,
+    ) -> IpcResponse {
+        let Some(ref net_mgr) = self.network_manager else {
+            return IpcResponse::Error {
+                message: "network manager not available in IPC server".to_owned(),
+            };
+        };
+        let options = crate::net::NetworkOptions {
+            label,
+            invite_only,
+            ..crate::net::NetworkOptions::default()
+        };
+        let result = net_mgr.write().await.create_with_doc_ticket(&name, options, doc_ticket);
+        match result {
+            Ok(id) => IpcResponse::Ok {
+                message: format!("created network {id}"),
+            },
+            Err(e) => response_from_error(e),
+        }
+    }
+
+    async fn handle_network_join(&self, ticket: String) -> IpcResponse {
+        let Some(ref net_mgr) = self.network_manager else {
+            return IpcResponse::Error {
+                message: "network manager not available in IPC server".to_owned(),
+            };
+        };
+        let parsed = match ticket.parse::<crate::net::NetworkTicket>() {
+            Ok(t) => t,
+            Err(e) => return response_from_error(e),
+        };
+        let result = net_mgr.write().await.join(parsed);
+        match result {
+            Ok(id) => IpcResponse::Ok {
+                message: format!("joined network {id}"),
+            },
+            Err(e) => response_from_error(e),
+        }
+    }
+
     async fn handle_collection_publish(
         &self,
         path: PathBuf,
         namespace: String,
         sequence: u64,
         bootstrap: Vec<String>,
+        manifest_bytes: Option<Vec<u8>>,
     ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -1563,18 +1767,16 @@ impl IpcServer {
                 };
             }
         };
-        let manifest_path = path.join(".syncweb-collection.json");
-        let manifest_bytes = match tokio::fs::read(&manifest_path).await {
-            Ok(bytes) => bytes,
-            Err(error) => {
+        let manifest = match manifest_bytes {
+            Some(bytes) => match CollectionManifest::from_bytes(bytes) {
+                Ok(m) => m,
+                Err(error) => return response_from_error(error),
+            },
+            None => {
                 return IpcResponse::Error {
-                    message: format!("failed to read collection manifest: {error}"),
+                    message: "collection publish requires manifest_bytes; run `collection init` first".to_owned(),
                 };
             }
-        };
-        let manifest = match CollectionManifest::from_bytes(manifest_bytes) {
-            Ok(m) => m,
-            Err(error) => return response_from_error(error),
         };
         for entry in &manifest.entries {
             let file_path = path.join(&entry.logical_path);
@@ -2114,6 +2316,7 @@ mod tests {
             namespace: "ns".to_owned(),
             sequence: 1,
             bootstrap: vec![],
+            manifest_bytes: None,
         });
         let enc7 = serde_json::to_vec(&req7).expect("serialize");
         let dec7: IpcRequest = serde_json::from_slice(&enc7).expect("deserialize");
@@ -2246,6 +2449,7 @@ mod tests {
                 namespace: "ns".to_owned(),
                 sequence: 1,
                 bootstrap: vec![],
+                manifest_bytes: None,
             }))
             .await;
         assert!(matches!(

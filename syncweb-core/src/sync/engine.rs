@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::Path,
     time::{Duration, Instant},
 };
@@ -15,8 +15,10 @@ use crate::{
     folder::FolderManager,
     node::iroh_node::IrohNode,
     node::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService},
+    storage::node_db::NodeDatabase,
 };
 
+use super::checkpoint::SyncCheckpoint;
 use super::{FetchStrategy, IntentHandle, SessionMode, SubscribeParams, SyncCommand, SyncEvent};
 
 /// Current aggregate statistics for a synchronization intent.
@@ -63,6 +65,7 @@ pub struct SyncEngine {
     folder_manager: FolderManager,
     blob_store: BlobStore,
     docs_engine: DocsEngine,
+    node_db: Option<NodeDatabase>,
 }
 
 impl SyncEngine {
@@ -77,7 +80,15 @@ impl SyncEngine {
             folder_manager,
             blob_store,
             docs_engine,
+            node_db: None,
         }
+    }
+
+    /// Set the node database for checkpoint tracking.
+    #[must_use]
+    pub fn with_node_db(mut self, node_db: NodeDatabase) -> Self {
+        self.node_db = Some(node_db);
+        self
     }
 
     #[must_use]
@@ -196,6 +207,7 @@ impl SyncEngine {
         let live_events = self.docs_engine.watch(folder.doc()).await?;
         self.docs_engine.start_sync(folder.doc(), Vec::new()).await?;
         let (events, commands, handle) = IntentHandle::channel();
+        let node_db = self.node_db.clone();
         tokio::spawn(run_intent(
             folder,
             IntentConfig { mode, params, filter },
@@ -203,6 +215,7 @@ impl SyncEngine {
             live_events,
             events,
             commands,
+            node_db,
         ));
         Ok(handle)
     }
@@ -221,6 +234,7 @@ async fn run_intent(
     mut live_events: impl n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin + 'static,
     events: mpsc::UnboundedSender<SyncEvent>,
     mut commands: mpsc::UnboundedReceiver<SyncCommand>,
+    node_db: Option<NodeDatabase>,
 ) {
     let started = Instant::now();
     if !send_initial_events(&events, started) {
@@ -231,31 +245,74 @@ async fn run_intent(
         return;
     }
 
-    let mut state = IntentState::default();
+    let namespace_id = folder.namespace_id();
+    let checkpoint = node_db
+        .as_ref()
+        .and_then(|db| match SyncCheckpoint::resume(db, namespace_id) {
+            Ok(Some(cp)) => {
+                tracing::info!(%namespace_id, session = %cp.session_id(), "resuming sync checkpoint");
+                Some(cp)
+            }
+            Ok(None) => SyncCheckpoint::create_session(db, namespace_id)
+                .map_err(|e| tracing::warn!(%namespace_id, %e, "failed to create checkpoint"))
+                .ok(),
+            Err(err) => {
+                tracing::warn!(%namespace_id, %err, "failed to resume checkpoint");
+                SyncCheckpoint::create_session(db, namespace_id)
+                    .map_err(|e2| tracing::warn!(%namespace_id, %e2, "failed to create checkpoint"))
+                    .ok()
+            }
+        });
+    let completed_keys: HashSet<Vec<u8>> = checkpoint
+        .as_ref()
+        .and_then(|cp| cp.completed_keys().ok())
+        .unwrap_or_default();
+
+    let mut state = IntentState {
+        completed: u64::try_from(completed_keys.len()).unwrap_or(u64::MAX),
+        ..IntentState::default()
+    };
     loop {
         tokio::select! {
             received_command = commands.recv() => {
                 let Some(command) = received_command else {
                     let _result = folder.doc().leave().await;
+                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 };
                 if !handle_command(&folder, command, &mut state.paused, &events).await {
+                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 }
             }
             next_event = live_events.next(), if !state.paused => {
                 let Some(event_result) = next_event else {
                     let _result = events.send(SyncEvent::Finished);
+                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 };
                 let live_event = match event_result {
                     Ok(event) => event,
                     Err(error) => {
                         let _result = events.send(SyncEvent::Failed(error.to_string()));
+                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                         return;
                     }
                 };
                 if !include_event(&config.params, &live_event) {
+                    continue;
+                }
+                let entry_key = match &live_event {
+                    LiveEvent::InsertLocal { entry } | LiveEvent::InsertRemote { entry, .. } => {
+                        Some(entry.key().to_vec())
+                    }
+                    LiveEvent::ContentReady { .. }
+                    | LiveEvent::PendingContentReady
+                    | LiveEvent::NeighborUp(_)
+                    | LiveEvent::NeighborDown(_)
+                    | LiveEvent::SyncFinished(_) => None,
+                };
+                if let Some(key) = &entry_key && completed_keys.contains(key) {
                     continue;
                 }
                 if let LiveEvent::ContentReady { hash } = &live_event {
@@ -265,10 +322,12 @@ async fn run_intent(
                             let _result = events.send(SyncEvent::Failed(format!(
                                 "content-ready blob {hash} is missing locally"
                             )));
+                            finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                             return;
                         }
                         Err(error) => {
                             let _result = events.send(SyncEvent::Failed(error.to_string()));
+                            finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                             return;
                         }
                     }
@@ -283,17 +342,37 @@ async fn run_intent(
                         let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
                         tokio::time::sleep(Duration::from_millis(milliseconds)).await;
                     }
+                    if let Some(ref cp) = checkpoint {
+                        let _ = cp.mark_completed(hash.as_bytes(), *hash, state.sizes.get(hash).copied().unwrap_or(0));
+                    }
                 }
                 if let Err(error) = state.apply(live_event, &config.params, config.filter.as_ref()) {
                     let _result = events.send(SyncEvent::Failed(error));
+                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 }
                 if !send_progress(&events, &state, started.elapsed()) {
+                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 }
             }
         }
     }
+}
+
+fn finalize_checkpoint(
+    checkpoint: Option<&SyncCheckpoint>,
+    state: &IntentState,
+    events: &mpsc::UnboundedSender<SyncEvent>,
+) {
+    if let Some(cp) = checkpoint {
+        if state.completed > 0 {
+            let _ = cp.complete();
+        } else {
+            let _ = cp.mark_incomplete();
+        }
+    }
+    let _ = events.send(SyncEvent::Finished);
 }
 
 fn send_initial_events(events: &mpsc::UnboundedSender<SyncEvent>, started: Instant) -> bool {

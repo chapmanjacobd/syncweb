@@ -1,6 +1,7 @@
 //! Synchronization primitives shared by the CLI and higher-level engines.
 
 pub mod actor;
+pub mod checkpoint;
 pub mod deleted;
 pub mod engine;
 pub mod intents;

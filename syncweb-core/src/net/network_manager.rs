@@ -9,6 +9,7 @@ use crate::storage::node_db::NodeDatabase;
 use crate::{Result, SyncwebError};
 
 use super::network::{Network, NetworkId, NetworkOptions, NetworkTicket, network_topic};
+use super::network_log::{NetworkEventType, NetworkLogger};
 
 /// Persistent manager for network membership and folder associations.
 #[derive(Clone, Debug)]
@@ -16,6 +17,7 @@ pub struct NetworkManager {
     db: NodeDatabase,
     local_node: PublicKey,
     networks: HashMap<NetworkId, Network>,
+    logger: Option<NetworkLogger>,
 }
 
 impl NetworkManager {
@@ -34,7 +36,30 @@ impl NetworkManager {
             db,
             local_node,
             networks,
+            logger: None,
         })
+    }
+
+    /// Open the network database with a network logger.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if existing state cannot be read.
+    pub fn with_logger(db: NodeDatabase, local_node: PublicKey, logger: NetworkLogger) -> Result<Self> {
+        let mut mgr = Self::new(db, local_node)?;
+        mgr.logger = Some(logger);
+        Ok(mgr)
+    }
+
+    /// Return a reference to the network logger, if set.
+    #[must_use]
+    pub const fn logger(&self) -> &Option<NetworkLogger> {
+        &self.logger
+    }
+
+    /// Set the network logger after construction.
+    pub fn set_logger(&mut self, logger: NetworkLogger) {
+        self.logger = Some(logger);
     }
 
     /// Return a reference to the underlying database.
@@ -43,12 +68,32 @@ impl NetworkManager {
         &self.db
     }
 
+    /// Return the local node's public key.
+    #[must_use]
+    pub const fn local_node(&self) -> &iroh::PublicKey {
+        &self.local_node
+    }
+
     /// Create and persist a network owned by the local node.
     ///
     /// # Errors
     ///
     /// Returns an error for an empty/duplicate name or failed persistence.
     pub fn create(&mut self, name: &str, options: NetworkOptions) -> Result<NetworkId> {
+        self.create_with_doc_ticket(name, options, None)
+    }
+
+    /// Create a network with an optional membership doc ticket.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an empty/duplicate name or failed persistence.
+    pub fn create_with_doc_ticket(
+        &mut self,
+        name: &str,
+        options: NetworkOptions,
+        doc_ticket: Option<String>,
+    ) -> Result<NetworkId> {
         let normalized = name.trim();
         if normalized.is_empty() {
             return Err(SyncwebError::InvalidConfig("network name cannot be empty".to_owned()));
@@ -59,9 +104,24 @@ impl NetworkManager {
                 "network {normalized:?} already exists"
             )));
         }
-        let network = Network::new(normalized, self.local_node, options);
+        let mut network = Network::new(normalized, self.local_node, options);
+        network.doc_ticket = doc_ticket;
         self.db.create_network(&network)?;
-        self.networks.insert(id, network);
+        self.networks.insert(id, network.clone());
+        self.log_event(
+            &id,
+            NetworkEventType::MemberAdded,
+            Some(&self.local_node),
+            Some("created"),
+        );
+        if network.is_invite_only() {
+            self.log_event(
+                &id,
+                NetworkEventType::TicketCreated,
+                None,
+                Some("invite-only network created"),
+            );
+        }
         Ok(id)
     }
 
@@ -92,10 +152,18 @@ impl NetworkManager {
             members,
             folders: ticket.folders,
             shared_secret: ticket.shared_secret,
+            doc_ticket: ticket.doc_ticket,
         };
         let id = network.id;
         self.db.create_network(&network)?;
         self.networks.insert(id, network);
+        self.log_event(
+            &id,
+            NetworkEventType::MemberAdded,
+            Some(&self.local_node),
+            Some("joined via ticket"),
+        );
+        self.log_event(&id, NetworkEventType::TicketAccepted, None, Some("network joined"));
         Ok(id)
     }
 
@@ -105,6 +173,12 @@ impl NetworkManager {
     ///
     /// Returns an error if the network does not exist or persistence fails.
     pub fn leave(&mut self, id: NetworkId) -> Result<()> {
+        self.log_event(
+            &id,
+            NetworkEventType::MemberRemoved,
+            Some(&self.local_node),
+            Some("left network"),
+        );
         self.networks
             .remove(&id)
             .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))?;
@@ -129,8 +203,16 @@ impl NetworkManager {
             members: network.members.clone(),
             folders: network.folders.clone(),
             shared_secret: network.shared_secret,
+            doc_ticket: network.doc_ticket.clone(),
         };
         self.db.add_member(id, device)?;
+        self.log_event(&id, NetworkEventType::MemberAdded, Some(&device), Some("invited"));
+        self.log_event(
+            &id,
+            NetworkEventType::TicketCreated,
+            None,
+            Some("device-bound ticket generated"),
+        );
         Ok(ticket)
     }
 
@@ -141,6 +223,12 @@ impl NetworkManager {
     /// Returns an error if the network does not exist or the local node is not its owner.
     pub fn invite_any(&self, id: NetworkId) -> Result<NetworkTicket> {
         let network = self.network_as_owner(id)?;
+        self.log_event(
+            &id,
+            NetworkEventType::TicketCreated,
+            None,
+            Some("open ticket generated"),
+        );
         Ok(NetworkTicket {
             network_id: network.id,
             name: network.name.clone(),
@@ -150,6 +238,7 @@ impl NetworkManager {
             members: network.members.clone(),
             folders: network.folders.clone(),
             shared_secret: network.shared_secret,
+            doc_ticket: network.doc_ticket.clone(),
         })
     }
 
@@ -170,6 +259,7 @@ impl NetworkManager {
             return Err(SyncwebError::InvalidConfig("device is not a network member".to_owned()));
         }
         self.db.remove_member(id, device)?;
+        self.log_event(&id, NetworkEventType::MemberRemoved, Some(device), Some("kicked"));
         Ok(())
     }
 
@@ -180,6 +270,12 @@ impl NetworkManager {
     /// Returns an error if the network does not exist or persistence fails.
     pub fn add_folder(&mut self, id: NetworkId, folder: NamespaceId) -> Result<()> {
         self.network_mut(id)?.folders.insert(folder);
+        self.log_event(
+            &id,
+            NetworkEventType::FolderAdded,
+            None,
+            Some(&format!("folder {folder}")),
+        );
         self.db.add_folder_to_network(id, folder)
     }
 
@@ -190,6 +286,12 @@ impl NetworkManager {
     /// Returns an error if the network does not exist or persistence fails.
     pub fn remove_folder(&mut self, id: NetworkId, folder: NamespaceId) -> Result<()> {
         self.network_mut(id)?.folders.remove(&folder);
+        self.log_event(
+            &id,
+            NetworkEventType::FolderRemoved,
+            None,
+            Some(&format!("folder {folder}")),
+        );
         self.db.remove_folder_from_network(id, folder)
     }
 
@@ -249,6 +351,83 @@ impl NetworkManager {
     #[must_use]
     pub fn get_by_name(&self, name: &str) -> Option<&Network> {
         self.networks.values().find(|network| network.name == name)
+    }
+
+    /// Check if the local node can access a given folder namespace through any network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn can_access_folder(&self, namespace_id: &NamespaceId) -> Result<bool> {
+        self.db
+            .can_access_folder(&namespace_id.to_string(), &self.local_node.to_string())
+    }
+
+    /// Return the network IDs (as strings) that contain a given folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn networks_for_folder(&self, namespace_id: &NamespaceId) -> Result<Vec<String>> {
+        self.db.networks_for_folder(&namespace_id.to_string())
+    }
+
+    /// Return the first network ID that contains a given folder, if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn network_for_folder(&self, namespace_id: &NamespaceId) -> Result<Option<String>> {
+        Ok(self
+            .db
+            .networks_for_folder(&namespace_id.to_string())?
+            .into_iter()
+            .next())
+    }
+
+    /// List all folder namespace IDs associated with a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn folders_for_network(&self, network_id: &NetworkId) -> Result<Vec<NamespaceId>> {
+        let folders = self.db.folders_for_network(&network_id.to_string())?;
+        folders
+            .into_iter()
+            .map(|f| {
+                f.parse()
+                    .map_err(|error| SyncwebError::operation("invalid namespace in database", error))
+            })
+            .collect()
+    }
+
+    /// List all members of a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn members_of_network(&self, network_id: &NetworkId) -> Result<Vec<iroh::PublicKey>> {
+        let members = self.db.members_of_network(&network_id.to_string())?;
+        members
+            .into_iter()
+            .map(|m| {
+                m.parse()
+                    .map_err(|error| SyncwebError::operation("invalid member key in database", error))
+            })
+            .collect()
+    }
+
+    fn log_event(
+        &self,
+        network_id: &NetworkId,
+        event: NetworkEventType,
+        peer: Option<&iroh::PublicKey>,
+        details: Option<&str>,
+    ) {
+        if let Some(ref logger) = self.logger {
+            let peer_str = peer.map(std::string::ToString::to_string);
+            let _ = logger.record_event(&network_id.to_string(), event, peer_str.as_deref(), details);
+        }
     }
 
     fn network_mut(&mut self, id: NetworkId) -> Result<&mut Network> {

@@ -939,7 +939,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (info)
 _arguments "${_arguments_options[@]}" : \
-'()--ticket=[]:TICKET:_default' \
+'--hash=[Blob hash of the manifest (requires --node-id)]:HASH:_default' \
+'--node-id=[Node ID hosting the manifest blob]:NODE_ID:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -947,12 +948,12 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::manifest:_files' \
+'::ticket:_default' \
 && ret=0
 ;;
 (install)
 _arguments "${_arguments_options[@]}" : \
-'()--ticket=[]:TICKET:_default' \
+'--path=[]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -960,13 +961,12 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::manifest:_files' \
-'::source:_files' \
+':ticket:_default' \
 && ret=0
 ;;
 (upgrade)
 _arguments "${_arguments_options[@]}" : \
-'()--ticket=[]:TICKET:_default' \
+'--path=[]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -974,8 +974,7 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::manifest:_files' \
-'::source:_files' \
+':ticket:_default' \
 && ret=0
 ;;
 (remove)
@@ -993,6 +992,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
+'--version=[]:VERSION:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1000,7 +1000,7 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':manifest:_files' \
+':collection:_default' \
 && ret=0
 ;;
 (list)
@@ -1202,6 +1202,31 @@ _arguments "${_arguments_options[@]}" : \
 ':device:_default' \
 && ret=0
 ;;
+(events)
+_arguments "${_arguments_options[@]}" : \
+'--limit=[]:LIMIT:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':network_id:_default' \
+&& ret=0
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+'--network=[]:NETWORK:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (test-relay)
 _arguments "${_arguments_options[@]}" : \
 '--relay-url=[]:RELAY_URL:_default' \
@@ -1250,7 +1275,119 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(events)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (test-relay)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(db)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__db_commands" \
+"*::: :->db" \
+&& ret=0
+
+    case $state in
+    (db)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-db-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(vacuum)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(backup)
+_arguments "${_arguments_options[@]}" : \
+'--output=[]:OUTPUT:_files' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__db__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-db-help-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(vacuum)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(backup)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2676,7 +2813,47 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(events)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (test-relay)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(db)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__db_commands" \
+"*::: :->db" \
+&& ret=0
+
+    case $state in
+    (db)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-db-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(vacuum)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(backup)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -3019,6 +3196,7 @@ _syncweb_commands() {
 'collection:Create and publish versioned content collections' \
 'package:Manage locally installed collection packages' \
 'network:Network connectivity utilities' \
+'db:Database maintenance\: check, vacuum, stats, backup' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
 'mirror:Mirror all blobs from a provider or network' \
@@ -3205,6 +3383,73 @@ _syncweb__subcmd__daemon-sync_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb daemon-sync commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__db_commands] )) ||
+_syncweb__subcmd__db_commands() {
+    local commands; commands=(
+'check:Run integrity check on all databases' \
+'vacuum:Run VACUUM to reclaim space in all databases' \
+'stats:Show database sizes and table statistics' \
+'backup:Back up all databases to a directory' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb db commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__backup_commands] )) ||
+_syncweb__subcmd__db__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db backup commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__check_commands] )) ||
+_syncweb__subcmd__db__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db check commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help_commands] )) ||
+_syncweb__subcmd__db__subcmd__help_commands() {
+    local commands; commands=(
+'check:Run integrity check on all databases' \
+'vacuum:Run VACUUM to reclaim space in all databases' \
+'stats:Show database sizes and table statistics' \
+'backup:Back up all databases to a directory' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb db help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__backup_commands] )) ||
+_syncweb__subcmd__db__subcmd__help__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db help backup commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__check_commands] )) ||
+_syncweb__subcmd__db__subcmd__help__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db help check commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__db__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__stats_commands] )) ||
+_syncweb__subcmd__db__subcmd__help__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db help stats commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__vacuum_commands] )) ||
+_syncweb__subcmd__db__subcmd__help__subcmd__vacuum_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db help vacuum commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__stats_commands] )) ||
+_syncweb__subcmd__db__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db stats commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__db__subcmd__vacuum_commands] )) ||
+_syncweb__subcmd__db__subcmd__vacuum_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb db vacuum commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__devices_commands] )) ||
 _syncweb__subcmd__devices_commands() {
     local commands; commands=()
@@ -3273,6 +3518,7 @@ _syncweb__subcmd__help_commands() {
 'collection:Create and publish versioned content collections' \
 'package:Manage locally installed collection packages' \
 'network:Network connectivity utilities' \
+'db:Database maintenance\: check, vacuum, stats, backup' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
 'mirror:Mirror all blobs from a provider or network' \
@@ -3371,6 +3617,36 @@ _syncweb__subcmd__help__subcmd__create_commands() {
 _syncweb__subcmd__help__subcmd__daemon-sync_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help daemon-sync commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__db_commands] )) ||
+_syncweb__subcmd__help__subcmd__db_commands() {
+    local commands; commands=(
+'check:Run integrity check on all databases' \
+'vacuum:Run VACUUM to reclaim space in all databases' \
+'stats:Show database sizes and table statistics' \
+'backup:Back up all databases to a directory' \
+    )
+    _describe -t commands 'syncweb help db commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__backup_commands] )) ||
+_syncweb__subcmd__help__subcmd__db__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help db backup commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__check_commands] )) ||
+_syncweb__subcmd__help__subcmd__db__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help db check commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__stats_commands] )) ||
+_syncweb__subcmd__help__subcmd__db__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help db stats commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__vacuum_commands] )) ||
+_syncweb__subcmd__help__subcmd__db__subcmd__vacuum_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help db vacuum commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__devices_commands] )) ||
 _syncweb__subcmd__help__subcmd__devices_commands() {
@@ -3567,6 +3843,8 @@ _syncweb__subcmd__help__subcmd__network_commands() {
 'leave:Leave a network' \
 'invite:Generate a network invitation' \
 'kick:Remove a device from a network' \
+'events:Show recent network events' \
+'health:Show network connectivity health' \
 'test-relay:Test a Syncthing relay TCP connection' \
     )
     _describe -t commands 'syncweb help network commands' commands "$@"
@@ -3575,6 +3853,16 @@ _syncweb__subcmd__help__subcmd__network_commands() {
 _syncweb__subcmd__help__subcmd__network__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help network create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__events_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__events_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network events commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__health_commands] )) ||
+_syncweb__subcmd__help__subcmd__network__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help network health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__invite_commands] )) ||
 _syncweb__subcmd__help__subcmd__network__subcmd__invite_commands() {
@@ -3612,11 +3900,11 @@ _syncweb__subcmd__help__subcmd__package_commands() {
 'export:Export one or more package directories as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
 'search:List locally installed packages, optionally filtering by text' \
-'info:Show a collection manifest' \
+'info:Show a collection manifest from a ticket or blob hash' \
 'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version' \
+'upgrade:Install a newer collection manifest version via ticket' \
 'remove:Remove a non-current installed collection version' \
-'verify:Verify an installed collection version against its manifest' \
+'verify:Verify an installed collection version' \
 'list:List locally installed collections' \
 'versions:List installed versions for a collection' \
 'switch:Switch the active installed collection version' \
@@ -4246,6 +4534,8 @@ _syncweb__subcmd__network_commands() {
 'leave:Leave a network' \
 'invite:Generate a network invitation' \
 'kick:Remove a device from a network' \
+'events:Show recent network events' \
+'health:Show network connectivity health' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -4256,6 +4546,16 @@ _syncweb__subcmd__network__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network create commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__network__subcmd__events_commands] )) ||
+_syncweb__subcmd__network__subcmd__events_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network events commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__health_commands] )) ||
+_syncweb__subcmd__network__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network health commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__network__subcmd__help_commands] )) ||
 _syncweb__subcmd__network__subcmd__help_commands() {
     local commands; commands=(
@@ -4265,6 +4565,8 @@ _syncweb__subcmd__network__subcmd__help_commands() {
 'leave:Leave a network' \
 'invite:Generate a network invitation' \
 'kick:Remove a device from a network' \
+'events:Show recent network events' \
+'health:Show network connectivity health' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -4274,6 +4576,16 @@ _syncweb__subcmd__network__subcmd__help_commands() {
 _syncweb__subcmd__network__subcmd__help__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network help create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__events_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__events_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help events commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__health_commands] )) ||
+_syncweb__subcmd__network__subcmd__help__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network help health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__help_commands] )) ||
 _syncweb__subcmd__network__subcmd__help__subcmd__help_commands() {
@@ -4346,11 +4658,11 @@ _syncweb__subcmd__package_commands() {
 'export:Export one or more package directories as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
 'search:List locally installed packages, optionally filtering by text' \
-'info:Show a collection manifest' \
+'info:Show a collection manifest from a ticket or blob hash' \
 'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version' \
+'upgrade:Install a newer collection manifest version via ticket' \
 'remove:Remove a non-current installed collection version' \
-'verify:Verify an installed collection version against its manifest' \
+'verify:Verify an installed collection version' \
 'list:List locally installed collections' \
 'versions:List installed versions for a collection' \
 'switch:Switch the active installed collection version' \
@@ -4369,11 +4681,11 @@ _syncweb__subcmd__package__subcmd__help_commands() {
 'export:Export one or more package directories as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
 'search:List locally installed packages, optionally filtering by text' \
-'info:Show a collection manifest' \
+'info:Show a collection manifest from a ticket or blob hash' \
 'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version' \
+'upgrade:Install a newer collection manifest version via ticket' \
 'remove:Remove a non-current installed collection version' \
-'verify:Verify an installed collection version against its manifest' \
+'verify:Verify an installed collection version' \
 'list:List locally installed collections' \
 'versions:List installed versions for a collection' \
 'switch:Switch the active installed collection version' \

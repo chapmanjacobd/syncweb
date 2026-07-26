@@ -83,6 +83,7 @@ pub struct Network {
     pub members: HashSet<PublicKey>,
     pub folders: HashSet<NamespaceId>,
     pub(crate) shared_secret: Option<[u8; 32]>,
+    pub doc_ticket: Option<String>,
 }
 
 impl Network {
@@ -102,6 +103,7 @@ impl Network {
             members,
             folders: HashSet::new(),
             shared_secret: options.invite_only.then(rand::random),
+            doc_ticket: None,
         }
     }
 
@@ -132,6 +134,7 @@ pub struct NetworkTicket {
     pub members: HashSet<PublicKey>,
     pub folders: HashSet<NamespaceId>,
     pub(crate) shared_secret: Option<[u8; 32]>,
+    pub doc_ticket: Option<String>,
 }
 
 impl NetworkTicket {
@@ -174,6 +177,8 @@ struct TicketWire {
     members: Vec<String>,
     folders: Vec<String>,
     shared_secret: Option<String>,
+    #[serde(default)]
+    doc_ticket: Option<String>,
 }
 
 impl From<&NetworkTicket> for TicketWire {
@@ -191,6 +196,7 @@ impl From<&NetworkTicket> for TicketWire {
             members,
             folders,
             shared_secret: ticket.shared_secret.map(hex::encode),
+            doc_ticket: ticket.doc_ticket.clone(),
         }
     }
 }
@@ -241,6 +247,7 @@ impl TryFrom<TicketWire> for NetworkTicket {
             members,
             folders,
             shared_secret,
+            doc_ticket: wire.doc_ticket,
         })
     }
 }

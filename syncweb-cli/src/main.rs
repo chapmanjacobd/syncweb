@@ -32,7 +32,7 @@ use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
-        DropImporter, FolderManager, PackageAnnouncement, PackageCatalog, PackageManager, SyncMode,
+        DropImporter, FolderManager, PackageCatalog, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::{InitResult, open_node},
@@ -165,7 +165,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Schedule { .. }
         | Command::Config { .. }
         | Command::Completions { .. }
-        | Command::Manpages { .. } => anyhow::bail!("auxiliary command dispatch failed"),
+        | Command::Manpages { .. }
+        | Command::Db { .. } => anyhow::bail!("auxiliary command dispatch failed"),
     }
     Ok(())
 }
@@ -185,6 +186,7 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::Config { .. }
             | Command::Completions { .. }
             | Command::Manpages { .. }
+            | Command::Db { .. }
     )
 }
 
@@ -236,6 +238,9 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     }
     if let Command::Config { command: config } = command {
         return handle_config(&ctx, config);
+    }
+    if let Command::Db { command: db_cmd } = command {
+        return handle_db(&ctx, db_cmd);
     }
     if let Command::Completions { shell } = command {
         clap_complete::generate(shell, &mut Cli::command(), "syncweb", &mut std::io::stdout());
@@ -805,7 +810,7 @@ async fn download_with_node(
             SyncEvent::Stats(transfer_stats) => {
                 let delta = transfer_stats.bytes_transferred.saturating_sub(accounted_bytes);
                 if delta > 0 {
-                    let _ = stats_db.record_download(delta, 0, Some(&folder_key), None);
+                    let _ = stats_db.record_download(delta, 0, Some(&folder_key), None, None);
                     accounted_bytes = transfer_stats.bytes_transferred;
                 }
                 pb.set_length(transfer_stats.bytes_total.unwrap_or(0));
@@ -2189,7 +2194,7 @@ async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::U
 async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
+    let node_db = open_node_db(data_dir)?;
     match command {
         CollectionCommand::Init {
             path,
@@ -2201,7 +2206,11 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
             if let Some(name) = package_name {
                 manifest.package = Some(syncweb_core::folder::PackageProfile::new(name));
             }
-            save_manifest(&path, &manifest)?;
+            node_db.save_workspace_manifest(
+                &path.to_string_lossy(),
+                &manifest.to_bytes()?,
+                &manifest.collection_id.to_string(),
+            )?;
             if output_json {
                 println!(
                     "{}",
@@ -2212,9 +2221,13 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
             }
         }
         CollectionCommand::Add { path } => {
-            let mut manifest = load_manifest(&path)?;
+            let source = path.to_string_lossy();
+            let manifest_bytes = node_db
+                .load_workspace_manifest(&source)?
+                .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
+            let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
             manifest.entries = scan_collection_entries(&path)?;
-            save_manifest(&path, &manifest)?;
+            node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
             if output_json {
                 println!("{}", serde_json::json!({"entries": manifest.entries.len()}));
             } else {
@@ -2226,12 +2239,16 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
             version,
             changelog,
         } => {
-            let mut manifest = load_manifest(&path)?;
+            let source = path.to_string_lossy();
+            let manifest_bytes = node_db
+                .load_workspace_manifest(&source)?
+                .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
+            let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
             let parent = manifest.blob_id()?;
             manifest.parent = Some(parent);
             manifest.version = version;
             manifest.changelog = changelog;
-            save_manifest(&path, &manifest)?;
+            node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
             if output_json {
                 println!("{}", serde_json::json!({"version": manifest.version}));
             } else {
@@ -2243,77 +2260,93 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
             namespace,
             sequence,
             bootstrap,
-        } => {
-            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::CollectionPublish {
-                        path: path.clone(),
-                        namespace: namespace.clone(),
-                        sequence,
-                        bootstrap: bootstrap.clone(),
-                    }))
-                    .await?;
-                return print_daemon_message(response, output_json);
-            }
-            let manifest = load_manifest(&path)?;
-            let node = open_node(data_dir).await?;
-            for entry in &manifest.entries {
-                let hash = node.blob_store().add_file(path.join(&entry.logical_path)).await?;
-                if hash != entry.content_id {
-                    anyhow::bail!(
-                        "collection content changed while publishing: {}",
-                        entry.logical_path.display()
-                    );
-                }
-            }
-            let manager = FolderManager::new(&node);
-            let folder = manager.get(namespace.parse()?).await?;
-            let store = CollectionStore::new(
-                folder.doc().clone(),
-                folder.author(),
-                node.blob_store().clone(),
-                node.docs_engine().clone(),
+        } => handle_collection_publish(ctx, &node_db, path, namespace, sequence, bootstrap).await?,
+    }
+    Ok(())
+}
+
+async fn handle_collection_publish(
+    ctx: &CliContext<'_>,
+    node_db: &NodeDatabase,
+    path: std::path::PathBuf,
+    namespace: String,
+    sequence: u64,
+    bootstrap: Vec<String>,
+) -> Result<()> {
+    let (data_dir, output_json, no_daemon) = (ctx.data_dir, ctx.output_json, ctx.no_daemon);
+    let source = path.to_string_lossy();
+    let manifest_bytes = node_db
+        .load_workspace_manifest(&source)?
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::CollectionPublish {
+                path,
+                namespace,
+                sequence,
+                bootstrap,
+                manifest_bytes: Some(manifest_bytes.clone()),
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
+    let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
+    let node = open_node(data_dir).await?;
+    for entry in &manifest.entries {
+        let hash = node.blob_store().add_file(path.join(&entry.logical_path)).await?;
+        if hash != entry.content_id {
+            anyhow::bail!(
+                "collection content changed while publishing: {}",
+                entry.logical_path.display()
             );
-            let head = store.publish(&manifest, sequence).await?;
-            let name = manifest
-                .package
-                .as_ref()
-                .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
-            let announcement = PackageAnnouncement::new(
-                manifest.collection_id,
-                name,
-                manifest.version.clone(),
-                head.sequence,
-                head.manifest,
-                node.blob_store().ticket(node.endpoint(), head.manifest).to_string(),
-                node.endpoint().id(),
-            )?;
-            let bootstrap_nodes = parse_bootstrap(bootstrap)?;
-            let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
-            let topic = if bootstrap_nodes.is_empty() {
-                catalog.subscribe(bootstrap_nodes).await?
-            } else {
-                catalog.subscribe_and_join(bootstrap_nodes).await?
-            };
-            let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-            catalog.announce(&sender, &announcement).await?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "manifest": head.manifest.to_string(),
-                        "manifest_ticket": announcement.manifest_ticket,
-                        "sequence": head.sequence,
-                    })
-                );
-            } else {
-                println!("manifest: {}", head.manifest);
-                println!("manifest_ticket: {}", announcement.manifest_ticket);
-                println!("sequence: {}", head.sequence);
-            }
-            node.stop().await?;
         }
     }
+    let manager = syncweb_core::folder::FolderManager::new(&node);
+    let folder = manager.get(namespace.parse()?).await?;
+    let store = syncweb_core::folder::CollectionStore::new(
+        folder.doc().clone(),
+        folder.author(),
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+    );
+    let head = store.publish(&manifest, sequence).await?;
+    let name = manifest
+        .package
+        .as_ref()
+        .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
+    let announcement = syncweb_core::folder::PackageAnnouncement::new(
+        manifest.collection_id,
+        name,
+        manifest.version.clone(),
+        head.sequence,
+        head.manifest,
+        node.blob_store().ticket(node.endpoint(), head.manifest).to_string(),
+        node.endpoint().id(),
+    )?;
+    let bootstrap_nodes = crate::parse_bootstrap(bootstrap)?;
+    let catalog = syncweb_core::folder::PackageCatalog::new(node.gossip_service(), node.endpoint());
+    let topic = if bootstrap_nodes.is_empty() {
+        catalog.subscribe(bootstrap_nodes).await?
+    } else {
+        catalog.subscribe_and_join(bootstrap_nodes).await?
+    };
+    let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
+    catalog.announce(&sender, &announcement).await?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "manifest": head.manifest.to_string(),
+                "manifest_ticket": announcement.manifest_ticket,
+                "sequence": head.sequence,
+            })
+        );
+    } else {
+        println!("manifest: {}", head.manifest);
+        println!("manifest_ticket: {}", announcement.manifest_ticket);
+        println!("sequence: {}", head.sequence);
+    }
+    node.stop().await?;
     Ok(())
 }
 
@@ -2337,27 +2370,17 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
                 handle_package_archive_import(ctx, archive, filter.clone()).await?;
             }
         }
-        PackageCommand::Info {
-            manifest: manifest_path,
-            ticket: ticket_value,
-        } => handle_package_info(ctx, manifest_path, ticket_value).await?,
-        PackageCommand::Install {
-            manifest: manifest_path,
-            source,
-            ticket: ticket_value,
+        PackageCommand::Info { ticket, hash, node_id } => handle_package_info(ctx, ticket, hash, node_id).await?,
+        PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
+            handle_package_install(ctx, &packages, ticket, path).await?;
         }
-        | PackageCommand::Upgrade {
-            manifest: manifest_path,
-            source,
-            ticket: ticket_value,
-        } => handle_package_install(ctx, &packages, manifest_path, source, ticket_value).await?,
         PackageCommand::Remove {
             collection: collection_id,
             version,
         } => handle_package_remove(&packages, &collection_id, &version, output_json)?,
-        PackageCommand::Verify {
-            manifest: manifest_path,
-        } => handle_package_verify(&packages, &manifest_path, output_json)?,
+        PackageCommand::Verify { collection, version } => {
+            handle_package_verify(&packages, &collection, version.as_deref(), output_json)?;
+        }
         PackageCommand::List => handle_package_list(&packages, output_json)?,
         PackageCommand::Versions {
             collection: collection_id,
@@ -2372,12 +2395,41 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
 
 async fn handle_package_info(
     ctx: &CliContext<'_>,
-    manifest_path: Option<std::path::PathBuf>,
     ticket_value: Option<String>,
+    hash: Option<String>,
+    node_id: Option<String>,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let collection_manifest = load_package_manifest(data_dir, manifest_path, ticket_value).await?;
+    let node = open_node(data_dir).await?;
+    let collection_manifest = if let Some(ticket_text) = ticket_value {
+        let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
+        if !node.blob_store().has(blob_ticket.hash()).await? {
+            node.blob_store().fetch(node.endpoint(), &blob_ticket).await?;
+        }
+        let manifest = CollectionManifest::from_bytes(node.blob_store().get(blob_ticket.hash()).await?)?;
+        if manifest.blob_id()? != blob_ticket.hash() {
+            node.stop().await?;
+            anyhow::bail!("manifest ticket hash does not match manifest content");
+        }
+        manifest
+    } else if let (Some(hash_str), Some(node_id_str)) = (hash, node_id) {
+        let blob_hash = hash_str.parse::<iroh_blobs::Hash>()?;
+        let peer_id = node_id_str.parse::<iroh::PublicKey>()?;
+        let ticket = iroh_blobs::ticket::BlobTicket::new(
+            iroh::EndpointAddr::new(peer_id),
+            blob_hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        if !node.blob_store().has(blob_hash).await? {
+            node.blob_store().fetch(node.endpoint(), &ticket).await?;
+        }
+        CollectionManifest::from_bytes(node.blob_store().get(blob_hash).await?)?
+    } else {
+        node.stop().await?;
+        anyhow::bail!("provide a blob ticket or hash with --node-id");
+    };
+    node.stop().await?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&collection_manifest)?);
     } else {
@@ -2399,13 +2451,18 @@ async fn handle_package_info(
 async fn handle_package_install(
     ctx: &CliContext<'_>,
     packages: &PackageManager,
-    manifest_path: Option<std::path::PathBuf>,
-    source: Option<std::path::PathBuf>,
-    ticket_value: Option<String>,
+    ticket_text: String,
+    path: Option<std::path::PathBuf>,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let collection_manifest = install_package(data_dir, packages, manifest_path, source, ticket_value).await?;
+    let node = open_node(data_dir).await?;
+    let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
+    let _install_path = path.unwrap_or_else(|| data_dir.join("packages"));
+    let collection_manifest = packages
+        .install_from_ticket(&blob_ticket, node.endpoint(), node.blob_store())
+        .await?;
+    node.stop().await?;
     if output_json {
         println!(
             "{}",
@@ -2447,23 +2504,32 @@ fn handle_package_remove(
     Ok(())
 }
 
-fn handle_package_verify(packages: &PackageManager, manifest_path: &std::path::Path, output_json: bool) -> Result<()> {
-    let collection_manifest = load_manifest_file(manifest_path)?;
-    packages.verify(&collection_manifest)?;
+fn handle_package_verify(
+    packages: &PackageManager,
+    collection: &str,
+    version: Option<&str>,
+    output_json: bool,
+) -> Result<()> {
+    let collection_id = collection.parse::<uuid::Uuid>()?;
+    let state = packages.state()?;
+    let installed = state
+        .current(collection_id)
+        .ok_or_else(|| anyhow::anyhow!("collection is not installed: {collection}"))?;
+    let target_version = version.unwrap_or(&installed.current);
+    if !installed.versions.contains_key(target_version) {
+        anyhow::bail!("version {target_version} not found for collection {collection}");
+    }
     if output_json {
         println!(
             "{}",
             serde_json::json!({
                 "status": "verified",
-                "collection": collection_manifest.collection_id.to_string(),
-                "version": collection_manifest.version,
+                "collection": collection,
+                "version": target_version,
             })
         );
     } else {
-        println!(
-            "verified: {} {}",
-            collection_manifest.collection_id, collection_manifest.version
-        );
+        println!("verified: {collection} {target_version}");
     }
     Ok(())
 }
@@ -2608,14 +2674,13 @@ async fn handle_package_archive_export(
     let exporter = DropExporter::new(node.blob_store().clone());
     let mut results = Vec::with_capacity(sources.len());
     for source in sources {
-        let manifests_with_roots = load_drop_manifests(&source)?;
-        for (manifest, root) in &manifests_with_roots {
-            add_drop_content(&node, manifest, root).await?;
-        }
-        let manifests = manifests_with_roots
-            .iter()
-            .map(|(manifest, _)| manifest.clone())
-            .collect::<Vec<_>>();
+        let entries = scan_collection_entries(&source)?;
+        let collection_id = uuid::Uuid::new_v4();
+        let mut manifest =
+            CollectionManifest::new(collection_id, version.clone().unwrap_or_else(|| "1.0.0".to_owned()));
+        manifest.entries = entries;
+        add_drop_content(&node, &manifest, &source).await?;
+        let manifests = vec![manifest];
         let output = drop_output_path(&source, destination.as_deref(), multiple)?;
         let mut options = DropExportOptions::default();
         if let Some(requested_version) = &version {
@@ -2739,34 +2804,6 @@ fn parse_drop_filters(expressions: &[String]) -> Result<Option<FilterEngine>> {
     Ok(Some(FilterEngine::new(config)?))
 }
 
-fn load_drop_manifests(source: &std::path::Path) -> Result<Vec<(CollectionManifest, std::path::PathBuf)>> {
-    if !source.exists() {
-        anyhow::bail!("package path does not exist: {}", source.display());
-    }
-    let (root, manifest) = if source.is_file() {
-        let root = source
-            .parent()
-            .map_or_else(|| std::path::PathBuf::from("."), std::path::Path::to_path_buf);
-        (root, load_manifest_file(source)?)
-    } else {
-        (source.to_path_buf(), load_manifest(source)?)
-    };
-    let mut manifests = vec![(manifest, root)];
-    if source.is_dir() {
-        for child_result in std::fs::read_dir(source)? {
-            let child_entry = child_result?;
-            if child_entry.file_type()?.is_dir() {
-                let child_root = child_entry.path();
-                let child_manifest = manifest_path(&child_root);
-                if child_manifest.is_file() {
-                    manifests.push((load_manifest_file(&child_manifest)?, child_root));
-                }
-            }
-        }
-    }
-    Ok(manifests)
-}
-
 async fn add_drop_content(node: &IrohNode, manifest: &CollectionManifest, root: &std::path::Path) -> Result<()> {
     for entry in &manifest.entries {
         let path = root.join(&entry.logical_path);
@@ -2877,51 +2914,186 @@ async fn handle_package_search(
     Ok(())
 }
 
-async fn load_package_manifest(
-    data_dir: &std::path::Path,
-    manifest_path: Option<std::path::PathBuf>,
-    ticket_value: Option<String>,
-) -> Result<CollectionManifest> {
-    if let Some(ticket_text) = ticket_value {
-        let node = open_node(data_dir).await?;
-        let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
-        if !node.blob_store().has(blob_ticket.hash()).await? {
-            node.blob_store().fetch(node.endpoint(), &blob_ticket).await?;
+fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let node_db = match NodeDatabase::open(data_dir.join("node.db")) {
+        Ok(db) => db,
+        Err(error) => {
+            eprintln!("Failed to open node.db: {error}");
+            return Ok(());
         }
-        let manifest = CollectionManifest::from_bytes(node.blob_store().get(blob_ticket.hash()).await?)?;
-        if manifest.blob_id()? != blob_ticket.hash() {
-            node.stop().await?;
-            anyhow::bail!("manifest ticket hash does not match manifest content");
+    };
+    let stats_db = match StatsDatabase::open(data_dir.join("stats.db")) {
+        Ok(db) => db,
+        Err(error) => {
+            eprintln!("Failed to open stats.db: {error}");
+            return Ok(());
         }
-        node.stop().await?;
-        Ok(manifest)
-    } else {
-        load_manifest_file(&manifest_path.ok_or_else(|| anyhow::anyhow!("manifest path is required"))?)
+    };
+    match command {
+        cli::commands::DbCommand::Check => {
+            let node_errors = node_db.check_integrity()?;
+            let stats_errors = stats_db.check_integrity()?;
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "node_db": node_errors,
+                        "stats_db": stats_errors,
+                    })
+                );
+            } else {
+                println!("Integrity check:");
+                println!("  node.db:  {} errors", node_errors.len());
+                for err in &node_errors {
+                    println!("    - {err}");
+                }
+                println!("  stats.db: {} errors", stats_errors.len());
+                for err in &stats_errors {
+                    println!("    - {err}");
+                }
+                if node_errors.is_empty() && stats_errors.is_empty() {
+                    println!("  all databases healthy!");
+                }
+            }
+        }
+        cli::commands::DbCommand::Vacuum => {
+            let node_size_before = node_db.size_on_disk().ok();
+            let stats_size_before = stats_db.size_on_disk().ok();
+            let node_freelist = node_db.freelist_count()?;
+            let stats_freelist = stats_db.freelist_count()?;
+            node_db.vacuum()?;
+            stats_db.vacuum()?;
+            let node_size_after = node_db.size_on_disk().ok();
+            let stats_size_after = stats_db.size_on_disk().ok();
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "node_db": {
+                            "freelist_before": node_freelist,
+                            "size_before": node_size_before,
+                            "size_after": node_size_after,
+                        },
+                        "stats_db": {
+                            "freelist_before": stats_freelist,
+                            "size_before": stats_size_before,
+                            "size_after": stats_size_after,
+                        },
+                    })
+                );
+            } else {
+                println!("VACUUM complete:");
+                println!(
+                    "  node.db:  {node_freelist} freelist pages → {} bytes",
+                    node_size_after.unwrap_or(0)
+                );
+                println!(
+                    "  stats.db: {stats_freelist} freelist pages → {} bytes",
+                    stats_size_after.unwrap_or(0)
+                );
+            }
+        }
+        cli::commands::DbCommand::Stats => {
+            let node_size = node_db.size_on_disk().unwrap_or(0);
+            let stats_size = stats_db.size_on_disk().unwrap_or(0);
+            let node_freelist = node_db.freelist_count().unwrap_or(0);
+            let stats_freelist = stats_db.freelist_count().unwrap_or(0);
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "node_db": {
+                            "size_bytes": node_size,
+                            "freelist_pages": node_freelist,
+                        },
+                        "stats_db": {
+                            "size_bytes": stats_size,
+                            "freelist_pages": stats_freelist,
+                        },
+                    })
+                );
+            } else {
+                let mut table = Table::new();
+                table.set_header(["Database", "Size", "Freelist Pages"]);
+                table.add_row(["node.db", &human_size(node_size), &node_freelist.to_string()]);
+                table.add_row(["stats.db", &human_size(stats_size), &stats_freelist.to_string()]);
+                println!("{table}");
+            }
+        }
+        cli::commands::DbCommand::Backup { output } => {
+            handle_db_backup(data_dir, &output, output_json)?;
+        }
     }
+    Ok(())
 }
 
-async fn install_package(
-    data_dir: &std::path::Path,
-    packages: &PackageManager,
-    manifest_path: Option<std::path::PathBuf>,
-    source: Option<std::path::PathBuf>,
-    ticket_value: Option<String>,
-) -> Result<CollectionManifest> {
-    if let Some(ticket_text) = ticket_value {
-        let node = open_node(data_dir).await?;
-        let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
-        let manifest = packages
-            .install_from_ticket(&blob_ticket, node.endpoint(), node.blob_store())
-            .await?;
-        node.stop().await?;
-        Ok(manifest)
+fn handle_db_backup(data_dir: &std::path::Path, output: &std::path::Path, output_json: bool) -> Result<()> {
+    let backup_dir = output.join(format!("syncweb-db-backup-{}", chrono_timestamp()));
+    std::fs::create_dir_all(&backup_dir)?;
+    let node_path = data_dir.join("node.db");
+    let stats_path = data_dir.join("stats.db");
+    if node_path.exists() {
+        std::fs::copy(&node_path, backup_dir.join("node.db"))?;
+    }
+    if stats_path.exists() {
+        std::fs::copy(&stats_path, backup_dir.join("stats.db"))?;
+    }
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "path": backup_dir.to_string_lossy(),
+                "files": ["node.db", "stats.db"],
+            })
+        );
     } else {
-        let manifest = load_manifest_file(&manifest_path.ok_or_else(|| anyhow::anyhow!("manifest path is required"))?)?;
-        packages.install(
-            &manifest,
-            source.ok_or_else(|| anyhow::anyhow!("package source is required"))?,
-        )?;
-        Ok(manifest)
+        println!("Backup created at: {}", backup_dir.display());
+    }
+    Ok(())
+}
+
+fn chrono_timestamp() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    format!("{}", now.as_secs())
+}
+
+fn human_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    if bytes >= GB {
+        let whole = bytes.checked_div(GB).unwrap_or(0);
+        let frac = bytes
+            .checked_rem(GB)
+            .unwrap_or(0)
+            .checked_mul(100)
+            .and_then(|n| n.checked_div(GB))
+            .unwrap_or(0);
+        format!("{whole}.{frac:02} GB")
+    } else if bytes >= MB {
+        let whole = bytes.checked_div(MB).unwrap_or(0);
+        let frac = bytes
+            .checked_rem(MB)
+            .unwrap_or(0)
+            .checked_mul(100)
+            .and_then(|n| n.checked_div(MB))
+            .unwrap_or(0);
+        format!("{whole}.{frac:02} MB")
+    } else if bytes >= KB {
+        let whole = bytes.checked_div(KB).unwrap_or(0);
+        let frac = bytes
+            .checked_rem(KB)
+            .unwrap_or(0)
+            .checked_mul(100)
+            .and_then(|n| n.checked_div(KB))
+            .unwrap_or(0);
+        format!("{whole}.{frac:02} KB")
+    } else {
+        format!("{bytes} B")
     }
 }
 
@@ -2932,27 +3104,8 @@ fn parse_bootstrap(values: Vec<String>) -> Result<Vec<iroh::PublicKey>> {
         .collect()
 }
 
-fn manifest_path(path: &std::path::Path) -> std::path::PathBuf {
-    path.join(".syncweb-collection.json")
-}
-
-fn load_manifest(path: &std::path::Path) -> Result<CollectionManifest> {
-    load_manifest_file(&manifest_path(path))
-}
-
-fn load_manifest_file(path: &std::path::Path) -> Result<CollectionManifest> {
-    let bytes =
-        std::fs::read(path).with_context(|| format!("failed to read collection manifest {}", path.display()))?;
-    Ok(CollectionManifest::from_bytes(bytes)?)
-}
-
-fn save_manifest(path: &std::path::Path, manifest: &CollectionManifest) -> Result<()> {
-    std::fs::write(manifest_path(path), manifest.to_bytes()?)?;
-    Ok(())
-}
-
 fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
-    ParallelScanner::new(path, vec![".syncweb-collection.json".to_owned()], 0)
+    ParallelScanner::new(path, vec![], 0)
         .scan()?
         .into_iter()
         .filter(|entry| entry.file_type == FileType::File)
@@ -3040,6 +3193,12 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("kicked: {device}");
             }
         }
+        NetworkCommand::Events { network_id, limit } => {
+            handle_network_events(data_dir, &network_id, limit, output_json)?;
+        }
+        NetworkCommand::Health { network } => {
+            handle_network_health(data_dir, &manager, network, output_json)?;
+        }
         NetworkCommand::TestRelay { relay_url } => {
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
             let app_config = open_node_db(data_dir)?.load_app_config()?;
@@ -3112,6 +3271,102 @@ fn handle_network_list(manager: &NetworkManager, name: Option<String>, output_js
                 ]);
             }
             println!("{table}");
+        }
+    }
+    Ok(())
+}
+
+fn handle_network_events(data_dir: &std::path::Path, network_id: &str, limit: usize, output_json: bool) -> Result<()> {
+    let stats_db = open_stats_db(data_dir)?;
+    let events = stats_db.recent_network_events(network_id, limit)?;
+    if output_json {
+        let json_events: Vec<_> = events
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "id": e.id,
+                    "timestamp": e.timestamp,
+                    "network_id": e.network_id,
+                    "event_type": e.event_type,
+                    "peer": e.peer,
+                    "details": e.details,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string(&json_events)?);
+    } else {
+        println!("Events for network {network_id}:");
+        for event in &events {
+            println!(
+                "  [{}] {} {}",
+                event.timestamp,
+                event.event_type,
+                event.details.as_deref().unwrap_or("")
+            );
+        }
+        if events.is_empty() {
+            println!("  no events");
+        }
+    }
+    Ok(())
+}
+
+fn handle_network_health(
+    data_dir: &std::path::Path,
+    manager: &NetworkManager,
+    network: Option<String>,
+    output_json: bool,
+) -> Result<()> {
+    let stats_db = open_stats_db(data_dir)?;
+    if let Some(network_id) = network {
+        let events = stats_db.recent_network_events(&network_id, 100)?;
+        let sessions = stats_db.recent_sync_sessions(&network_id, 100)?;
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "network_id": network_id,
+                    "events": events.len(),
+                    "sessions": sessions.len(),
+                })
+            );
+        } else {
+            println!("Network: {network_id}");
+            println!("  events:   {}", events.len());
+            println!("  sessions: {}", sessions.len());
+        }
+    } else {
+        let networks = manager.list();
+        if output_json {
+            let summary: Vec<_> = networks
+                .iter()
+                .map(|n| {
+                    let id = n.id.to_string();
+                    let events = stats_db.recent_network_events(&id, 1).unwrap_or_default();
+                    serde_json::json!({
+                        "name": n.name,
+                        "id": id,
+                        "member_count": n.members.len(),
+                        "folder_count": n.folders.len(),
+                        "last_event": events.first().map(|e| e.timestamp),
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string(&summary)?);
+        } else {
+            for net in &networks {
+                let id = net.id.to_string();
+                let events = stats_db.recent_network_events(&id, 1).unwrap_or_default();
+                let last_event = events
+                    .first()
+                    .map_or_else(|| "never".to_owned(), |e| e.timestamp.to_string());
+                println!(
+                    "{}  members={}  folders={}  last_event={last_event}",
+                    net.name,
+                    net.members.len(),
+                    net.folders.len(),
+                );
+            }
         }
     }
     Ok(())

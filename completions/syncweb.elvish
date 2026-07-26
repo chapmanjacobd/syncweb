@@ -60,6 +60,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand collection 'Create and publish versioned content collections'
             cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
+            cand db 'Database maintenance: check, vacuum, stats, backup'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
             cand mirror 'Mirror all blobs from a provider or network'
@@ -693,11 +694,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand export 'Export one or more package directories as compressed CAR archive files'
             cand import 'Import and install a compressed CAR archive file'
             cand search 'List locally installed packages, optionally filtering by text'
-            cand info 'Show a collection manifest'
+            cand info 'Show a collection manifest from a ticket or blob hash'
             cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version'
+            cand upgrade 'Install a newer collection manifest version via ticket'
             cand remove 'Remove a non-current installed collection version'
-            cand verify 'Verify an installed collection version against its manifest'
+            cand verify 'Verify an installed collection version'
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
@@ -736,7 +737,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;info'= {
-            cand --ticket 'ticket'
+            cand --hash 'Blob hash of the manifest (requires --node-id)'
+            cand --node-id 'Node ID hosting the manifest blob'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -746,7 +748,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;install'= {
-            cand --ticket 'ticket'
+            cand --path 'path'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -756,7 +758,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;upgrade'= {
-            cand --ticket 'ticket'
+            cand --path 'path'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -775,6 +777,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;verify'= {
+            cand --version 'version'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -814,11 +817,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand export 'Export one or more package directories as compressed CAR archive files'
             cand import 'Import and install a compressed CAR archive file'
             cand search 'List locally installed packages, optionally filtering by text'
-            cand info 'Show a collection manifest'
+            cand info 'Show a collection manifest from a ticket or blob hash'
             cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version'
+            cand upgrade 'Install a newer collection manifest version via ticket'
             cand remove 'Remove a non-current installed collection version'
-            cand verify 'Verify an installed collection version against its manifest'
+            cand verify 'Verify an installed collection version'
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
@@ -862,6 +865,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand leave 'Leave a network'
             cand invite 'Generate a network invitation'
             cand kick 'Remove a device from a network'
+            cand events 'Show recent network events'
+            cand health 'Show network connectivity health'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
@@ -921,6 +926,26 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;network;events'= {
+            cand --limit 'limit'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;health'= {
+            cand --network 'network'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;network;test-relay'= {
             cand --relay-url 'relay-url'
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -938,6 +963,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand leave 'Leave a network'
             cand invite 'Generate a network invitation'
             cand kick 'Remove a device from a network'
+            cand events 'Show recent network events'
+            cand health 'Show network connectivity health'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
@@ -953,9 +980,81 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;network;help;kick'= {
         }
+        &'syncweb;network;help;events'= {
+        }
+        &'syncweb;network;help;health'= {
+        }
         &'syncweb;network;help;test-relay'= {
         }
         &'syncweb;network;help;help'= {
+        }
+        &'syncweb;db'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand check 'Run integrity check on all databases'
+            cand vacuum 'Run VACUUM to reclaim space in all databases'
+            cand stats 'Show database sizes and table statistics'
+            cand backup 'Back up all databases to a directory'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;db;check'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;db;vacuum'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;db;stats'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;db;backup'= {
+            cand --output 'output'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;db;help'= {
+            cand check 'Run integrity check on all databases'
+            cand vacuum 'Run VACUUM to reclaim space in all databases'
+            cand stats 'Show database sizes and table statistics'
+            cand backup 'Back up all databases to a directory'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;db;help;check'= {
+        }
+        &'syncweb;db;help;vacuum'= {
+        }
+        &'syncweb;db;help;stats'= {
+        }
+        &'syncweb;db;help;backup'= {
+        }
+        &'syncweb;db;help;help'= {
         }
         &'syncweb;indexing'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1629,6 +1728,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand collection 'Create and publish versioned content collections'
             cand package 'Manage locally installed collection packages'
             cand network 'Network connectivity utilities'
+            cand db 'Database maintenance: check, vacuum, stats, backup'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
             cand link 'Create and resolve stable syncweb links'
             cand mirror 'Mirror all blobs from a provider or network'
@@ -1749,11 +1849,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand export 'Export one or more package directories as compressed CAR archive files'
             cand import 'Import and install a compressed CAR archive file'
             cand search 'List locally installed packages, optionally filtering by text'
-            cand info 'Show a collection manifest'
+            cand info 'Show a collection manifest from a ticket or blob hash'
             cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version'
+            cand upgrade 'Install a newer collection manifest version via ticket'
             cand remove 'Remove a non-current installed collection version'
-            cand verify 'Verify an installed collection version against its manifest'
+            cand verify 'Verify an installed collection version'
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
@@ -1787,6 +1887,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand leave 'Leave a network'
             cand invite 'Generate a network invitation'
             cand kick 'Remove a device from a network'
+            cand events 'Show recent network events'
+            cand health 'Show network connectivity health'
             cand test-relay 'Test a Syncthing relay TCP connection'
         }
         &'syncweb;help;network;create'= {
@@ -1801,7 +1903,25 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;help;network;kick'= {
         }
+        &'syncweb;help;network;events'= {
+        }
+        &'syncweb;help;network;health'= {
+        }
         &'syncweb;help;network;test-relay'= {
+        }
+        &'syncweb;help;db'= {
+            cand check 'Run integrity check on all databases'
+            cand vacuum 'Run VACUUM to reclaim space in all databases'
+            cand stats 'Show database sizes and table statistics'
+            cand backup 'Back up all databases to a directory'
+        }
+        &'syncweb;help;db;check'= {
+        }
+        &'syncweb;help;db;vacuum'= {
+        }
+        &'syncweb;help;db;stats'= {
+        }
+        &'syncweb;help;db;backup'= {
         }
         &'syncweb;help;indexing'= {
             cand enable 'Opt a synchronized folder into indexing'

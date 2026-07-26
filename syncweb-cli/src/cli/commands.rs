@@ -92,6 +92,11 @@ pub enum Command {
         #[command(subcommand)]
         command: NetworkCommand,
     },
+    #[command(about = "Database maintenance: check, vacuum, stats, backup")]
+    Db {
+        #[command(subcommand)]
+        command: DbCommand,
+    },
     #[command(about = "Manage opt-in indexing, catalogs, and metadata")]
     Indexing {
         #[command(subcommand)]
@@ -142,6 +147,21 @@ pub enum ConfigCommand {
     Set { key: String, value: String },
     #[command(about = "Show configuration, optionally limited to a section")]
     Show { section: Option<String> },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DbCommand {
+    #[command(about = "Run integrity check on all databases")]
+    Check,
+    #[command(about = "Run VACUUM to reclaim space in all databases")]
+    Vacuum,
+    #[command(about = "Show database sizes and table statistics")]
+    Stats,
+    #[command(about = "Back up all databases to a directory")]
+    Backup {
+        #[arg(long, default_value = ".")]
+        output: PathBuf,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -717,35 +737,34 @@ pub enum PackageCommand {
         #[arg(long, default_value_t = 250)]
         timeout_ms: u64,
     },
-    #[command(about = "Show a collection manifest")]
+    #[command(about = "Show a collection manifest from a ticket or blob hash")]
     Info {
-        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
-        manifest: Option<PathBuf>,
-        #[arg(long, conflicts_with = "manifest")]
         ticket: Option<String>,
+        #[arg(long, help = "Blob hash of the manifest (requires --node-id)")]
+        hash: Option<String>,
+        #[arg(long, help = "Node ID hosting the manifest blob")]
+        node_id: Option<String>,
     },
     #[command(about = "Verify, stage, and atomically install a collection version")]
     Install {
-        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
-        manifest: Option<PathBuf>,
-        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
-        source: Option<PathBuf>,
-        #[arg(long, conflicts_with_all = ["manifest", "source"])]
-        ticket: Option<String>,
+        ticket: String,
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
-    #[command(about = "Install a newer collection manifest version")]
+    #[command(about = "Install a newer collection manifest version via ticket")]
     Upgrade {
-        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
-        manifest: Option<PathBuf>,
-        #[arg(required_unless_present = "ticket", conflicts_with = "ticket")]
-        source: Option<PathBuf>,
-        #[arg(long, conflicts_with_all = ["manifest", "source"])]
-        ticket: Option<String>,
+        ticket: String,
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
     #[command(about = "Remove a non-current installed collection version")]
     Remove { collection: String, version: String },
-    #[command(about = "Verify an installed collection version against its manifest")]
-    Verify { manifest: PathBuf },
+    #[command(about = "Verify an installed collection version")]
+    Verify {
+        collection: String,
+        #[arg(long)]
+        version: Option<String>,
+    },
     #[command(name = "list", about = "List locally installed collections")]
     List,
     #[command(about = "List installed versions for a collection")]
@@ -778,6 +797,17 @@ pub enum NetworkCommand {
     },
     #[command(about = "Remove a device from a network")]
     Kick { name: String, device: String },
+    #[command(about = "Show recent network events")]
+    Events {
+        network_id: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(about = "Show network connectivity health")]
+    Health {
+        #[arg(long)]
+        network: Option<String>,
+    },
     #[command(about = "Test a Syncthing relay TCP connection")]
     TestRelay {
         #[arg(long = "relay-url")]

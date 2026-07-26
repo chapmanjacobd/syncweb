@@ -58,7 +58,7 @@ use crate::{
 };
 
 /// Current indexing database schema version.
-pub const SCHEMA_VERSION: &str = "3";
+pub const SCHEMA_VERSION: &str = "1";
 const EVENT_CAPACITY: usize = 256;
 
 /// A content entry known to the local indexing service.
@@ -2877,7 +2877,6 @@ fn initialize_connection(connection: &Connection) -> Result<()> {
         .pragma_update(None, "foreign_keys", "ON")
         .map_err(|error| database_error("failed to enable indexing foreign keys", error))?;
     initialize_schema(connection)?;
-    migrate_database(connection)?;
     connection
         .execute(
             "INSERT INTO index_metadata(key, value)
@@ -2886,49 +2885,6 @@ fn initialize_connection(connection: &Connection) -> Result<()> {
             [SCHEMA_VERSION],
         )
         .map_err(|error| database_error("failed to persist indexing schema version", error))?;
-    Ok(())
-}
-
-/// Run one-shot migrations from earlier schema versions.
-fn migrate_database(connection: &Connection) -> Result<()> {
-    let version: String = connection
-        .query_row(
-            "SELECT value FROM index_metadata WHERE key = 'schema_version'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or_default();
-    match version.as_str() {
-        "" | "1" => {
-            // Migration: add signature column to content_reports_v2
-            let has_col: bool = connection
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('content_reports_v2') WHERE name='signature'",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(false);
-            if !has_col {
-                connection
-                    .execute_batch("ALTER TABLE content_reports_v2 ADD COLUMN signature TEXT")
-                    .map_err(|error| database_error("failed to add signature column to content_reports_v2", error))?;
-            }
-        }
-        "2" => {
-            // Migration: add revoked_links table
-            connection
-                .execute_batch(
-                    "CREATE TABLE IF NOT EXISTS revoked_links (
-                        manifest BLOB NOT NULL CHECK(length(manifest) = 32),
-                        capability TEXT NOT NULL,
-                        revoked_at INTEGER NOT NULL,
-                        PRIMARY KEY(manifest, capability)
-                    )",
-                )
-                .map_err(|error| database_error("failed to create revoked_links table", error))?;
-        }
-        _ => {}
-    }
     Ok(())
 }
 
@@ -2958,11 +2914,7 @@ fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
 /// Deterministic gossip topic for broadcasting signed moderation reports.
 pub const REPORT_GOSSIP_TOPIC: &[u8] = b"syncweb/reports/v1";
 
-/// A content report stored in the indexing database.
-///
-/// Reports may be cryptographically signed by the reporter's node key.
-/// Unsigned reports (reporter == `None`, signature == `None`) are legacy
-/// records from the pre-signing era or from CLI usage without a node key.
+/// A signed content report stored in the indexing database.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ReportRecord {
@@ -3050,7 +3002,7 @@ impl SignedGossipMessage for ReportRecord {
                 self.verify(&public_key)
             }
             None => {
-                // Unsigned legacy report — accept without verification
+                // Unsigned local report — accept without verification
                 Ok(())
             }
         }

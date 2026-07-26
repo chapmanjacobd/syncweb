@@ -16,9 +16,9 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext},
     commands::{
-        CollectionCommand, Command, ConfigCommand, HealthArgs, ImportArgs, InitArgs, NetworkCommand, PackageCommand,
-        PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs,
-        StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
+        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, NetworkCommand,
+        PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -133,6 +133,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Snapshot { command } => {
             handle_snapshot(&ctx, command).await?;
         }
+        Command::FileStats(command) => handle_filestats(&ctx, command).await?,
         Command::Health(command) => handle_health(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Init(command) => handle_init(&ctx, command).await?,
@@ -150,7 +151,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
         }
         Command::Attest { command } => cli::indexing::handle_attest(&ctx, command)?,
-        Command::Report(command) => cli::indexing::handle_report(&ctx, command)?,
         Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command)?,
         Command::Start(_)
         | Command::Shutdown(_)
@@ -1423,6 +1423,55 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+#[async_recursion]
+async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = resolve_folder(&manager, std::path::Path::new(&command.folder)).await?;
+    let entries = node.docs_engine().list_latest(folder.doc()).await?;
+
+    let mut collector = syncweb_core::stats::FileStatsCollector::new();
+    for entry in entries {
+        if entry.key().starts_with(b"sys/") {
+            continue;
+        }
+        collector.add_entry_bytes(entry.key(), entry.content_len());
+    }
+    let report = collector.report();
+
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("total_files: {}", report.total_files);
+        println!("total_size:  {}", format_bytes(report.total_size));
+        println!();
+
+        if !report.by_extension.is_empty() && matches!(command.by.as_str(), "extension" | "all") {
+            let mut table = Table::new();
+            table.set_header(["Extension", "Files", "Size"]);
+            for (ext, group) in &report.by_extension {
+                table.add_row([ext.as_str(), &group.count.to_string(), &format_bytes(group.total_size)]);
+            }
+            println!("{table}");
+        }
+
+        if !report.size_buckets.is_empty() && matches!(command.by.as_str(), "size" | "all") {
+            let mut table = Table::new();
+            table.set_header(["Bucket", "Files"]);
+            for (label, count) in &report.size_buckets {
+                table.add_row([label.as_str(), &count.to_string()]);
+            }
+            println!("{table}");
+        }
+    }
+
+    node.stop().await?;
     Ok(())
 }
 

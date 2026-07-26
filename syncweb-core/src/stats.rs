@@ -152,6 +152,87 @@ impl BandwidthStats {
     }
 }
 
+/// A group of files sharing the same extension.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct ExtensionGroup {
+    pub count: u64,
+    pub total_size: u64,
+}
+
+/// Report produced by [`FileStatsCollector`].
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct FileStatsReport {
+    pub total_files: u64,
+    pub total_size: u64,
+    pub by_extension: BTreeMap<String, ExtensionGroup>,
+    pub size_buckets: BTreeMap<String, u64>,
+}
+
+/// Collects file-level statistics from existing metadata (doc entries).
+///
+/// Does **not** scan the filesystem — entries are fed via [`add_entry`].
+#[derive(Clone, Debug, Default)]
+pub struct FileStatsCollector {
+    extensions: BTreeMap<String, ExtensionGroup>,
+    sizes: Vec<u64>,
+}
+
+impl FileStatsCollector {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record one file entry.
+    pub fn add_entry(&mut self, path: &str, size: u64) {
+        let raw = path
+            .rsplit('.')
+            .next()
+            .filter(|s| !s.contains(std::path::MAIN_SEPARATOR))
+            .unwrap_or("");
+        let normalized = if raw.is_empty() || raw == path { "" } else { raw };
+        let group = self.extensions.entry(normalized.to_lowercase()).or_default();
+        group.count = group.count.saturating_add(1);
+        group.total_size = group.total_size.saturating_add(size);
+        self.sizes.push(size);
+    }
+
+    /// Attempt to record an entry key stored as raw bytes (UTF-8).  Non-UTF-8 keys are silently skipped.
+    pub fn add_entry_bytes(&mut self, key: &[u8], size: u64) {
+        if let Ok(path) = std::str::from_utf8(key) {
+            self.add_entry(path, size);
+        }
+    }
+
+    /// Finalise and return the collected report.
+    #[must_use]
+    pub fn report(&self) -> FileStatsReport {
+        let total_files = self.extensions.values().map(|g| g.count).sum();
+        let total_size = self.extensions.values().map(|g| g.total_size).sum();
+
+        let mut size_buckets = BTreeMap::new();
+        for &size in &self.sizes {
+            let label = match size {
+                0..=1023 => "<1KB",
+                1024..=1_048_575 => "1KB-1MB",
+                1_048_576..=104_857_599 => "1MB-100MB",
+                _ => ">100MB",
+            };
+            *size_buckets.entry(label.to_owned()).or_insert(0_u64) =
+                size_buckets.get(label).copied().unwrap_or(0).saturating_add(1);
+        }
+
+        FileStatsReport {
+            total_files,
+            total_size,
+            by_extension: self.extensions.clone(),
+            size_buckets,
+        }
+    }
+}
+
 fn now_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -160,4 +241,101 @@ fn now_seconds() -> u64 {
 
 fn temporary_path(path: &Path) -> PathBuf {
     path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::ensure;
+
+    #[test]
+    fn filestats_empty() {
+        let collector = FileStatsCollector::new();
+        let report = collector.report();
+        assert_eq!(report.total_files, 0);
+        assert_eq!(report.total_size, 0);
+        assert!(report.by_extension.is_empty());
+        assert!(report.size_buckets.is_empty());
+    }
+
+    #[test]
+    fn filestats_counts_by_extension() -> anyhow::Result<()> {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry("a.txt", 5);
+        collector.add_entry("b.txt", 10);
+        collector.add_entry("img.png", 100);
+        let report = collector.report();
+        ensure!(report.total_files == 3, "total_files should be 3");
+        ensure!(report.total_size == 115, "total_size should be 115");
+        let txt = report.by_extension.get("txt");
+        ensure!(txt.is_some(), "expected txt extension");
+        ensure!(txt.unwrap().count == 2, "txt count should be 2");
+        let png = report.by_extension.get("png");
+        ensure!(png.is_some(), "expected png extension");
+        ensure!(png.unwrap().count == 1, "png count should be 1");
+        ensure!(txt.unwrap().total_size == 15, "txt total_size should be 15");
+        Ok(())
+    }
+
+    #[test]
+    fn filestats_size_distribution() {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry("tiny.txt", 1);
+        collector.add_entry("medium.txt", 50_000);
+        collector.add_entry("large.txt", 5_000_000);
+        let report = collector.report();
+        assert_eq!(report.size_buckets.get("<1KB").copied().unwrap_or(0), 1);
+        assert!(report.size_buckets.get("1KB-1MB").copied().unwrap_or(0) >= 1);
+        assert!(report.size_buckets.get("1MB-100MB").copied().unwrap_or(0) >= 1);
+    }
+
+    #[test]
+    fn filestats_no_extension() -> anyhow::Result<()> {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry("Makefile", 200);
+        collector.add_entry("README", 50);
+        let report = collector.report();
+        ensure!(report.total_files == 2, "total_files should be 2");
+        let no_ext = report.by_extension.get("");
+        ensure!(no_ext.is_some(), "expected empty extension");
+        ensure!(no_ext.unwrap().count == 2, "no-ext count should be 2");
+        Ok(())
+    }
+
+    #[test]
+    fn filestats_bytes_key() -> anyhow::Result<()> {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry_bytes(b"notes.txt", 42);
+        collector.add_entry_bytes(b"sub/doc.pdf", 300);
+        let report = collector.report();
+        ensure!(report.total_files == 2, "total_files should be 2");
+        let txt = report.by_extension.get("txt");
+        ensure!(txt.is_some(), "expected txt extension");
+        ensure!(txt.unwrap().count == 1, "txt count should be 1");
+        let pdf = report.by_extension.get("pdf");
+        ensure!(pdf.is_some(), "expected pdf extension");
+        ensure!(pdf.unwrap().count == 1, "pdf count should be 1");
+        Ok(())
+    }
+
+    #[test]
+    fn filestats_extension_case_insensitive() -> anyhow::Result<()> {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry("a.TXT", 5);
+        collector.add_entry("b.txt", 10);
+        let report = collector.report();
+        ensure!(report.by_extension.len() == 1, "should be 1 extension");
+        let txt = report.by_extension.get("txt");
+        ensure!(txt.is_some(), "expected txt extension");
+        ensure!(txt.unwrap().count == 2, "txt count should be 2");
+        Ok(())
+    }
+
+    #[test]
+    fn filestats_empty_path() {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry("", 0);
+        let report = collector.report();
+        assert_eq!(report.total_files, 1);
+    }
 }

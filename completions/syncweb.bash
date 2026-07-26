@@ -43,6 +43,9 @@ _syncweb() {
             syncweb,download)
                 cmd="syncweb__subcmd__download"
                 ;;
+            syncweb,filestats)
+                cmd="syncweb__subcmd__filestats"
+                ;;
             syncweb,find)
                 cmd="syncweb__subcmd__find"
                 ;;
@@ -96,9 +99,6 @@ _syncweb() {
                 ;;
             syncweb,reload)
                 cmd="syncweb__subcmd__reload"
-                ;;
-            syncweb,report)
-                cmd="syncweb__subcmd__report"
                 ;;
             syncweb,schedule)
                 cmd="syncweb__subcmd__schedule"
@@ -241,6 +241,9 @@ _syncweb() {
             syncweb__subcmd__help,download)
                 cmd="syncweb__subcmd__help__subcmd__download"
                 ;;
+            syncweb__subcmd__help,filestats)
+                cmd="syncweb__subcmd__help__subcmd__filestats"
+                ;;
             syncweb__subcmd__help,find)
                 cmd="syncweb__subcmd__help__subcmd__find"
                 ;;
@@ -294,9 +297,6 @@ _syncweb() {
                 ;;
             syncweb__subcmd__help,reload)
                 cmd="syncweb__subcmd__help__subcmd__reload"
-                ;;
-            syncweb__subcmd__help,report)
-                cmd="syncweb__subcmd__help__subcmd__report"
                 ;;
             syncweb__subcmd__help,schedule)
                 cmd="syncweb__subcmd__help__subcmd__schedule"
@@ -983,7 +983,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest report moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats filestats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1602,6 +1602,32 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        syncweb__subcmd__filestats)
+            opts="-h --by --top-largest --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --by)
+                    COMPREPLY=($(compgen -W "extension size all" -- "${cur}"))
+                    return 0
+                    ;;
+                --top-largest)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         syncweb__subcmd__find)
             opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --depth --min-depth --max-depth --sizes --modified-within --modified-before --time-modified --extension --type --threads --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -1705,7 +1731,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help)
-            opts="version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest report moderation completions manpages help"
+            opts="version start shutdown status reload daemon-sync unwatch create join leave unsubscribe folders devices config ls find sort stat download import snapshot health init automatic watch stats filestats verify schedule subscribe publish unpublish collection package network indexing link provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1943,6 +1969,20 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__download)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__help__subcmd__filestats)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -2685,20 +2725,6 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__help__subcmd__reload)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__help__subcmd__report)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -4983,28 +5009,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__report)
-            opts="-h --reason --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --reason)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

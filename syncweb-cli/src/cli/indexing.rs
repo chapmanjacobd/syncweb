@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::args::CliContext;
 use super::commands::{
     AttestCommand, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
-    ProviderTrustCommand, ReportArgs, TrustCommand, TrustStreamCommand,
+    ProviderTrustCommand, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
     folder::{FolderManager, SyncwebFolder},
@@ -1313,22 +1313,6 @@ fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout:
         }
     }
     Ok(())
-}
-
-pub fn handle_report(ctx: &CliContext<'_>, command: ReportArgs) -> Result<()> {
-    eprintln!("warning: 'report' is deprecated; use 'moderation report' instead");
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let content = parse_hash(&command.record)?;
-    let (db, mut state) = open_indexing_state(data_dir)?;
-    let report = ReportRecord::new(content, command.reason, epoch_seconds());
-    state.reports.push(report.clone());
-    db.save_content_reports(&state.reports)?;
-    print_status(
-        output_json,
-        serde_json::json!({"status": "reported", "content": content.to_string(), "reason": report.reason}),
-        format!("reported: {content}\nreason: {}", report.reason),
-    )
 }
 
 pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {

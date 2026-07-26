@@ -33,11 +33,11 @@ impl StatsDatabase {
         let db = Self {
             connection: Arc::new(Mutex::new(connection)),
         };
-        db.migrate()?;
+        db.init_schema()?;
         Ok(db)
     }
 
-    fn migrate(&self) -> Result<()> {
+    fn init_schema(&self) -> Result<()> {
         let connection = self
             .connection
             .lock()

@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH filestats 1  "filestats " 
+.SH NAME
+filestats \- Show file\-level statistics for synced folder content
+.SH SYNOPSIS
+\fBfilestats\fR [\fB\-\-by\fR] [\fB\-\-top\-largest\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFOLDER\fR> 
+.SH DESCRIPTION
+Show file\-level statistics for synced folder content
+.SH OPTIONS
+.TP
+\fB\-\-by\fR \fI<BY>\fR [default: extension]
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+extension
+.IP \(bu 2
+size
+.IP \(bu 2
+all
+.RE
+.TP
+\fB\-\-top\-largest\fR \fI<TOP_LARGEST>\fR
+Top N largest files by size
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFOLDER\fR>
+Namespace ID or path to a managed folder

@@ -62,6 +62,8 @@ pub enum Command {
     Watch(WatchArgs),
     #[command(about = "Show persisted bandwidth accounting")]
     Stats(StatsArgs),
+    #[command(name = "filestats", about = "Show file-level statistics for synced folder content")]
+    FileStats(FileStatsArgs),
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
     #[command(about = "Show or update synchronization schedules")]
@@ -115,8 +117,6 @@ pub enum Command {
         #[command(subcommand)]
         command: AttestCommand,
     },
-    #[command(about = "Submit a local moderation report (deprecated: use 'moderation report')")]
-    Report(ReportArgs),
     #[command(about = "Manage local moderation decisions")]
     Moderation {
         #[command(subcommand)]
@@ -526,6 +526,20 @@ pub struct StatsArgs {
     pub reset: bool,
     #[arg(long, help = "Retained for compatibility; counters are persisted since period start")]
     pub period: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct FileStatsArgs {
+    #[arg(help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
+    #[arg(
+        long,
+        default_value = "extension",
+        value_parser = ["extension", "size", "all"]
+    )]
+    pub by: String,
+    #[arg(long, help = "Top N largest files by size")]
+    pub top_largest: Option<usize>,
 }
 
 #[derive(Debug, Args)]
@@ -971,14 +985,6 @@ pub enum AttestCommand {
         #[arg(long, help = "Timeout in seconds for gossip collection")]
         timeout: Option<u64>,
     },
-}
-
-#[derive(Debug, Args)]
-pub struct ReportArgs {
-    #[arg(help = "Content hash or record identifier")]
-    pub record: String,
-    #[arg(long, help = "Reason for the report")]
-    pub reason: String,
 }
 
 #[derive(Debug, Subcommand)]

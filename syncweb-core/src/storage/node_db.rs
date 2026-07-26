@@ -44,16 +44,16 @@ impl NodeDatabase {
         let db = Self {
             connection: Arc::new(Mutex::new(connection)),
         };
-        db.migrate()?;
+        db.init_schema()?;
         Ok(db)
     }
 
-    /// Run database migrations.
+    /// Initialize the database schema, creating tables and indexes if they don't exist.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database schema cannot be created or migrated.
-    pub fn migrate(&self) -> Result<()> {
+    /// Returns an error if the database mutex is poisoned or if a SQL operation fails.
+    pub fn init_schema(&self) -> Result<()> {
         let connection = self
             .connection
             .lock()

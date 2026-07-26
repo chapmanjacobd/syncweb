@@ -605,6 +605,20 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(filestats)
+_arguments "${_arguments_options[@]}" : \
+'--by=[]:BY:(extension size all)' \
+'--top-largest=[Top N largest files by size]:TOP_LARGEST:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':folder -- Namespace ID or path to a managed folder:_default' \
+&& ret=0
+;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
 '*--hash=[Content hash(es) to verify (can repeat)]:HASH:_default' \
@@ -2185,19 +2199,6 @@ esac
     ;;
 esac
 ;;
-(report)
-_arguments "${_arguments_options[@]}" : \
-'--reason=[Reason for the report]:REASON:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':record -- Content hash or record identifier:_default' \
-&& ret=0
-;;
 (moderation)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -2481,6 +2482,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (stats)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(filestats)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -2904,10 +2909,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(report)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (moderation)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help__subcmd__moderation_commands" \
@@ -2986,6 +2987,7 @@ _syncweb_commands() {
 'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
 'stats:Show persisted bandwidth accounting' \
+'filestats:Show file-level statistics for synced folder content' \
 'verify:Re-check local folder blob integrity' \
 'schedule:Show or update synchronization schedules' \
 'subscribe:Subscribe to a folder with event filters' \
@@ -2999,7 +3001,6 @@ _syncweb_commands() {
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
-'report:Submit a local moderation report (deprecated\: use '\''moderation report'\'')' \
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -3190,6 +3191,11 @@ _syncweb__subcmd__download_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb download commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__filestats_commands] )) ||
+_syncweb__subcmd__filestats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb filestats commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__find_commands] )) ||
 _syncweb__subcmd__find_commands() {
     local commands; commands=()
@@ -3234,6 +3240,7 @@ _syncweb__subcmd__help_commands() {
 'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
 'stats:Show persisted bandwidth accounting' \
+'filestats:Show file-level statistics for synced folder content' \
 'verify:Re-check local folder blob integrity' \
 'schedule:Show or update synchronization schedules' \
 'subscribe:Subscribe to a folder with event filters' \
@@ -3247,7 +3254,6 @@ _syncweb__subcmd__help_commands() {
 'provider:Manage blob provider registrations' \
 'trust:Inspect and delegate local trust' \
 'attest:Sign content provenance attestations' \
-'report:Submit a local moderation report (deprecated\: use '\''moderation report'\'')' \
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -3350,6 +3356,11 @@ _syncweb__subcmd__help__subcmd__devices_commands() {
 _syncweb__subcmd__help__subcmd__download_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help download commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__filestats_commands] )) ||
+_syncweb__subcmd__help__subcmd__filestats_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help filestats commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__find_commands] )) ||
 _syncweb__subcmd__help__subcmd__find_commands() {
@@ -3658,11 +3669,6 @@ _syncweb__subcmd__help__subcmd__publish_commands() {
 _syncweb__subcmd__help__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__report_commands] )) ||
-_syncweb__subcmd__help__subcmd__report_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__schedule_commands] )) ||
 _syncweb__subcmd__help__subcmd__schedule_commands() {
@@ -4490,11 +4496,6 @@ _syncweb__subcmd__publish_commands() {
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__report_commands] )) ||
-_syncweb__subcmd__report_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__schedule_commands] )) ||
 _syncweb__subcmd__schedule_commands() {

@@ -424,7 +424,7 @@ async fn publish_link(namespace_str: String, link: &Link, state: &IndexingState,
         Link::Private(private_link) => {
             let payload = serde_json::to_vec(private_link)?;
             folder
-                .set_blob(format!("sys/links/private/{}", private_link.capability), payload)
+                .set_blob(format!("sys/links/private/{}", hex::encode(private_link.capability)), payload)
                 .await?;
             tracing::info!(namespace = %namespace, "published private link to folder");
         }

@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use cli::{
-    args::{Cli, CliContext},
+    args::{Cli, CliContext, effective_data_dir},
     commands::{
         CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MirrorArgs,
         NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
@@ -106,10 +106,12 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         return execute_auxiliary_command(cli).await;
     }
 
+    let effective = effective_data_dir(&cli.data_dir, cli.network.as_deref());
     let ctx = CliContext {
-        data_dir: &cli.data_dir,
+        data_dir: &effective,
         output_json: cli.json,
         no_daemon: cli.no_daemon,
+        network: cli.network.as_deref(),
     };
     match cli.command {
         Command::Version => {
@@ -196,19 +198,24 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         command,
         json: output_json,
         no_daemon,
+        network,
         ..
     } = cli;
+    let effective = effective_data_dir(&data_dir, network.as_deref());
     let ctx = CliContext {
-        data_dir: &data_dir,
+        data_dir: &effective,
         output_json,
         no_daemon,
+        network: network.as_deref(),
     };
     if let Command::Start(args) = command {
-        let effective_data_dir = args.data_dir.clone().unwrap_or(data_dir);
+        let base = args.data_dir.as_ref().unwrap_or(&data_dir);
+        let effective_start = effective_data_dir(base, network.as_deref());
         let daemon_ctx = CliContext {
-            data_dir: &effective_data_dir,
+            data_dir: &effective_start,
             output_json,
             no_daemon,
+            network: network.as_deref(),
         };
         return handle_start(&daemon_ctx, args).await;
     }
@@ -324,7 +331,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     if args.bg {
-        let child = spawn_daemon_process(data_dir, &args)?;
+        let child = spawn_daemon_process(data_dir, &args, ctx.network)?;
         if output_json {
             println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
         } else {
@@ -335,6 +342,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
 
     let app_config = open_node_db(data_dir)?.load_app_config()?;
     let mut daemon_config = DaemonConfig::new(data_dir);
+    daemon_config.network = ctx.network.map(String::from);
     daemon_config.sync_interval = args.sync_interval.map_or(Duration::from_mins(1), Duration::from_secs);
     daemon_config.rayon_threads = args.max_threads.unwrap_or(app_config.parallel.threads);
     daemon_config.log_file = args.log_file;
@@ -375,7 +383,7 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
     print_daemon_message(response, output_json)
 }
 
-fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs) -> Result<Child> {
+fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: Option<&str>) -> Result<Child> {
     let executable = std::env::current_exe().context("resolve syncweb executable")?;
     let mut command = ProcessCommand::new(executable);
     command
@@ -385,6 +393,9 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs) -> Result<
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    if let Some(net) = network {
+        command.arg("--network").arg(net);
+    }
     if let Some(log_file) = &args.log_file {
         command.arg("--log-file").arg(log_file);
     }
@@ -403,6 +414,7 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs) -> Result<
 async fn daemon_client_or_start(
     data_dir: &std::path::Path,
     no_daemon: bool,
+    network: Option<&str>,
 ) -> Result<Option<syncweb_core::daemon::IpcClient>> {
     if no_daemon {
         return Ok(None);
@@ -424,6 +436,7 @@ async fn daemon_client_or_start(
                 sync_interval: None,
                 no_relay: false,
             },
+            network,
         )?)
     } else {
         None
@@ -600,7 +613,7 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     if !command.path.exists() {
         anyhow::bail!("import path does not exist: {}", command.path.display());
     }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::ImportFiles {
                 namespace: command.folder.clone(),
@@ -722,6 +735,7 @@ async fn download_via_daemon_or_node(
     data_dir: &std::path::Path,
     output_json: bool,
     no_daemon: bool,
+    network: Option<&str>,
     command: &crate::cli::commands::DownloadArgs,
 ) -> Result<()> {
     let mut filter = FetchFilter::new();
@@ -746,7 +760,7 @@ async fn download_via_daemon_or_node(
     } else {
         FetchStrategy::All
     };
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Download {
                 namespace: command.source.to_string_lossy().into_owned(),
@@ -867,7 +881,7 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
         return Ok(());
     }
 
-    download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, &command).await
+    download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, ctx.network, &command).await
 }
 
 async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> {
@@ -1045,7 +1059,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
     let no_daemon = ctx.no_daemon;
     match command {
         SnapshotCommand::Create(args) => {
-            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
                 let response = client
                     .send(IpcRequest::new(IpcCommand::SnapshotCreate {
                         path: args.path.clone(),
@@ -1059,7 +1073,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
         }
         SnapshotCommand::Restore(args) => handle_snapshot_restore(ctx, args).await,
         SnapshotCommand::List { path } => {
-            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
                 let response = client
                     .send(IpcRequest::new(IpcCommand::SnapshotList { path: path.clone() }))
                     .await?;
@@ -1143,7 +1157,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
                 println!("aborted");
                 return Ok(());
             }
-            if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
                 let response = client
                     .send(IpcRequest::new(IpcCommand::SnapshotDelete { id: snapshot.clone() }))
                     .await?;
@@ -1172,7 +1186,7 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::HealthCheck {
                 path: command.path.clone(),
@@ -1261,7 +1275,7 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: command.path.clone(),
@@ -1666,7 +1680,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     if !command.once && !no_daemon {
-        let client = daemon_client_or_start(data_dir, no_daemon)
+        let client = daemon_client_or_start(data_dir, no_daemon, ctx.network)
             .await?
             .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or pass --no-daemon"))?;
 
@@ -1809,7 +1823,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     let no_daemon = ctx.no_daemon;
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: command.path.clone(),
@@ -1847,7 +1861,7 @@ async fn handle_init(ctx: &CliContext<'_>, command: InitArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     std::fs::create_dir_all(&command.path)?;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: command.path.clone(),
@@ -1894,7 +1908,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     std::fs::create_dir_all(&effective_path)
         .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
     if command.once
-        && let Some(client) = daemon_client_or_start(data_dir, no_daemon).await?
+        && let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await?
     {
         let response = client
             .send(IpcRequest::new(IpcCommand::Join {
@@ -2060,7 +2074,7 @@ async fn handle_subscribe(ctx: &CliContext<'_>, command: SubscribeArgs) -> Resul
         }
         params = params.with_limits(limits);
     }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace_id = if let Ok(ns) = command.folder.parse::<iroh_docs::NamespaceId>() {
             ns
         } else {
@@ -2127,7 +2141,7 @@ async fn handle_publish(ctx: &CliContext<'_>, command: PublishArgs) -> Result<()
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Publish {
                 namespace: command.namespace.clone(),
@@ -2168,7 +2182,7 @@ async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::U
         println!("aborted");
         return Ok(());
     }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Unpublish {
                 namespace: command.namespace.clone(),
@@ -2278,7 +2292,7 @@ async fn handle_collection_publish(
     let manifest_bytes = node_db
         .load_workspace_manifest(&source)?
         .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CollectionPublish {
                 path,
@@ -3405,7 +3419,7 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Folde
         println!("aborted");
         return Ok(());
     }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::LeaveFolder {
                 namespace: command.folder.clone(),
@@ -3439,7 +3453,7 @@ async fn handle_unsubscribe(ctx: &CliContext<'_>, command: crate::cli::commands:
         println!("aborted");
         return Ok(());
     }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Unsubscribe {
                 namespace: command.folder.clone(),
@@ -3471,7 +3485,7 @@ async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon).await? {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
         match response {
             IpcResponse::FolderList(folders) => {

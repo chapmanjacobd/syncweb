@@ -1089,14 +1089,15 @@ impl IndexingDatabase {
             if let Ok(mut rev_stmt) = connection.prepare("SELECT manifest, capability, revoked_at FROM revoked_links")
                 && let Ok(rev_rows) = rev_stmt.query_map([], |row| {
                     let manifest_bytes: Vec<u8> = row.get(0)?;
-                    let capability: String = row.get(1)?;
+                    let capability_blob: Vec<u8> = row.get(1)?;
                     let manifests: [u8; 32] = manifest_bytes.try_into().unwrap_or([0_u8; 32]);
                     let hash = Hash::from_bytes(manifests);
-                    Ok((hash, capability))
+                    Ok((hash, capability_blob))
                 })
             {
                 for row in rev_rows.flatten() {
-                    if let Ok(link) = PrivateLink::new(row.0, row.1, u64::MAX) {
+                    let cap: [u8; 32] = row.1.try_into().unwrap_or([0_u8; 32]);
+                    if let Ok(link) = PrivateLink::new(row.0, cap, u64::MAX) {
                         revoked.push(link);
                     }
                 }
@@ -1152,7 +1153,7 @@ impl IndexingDatabase {
                 connection.execute(
                     "INSERT OR REPLACE INTO revoked_links(manifest, capability, revoked_at)
                      VALUES (?1, ?2, ?3)",
-                    params![link.manifest.as_bytes(), link.capability, now],
+                    params![link.manifest.as_bytes(), link.capability.as_slice(), now],
                 ).map_err(|error| database_error("failed to save revoked link", error))?;
             }
             Ok(())

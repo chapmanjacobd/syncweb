@@ -20,7 +20,6 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::{PublicKey, SecretKey};
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use super::IndexingDatabase;
 use crate::{
@@ -474,7 +473,7 @@ pub struct PrivateLink {
     /// Immutable manifest granted by this capability.
     pub manifest: Hash,
     /// Secret read capability.  It is intentionally included in the URI.
-    pub capability: String,
+    pub capability: [u8; 32],
     /// Unix timestamp after which the capability is no longer accepted.
     pub expires_at: u64,
 }
@@ -487,7 +486,7 @@ impl PrivateLink {
     ///
     /// Returns an error if the expiration is invalid.
     pub fn generate(manifest: Hash, expires_at: u64) -> Result<Self> {
-        let capability = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let capability = rand::random::<[u8; 32]>();
         Self::new(manifest, capability, expires_at)
     }
 
@@ -515,10 +514,10 @@ impl PrivateLink {
     /// # Errors
     ///
     /// Returns an error if the capability or expiration is invalid.
-    pub fn new(manifest: Hash, capability: impl Into<String>, expires_at: u64) -> Result<Self> {
+    pub fn new(manifest: Hash, capability: [u8; 32], expires_at: u64) -> Result<Self> {
         let link = Self {
             manifest,
-            capability: capability.into(),
+            capability,
             expires_at,
         };
         link.validate()?;
@@ -535,15 +534,14 @@ impl PrivateLink {
     ///
     /// # Errors
     ///
-    /// Returns an error if the capability is empty or contains URI
-    /// delimiters, or if the expiration is zero.
+    /// Returns an error if the expiration is zero.
     pub fn validate(&self) -> Result<()> {
         if self.expires_at == 0 {
             return Err(SyncwebError::InvalidConfig(
                 "private link expiration must be greater than zero".to_owned(),
             ));
         }
-        validate_path_segment(&self.capability, "private link capability")
+        Ok(())
     }
 
     /// Return whether this link is expired at `now`.
@@ -554,8 +552,8 @@ impl PrivateLink {
 
     /// Return a stable key used by revocation lists.
     #[must_use]
-    pub fn revocation_key(&self) -> (Hash, String) {
-        (self.manifest, self.capability.clone())
+    pub fn revocation_key(&self) -> (Hash, Vec<u8>) {
+        (self.manifest, self.capability.to_vec())
     }
 }
 
@@ -564,7 +562,7 @@ impl fmt::Display for PrivateLink {
         write!(
             formatter,
             "{LINK_SCHEME}private/{}/{}?expires={}",
-            self.manifest, self.capability, self.expires_at
+            self.manifest, hex::encode(self.capability), self.expires_at
         )
     }
 }
@@ -580,7 +578,7 @@ impl FromStr for PrivateLink {
             .ok_or_else(|| SyncwebError::InvalidConfig("private link must contain an expiration".to_owned()))?;
         let mut parts = path.split('/');
         let manifest = next_part(&mut parts, "private link manifest")?;
-        let capability = next_part(&mut parts, "private link capability")?;
+        let capability_hex = next_part(&mut parts, "private link capability")?;
         if parts.next().is_some() {
             return Err(SyncwebError::InvalidConfig(
                 "private link has too many path segments".to_owned(),
@@ -589,6 +587,11 @@ impl FromStr for PrivateLink {
         let manifest_hash = manifest
             .parse::<Hash>()
             .map_err(|error| SyncwebError::InvalidConfig(format!("invalid private link manifest: {error}")))?;
+        let capability_bytes = hex::decode(capability_hex)
+            .map_err(|error| SyncwebError::InvalidConfig(format!("invalid private link capability: {error}")))?;
+        let capability: [u8; 32] = capability_bytes.try_into().map_err(|_| {
+            SyncwebError::InvalidConfig("private link capability must be 32 bytes".to_owned())
+        })?;
         let expires_text = query
             .strip_prefix("expires=")
             .ok_or_else(|| SyncwebError::InvalidConfig("private link query must contain expires".to_owned()))?;
@@ -807,7 +810,7 @@ impl ResolveOptions {
 struct ResolverState {
     mirrors: HashMap<Hash, Vec<Mirror>>,
     pointers: HashMap<(PublicKey, String), PointerHistory>,
-    revoked: HashSet<(Hash, String)>,
+    revoked: HashSet<(Hash, Vec<u8>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1439,7 +1442,8 @@ mod tests {
     #[test]
     fn private_links_expire_and_revoke() {
         let hash = Hash::from_bytes([3; 32]);
-        let link = PrivateLink::new(hash, "capability-token", 20).expect("private link should build");
+        let cap: [u8; 32] = [1u8; 32];
+        let link = PrivateLink::new(hash, cap, 20).expect("private link should build");
         let resolver = LinkResolver::new();
         assert_eq!(
             resolver
@@ -1451,6 +1455,37 @@ mod tests {
         resolver.revoke(&link).expect("private link should revoke");
         assert!(resolver.resolve_at(&Link::Private(link.clone()), 10).is_err());
         assert!(resolver.resolve_at(&Link::Private(link), 20).is_err());
+    }
+
+    #[test]
+    fn private_link_generates_random_capability() {
+        let hash = Hash::from_bytes([4; 32]);
+        let link = PrivateLink::generate(hash, 100).expect("should generate");
+        assert_ne!(link.capability, [0u8; 32], "capability should not be zeroed");
+        assert_eq!(link.manifest, hash);
+        assert_eq!(link.expires_at, 100);
+        // Two generated links should differ
+        let link2 = PrivateLink::generate(hash, 100).expect("should generate");
+        assert_ne!(link.capability, link2.capability, "capabilities should be random");
+    }
+
+    #[test]
+    fn private_link_uri_round_trip() {
+        let hash = Hash::from_bytes([5; 32]);
+        let cap: [u8; 32] = [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+            0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+            0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+            0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+        ];
+        let link = PrivateLink::new(hash, cap, 200).expect("should build");
+        let uri = link.to_string();
+        assert!(uri.starts_with("syncweb://private/"));
+        assert!(uri.contains("?expires=200"));
+        let parsed: PrivateLink = uri.parse().expect("should parse");
+        assert_eq!(parsed.manifest, hash);
+        assert_eq!(parsed.capability, cap);
+        assert_eq!(parsed.expires_at, 200);
     }
 
     #[test]

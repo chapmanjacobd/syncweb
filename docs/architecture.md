@@ -85,6 +85,10 @@ Use cases:
 
 Migration: Single-device users skip networks. Multi-folder multi-device users adopt them naturally.
 
+### Security: Per-Network Process Isolation
+
+Each network runs as a separate daemon process with its own data directory, Ed25519 identity, and blob store. Non-member peers are rejected at connection time via iroh's `EndpointHooks` (fires after TLS handshake, before protocol handlers). See `docs/security-model.md` for the full threat model.
+
 ---
 
 ## iroh-willow Architecture Patterns (Selected)

@@ -164,8 +164,9 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
     let hash = alice.blob_store().add_bytes(b"secret").await?;
     let link = PrivateLink::generate(hash, 4_000_000_000)?;
     let payload = serde_json::to_vec(&link)?;
+    let link_key = format!("sys/links/private/{}", hex::encode(link.capability));
     folder
-        .set_blob(format!("sys/links/private/{}", link.capability), payload)
+        .set_blob(&link_key, payload)
         .await?;
 
     let ticket = folder.ticket(alice.endpoint().addr(), true).await?;
@@ -183,7 +184,7 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
 
     let entry = bob
         .docs_engine()
-        .get_any(bob_folder.doc(), format!("sys/links/private/{}", link.capability))
+        .get_any(bob_folder.doc(), &link_key)
         .await?;
     anyhow::ensure!(entry.is_some(), "Bob should see the private link entry after sync");
 

@@ -218,6 +218,7 @@ impl NodeDatabase {
             .execute_batch(Self::create_schema_sql())
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
         let _ = connection.execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT");
+        let _ = connection.execute_batch("ALTER TABLE blob_folders ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0");
         connection
             .execute(
                 "INSERT INTO schema_version(key, value) VALUES ('version', '1')
@@ -1272,7 +1273,13 @@ impl NodeDatabase {
     /// # Errors
     ///
     /// Returns an error if the database write fails.
-    pub fn record_blob_folder(&self, content_hash: &[u8; 32], namespace_id: &str, entry_key: &[u8]) -> Result<()> {
+    pub fn record_blob_folder(
+        &self,
+        content_hash: &[u8; 32],
+        namespace_id: &str,
+        entry_key: &[u8],
+        is_public: bool,
+    ) -> Result<()> {
         let connection = self
             .connection
             .lock()
@@ -1280,9 +1287,9 @@ impl NodeDatabase {
         let now = current_timestamp().cast_signed();
         connection
             .execute(
-                "INSERT OR IGNORE INTO blob_folders(content_hash, namespace_id, entry_key, added_at)
-             VALUES (?1, ?2, ?3, ?4)",
-                params![content_hash.as_slice(), namespace_id, entry_key, now],
+                "INSERT OR IGNORE INTO blob_folders(content_hash, namespace_id, entry_key, added_at, is_public)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![content_hash.as_slice(), namespace_id, entry_key, now, i64::from(is_public)],
             )
             .map_err(|error| SyncwebError::operation("failed to record blob folder association", error))?;
         drop(connection);
@@ -1439,6 +1446,53 @@ impl NodeDatabase {
         drop(stmt);
         drop(connection);
         Ok(members)
+    }
+
+    /// Returns true if the given peer is a member of any network.
+    /// For the per-network daemon model, a daemon only manages ONE network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn is_peer_network_member(&self, peer_public_key: &str) -> Result<bool> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let exists: bool = connection
+            .query_row(
+                "SELECT 1 FROM network_members WHERE member = ?1 LIMIT 1",
+                params![peer_public_key],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to check peer membership", error))?
+            .is_some();
+        drop(connection);
+        Ok(exists)
+    }
+
+    /// Returns true if the blob is marked as public (PublicReadOnly sync mode).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn is_blob_public(&self, content_hash: &[u8; 32]) -> Result<bool> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let exists: bool = connection
+            .query_row(
+                "SELECT 1 FROM blob_folders WHERE content_hash = ?1 AND is_public = 1 LIMIT 1",
+                params![content_hash.as_slice()],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to check blob visibility", error))?
+            .is_some();
+        drop(connection);
+        Ok(exists)
     }
 
     // ------------------------------------------------------------------
@@ -1777,5 +1831,69 @@ impl crate::storage::Vacuumable for NodeDatabase {
 
     fn freelist_count(&self) -> Result<i64> {
         self.freelist_count()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn test_db() -> NodeDatabase {
+        let conn = Connection::open_in_memory().unwrap();
+        let db = NodeDatabase {
+            connection: Arc::new(Mutex::new(conn)),
+        };
+        db.init_schema().unwrap();
+        db
+    }
+
+    fn make_public_key(seed: u8) -> PublicKey {
+        iroh::SecretKey::from_bytes(&[seed; 32]).public()
+    }
+
+    #[test]
+    fn test_is_peer_network_member_true() {
+        let db = test_db();
+        let member_key = make_public_key(1);
+        let owner = make_public_key(2);
+
+        let mut network = Network::new("test", owner, crate::net::network::NetworkOptions::default());
+        network.members.insert(member_key);
+        db.create_network(&network).unwrap();
+
+        assert!(db.is_peer_network_member(&member_key.to_string()).unwrap());
+    }
+
+    #[test]
+    fn test_is_peer_network_member_false() {
+        let db = test_db();
+        assert!(!db.is_peer_network_member("unknown-peer").unwrap());
+    }
+
+    #[test]
+    fn test_is_blob_public_true() {
+        let db = test_db();
+        let hash = [42u8; 32];
+        let namespace = "ns1";
+
+        db.record_blob_folder(&hash, namespace, b"key1", true).unwrap();
+        assert!(db.is_blob_public(&hash).unwrap());
+    }
+
+    #[test]
+    fn test_is_blob_public_false() {
+        let db = test_db();
+        let hash = [42u8; 32];
+        let namespace = "ns1";
+
+        db.record_blob_folder(&hash, namespace, b"key1", false).unwrap();
+        assert!(!db.is_blob_public(&hash).unwrap());
+    }
+
+    #[test]
+    fn test_is_blob_public_unknown_hash() {
+        let db = test_db();
+        assert!(!db.is_blob_public(&[99u8; 32]).unwrap());
     }
 }

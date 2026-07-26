@@ -9,6 +9,12 @@ pub struct CliContext<'a> {
     pub data_dir: &'a Path,
     pub output_json: bool,
     pub no_daemon: bool,
+    pub network: Option<&'a str>,
+}
+
+pub fn effective_data_dir(data_dir: &Path, network: Option<&str>) -> PathBuf {
+    let net = network.unwrap_or("default");
+    data_dir.join(net)
 }
 
 #[derive(Debug, Parser)]
@@ -35,6 +41,13 @@ pub struct Cli {
         help = "Directory used for persistent node identity and data"
     )]
     pub data_dir: PathBuf,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Network name for scoped operations (uses data_dir/<network>/). Defaults to 'default' if absent."
+    )]
+    pub network: Option<String>,
 
     #[command(subcommand)]
     pub command: Command,

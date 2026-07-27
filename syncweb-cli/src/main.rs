@@ -907,10 +907,12 @@ async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> 
 
     let result = if let Some(ref network_str) = command.network {
         let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
+        let no_public = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let network_mgr = syncweb_core::net::NetworkManager::new(
             open_node_db(data_dir)?,
             node.endpoint().secret_key().public(),
             empty_keys,
+            no_public,
         )?;
         let network = network_mgr
             .get_by_name(network_str)
@@ -3394,7 +3396,8 @@ fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
     let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
-    Ok(NetworkManager::new(db, identity.node_id(), empty_keys)?)
+    let no_public = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    Ok(NetworkManager::new(db, identity.node_id(), empty_keys, no_public)?)
 }
 
 fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {

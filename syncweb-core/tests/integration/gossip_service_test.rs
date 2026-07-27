@@ -28,8 +28,8 @@ async fn test_node(
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let relay_mode = relay_map.map_or(RelayMode::Default, |map| RelayMode::Custom { map, insecure: true });
     match address_lookup {
-        Some(lookup) => Ok(IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup, crate::test_utils::empty_member_keys()).await?),
-        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode, crate::test_utils::empty_member_keys()).await?),
+        Some(lookup) => Ok(IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?),
+        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?),
     }
 }
 

@@ -84,7 +84,7 @@ replication = "disabled"
 async fn publish_folder(&self, folder_id: &NamespaceId) -> Result<BlobTicket> {
     // 1. Ensure folder is SendOnly or SendReceive (has namespace key)
     let folder = self.folders.get(folder_id)?;
-    ensure!(folder.sync_mode.can_publish());
+    ensure!(folder.sync_mode.can_write_locally());
 
     // 2. Get the root hash of all blobs in this folder
     let root_hash = self.get_folder_root_hash(folder).await?;

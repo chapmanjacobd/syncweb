@@ -110,7 +110,8 @@ impl NodeDatabase {
             label TEXT NOT NULL DEFAULT '',
             owner TEXT NOT NULL,
             shared_secret BLOB,
-            created_at INTEGER NOT NULL
+            created_at INTEGER NOT NULL,
+            is_public INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS network_members (
             network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
@@ -543,7 +544,7 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
         let now = current_timestamp().cast_signed();
         connection.execute(
-            "INSERT INTO networks(id, name, label, owner, shared_secret, created_at, doc_ticket) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO networks(id, name, label, owner, shared_secret, created_at, doc_ticket, is_public) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 network.id.to_string(),
                 network.name,
@@ -552,6 +553,7 @@ impl NodeDatabase {
                 network.shared_secret.as_ref().map(|s| s.to_vec()),
                 now,
                 network.doc_ticket,
+                i64::from(network.is_public),
             ],
         ).map_err(|error| SyncwebError::operation("failed to create network", error))?;
         for member in &network.members {
@@ -686,7 +688,7 @@ impl NodeDatabase {
             .lock()
             .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
         let mut stmt = connection
-            .prepare("SELECT id, name, label, owner, shared_secret, doc_ticket FROM networks ORDER BY name")
+            .prepare("SELECT id, name, label, owner, shared_secret, doc_ticket, is_public FROM networks ORDER BY name")
             .map_err(|error| SyncwebError::operation("failed to prepare network query", error))?;
         let networks = stmt
             .query_map([], |row| {
@@ -697,6 +699,7 @@ impl NodeDatabase {
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<Vec<u8>>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(6)? != 0,
                 ))
             })
             .map_err(|error| SyncwebError::operation("failed to query networks", error))?
@@ -711,7 +714,7 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to prepare folder query", error))?;
 
         let mut result = Vec::new();
-        for (id_str, name, label, owner_str, shared_secret_bytes, doc_ticket) in networks {
+        for (id_str, name, label, owner_str, shared_secret_bytes, doc_ticket, is_public) in networks {
             let network_id = NetworkId::from_str(&id_str)
                 .map_err(|error| SyncwebError::operation("invalid network ID in database", error))?;
             let owner = parse_public_key(&owner_str)?;
@@ -752,6 +755,7 @@ impl NodeDatabase {
                 folders,
                 shared_secret,
                 doc_ticket,
+                is_public,
             });
         }
         drop(stmt);

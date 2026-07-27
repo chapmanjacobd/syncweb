@@ -76,7 +76,7 @@ Goal: Sync engine, automatic daemon, networks abstraction
 ### Phase 5: Public Folders + Living Folders
 Goal: Public sharing + data package versioning
 
-- [x] `SyncMode::PublicReadOnly`
+- [x] Network-level `is_public` replaces folder-level `PublicReadOnly`
 - [x] Blob ticket generation
 - [x] Content pinning (prevent GC for shared blobs)
 - [x] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`

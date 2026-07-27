@@ -5,6 +5,7 @@ use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -35,6 +36,8 @@ pub struct IrohNode {
     topic_tracker: TopicTracker,
     #[allow(dead_code)]
     member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+    #[allow(dead_code)]
+    has_public_network: Arc<AtomicBool>,
 }
 
 impl IrohNode {
@@ -48,8 +51,9 @@ impl IrohNode {
         data_dir: PathBuf,
         relay_mode: RelayMode,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        has_public_network: Arc<AtomicBool>,
     ) -> Result<Self> {
-        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new(), member_keys).await
+        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new(), member_keys, has_public_network).await
     }
 
     /// # Errors
@@ -61,6 +65,7 @@ impl IrohNode {
         relay_mode: RelayMode,
         address_lookup: MemoryLookup,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        has_public_network: Arc<AtomicBool>,
     ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir)
             .await
@@ -85,7 +90,10 @@ impl IrohNode {
             }
         };
 
-        let hook = MembershipHook { member_keys: member_keys.clone() };
+        let hook = MembershipHook {
+            member_keys: member_keys.clone(),
+            has_public_network: has_public_network.clone(),
+        };
         let endpoint = builder
             .address_lookup(address_lookup.clone())
             .secret_key(identity.secret_key().clone())
@@ -142,6 +150,7 @@ impl IrohNode {
             gossip_service,
             topic_tracker,
             member_keys,
+            has_public_network,
         })
     }
 

@@ -2591,7 +2591,7 @@ mod tests {
 
         let identity = IdentityManager::new(directory.join("identity.key")).expect("test identity should open");
         let node = Arc::new(
-            IrohNode::new(identity, directory.join("data"), RelayMode::Default, Arc::new(RwLock::new(HashSet::new())))
+            IrohNode::new(identity, directory.join("data"), RelayMode::Default, Arc::new(RwLock::new(HashSet::new())), Arc::new(std::sync::atomic::AtomicBool::new(false)))
                 .await
                 .expect("test node should start"),
         );

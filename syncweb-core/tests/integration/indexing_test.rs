@@ -91,7 +91,7 @@ async fn indexing_service_consumes_folder_events() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-indexing-test")?;
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    let node = IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?;
+    let node = IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     let service = IndexingService::in_memory()?;
     let mut events = service.subscribe();
@@ -123,7 +123,7 @@ async fn catalog_publish_and_search_uses_global_fts() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-indexing-test")?;
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    let node = IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?;
+    let node = IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     folder.set_blob(b"notes/readme.txt", b"catalog content").await?;
 
@@ -163,6 +163,7 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
     let subscriber_root = directory.path().join("subscriber");
@@ -175,6 +176,7 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -238,6 +240,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
     let subscriber_root = directory.path().join("resilience-subscriber");
@@ -250,6 +253,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 

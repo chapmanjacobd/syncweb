@@ -16,7 +16,7 @@ use crate::test_utils::TestDirectory;
 async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?)
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?)
 }
 
 #[tokio::test]
@@ -74,73 +74,26 @@ async fn test_sync_modes() -> anyhow::Result<()> {
     let sr = manager.create(SyncMode::SendReceive).await?;
     anyhow::ensure!(sr.mode().can_write_locally());
     anyhow::ensure!(sr.mode().can_receive());
-    anyhow::ensure!(!sr.mode().is_public());
     anyhow::ensure!(sr.mode().to_string() == "sendreceive");
 
     let so = manager.create(SyncMode::SendOnly).await?;
     anyhow::ensure!(so.mode().can_write_locally());
     anyhow::ensure!(!so.mode().can_receive());
-    anyhow::ensure!(!so.mode().is_public());
     anyhow::ensure!(so.mode().to_string() == "sendonly");
 
     let ro = manager.create(SyncMode::ReceiveOnly).await?;
     anyhow::ensure!(!ro.mode().can_write_locally());
     anyhow::ensure!(ro.mode().can_receive());
-    anyhow::ensure!(!ro.mode().is_public());
     anyhow::ensure!(ro.mode().to_string() == "receiveonly");
 
     let re = manager.create(SyncMode::ReceiveEncrypted).await?;
     anyhow::ensure!(!re.mode().can_write_locally());
     anyhow::ensure!(re.mode().can_receive());
-    anyhow::ensure!(!re.mode().is_public());
     anyhow::ensure!(re.mode().to_string() == "receiveencrypted");
 
-    let pro = manager.create(SyncMode::PublicReadOnly).await?;
-    anyhow::ensure!(!pro.mode().can_write_locally());
-    anyhow::ensure!(pro.mode().can_receive());
-    anyhow::ensure!(pro.mode().is_public());
-    anyhow::ensure!(pro.mode().to_string() == "publicreadonly");
-
-    anyhow::ensure!(manager.list().await?.len() == 5);
+    anyhow::ensure!(manager.list().await?.len() == 4);
 
     test_node.stop().await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_public_readonly_blob_ticket_requires_no_folder_capability() -> anyhow::Result<()> {
-    let directory = TestDirectory::new("syncweb-folder-test")?;
-    let node = node(&directory, "node").await?;
-    let manager = FolderManager::new(&node);
-    let folder = manager.create(SyncMode::PublicReadOnly).await?;
-    let hash = node.blob_store().add_bytes(b"public content").await?;
-
-    let ticket = folder.publish_blob(node.endpoint().addr(), hash).await?;
-    anyhow::ensure!(ticket.hash() == hash);
-    anyhow::ensure!(
-        node.blob_store()
-            .is_pinned(format!("syncweb/public/{}/{}", folder.namespace_id(), hash), hash)
-            .await?
-    );
-    anyhow::ensure!(!folder.can_write_as(node.endpoint().id()).await);
-
-    node.stop().await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::Result<()> {
-    let directory = TestDirectory::new("syncweb-folder-test")?;
-    let node = node(&directory, "node").await?;
-    let manager = FolderManager::new(&node);
-    let folder = manager.create(SyncMode::PublicReadOnly).await?;
-
-    let restarted_manager = FolderManager::new(&node);
-    let restored = restarted_manager.get(folder.namespace_id()).await?;
-    anyhow::ensure!(restored.mode() == SyncMode::PublicReadOnly);
-    anyhow::ensure!(!restored.mode().can_write_locally());
-
-    node.stop().await?;
     Ok(())
 }
 
@@ -161,6 +114,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
             },
             memory_lookup.clone(),
             crate::test_utils::empty_member_keys(),
+            crate::test_utils::no_public_network(),
         )
         .await?
     };
@@ -176,6 +130,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
             },
             memory_lookup.clone(),
             crate::test_utils::empty_member_keys(),
+            crate::test_utils::no_public_network(),
         )
         .await?
     };
@@ -307,6 +262,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -321,6 +277,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -384,6 +341,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -398,6 +356,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
+        crate::test_utils::no_public_network(),
     )
     .await?;
 

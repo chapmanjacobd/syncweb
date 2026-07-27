@@ -189,6 +189,8 @@ struct TicketWire {
     shared_secret: Option<String>,
     #[serde(default)]
     doc_ticket: Option<String>,
+    #[serde(default)]
+    is_public: bool,
 }
 
 impl From<&NetworkTicket> for TicketWire {
@@ -207,6 +209,7 @@ impl From<&NetworkTicket> for TicketWire {
             folders,
             shared_secret: ticket.shared_secret.map(hex::encode),
             doc_ticket: ticket.doc_ticket.clone(),
+            is_public: ticket.is_public,
         }
     }
 }
@@ -258,6 +261,7 @@ impl TryFrom<TicketWire> for NetworkTicket {
             folders,
             shared_secret,
             doc_ticket: wire.doc_ticket,
+            is_public: wire.is_public,
         })
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -10,6 +11,10 @@ use syncweb_core::node::{
 
 pub fn empty_member_keys() -> Arc<RwLock<HashSet<iroh::PublicKey>>> {
     Arc::new(RwLock::new(HashSet::new()))
+}
+
+pub fn no_public_network() -> Arc<AtomicBool> {
+    Arc::new(AtomicBool::new(false))
 }
 
 pub struct TestDirectory(PathBuf);
@@ -48,5 +53,5 @@ impl Drop for TestDirectory {
 pub async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, empty_member_keys()).await?)
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, empty_member_keys(), no_public_network()).await?)
 }

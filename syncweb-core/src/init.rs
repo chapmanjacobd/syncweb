@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -39,5 +40,6 @@ impl InitResult {
 pub async fn open_node(data_dir: &std::path::Path) -> crate::error::Result<IrohNode> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let empty_keys = Arc::new(RwLock::new(HashSet::new()));
-    IrohNode::new(identity, data_dir.join("data"), RelayMode::Default, empty_keys).await
+    let no_public = Arc::new(AtomicBool::new(false));
+    IrohNode::new(identity, data_dir.join("data"), RelayMode::Default, empty_keys, no_public).await
 }

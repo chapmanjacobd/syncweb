@@ -292,11 +292,11 @@ Decision: One daemon process per network, each with its own data directory, iden
 
 - Each network gets a dedicated daemon with `data_dir/<network>/` — separate blob stores, node databases, and Ed25519 identities
 - Blobs shared across networks are deduplicated via filesystem hardlinks (ciphertext-free)
-- **Connection-level**: iroh's `EndpointHooks::after_handshake()` rejects non-member connections for docs/gossip protocols (ALPN-aware). Blob protocol connections are allowed through for per-blob authorization.
-- **Protocol-level**: Custom auth blob ALPN replaces default `iroh-blobs/1`. Per-request check: is peer in network OR is blob PublicReadOnly? Serves from same on-disk FsStore.
-- PublicReadOnly folders remain world-readable (any authenticated peer, no membership check)
-- PrivateLink capability tokens provide application-level access control for individual manifests (expiry + revocation)
-- Default daemon (`default/`, no `--network`) has no access control — any authenticated peer can download any blob
+- **Connection-level**: iroh's `EndpointHooks::after_handshake()` rejects non-member connections for all three ALPNs (docs, gossip, blobs). No separate per-blob protocol handler is needed.
+- **Public networks**: A network can be marked `is_public: true` at creation time. In a public network, blob ALPN connections are allowed through for any authenticated peer; docs and gossip remain gated to members.
+- **Private networks**: All three ALPNs are gated to network members.
+- **Default daemon** (`default/`, no `--network`): has no gating — any authenticated peer can connect.
+- PrivateLink capability tokens provide application-level access control for individual manifests (expiry + revocation).
 
-A modified client cannot download non-public blobs from networks it is not a member of (rejected at protocol level), use expired/revoked PrivateLinks, or forge network membership (requires member's Ed25519 key). A modified client can still exfiltrate blobs it is authorized to access, or use a stolen member key. Retroactive revocation of already-downloaded plaintext is not possible without encryption-at-rest. See `docs/security-model.md` for full threat model.
+A modified client cannot download non-public blobs from networks it is not a member of (rejected at connection level), use expired/revoked PrivateLinks, or forge network membership (requires member's Ed25519 key). A modified client can still exfiltrate blobs it is authorized to access, or use a stolen member key. See `docs/security-model.md` for full threat model.
 

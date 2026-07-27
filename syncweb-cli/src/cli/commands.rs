@@ -171,7 +171,7 @@ pub struct FolderCreate {
     #[arg(
         long,
         default_value = "sendreceive",
-        help = "Sync mode: sendreceive, receiveonly, sendonly, or publicreadonly"
+        help = "Sync mode: sendreceive, receiveonly, or sendonly"
     )]
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
@@ -254,7 +254,7 @@ pub struct FindArgs {
         long = "download",
         alias = "dl",
         alias = "downloadable",
-        help = "Exclude sendonly/publicreadonly folders from search"
+        help = "Exclude sendonly folders from search"
     )]
     pub downloadable: bool,
     #[arg(

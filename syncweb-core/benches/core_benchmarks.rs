@@ -29,7 +29,10 @@
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::AtomicBool,
+        Arc,
+    },
     time::{Duration, SystemTime},
 };
 use tokio::sync::RwLock;
@@ -564,7 +567,7 @@ fn archive_benchmark_fixture() -> ArchiveBenchmarkFixture {
     let (node, manifest, archive, output, pool) = runtime.block_on(async {
         let identity = IdentityManager::new(directory.join("identity.key")).expect("benchmark identity should open");
         let node = Arc::new(
-            IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys())
+            IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys(), no_public_network())
                 .await
                 .expect("benchmark node should start"),
         );
@@ -683,7 +686,7 @@ fn bench_ipc_create_folder(c: &mut Criterion) {
             let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
                 .expect("benchmark identity should open");
             let node = Arc::new(
-                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys())
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys(), no_public_network())
                     .await
                     .expect("benchmark node should start"),
             );
@@ -731,7 +734,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
             let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
                 .expect("benchmark identity should open");
             let node = Arc::new(
-                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys())
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys(), no_public_network())
                     .await
                     .expect("benchmark node should start"),
             );
@@ -799,7 +802,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
             let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
                 .expect("benchmark identity should open");
             let node = Arc::new(
-                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys())
+                IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys(), no_public_network())
                     .await
                     .expect("benchmark node should start"),
             );
@@ -868,6 +871,10 @@ fn empty_member_keys() -> Arc<RwLock<HashSet<iroh::PublicKey>>> {
     Arc::new(RwLock::new(HashSet::new()))
 }
 
+fn no_public_network() -> Arc<AtomicBool> {
+    Arc::new(AtomicBool::new(false))
+}
+
 fn bench_daemon_start_stop(c: &mut Criterion) {
     let runtime = benchmark_runtime();
     let directory = std::env::temp_dir().join(format!("syncweb-bench-startstop-{}", uuid::Uuid::new_v4()));
@@ -880,7 +887,7 @@ fn bench_daemon_start_stop(c: &mut Criterion) {
                 let result = runtime.block_on(async {
                     let identity = syncweb_core::node::identity::IdentityManager::new(directory.join("identity.key"))
                         .expect("benchmark identity should open");
-                    let node = IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys())
+                    let node = IrohNode::new(identity, directory.join("data"), RelayMode::Default, empty_member_keys(), no_public_network())
                         .await
                         .expect("benchmark node should start");
                     node.stop().await

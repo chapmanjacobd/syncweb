@@ -11,7 +11,6 @@ pub enum SyncMode {
     SendOnly,
     ReceiveOnly,
     ReceiveEncrypted,
-    PublicReadOnly,
 }
 
 impl SyncMode {
@@ -29,11 +28,6 @@ impl SyncMode {
     pub const fn can_receive(self) -> bool {
         !matches!(self, Self::SendOnly)
     }
-
-    #[must_use]
-    pub const fn is_public(self) -> bool {
-        matches!(self, Self::PublicReadOnly)
-    }
 }
 
 impl fmt::Display for SyncMode {
@@ -43,7 +37,6 @@ impl fmt::Display for SyncMode {
             Self::SendOnly => "sendonly",
             Self::ReceiveOnly => "receiveonly",
             Self::ReceiveEncrypted => "receiveencrypted",
-            Self::PublicReadOnly => "publicreadonly",
         })
     }
 }
@@ -57,7 +50,6 @@ impl FromStr for SyncMode {
             "sendonly" => Ok(Self::SendOnly),
             "receiveonly" => Ok(Self::ReceiveOnly),
             "receiveencrypted" => Ok(Self::ReceiveEncrypted),
-            "publicreadonly" => Ok(Self::PublicReadOnly),
             _ => Err(SyncwebError::InvalidSyncMode(value.to_owned())),
         }
     }

@@ -25,7 +25,7 @@ use crate::test_utils::TestDirectory;
 async fn create_folder(directory: &TestDirectory, root: &Path) -> Result<iroh_docs::NamespaceId> {
     fs::create_dir_all(root)?;
     let identity = IdentityManager::new(directory.path().join("identity.key"))?;
-    let node = IrohNode::new(identity, directory.path().join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?;
+    let node = IrohNode::new(identity, directory.path().join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     let namespace = folder.namespace_id();
     node.stop().await?;
@@ -312,7 +312,7 @@ async fn test_daemon_supervisor_shutdown_cancels_intents() -> Result<()> {
 async fn test_daemon_import_export_archive_via_ipc() -> Result<()> {
     let directory = TestDirectory::new("archive-ipc")?;
     let identity = IdentityManager::new(directory.path().join("identity.key"))?;
-    let node = Arc::new(IrohNode::new(identity, directory.path().join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?);
+    let node = Arc::new(IrohNode::new(identity, directory.path().join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?);
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
     let namespace = folder.namespace_id();
     let content = b"archive content for export";

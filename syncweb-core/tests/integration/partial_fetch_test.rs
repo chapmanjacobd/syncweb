@@ -151,6 +151,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
         node_b.blob_store().clone(),
         node_b.docs_engine().clone(),
         node_b.gossip_service().clone(),
+        None,
     );
 
     let filter = FetchFilter::new().with_max_peers(1);

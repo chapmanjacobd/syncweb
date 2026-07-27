@@ -1,7 +1,8 @@
 use anyhow::Result;
 use syncweb_core::folder::{CollectionManifest, CollectionStore, FolderManager, SyncMode};
 
-use crate::test_utils::{TestDirectory, test_node};
+use super::test_node;
+use crate::test_utils::TestDirectory;
 
 #[tokio::test]
 async fn test_collection_publish_uses_copy_mode() -> Result<()> {

@@ -2,7 +2,8 @@ use std::fs;
 
 use syncweb_core::fs::{ExportEntry, Exporter, ParallelExporter};
 
-use crate::test_utils::{TestDirectory, test_node};
+use super::test_node;
+use crate::test_utils::TestDirectory;
 
 #[tokio::test]
 async fn test_export_single_blob() -> anyhow::Result<()> {

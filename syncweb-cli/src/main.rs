@@ -687,8 +687,8 @@ async fn download_from_ticket(
     cli::indexing::download_blob(
         ctx,
         &[ticket],
-        command.min_providers,
-        command.no_sharing,
+        command.providers.min_providers,
+        command.providers.no_sharing,
         command.destination.as_deref(),
     )
     .await
@@ -699,7 +699,7 @@ async fn download_with_hash(
     hash: &str,
     command: &crate::cli::commands::DownloadArgs,
 ) -> Result<()> {
-    if command.from.is_empty() {
+    if command.providers.from.is_empty() {
         anyhow::bail!("--from (or --provider) is required with --hash");
     }
     if command.max_peers.is_some()
@@ -711,6 +711,7 @@ async fn download_with_hash(
     }
     let content_hash: iroh_blobs::Hash = hash.parse().map_err(|e| anyhow::anyhow!("invalid content hash: {e}"))?;
     let tickets: Vec<iroh_blobs::ticket::BlobTicket> = command
+        .providers
         .from
         .iter()
         .map(|t| {
@@ -725,8 +726,8 @@ async fn download_with_hash(
     cli::indexing::download_blob(
         ctx,
         &tickets,
-        command.min_providers,
-        command.no_sharing,
+        command.providers.min_providers,
+        command.providers.no_sharing,
         command.destination.as_deref(),
     )
     .await
@@ -861,7 +862,7 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
         return download_from_ticket(ctx, &command, ticket).await;
     }
 
-    if let Some(ref hash) = command.hash {
+    if let Some(hash) = command.filter.hash.first() {
         return download_with_hash(ctx, hash, &command).await;
     }
 
@@ -1194,6 +1195,9 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
         let response = client
             .send(IpcRequest::new(IpcCommand::HealthCheck {
                 path: command.path.clone(),
+                hash: command.filter.hash.clone(),
+                path_prefix: command.filter.path_prefix.clone(),
+                glob: command.filter.glob.clone(),
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -1201,6 +1205,19 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = resolve_folder(&manager, &command.path).await?;
+
+    let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
+        None
+    } else {
+        match syncweb_core::verify::VerifyFilter::try_from(&command.filter) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                node.stop().await?;
+                anyhow::bail!("{e}");
+            }
+        }
+    };
+
     let entries = node.docs_engine().list_latest(folder.doc()).await?;
     let mut candidates = Vec::new();
     let mut hashes = Vec::new();
@@ -1208,9 +1225,14 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
         if entry.key().starts_with(b"sys/") {
             continue;
         }
+        let hash = entry.content_hash();
+        if let Some(ref f) = filter
+            && !f.matches(entry.key(), &hash)
+        {
+            continue;
+        }
         let path = String::from_utf8(entry.key().to_vec())
             .map_err(|error| anyhow::anyhow!("folder entry path is not UTF-8: {error}"))?;
-        let hash = entry.content_hash();
         candidates.push(FetchCandidate::new(
             path,
             hash,
@@ -1283,11 +1305,11 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
         let response = client
             .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: command.path.clone(),
-                hash: command.hash.clone(),
-                path_filter: command.path_filter.clone(),
-                glob_filter: command.glob_filter.clone(),
+                hash: command.filter.hash.clone(),
+                path_filter: command.filter.path_prefix.clone(),
+                glob_filter: command.filter.glob.clone(),
                 fix: command.fix,
-                from: command.from.clone(),
+                from: command.providers.from.clone(),
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -1297,11 +1319,21 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let folder = resolve_folder(&manager, &command.path).await?;
     let checker = IntegrityChecker::new(node.blob_store().clone(), node.docs_engine().clone());
 
-    let filter = build_verify_filter(&command);
+    let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
+        None
+    } else {
+        match syncweb_core::verify::VerifyFilter::try_from(&command.filter) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                node.stop().await?;
+                anyhow::bail!("{e}");
+            }
+        }
+    };
 
     if command.fix {
         let result = checker.verify_folder_filtered(&folder, filter.as_ref()).await?;
-        let repair = try_repair(&node, &folder, &result.corrupted, &command.from).await;
+        let repair = try_repair(&node, &folder, &result.corrupted, &command.providers.from).await;
         let fixed = syncweb_core::verify::FixedVerifyResult::new(result.clone(), Some(repair.clone()));
         if output_json {
             println!("{}", serde_json::to_string_pretty(&fixed)?);
@@ -1327,31 +1359,6 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
         anyhow::bail!("integrity verification failed");
     }
     Ok(())
-}
-
-fn build_verify_filter(command: &VerifyArgs) -> Option<syncweb_core::verify::VerifyFilter> {
-    let has_filter = !command.hash.is_empty() || command.path_filter.is_some() || command.glob_filter.is_some();
-    if !has_filter {
-        return None;
-    }
-    let mut filter = syncweb_core::verify::VerifyFilter::new();
-    if !command.hash.is_empty() {
-        let hashes: Vec<iroh_blobs::Hash> = command
-            .hash
-            .iter()
-            .filter_map(|h| h.parse::<iroh_blobs::Hash>().ok())
-            .collect();
-        if !hashes.is_empty() {
-            filter = filter.with_hashes(hashes);
-        }
-    }
-    if let Some(ref path) = command.path_filter {
-        filter = filter.with_path(std::path::PathBuf::from(path));
-    }
-    if let Some(ref glob) = command.glob_filter {
-        filter.glob = Some(glob.clone());
-    }
-    Some(filter)
 }
 
 async fn try_repair(

@@ -11,7 +11,8 @@ use syncweb_core::{
     sync::{LazyFetch, SyncEvent},
 };
 
-use crate::test_utils::{TestDirectory, test_node};
+use super::test_node;
+use crate::test_utils::TestDirectory;
 
 #[tokio::test]
 async fn test_ls_without_download() -> anyhow::Result<()> {

@@ -13,6 +13,7 @@ use crate::{
     error::Result,
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::FolderManager,
+    node::discovery::TopicTracker,
     node::iroh_node::IrohNode,
     node::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService},
     storage::node_db::NodeDatabase,
@@ -66,6 +67,7 @@ pub struct SyncEngine {
     blob_store: BlobStore,
     docs_engine: DocsEngine,
     node_db: Option<NodeDatabase>,
+    topic_tracker: Option<TopicTracker>,
 }
 
 impl SyncEngine {
@@ -75,12 +77,14 @@ impl SyncEngine {
         blob_store: BlobStore,
         docs_engine: DocsEngine,
         _gossip: GossipService,
+        topic_tracker: Option<TopicTracker>,
     ) -> Self {
         Self {
             folder_manager,
             blob_store,
             docs_engine,
             node_db: None,
+            topic_tracker,
         }
     }
 
@@ -98,6 +102,7 @@ impl SyncEngine {
             node.blob_store().clone(),
             node.docs_engine().clone(),
             node.gossip_service().clone(),
+            Some(node.topic_tracker().clone()),
         )
     }
 
@@ -205,6 +210,17 @@ impl SyncEngine {
     ) -> Result<IntentHandle> {
         let folder = self.folder_manager.get(folder_id).await?;
         let live_events = self.docs_engine.watch(folder.doc()).await?;
+        if let Some(topic_tracker) = &self.topic_tracker {
+            match topic_tracker.find_peers(folder_id).await {
+                Ok(peers) if !peers.is_empty() => {
+                    tracing::debug!(%folder_id, peer_count = peers.len(), "discovered peers via topic tracker");
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::debug!(%folder_id, %error, "failed to discover peers via topic tracker");
+                }
+            }
+        }
         self.docs_engine.start_sync(folder.doc(), Vec::new()).await?;
         let (events, commands, handle) = IntentHandle::channel();
         let node_db = self.node_db.clone();

@@ -122,6 +122,12 @@ pub enum IpcCommand {
     },
     HealthCheck {
         path: PathBuf,
+        #[serde(default)]
+        hash: Vec<String>,
+        #[serde(default)]
+        path_prefix: Option<String>,
+        #[serde(default)]
+        glob: Option<String>,
     },
     VerifyIntegrity {
         path: PathBuf,
@@ -738,7 +744,12 @@ impl IpcServer {
             C::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
             C::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
             C::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
-            C::HealthCheck { path } => self.handle_health_check(path).await,
+            C::HealthCheck {
+                path,
+                hash: filter_hashes,
+                path_prefix,
+                glob,
+            } => self.handle_health_check(path, filter_hashes, path_prefix, glob).await,
             C::VerifyIntegrity {
                 path,
                 hash,
@@ -887,6 +898,7 @@ impl IpcServer {
             context.node.blob_store().clone(),
             context.node.docs_engine().clone(),
             context.node.gossip_service().clone(),
+            Some(context.node.topic_tracker().clone()),
         );
         let mut intent = sync.fetch(namespace_id, strategy).await?;
         let mut bytes_transferred = 0_u64;
@@ -1096,6 +1108,7 @@ impl IpcServer {
             context.node.blob_store().clone(),
             context.node.docs_engine().clone(),
             context.node.gossip_service().clone(),
+            Some(context.node.topic_tracker().clone()),
         );
         match sync.subscribe(namespace_id, params).await {
             Ok(_intent) => IpcResponse::Ok {
@@ -1201,7 +1214,13 @@ impl IpcServer {
         }
     }
 
-    async fn handle_health_check(&self, path: PathBuf) -> IpcResponse {
+    async fn handle_health_check(
+        &self,
+        path: PathBuf,
+        filter_hashes: Vec<String>,
+        path_prefix: Option<String>,
+        glob: Option<String>,
+    ) -> IpcResponse {
         use std::collections::HashMap;
 
         let context = match &self.archive_context {
@@ -1217,6 +1236,7 @@ impl IpcServer {
             Ok(f) => f,
             Err(error) => return error,
         };
+        let filter = build_ipc_verify_filter(&filter_hashes, path_prefix.as_ref(), glob.as_ref());
         let entries = match context.node.docs_engine().list_latest(folder.doc()).await {
             Ok(e) => e,
             Err(error) => return response_from_error(error),
@@ -1225,6 +1245,12 @@ impl IpcServer {
         let mut hashes = Vec::new();
         for entry in entries {
             if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            let entry_hash = entry.content_hash();
+            if let Some(ref f) = filter
+                && !f.matches(entry.key(), &entry_hash)
+            {
                 continue;
             }
             let path_str = match String::from_utf8(entry.key().to_vec()) {
@@ -2497,6 +2523,9 @@ mod tests {
         let response = server
             .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
                 path: PathBuf::from("."),
+                hash: Vec::new(),
+                path_prefix: None,
+                glob: None,
             }))
             .await;
         assert!(matches!(
@@ -2735,6 +2764,9 @@ mod tests {
                 .server
                 .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
                     path: PathBuf::from(&ns),
+                    hash: Vec::new(),
+                    path_prefix: None,
+                    glob: None,
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -2753,8 +2785,11 @@ mod tests {
         let fixture = setup_ipc_test().await;
         let response = fixture
             .server
-            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+                .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
                 path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+                hash: Vec::new(),
+                path_prefix: None,
+                glob: None,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

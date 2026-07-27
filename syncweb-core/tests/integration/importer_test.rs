@@ -2,7 +2,8 @@ use std::{fs, path::PathBuf};
 
 use syncweb_core::fs::{Importer, ParallelImporter};
 
-use crate::test_utils::{TestDirectory, test_node};
+use super::test_node;
+use crate::test_utils::TestDirectory;
 
 #[tokio::test]
 async fn test_import_single_file() -> anyhow::Result<()> {

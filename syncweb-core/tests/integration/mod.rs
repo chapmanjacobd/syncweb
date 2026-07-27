@@ -1,3 +1,20 @@
+use crate::test_utils::{TestDirectory, empty_member_keys};
+use syncweb_core::node::{
+    identity::IdentityManager,
+    iroh_node::{IrohNode, RelayMode},
+};
+
+/// Create a test Iroh node within the given directory.
+///
+/// # Errors
+///
+/// Returns an error if the identity cannot be loaded or the node cannot connect.
+pub async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
+    let root = directory.path().join(name);
+    let identity = IdentityManager::new(root.join("identity.key"))?;
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, empty_member_keys()).await?)
+}
+
 mod actor_test;
 mod archive_export_test;
 mod archive_import_test;

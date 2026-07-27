@@ -146,6 +146,7 @@ impl Daemon {
             node.blob_store().clone(),
             node.docs_engine().clone(),
             node.gossip_service().clone(),
+            Some(node.topic_tracker().clone()),
         );
         Ok((node, folder_manager, sync_engine))
     }
@@ -372,12 +373,14 @@ impl Daemon {
         self.archive_pool.as_ref()
     }
 
+    #[expect(clippy::cognitive_complexity)]
     async fn run_inner(&self) -> Result<()> {
         tracing::debug!(
             rayon_threads = self.archive_pool.thread_count(),
             "daemon runtime initialized"
         );
         self.load_folders().await?;
+        self.reannounce_folders().await;
         self.load_subscriptions().await?;
         self.start_watching().await?;
         self.subscribe_network_gossip().await;
@@ -877,6 +880,15 @@ impl Daemon {
         }
         drop(registry);
         Ok(())
+    }
+
+    async fn reannounce_folders(&self) {
+        let Ok(folders) = self.folder_manager.list().await else {
+            return;
+        };
+        for folder in &folders {
+            self.folder_manager.announce_namespace(folder.namespace_id()).await;
+        }
     }
 
     async fn load_subscriptions(&self) -> Result<()> {

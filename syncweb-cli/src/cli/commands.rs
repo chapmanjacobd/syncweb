@@ -397,6 +397,10 @@ pub struct FolderSelector {
 pub struct DownloadArgs {
     pub source: PathBuf,
     pub destination: Option<PathBuf>,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilter,
+    #[command(flatten)]
+    pub providers: super::filter::ProviderSelector,
     #[arg(long, help = "Fetch only blobs with at most N observed peers")]
     pub max_peers: Option<usize>,
     #[arg(long, help = "Fetch only blobs with at least N observed peers")]
@@ -411,22 +415,6 @@ pub struct DownloadArgs {
         help = "Copy threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
-    #[arg(long, help = "Content hash to download (single blob mode)")]
-    pub hash: Option<String>,
-    #[arg(
-        long,
-        visible_alias = "provider",
-        help = "Blob ticket(s) for providers (can repeat, requires --hash)"
-    )]
-    pub from: Vec<String>,
-    #[arg(
-        long,
-        visible_alias = "no-seeding",
-        help = "Do not share or seed the downloaded content"
-    )]
-    pub no_sharing: bool,
-    #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
-    pub min_providers: usize,
 }
 
 #[derive(Debug, Args)]
@@ -489,6 +477,8 @@ pub struct SnapshotRestoreArgs {
 pub struct HealthArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilter,
 }
 
 #[derive(Debug, Subcommand)]
@@ -596,20 +586,12 @@ pub struct FileStatsArgs {
 pub struct VerifyArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
-    #[arg(long, help = "Content hash(es) to verify (can repeat)")]
-    pub hash: Vec<String>,
-    #[arg(long, help = "Only verify entries whose path matches this prefix")]
-    pub path_filter: Option<String>,
-    #[arg(long, help = "Only verify entries whose path matches this glob pattern")]
-    pub glob_filter: Option<String>,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilter,
     #[arg(long, help = "Attempt to repair corrupted blobs by re-downloading from peers")]
     pub fix: bool,
-    #[arg(
-        long,
-        visible_alias = "provider",
-        help = "Blob ticket(s) for providers (can repeat, requires --fix)"
-    )]
-    pub from: Vec<String>,
+    #[command(flatten)]
+    pub providers: super::filter::ProviderSelector,
 }
 
 #[derive(Debug, Subcommand)]

@@ -2,11 +2,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use syncweb_core::node::{
-    identity::IdentityManager,
-    iroh_node::{IrohNode, RelayMode},
-};
-
 pub fn empty_member_keys() -> Arc<RwLock<HashSet<iroh::PublicKey>>> {
     Arc::new(RwLock::new(HashSet::new()))
 }
@@ -37,15 +32,4 @@ impl Drop for TestDirectory {
             eprintln!("failed to remove test directory {}: {error}", self.0.display());
         }
     }
-}
-
-/// Create a test Iroh node within the given directory.
-///
-/// # Errors
-///
-/// Returns an error if the identity cannot be loaded or the node cannot connect.
-pub async fn test_node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, empty_member_keys()).await?)
 }

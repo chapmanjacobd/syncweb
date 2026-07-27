@@ -5,7 +5,8 @@ use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
 
-use crate::test_utils::{TestDirectory, test_node};
+use super::test_node;
+use crate::test_utils::TestDirectory;
 
 async fn test_node_with_lookup(
     directory: &TestDirectory,

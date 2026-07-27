@@ -11,6 +11,7 @@ use n0_future::StreamExt;
 use tokio::sync::RwLock;
 
 use crate::error::{Result, SyncwebError};
+use crate::node::discovery::TopicTracker;
 use crate::node::iroh_node::IrohNode;
 
 use super::{Capability, SyncMode, SyncwebFolder};
@@ -26,6 +27,8 @@ pub struct FolderManager {
     docs_engine: crate::node::docs_engine::DocsEngine,
     folders: Arc<RwLock<HashMap<NamespaceId, SyncwebFolder>>>,
     subscriptions: Arc<RwLock<HashSet<iroh_blobs::Hash>>>,
+    topic_tracker: TopicTracker,
+    announced: Arc<RwLock<HashSet<NamespaceId>>>,
 }
 
 impl FolderManager {
@@ -39,6 +42,8 @@ impl FolderManager {
             docs_engine: node.docs_engine().clone(),
             folders: Arc::new(RwLock::new(HashMap::new())),
             subscriptions: Arc::new(RwLock::new(HashSet::new())),
+            topic_tracker: node.topic_tracker().clone(),
+            announced: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -52,6 +57,7 @@ impl FolderManager {
         let folder = SyncwebFolder::new(doc, author, self.blob_store.clone(), self.docs_engine.clone(), mode);
         folder.grant(self.node_id, Capability::Admin).await;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
+        self.announce_namespace(folder.namespace_id()).await;
         Ok(folder)
     }
 
@@ -76,6 +82,7 @@ impl FolderManager {
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
+        self.announce_namespace(folder.namespace_id()).await;
         Ok(folder)
     }
 
@@ -108,7 +115,21 @@ impl FolderManager {
             .ok_or(SyncwebError::NamespaceNotAvailable)?;
         let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
         self.folders.write().await.insert(namespace_id, folder.clone());
+        self.announce_namespace(namespace_id).await;
         Ok(folder)
+    }
+
+    /// Announce a namespace to the topic tracker if not already announced.
+    /// Idempotent — safe to call multiple times for the same namespace.
+    pub async fn announce_namespace(&self, namespace_id: NamespaceId) {
+        if self.announced.read().await.contains(&namespace_id) {
+            return;
+        }
+        if let Err(error) = self.topic_tracker.announce(namespace_id).await {
+            tracing::warn!(%namespace_id, %error, "failed to announce folder namespace");
+        } else {
+            self.announced.write().await.insert(namespace_id);
+        }
     }
 
     /// Return all managed public subscription hashes.

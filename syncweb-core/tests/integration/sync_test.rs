@@ -116,6 +116,7 @@ async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
         node.blob_store().clone(),
         node.docs_engine().clone(),
         node.gossip_service().clone(),
+        None,
     );
     let mut intent = engine
         .sync(folder.namespace_id(), syncweb_core::sync::SessionMode::ReconcileOnce)

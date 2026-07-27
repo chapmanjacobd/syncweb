@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    net::SocketAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
@@ -54,6 +55,7 @@ pub struct DaemonConfig {
     pub log_file: Option<PathBuf>,
     pub watch_debounce: Duration,
     pub relay_mode: crate::node::iroh_node::RelayMode,
+    pub bridge_listen: Option<SocketAddr>,
 }
 
 impl Default for DaemonConfig {
@@ -71,6 +73,7 @@ impl Default for DaemonConfig {
             log_file: None,
             watch_debounce: Duration::from_millis(500),
             relay_mode: crate::node::iroh_node::RelayMode::Default,
+            bridge_listen: None,
         }
     }
 }
@@ -387,6 +390,13 @@ impl Daemon {
         self.spawn_membership_listeners().await;
         let server = self.ipc_server.clone();
         let mut server_task = tokio::spawn(async move { server.serve().await });
+
+        let bridge_task = self.config.bridge_listen.map(|addr| {
+            let bridge = crate::bridge::WsBridgeServer::new(self.node.clone(), addr, self.config.data_dir.clone());
+            let shutdown = self.handle.shutdown_sender.clone();
+            tokio::spawn(async move { bridge.run(shutdown).await })
+        });
+
         let mut shutdown = self.handle.shutdown_sender.subscribe();
         let shutdown_sender = self.handle.shutdown_sender.clone();
         let mut signal_task: SignalTask<'_> = Box::pin(self.handle_signals(shutdown_sender.clone()));
@@ -416,6 +426,12 @@ impl Daemon {
                 Ok(server_result) => server_result?,
                 Err(error) => return Err(SyncwebError::operation("daemon IPC task failed", error)),
             }
+        }
+        if let Some(task) = bridge_task
+            && !task.is_finished()
+            && let Err(error) = task.await
+        {
+            tracing::warn!(%error, "bridge server task failed");
         }
         result
     }

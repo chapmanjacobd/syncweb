@@ -1803,12 +1803,36 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__download)
-            opts="-h --max-peers --min-peers --min-count --max-count --threads --hash --provider --from --no-seeding --no-sharing --min-providers --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --hash --path-prefix --glob --provider --from --min-providers --no-seeding --no-sharing --max-peers --min-peers --min-count --max-count --threads --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --from)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --provider)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-providers)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --max-peers)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -1826,22 +1850,6 @@ _syncweb() {
                     return 0
                     ;;
                 --threads)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --hash)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --from)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --provider)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --min-providers)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1967,12 +1975,24 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__health)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --hash --path-prefix --glob --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -5917,7 +5937,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__start)
-            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --no-relay --verbose --json --embedded --no-daemon --help"
+            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --no-relay --bridge-listen --verbose --json --embedded --no-daemon --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -5936,6 +5956,10 @@ _syncweb() {
                     return 0
                     ;;
                 --sync-interval)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --bridge-listen)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -6815,7 +6839,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__verify)
-            opts="-h --hash --path-filter --glob-filter --fix --provider --from --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --hash --path-prefix --glob --fix --provider --from --min-providers --no-seeding --no-sharing --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -6825,11 +6849,11 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --path-filter)
+                --path-prefix)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --glob-filter)
+                --glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -6838,6 +6862,10 @@ _syncweb() {
                     return 0
                     ;;
                 --provider)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-providers)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

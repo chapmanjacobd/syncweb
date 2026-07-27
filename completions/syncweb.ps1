@@ -92,6 +92,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--log-file', '--log-file', [CompletionResultType]::ParameterName, 'Write daemon logs to this file')
             [CompletionResult]::new('--max-threads', '--max-threads', [CompletionResultType]::ParameterName, 'max-threads')
             [CompletionResult]::new('--sync-interval', '--sync-interval', [CompletionResultType]::ParameterName, 'sync-interval')
+            [CompletionResult]::new('--bridge-listen', '--bridge-listen', [CompletionResultType]::ParameterName, 'WebSocket bridge listen address (e.g. 127.0.0.1:9192)')
             [CompletionResult]::new('--bg', '--bg', [CompletionResultType]::ParameterName, 'Run in the background (daemon mode)')
             [CompletionResult]::new('--no-relay', '--no-relay', [CompletionResultType]::ParameterName, 'Disable Iroh relay mode (no relay server connections)')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -360,18 +361,20 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;download' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
+            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'Only entries whose path matches this glob pattern')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat)')
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat)')
+            [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum providers for healthy replication')
             [CompletionResult]::new('--max-peers', '--max-peers', [CompletionResultType]::ParameterName, 'Fetch only blobs with at most N observed peers')
             [CompletionResult]::new('--min-peers', '--min-peers', [CompletionResultType]::ParameterName, 'Fetch only blobs with at least N observed peers')
             [CompletionResult]::new('--min-count', '--min-count', [CompletionResultType]::ParameterName, 'Minimum number of blobs to fetch')
             [CompletionResult]::new('--max-count', '--max-count', [CompletionResultType]::ParameterName, 'Maximum number of blobs to fetch')
             [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Copy threads (1 disables parallelism, 0 uses all available CPUs)')
-            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash to download (single blob mode)')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --hash)')
-            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --hash)')
-            [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum providers for healthy replication')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed the downloaded content')
-            [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed the downloaded content')
+            [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
+            [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
@@ -489,6 +492,9 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;health' {
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
+            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'Only entries whose path matches this glob pattern')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -563,13 +569,16 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;verify' {
-            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to verify (can repeat)')
-            [CompletionResult]::new('--path-filter', '--path-filter', [CompletionResultType]::ParameterName, 'Only verify entries whose path matches this prefix')
-            [CompletionResult]::new('--glob-filter', '--glob-filter', [CompletionResultType]::ParameterName, 'Only verify entries whose path matches this glob pattern')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --fix)')
-            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat, requires --fix)')
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
+            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'Only entries whose path matches this glob pattern')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat)')
+            [CompletionResult]::new('--provider', '--provider', [CompletionResultType]::ParameterName, 'Blob ticket(s) for providers (can repeat)')
+            [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum providers for healthy replication')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Attempt to repair corrupted blobs by re-downloading from peers')
+            [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
+            [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

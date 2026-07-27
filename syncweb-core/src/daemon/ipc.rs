@@ -2785,7 +2785,7 @@ mod tests {
         let fixture = setup_ipc_test().await;
         let response = fixture
             .server
-                .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
+            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
                 path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
                 hash: Vec::new(),
                 path_prefix: None,

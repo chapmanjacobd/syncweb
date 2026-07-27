@@ -56,6 +56,7 @@ async-recursion = "1.1"
 async-compression = { version = "0.4", features = ["tokio", "zstd"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 libc = "0.2"
+tokio-tungstenite = "0.30"
 
 [profile.release]
 lto = true

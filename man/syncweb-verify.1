@@ -4,25 +4,31 @@
 .SH NAME
 verify \- Re\-check local folder blob integrity
 .SH SYNOPSIS
-\fBverify\fR [\fB\-\-hash\fR] [\fB\-\-path\-filter\fR] [\fB\-\-glob\-filter\fR] [\fB\-\-fix\fR] [\fB\-\-from\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBverify\fR [\fB\-\-hash\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-fix\fR] [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Re\-check local folder blob integrity
 .SH OPTIONS
 .TP
 \fB\-\-hash\fR \fI<HASH>\fR
-Content hash(es) to verify (can repeat)
+Content hash(es) to select (can repeat)
 .TP
-\fB\-\-path\-filter\fR \fI<PATH_FILTER>\fR
-Only verify entries whose path matches this prefix
+\fB\-\-path\-prefix\fR \fI<PATH_PREFIX>\fR
+Only entries whose path starts with this prefix
 .TP
-\fB\-\-glob\-filter\fR \fI<GLOB_FILTER>\fR
-Only verify entries whose path matches this glob pattern
+\fB\-\-glob\fR \fI<GLOB>\fR
+Only entries whose path matches this glob pattern
 .TP
 \fB\-\-fix\fR
 Attempt to repair corrupted blobs by re\-downloading from peers
 .TP
 \fB\-\-from\fR \fI<FROM>\fR
-Blob ticket(s) for providers (can repeat, requires \-\-fix)
+Blob ticket(s) for providers (can repeat)
+.TP
+\fB\-\-min\-providers\fR \fI<MIN_PROVIDERS>\fR [default: 2]
+Minimum providers for healthy replication
+.TP
+\fB\-\-no\-sharing\fR
+Do not share or seed downloaded content
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

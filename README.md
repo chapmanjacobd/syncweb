@@ -1,61 +1,36 @@
 # syncweb
 
-A delay-tolerant P2P web built on [Iroh](https://iroh.computer/). 
+A delay-tolerant P2P web built on [Iroh](https://iroh.computer/).
+Successor to [syncweb-py](https://github.com/chapmanjacobd/syncweb-py), rewritten in Rust.
 
-A successor to [syncweb-py](https://github.com/chapmanjacobd/syncweb-py), rewritten in Rust.
+Some highlights:
 
-## Features
+- Delta sync for large files -- Bao trees enable byte-range verification; only changed ranges re-sync for databases, VMs, video projects
+- Snapshots are instant -- content-addressed storage means snapshots are just references to existing blobs, zero data copying
+- Syncthing relay piggyback -- when QUIC hole punching fails, tunnels through Syncthing's TCP relays for CGNAT traversal
+- Per-network daemon isolation -- each named network gets its own process, data dir, and identity key; blobs shared across networks are deduped via filesystem hardlinks
+- Peer discovery via BitTorrent DHT -- no central bootstrap server; uses distributed-topic-tracker on the mainline DHT
+- Partial folder fetch -- fetch the least-seeded blobs first to improve network health
 
-- Content-addressed storage -- BLAKE3 + Bao trees for verified streaming, range requests, and deduplication
-- Lazy & selective sync -- blobs fetched on-demand; `ls`/`find` show metadata without downloading
-- CRDT conflict resolution -- last-writer-wins with best-effort text diffs for concurrent edits
-- Decentralized peer discovery -- via BitTorrent DHT (`distributed-topic-tracker`); no central bootstrap server
-- NAT traversal -- QUIC transport with relay fallback
-- Single-writer daemon mode -- one Iroh node owner with local IPC for CLI access
-- Named networks -- multi-folder, multi-device groups under gossip topics
-- Parallel file operations -- Rayon-based parallel scanning/import/export
-- Bandwidth scheduling -- time-of-day and per-folder bandwidth limits
-- Deleted file tracking -- undelete support and audit trails
-
-## Installation
+## Install
 
 ```sh
 cargo install --locked syncweb
 ```
 
-### From source
-
+Or from source:
 ```sh
 git clone https://github.com/chapmanjacobd/syncweb.git
-cd syncweb
-cargo install .
-```
-
-Or using the Makefile:
-
-```sh
-make install                # builds release and installs the binary
-make completions            # generates shell completions (bash, zsh, fish, elvish, powershell)
-make man                    # generates man pages
+cd syncweb && cargo install .
 ```
 
 ## Quick Start
 
 ```sh
-# Create a folder and get a sharing ticket
-syncweb create ~/my-folder
-
-# Join a folder via ticket
-syncweb join <ticket>
-
-# List local folders
-syncweb folders
-
-# Show device identity
-syncweb devices
-
-# Generate shell completions
-syncweb completions bash > ~/.local/share/bash-completion/completions/syncweb
+syncweb create ~/my-folder       # create a folder, get a sharing ticket
+syncweb join <ticket>             # join a folder via ticket
+syncweb folders                   # list local folders
+syncweb devices                   # show device identity
 ```
 
 ## Commands
@@ -66,30 +41,18 @@ syncweb completions bash > ~/.local/share/bash-completion/completions/syncweb
 | `join` | Join a folder via ticket |
 | `accept` | Accept/grant capability for a namespace |
 | `drop` | Remove/revoke a namespace |
-| `folders` | List local folders with sync modes |
-| `devices` | Show device identity (iroh `NodeId` + Syncthing `DeviceId`) |
+| `folders` | List local folders |
+| `devices` | Show device identity |
 | `config` | Show/set configuration |
-| `network test-relay` | Test Syncthing relay connectivity |
+| `network test-relay` | Test relay connectivity |
 | `repl` | Interactive REPL |
 | `completions` | Generate shell completions |
 | `manpages` | Generate man pages |
 
-### Dependencies
-
-| Crate | Version |
-|-------|---------|
-| iroh | 1.0.2 |
-| iroh-blobs | 0.103.0 |
-| iroh-docs | 0.101.0 |
-| iroh-gossip | 0.101.0 |
-| distributed-topic-tracker | 0.3.5 |
-
 ## Configuration
 
-TOML-based config at `~/.config/syncweb/config.toml`. Sections include `[node]`, `[relay]`, `[discovery]`, `[folders]`, `[bandwidth]`, `[schedule]`, `[filter]`, and more.
-
-See the [docs/](docs/) directory for detailed design documentation.
+TOML config at `~/.config/syncweb/config.toml`. See [docs/](docs/) for details.
 
 ## License
 
-[MIT](https://opensource.org/licenses/MIT)
+MIT

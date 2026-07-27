@@ -49,6 +49,7 @@ _arguments "${_arguments_options[@]}" : \
 '--log-file=[Write daemon logs to this file]:LOG_FILE:_files' \
 '--max-threads=[]:MAX_THREADS:_default' \
 '--sync-interval=[]:SYNC_INTERVAL:_default' \
+'--bridge-listen=[WebSocket bridge listen address (e.g. 127.0.0.1\:9192)]:BRIDGE_LISTEN:_default' \
 '--bg[Run in the background (daemon mode)]' \
 '--no-relay[Disable Iroh relay mode (no relay server connections)]' \
 '--verbose[Enable verbose structured logging]' \
@@ -372,18 +373,20 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (download)
 _arguments "${_arguments_options[@]}" : \
+'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
+'*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
+'*--provider=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
+'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
 '--max-peers=[Fetch only blobs with at most N observed peers]:MAX_PEERS:_default' \
 '--min-peers=[Fetch only blobs with at least N observed peers]:MIN_PEERS:_default' \
 '--min-count=[Minimum number of blobs to fetch]:MIN_COUNT:_default' \
 '--max-count=[Maximum number of blobs to fetch]:MAX_COUNT:_default' \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
-'--hash=[Content hash to download (single blob mode)]:HASH:_default' \
-'*--from=[Blob ticket(s) for providers (can repeat, requires --hash)]:FROM:_default' \
-'*--provider=[Blob ticket(s) for providers (can repeat, requires --hash)]:FROM:_default' \
-'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--no-sharing[Do not share or seed the downloaded content]' \
-'--no-seeding[Do not share or seed the downloaded content]' \
+'--no-sharing[Do not share or seed downloaded content]' \
+'--no-seeding[Do not share or seed downloaded content]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -540,6 +543,9 @@ esac
 ;;
 (health)
 _arguments "${_arguments_options[@]}" : \
+'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -624,13 +630,16 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
-'*--hash=[Content hash(es) to verify (can repeat)]:HASH:_default' \
-'--path-filter=[Only verify entries whose path matches this prefix]:PATH_FILTER:_default' \
-'--glob-filter=[Only verify entries whose path matches this glob pattern]:GLOB_FILTER:_default' \
-'*--from=[Blob ticket(s) for providers (can repeat, requires --fix)]:FROM:_default' \
-'*--provider=[Blob ticket(s) for providers (can repeat, requires --fix)]:FROM:_default' \
+'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
+'*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
+'*--provider=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
+'--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--fix[Attempt to repair corrupted blobs by re-downloading from peers]' \
+'--no-sharing[Do not share or seed downloaded content]' \
+'--no-seeding[Do not share or seed downloaded content]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

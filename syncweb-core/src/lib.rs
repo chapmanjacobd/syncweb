@@ -20,6 +20,7 @@
 //! - `search`: Find engine for querying synchronized assets.
 //! - `sync`: The core synchronization engine and session management.
 //!
+pub mod bridge;
 pub mod daemon;
 pub mod editorial;
 pub mod error;

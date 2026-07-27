@@ -85,6 +85,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l data-dir -d 'O
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l log-file -d 'Write daemon logs to this file' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l max-threads -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l sync-interval -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l bridge-listen -d 'WebSocket bridge listen address (e.g. 127.0.0.1:9192)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l bg -d 'Run in the background (daemon mode)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-relay -d 'Disable Iroh relay mode (no relay server connections)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l verbose -d 'Enable verbose structured logging'
@@ -256,16 +257,18 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l verbose -d 'Ena
 complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l hash -d 'Content hash(es) to select (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l from -l provider -d 'Blob ticket(s) for providers (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-providers -d 'Minimum providers for healthy replication' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l max-peers -d 'Fetch only blobs with at most N observed peers' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-peers -d 'Fetch only blobs with at least N observed peers' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-count -d 'Minimum number of blobs to fetch' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l max-count -d 'Maximum number of blobs to fetch' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l threads -d 'Copy threads (1 disables parallelism, 0 uses all available CPUs)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l hash -d 'Content hash to download (single blob mode)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l from -l provider -d 'Blob ticket(s) for providers (can repeat, requires --hash)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-providers -d 'Minimum providers for healthy replication' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-sharing -l no-seeding -d 'Do not share or seed the downloaded content'
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-sharing -l no-seeding -d 'Do not share or seed downloaded content'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -322,6 +325,9 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from help" -f -a "diff" -d 'Compare two snapshots'
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from help" -f -a "delete" -d 'Delete a snapshot and release its pins'
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l hash -d 'Content hash(es) to select (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l glob -d 'Only entries whose path matches this glob pattern' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l json -d 'Emit machine-readable JSON where supported'
@@ -368,12 +374,14 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l verbose -d
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to verify (can repeat)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-filter -d 'Only verify entries whose path matches this prefix' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob-filter -d 'Only verify entries whose path matches this glob pattern' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l from -l provider -d 'Blob ticket(s) for providers (can repeat, requires --fix)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to select (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l from -l provider -d 'Blob ticket(s) for providers (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l min-providers -d 'Minimum providers for healthy replication' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l fix -d 'Attempt to repair corrupted blobs by re-downloading from peers'
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l no-sharing -l no-seeding -d 'Do not share or seed downloaded content'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

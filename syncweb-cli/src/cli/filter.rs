@@ -30,7 +30,10 @@ impl TryFrom<&ContentFilter> for VerifyFilter {
         let hashes: Vec<Hash> = cf
             .hash
             .iter()
-            .map(|h| h.parse::<Hash>().map_err(|e| anyhow::anyhow!("invalid content hash {h}: {e}")))
+            .map(|h| {
+                h.parse::<Hash>()
+                    .map_err(|e| anyhow::anyhow!("invalid content hash {h}: {e}"))
+            })
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let mut filter = VerifyFilter::default();
         filter.hashes = if hashes.is_empty() { None } else { Some(hashes) };
@@ -42,24 +45,12 @@ impl TryFrom<&ContentFilter> for VerifyFilter {
 
 #[derive(Debug, Args, Clone)]
 pub struct ProviderSelector {
-    #[arg(
-        long,
-        visible_alias = "provider",
-        help = "Blob ticket(s) for providers (can repeat)"
-    )]
+    #[arg(long, visible_alias = "provider", help = "Blob ticket(s) for providers (can repeat)")]
     pub from: Vec<String>,
 
-    #[arg(
-        long,
-        default_value_t = 2,
-        help = "Minimum providers for healthy replication"
-    )]
+    #[arg(long, default_value_t = 2, help = "Minimum providers for healthy replication")]
     pub min_providers: usize,
 
-    #[arg(
-        long,
-        visible_alias = "no-seeding",
-        help = "Do not share or seed downloaded content"
-    )]
+    #[arg(long, visible_alias = "no-seeding", help = "Do not share or seed downloaded content")]
     pub no_sharing: bool,
 }

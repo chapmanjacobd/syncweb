@@ -351,6 +351,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     } else {
         syncweb_core::node::iroh_node::RelayMode::Default
     };
+    daemon_config.bridge_listen = args.bridge_listen;
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     if output_json {
@@ -408,6 +409,9 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: O
     if args.no_relay {
         command.arg("--no-relay");
     }
+    if let Some(addr) = args.bridge_listen {
+        command.arg("--bridge-listen").arg(addr.to_string());
+    }
     command.spawn().context("spawn syncweb daemon")
 }
 
@@ -436,6 +440,7 @@ async fn daemon_client_or_start(
                 max_threads: None,
                 sync_interval: None,
                 no_relay: false,
+                bridge_listen: None,
             },
             network,
         )?)
@@ -2047,6 +2052,7 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
             max_threads: None,
             sync_interval: None,
             no_relay: false,
+            bridge_listen: None,
         },
     )
     .await

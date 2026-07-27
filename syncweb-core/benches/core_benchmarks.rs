@@ -793,6 +793,9 @@ fn bench_ipc_health_check(c: &mut Criterion) {
             b.iter(|| {
                 let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::HealthCheck {
                     path: std::path::PathBuf::from(&namespace),
+                    hash: Vec::new(),
+                    path_prefix: None,
+                    glob: None,
                 })));
                 let _ = std::hint::black_box(response);
             });

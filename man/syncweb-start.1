@@ -4,7 +4,7 @@
 .SH NAME
 start \- Start the local syncweb daemon
 .SH SYNOPSIS
-\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-bridge\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-bridge\-listen\fR] [\fB\-\-media\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Start the local syncweb daemon
 .SH OPTIONS
@@ -29,6 +29,9 @@ Disable Iroh relay mode (no relay server connections)
 .TP
 \fB\-\-bridge\-listen\fR \fI<BRIDGE_LISTEN>\fR
 WebSocket bridge listen address (e.g. 127.0.0.1:9192)
+.TP
+\fB\-\-media\-listen\fR \fI<MEDIA_LISTEN>\fR
+Media HTTP server listen address (e.g. 127.0.0.1:9193)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

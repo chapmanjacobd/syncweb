@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH media 1  "media " 
+.SH NAME
+media \- Serve media blobs via HTTP (standalone media server)
+.SH SYNOPSIS
+\fBmedia\fR [\fB\-\-listen\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Serve media blobs via HTTP (standalone media server)
+.SH OPTIONS
+.TP
+\fB\-\-listen\fR \fI<LISTEN>\fR [default: 127.0.0.1:9193]
+
+.TP
+\fB\-\-data\-dir\fR \fI<DATA_DIR>\fR
+Override the global persistent data directory
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

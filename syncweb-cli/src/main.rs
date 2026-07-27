@@ -16,8 +16,8 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, effective_data_dir},
     commands::{
-        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MirrorArgs,
-        NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
+        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MediaArgs,
+        MirrorArgs, NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
         SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
@@ -58,6 +58,28 @@ use syncweb_core::{
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
 const ERR_UNEXPECTED_RESPONSE: &str = "daemon returned an unexpected response";
+
+async fn handle_media(args: MediaArgs) -> Result<()> {
+    let data_dir = effective_data_dir(&args.data_dir.unwrap_or_default(), None);
+    std::fs::create_dir_all(&data_dir)?;
+    let node = syncweb_core::init::open_node(&data_dir).await?;
+    let server = syncweb_core::media::MediaServer::new(args.listen, node.blob_store().clone());
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
+
+    println!("media server listening on {}", args.listen);
+
+    tokio::select! {
+        result = server.run(shutdown_tx) => {
+            result?;
+        }
+        _ = tokio::signal::ctrl_c() => {
+            println!("shutting down media server");
+        }
+    }
+
+    node.stop().await?;
+    Ok(())
+}
 
 fn open_node_db(data_dir: &Path) -> Result<NodeDatabase> {
     Ok(NodeDatabase::open(data_dir.join("node.db"))?)
@@ -150,6 +172,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Mirror(command) => handle_mirror(&ctx, command).await?,
+        Command::Media(command) => handle_media(command).await?,
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
@@ -352,6 +375,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
         syncweb_core::node::iroh_node::RelayMode::Default
     };
     daemon_config.bridge_listen = args.bridge_listen;
+    daemon_config.media_listen = args.media_listen;
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     if output_json {
@@ -412,6 +436,9 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: O
     if let Some(addr) = args.bridge_listen {
         command.arg("--bridge-listen").arg(addr.to_string());
     }
+    if let Some(addr) = args.media_listen {
+        command.arg("--media-listen").arg(addr.to_string());
+    }
     command.spawn().context("spawn syncweb daemon")
 }
 
@@ -441,6 +468,7 @@ async fn daemon_client_or_start(
                 sync_interval: None,
                 no_relay: false,
                 bridge_listen: None,
+                media_listen: None,
             },
             network,
         )?)
@@ -2053,6 +2081,7 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
             sync_interval: None,
             no_relay: false,
             bridge_listen: None,
+            media_listen: None,
         },
     )
     .await

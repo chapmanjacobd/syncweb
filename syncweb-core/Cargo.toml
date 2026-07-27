@@ -51,6 +51,10 @@ async-compression.workspace = true
 rusqlite.workspace = true
 libc.workspace = true
 tokio-tungstenite.workspace = true
+axum.workspace = true
+hyper.workspace = true
+tokio-util.workspace = true
+mime.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

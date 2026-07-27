@@ -73,33 +73,6 @@ pub fn read_bytes(buf: &[u8], offset: &mut usize) -> Result<Vec<u8>> {
     Ok(slice.to_vec())
 }
 
-#[expect(dead_code)]
-pub fn read_peer_list(buf: &[u8], offset: &mut usize) -> Result<Vec<ConnectedPeer>> {
-    let count = read_u16(buf, offset)?;
-    let mut peers = Vec::with_capacity(usize::from(count));
-    for _ in 0..count {
-        let node_id = read_string(buf, offset)?;
-        let first_seen_secs = read_u64(buf, offset)?;
-        let last_seen_secs = read_u64(buf, offset)?;
-        peers.push(ConnectedPeer {
-            node_id,
-            first_seen_secs,
-            last_seen_secs,
-        });
-    }
-    Ok(peers)
-}
-
-#[expect(dead_code)]
-pub fn read_string_list(buf: &[u8], offset: &mut usize) -> Result<Vec<String>> {
-    let count = read_u16(buf, offset)?;
-    let mut list = Vec::with_capacity(usize::from(count));
-    for _ in 0..count {
-        list.push(read_string(buf, offset)?);
-    }
-    Ok(list)
-}
-
 pub fn write_u16(buf: &mut Vec<u8>, val: u16) {
     buf.extend_from_slice(&val.to_be_bytes());
 }

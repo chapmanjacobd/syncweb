@@ -74,6 +74,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
+            [CompletionResult]::new('media', 'media', [CompletionResultType]::ParameterValue, 'Serve media blobs via HTTP (standalone media server)')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -93,6 +94,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--max-threads', '--max-threads', [CompletionResultType]::ParameterName, 'max-threads')
             [CompletionResult]::new('--sync-interval', '--sync-interval', [CompletionResultType]::ParameterName, 'sync-interval')
             [CompletionResult]::new('--bridge-listen', '--bridge-listen', [CompletionResultType]::ParameterName, 'WebSocket bridge listen address (e.g. 127.0.0.1:9192)')
+            [CompletionResult]::new('--media-listen', '--media-listen', [CompletionResultType]::ParameterName, 'Media HTTP server listen address (e.g. 127.0.0.1:9193)')
             [CompletionResult]::new('--bg', '--bg', [CompletionResultType]::ParameterName, 'Run in the background (daemon mode)')
             [CompletionResult]::new('--no-relay', '--no-relay', [CompletionResultType]::ParameterName, 'Disable Iroh relay mode (no relay server connections)')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1934,6 +1936,17 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'syncweb;media' {
+            [CompletionResult]::new('--listen', '--listen', [CompletionResultType]::ParameterName, 'listen')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Override the global persistent data directory')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'syncweb;help' {
             [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Show syncweb version information')
             [CompletionResult]::new('start', 'start', [CompletionResultType]::ParameterValue, 'Start the local syncweb daemon')
@@ -1980,6 +1993,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
+            [CompletionResult]::new('media', 'media', [CompletionResultType]::ParameterValue, 'Serve media blobs via HTTP (standalone media server)')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -2392,6 +2406,9 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;manpages' {
+            break
+        }
+        'syncweb;help;media' {
             break
         }
         'syncweb;help;help' {

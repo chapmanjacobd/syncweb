@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use n0_future::{SinkExt, StreamExt, split};
 use tokio::sync::broadcast;
@@ -13,14 +13,12 @@ const FRAME_HEADER_LEN: usize = 9;
 pub struct WsSession {
     service: Arc<BridgeService>,
     sender: split::SplitSink<tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, Message>,
-    #[expect(dead_code)]
-    subscribed_topics: HashSet<String>,
     shutdown: broadcast::Receiver<()>,
 }
 
 impl WsSession {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         service: Arc<BridgeService>,
         sender: split::SplitSink<tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, Message>,
         shutdown: broadcast::Receiver<()>,
@@ -28,7 +26,6 @@ impl WsSession {
         Self {
             service,
             sender,
-            subscribed_topics: HashSet::new(),
             shutdown,
         }
     }
@@ -82,7 +79,7 @@ impl WsSession {
         let payload = Self::extract_payload(&bytes, header.payload_len)?;
 
         let result = match header.tag {
-            0x01 => Box::pin(self.handle_dial_peer(payload)).await,
+            0x01 => Self::handle_dial_peer(payload),
             0x02 => Box::pin(self.handle_append_event(payload)).await,
             0x03 => Box::pin(self.handle_get_events(payload)).await,
             0x04 => Box::pin(self.handle_get_events_paged(payload)).await,
@@ -93,10 +90,10 @@ impl WsSession {
             0x09 => Box::pin(self.handle_leave_gossip_topic(payload)).await,
             0x0A => Box::pin(self.handle_send_gossip_message(payload)).await,
             0x0B => Box::pin(self.handle_get_connected_peers(payload)).await,
-            0x0C => Box::pin(self.handle_block_peer(payload)).await,
-            0x0D => Box::pin(self.handle_unblock_peer(payload)).await,
-            0x0E => Box::pin(self.handle_get_blocked_peers(payload)).await,
-            0x0F => Box::pin(self.handle_get_node_id(payload)).await,
+            0x0C => self.handle_block_peer(payload),
+            0x0D => self.handle_unblock_peer(payload),
+            0x0E => Ok(self.handle_get_blocked_peers(payload)),
+            0x0F => Ok(self.handle_get_node_id(payload)),
             _ => {
                 let msg = format!("unknown tag: 0x{:02X}", header.tag);
                 self.send_error(header.seq, &msg).await;
@@ -148,8 +145,7 @@ impl WsSession {
             .ok_or_else(|| SyncwebError::operation("frame parse error", "truncated payload"))
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_dial_peer(&self, payload: &[u8]) -> Result<Vec<u8>> {
+    fn handle_dial_peer(payload: &[u8]) -> Result<Vec<u8>> {
         let mut offset = 0;
         let node_id = encoding::read_string(payload, &mut offset)?;
         let _: iroh::PublicKey = node_id
@@ -316,36 +312,32 @@ impl WsSession {
         Ok(response)
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_block_peer(&self, payload: &[u8]) -> Result<Vec<u8>> {
+    fn handle_block_peer(&self, payload: &[u8]) -> Result<Vec<u8>> {
         let mut offset = 0;
         let node_id = encoding::read_string(payload, &mut offset)?;
         self.service.block_peer(&node_id)?;
         Ok(Vec::new())
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_unblock_peer(&self, payload: &[u8]) -> Result<Vec<u8>> {
+    fn handle_unblock_peer(&self, payload: &[u8]) -> Result<Vec<u8>> {
         let mut offset = 0;
         let node_id = encoding::read_string(payload, &mut offset)?;
         self.service.unblock_peer(&node_id)?;
         Ok(Vec::new())
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_get_blocked_peers(&self, _payload: &[u8]) -> Result<Vec<u8>> {
+    fn handle_get_blocked_peers(&self, _payload: &[u8]) -> Vec<u8> {
         let blocked = self.service.get_blocked_peers();
         let mut response = Vec::new();
         encoding::write_string_list(&mut response, &blocked);
-        Ok(response)
+        response
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_get_node_id(&self, _payload: &[u8]) -> Result<Vec<u8>> {
+    fn handle_get_node_id(&self, _payload: &[u8]) -> Vec<u8> {
         let node_id = self.service.node().endpoint().id().to_string();
         let mut response = Vec::new();
         encoding::write_string(&mut response, &node_id);
-        Ok(response)
+        response
     }
 
     async fn send_ok(&mut self, seq: u32, payload: &[u8]) -> Result<()> {

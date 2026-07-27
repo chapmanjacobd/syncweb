@@ -139,6 +139,16 @@ pub enum Command {
         #[arg(default_value = "man")]
         dir: PathBuf,
     },
+    #[command(about = "Serve media blobs via HTTP (standalone media server)")]
+    Media(MediaArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct MediaArgs {
+    #[arg(long, default_value = "127.0.0.1:9193")]
+    pub listen: std::net::SocketAddr,
+    #[arg(long, help = "Override the global persistent data directory")]
+    pub data_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -538,6 +548,8 @@ pub struct StartArgs {
     pub no_relay: bool,
     #[arg(long, help = "WebSocket bridge listen address (e.g. 127.0.0.1:9192)")]
     pub bridge_listen: Option<std::net::SocketAddr>,
+    #[arg(long, help = "Media HTTP server listen address (e.g. 127.0.0.1:9193)")]
+    pub media_listen: Option<std::net::SocketAddr>,
 }
 
 #[derive(Debug, Args)]

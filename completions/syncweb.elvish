@@ -71,6 +71,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
+            cand media 'Serve media blobs via HTTP (standalone media server)'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;version'= {
@@ -88,6 +89,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --max-threads 'max-threads'
             cand --sync-interval 'sync-interval'
             cand --bridge-listen 'WebSocket bridge listen address (e.g. 127.0.0.1:9192)'
+            cand --media-listen 'Media HTTP server listen address (e.g. 127.0.0.1:9193)'
             cand --bg 'Run in the background (daemon mode)'
             cand --no-relay 'Disable Iroh relay mode (no relay server connections)'
             cand --verbose 'Enable verbose structured logging'
@@ -1702,6 +1704,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;media'= {
+            cand --listen 'listen'
+            cand --data-dir 'Override the global persistent data directory'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;help'= {
             cand version 'Show syncweb version information'
             cand start 'Start the local syncweb daemon'
@@ -1748,6 +1760,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand moderation 'Manage local moderation decisions'
             cand completions 'Generate shell completions'
             cand manpages 'Generate manpages'
+            cand media 'Serve media blobs via HTTP (standalone media server)'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;help;version'= {
@@ -2046,6 +2059,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;completions'= {
         }
         &'syncweb;help;manpages'= {
+        }
+        &'syncweb;help;media'= {
         }
         &'syncweb;help;help'= {
         }

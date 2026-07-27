@@ -4,7 +4,7 @@ use iroh_blobs::{
     BlobFormat, BlobsProtocol, Hash,
     api::{
         Store as BlobApi,
-        blobs::{AddPathOptions, BlobReader, ExportMode, ExportOptions, ImportMode},
+        blobs::{AddPathOptions, BlobReader, BlobStatus, ExportMode, ExportOptions, ImportMode},
     },
     protocol::GetRequest,
     ticket::BlobTicket,
@@ -141,6 +141,19 @@ impl BlobStore {
             .has(hash)
             .await
             .map_err(|error| SyncwebError::operation("failed to query blob store", error))
+    }
+
+    /// Get metadata (size) for a blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob is not found or the store cannot be queried.
+    pub async fn stat(&self, hash: Hash) -> Result<BlobStatus> {
+        self.store
+            .blobs()
+            .status(hash)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to stat blob", error))
     }
 
     /// # Errors

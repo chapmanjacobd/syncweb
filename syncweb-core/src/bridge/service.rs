@@ -39,8 +39,7 @@ impl BridgeService {
     /// # Errors
     ///
     /// Returns an error if the blocklist or doc map cannot be loaded.
-    #[expect(clippy::unused_async)]
-    pub async fn new(node: Arc<IrohNode>, data_dir: PathBuf, shutdown: broadcast::Sender<()>) -> Result<Self> {
+    pub fn new(node: Arc<IrohNode>, data_dir: PathBuf, shutdown: broadcast::Sender<()>) -> Result<Self> {
         let blocklist_path = data_dir.join("blocklist.txt");
         let blocked_peers = load_blocklist(&blocklist_path).unwrap_or_default();
         let doc_map = load_doc_map(&data_dir.join(DOC_MAP_FILENAME)).unwrap_or_default();

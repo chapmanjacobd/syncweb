@@ -50,6 +50,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-threads=[]:MAX_THREADS:_default' \
 '--sync-interval=[]:SYNC_INTERVAL:_default' \
 '--bridge-listen=[WebSocket bridge listen address (e.g. 127.0.0.1\:9192)]:BRIDGE_LISTEN:_default' \
+'--media-listen=[Media HTTP server listen address (e.g. 127.0.0.1\:9193)]:MEDIA_LISTEN:_default' \
 '--bg[Run in the background (daemon mode)]' \
 '--no-relay[Disable Iroh relay mode (no relay server connections)]' \
 '--verbose[Enable verbose structured logging]' \
@@ -2483,6 +2484,18 @@ _arguments "${_arguments_options[@]}" : \
 '::dir:_files' \
 && ret=0
 ;;
+(media)
+_arguments "${_arguments_options[@]}" : \
+'--listen=[]:LISTEN:_default' \
+'--data-dir=[Override the global persistent data directory]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_syncweb__subcmd__help_commands" \
@@ -3155,6 +3168,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(media)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -3216,6 +3233,7 @@ _syncweb_commands() {
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
+'media:Serve media blobs via HTTP (standalone media server)' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb commands' commands "$@"
@@ -3538,6 +3556,7 @@ _syncweb__subcmd__help_commands() {
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
+'media:Serve media blobs via HTTP (standalone media server)' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb help commands' commands "$@"
@@ -3814,6 +3833,11 @@ _syncweb__subcmd__help__subcmd__ls_commands() {
 _syncweb__subcmd__help__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help manpages commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__media_commands] )) ||
+_syncweb__subcmd__help__subcmd__media_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help media commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__mirror_commands] )) ||
 _syncweb__subcmd__help__subcmd__mirror_commands() {
@@ -4474,6 +4498,11 @@ _syncweb__subcmd__ls_commands() {
 _syncweb__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb manpages commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__media_commands] )) ||
+_syncweb__subcmd__media_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb media commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__mirror_commands] )) ||
 _syncweb__subcmd__mirror_commands() {

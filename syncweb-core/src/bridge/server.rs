@@ -35,7 +35,7 @@ impl WsBridgeServer {
 
         tracing::info!("WebSocket bridge listening on {}", self.addr);
 
-        let service = Arc::new(BridgeService::new(self.node, self.data_dir, shutdown.clone()).await?);
+        let service = Arc::new(BridgeService::new(self.node, self.data_dir, shutdown.clone())?);
 
         let mut server_shutdown = shutdown.subscribe();
 
@@ -46,7 +46,7 @@ impl WsBridgeServer {
                     break Ok(());
                 }
                 accepted = listener.accept() => {
-                    Self::handle_accept(accepted, &service, &shutdown).await;
+                    Self::handle_accept(accepted, &service, &shutdown);
                 }
             }
         }
@@ -58,8 +58,7 @@ impl WsBridgeServer {
             .map_err(|error| SyncwebError::operation(format!("failed to bind bridge server on {addr}"), error))
     }
 
-    #[expect(clippy::unused_async)]
-    async fn handle_accept(
+    fn handle_accept(
         accepted: std::io::Result<(tokio::net::TcpStream, SocketAddr)>,
         service: &Arc<BridgeService>,
         shutdown: &broadcast::Sender<()>,

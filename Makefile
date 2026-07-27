@@ -43,7 +43,7 @@ clean:
 	cargo clean
 
 install:
-	cargo install --path syncweb-cli
+	cargo install --locked --path syncweb-cli
 
 completions: build
 	mkdir -p completions

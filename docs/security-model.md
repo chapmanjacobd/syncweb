@@ -37,7 +37,7 @@ syncweb --network work download <url>  # routes to work daemon IPC socket
 syncweb start                          # uses default/ daemon
 ```
 
-### Layer 2: Peer Whitelist (Connection-Level)
+### Layer 2: Peer Allowlist (Connection-Level)
 
 Each per-network daemon uses iroh's `EndpointHooks` trait (`iroh-1.0.3/src/endpoint/hooks.rs`) to gate connections based on both the peer's identity and the negotiated ALPN protocol. The hook fires after TLS handshake completion, before any protocol handler runs — the remote peer's `EndpointId` and `ALPN` are both known.
 
@@ -124,7 +124,7 @@ Capability links are enforced at blob serve time — the requesting peer must be
 
 ### Default Daemon (no --network)
 
-The `default/` daemon has no network membership concept. It applies no peer whitelist — any authenticated peer can connect and download any blob. This is the fully public mode. Users who want access control should adopt named networks.
+The `default/` daemon has no network membership concept. It applies no peer allowlist — any authenticated peer can connect and download any blob. This is the fully public mode. Users who want access control should adopt named networks.
 
 ### Identity per Network
 

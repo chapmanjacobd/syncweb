@@ -594,10 +594,10 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&data_dir).context("cleanup auto-started daemon")?;
 
     ensure!(!download.status.success());
+    let download_stderr = String::from_utf8(download.stderr).context("download UTF-8 error")?;
     ensure!(
-        String::from_utf8(download.stderr)
-            .context("download UTF-8 error")?
-            .contains("invalid download namespace")
+        download_stderr.contains("invalid download namespace"),
+        "expected 'invalid download namespace' in stderr, got: {download_stderr:?}"
     );
     ensure!(status.status.success());
     ensure!(
@@ -1295,12 +1295,14 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
         "output should indicate provider added"
     );
 
-    let db = syncweb_core::indexing::IndexingDatabase::open(data_dir.join("default").join("indexing.sqlite"))?;
-    let (_pointers, mirrors, _revoked) = db.load_links()?;
-    ensure!(!mirrors.is_empty(), "should have at least one mirror");
-
+    let result = {
+        let db = syncweb_core::indexing::IndexingDatabase::open(data_dir.join("default").join("indexing.sqlite"))?;
+        let (_pointers, mirrors, _revoked) = db.load_links()?;
+        ensure!(!mirrors.is_empty(), "should have at least one mirror");
+        Ok(())
+    };
     std::fs::remove_dir_all(&data_dir)?;
-    Ok(())
+    result
 }
 
 #[test]

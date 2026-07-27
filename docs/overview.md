@@ -286,7 +286,7 @@ Decision: iroh-docs manifests + iroh-blobs content addressing (replaces APT/Debi
 - Full lifecycle: init → add → bump → publish → search → install → upgrade → remove → verify
 - See "Data Package Management" section for full design
 
-### 22. Network Security Model (Process Isolation + Peer Whitelist)
+### 22. Network Security Model (Process Isolation + Peer Allowlist)
 
 Decision: One daemon process per network, each with its own data directory, identity key, and layered access enforcement.
 

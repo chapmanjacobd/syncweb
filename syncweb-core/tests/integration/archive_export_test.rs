@@ -18,7 +18,7 @@ use crate::test_utils::TestDirectory;
 async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?)
 }
 
 fn manifest(collection_id: uuid::Uuid, version: &str, entries: &[(&str, &[u8])]) -> Result<CollectionManifest> {

@@ -16,8 +16,13 @@ pub enum SyncMode {
 
 impl SyncMode {
     #[must_use]
-    pub const fn can_write(self) -> bool {
+    pub const fn can_write_locally(self) -> bool {
         matches!(self, Self::SendReceive | Self::SendOnly)
+    }
+
+    #[must_use]
+    pub const fn can_grant_write(self) -> bool {
+        matches!(self, Self::SendReceive)
     }
 
     #[must_use]

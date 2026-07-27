@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use iroh::PublicKey;
 use iroh_docs::NamespaceId;
@@ -18,6 +20,7 @@ pub struct NetworkManager {
     local_node: PublicKey,
     networks: HashMap<NetworkId, Network>,
     logger: Option<NetworkLogger>,
+    member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
 }
 
 impl NetworkManager {
@@ -26,18 +29,25 @@ impl NetworkManager {
     /// # Errors
     ///
     /// Returns an error if existing state cannot be read.
-    pub fn new(db: NodeDatabase, local_node: PublicKey) -> Result<Self> {
+    pub fn new(
+        db: NodeDatabase,
+        local_node: PublicKey,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+    ) -> Result<Self> {
         let networks = db
             .list_networks()?
             .into_iter()
             .map(|network| (network.id, network))
             .collect();
-        Ok(Self {
+        let mgr = Self {
             db,
             local_node,
             networks,
             logger: None,
-        })
+            member_keys,
+        };
+        mgr.sync_member_keys();
+        Ok(mgr)
     }
 
     /// Open the network database with a network logger.
@@ -45,8 +55,13 @@ impl NetworkManager {
     /// # Errors
     ///
     /// Returns an error if existing state cannot be read.
-    pub fn with_logger(db: NodeDatabase, local_node: PublicKey, logger: NetworkLogger) -> Result<Self> {
-        let mut mgr = Self::new(db, local_node)?;
+    pub fn with_logger(
+        db: NodeDatabase,
+        local_node: PublicKey,
+        logger: NetworkLogger,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+    ) -> Result<Self> {
+        let mut mgr = Self::new(db, local_node, member_keys)?;
         mgr.logger = Some(logger);
         Ok(mgr)
     }
@@ -163,6 +178,7 @@ impl NetworkManager {
             Some(&self.local_node),
             Some("joined via ticket"),
         );
+        self.sync_member_keys();
         self.log_event(&id, NetworkEventType::TicketAccepted, None, Some("network joined"));
         Ok(id)
     }
@@ -182,6 +198,7 @@ impl NetworkManager {
         self.networks
             .remove(&id)
             .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))?;
+        self.sync_member_keys();
         self.db.delete_network(id)
     }
 
@@ -206,6 +223,7 @@ impl NetworkManager {
             doc_ticket: network.doc_ticket.clone(),
         };
         self.db.add_member(id, device)?;
+        self.sync_member_keys();
         self.log_event(&id, NetworkEventType::MemberAdded, Some(&device), Some("invited"));
         self.log_event(
             &id,
@@ -259,6 +277,7 @@ impl NetworkManager {
             return Err(SyncwebError::InvalidConfig("device is not a network member".to_owned()));
         }
         self.db.remove_member(id, device)?;
+        self.sync_member_keys();
         self.log_event(&id, NetworkEventType::MemberRemoved, Some(device), Some("kicked"));
         Ok(())
     }
@@ -415,6 +434,16 @@ impl NetworkManager {
                     .map_err(|error| SyncwebError::operation("invalid member key in database", error))
             })
             .collect()
+    }
+
+    /// Sync the member_keys set from all network members.
+    fn sync_member_keys(&self) {
+        let keys: HashSet<iroh::PublicKey> = self
+            .networks
+            .values()
+            .flat_map(|n| n.members.iter().copied())
+            .collect();
+        *self.member_keys.blocking_write() = keys;
     }
 
     fn log_event(

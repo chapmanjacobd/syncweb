@@ -3,13 +3,16 @@ use iroh::protocol::Router;
 use iroh_blobs::BlobsProtocol;
 use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use crate::error::{Result, SyncwebError};
 
 use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
+use super::membership_hook::MembershipHook;
 use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
 #[non_exhaustive]
@@ -30,6 +33,8 @@ pub struct IrohNode {
     docs_engine: DocsEngine,
     gossip_service: GossipService,
     topic_tracker: TopicTracker,
+    #[allow(dead_code)]
+    member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
 }
 
 impl IrohNode {
@@ -38,8 +43,13 @@ impl IrohNode {
     /// # Errors
     ///
     /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
-    pub async fn new(identity: IdentityManager, data_dir: PathBuf, relay_mode: RelayMode) -> Result<Self> {
-        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new()).await
+    pub async fn new(
+        identity: IdentityManager,
+        data_dir: PathBuf,
+        relay_mode: RelayMode,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+    ) -> Result<Self> {
+        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new(), member_keys).await
     }
 
     /// # Errors
@@ -50,6 +60,7 @@ impl IrohNode {
         data_dir: PathBuf,
         relay_mode: RelayMode,
         address_lookup: MemoryLookup,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir)
             .await
@@ -74,9 +85,11 @@ impl IrohNode {
             }
         };
 
+        let hook = MembershipHook { member_keys: member_keys.clone() };
         let endpoint = builder
             .address_lookup(address_lookup.clone())
             .secret_key(identity.secret_key().clone())
+            .hooks(hook)
             .bind()
             .await
             .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
@@ -128,6 +141,7 @@ impl IrohNode {
             docs_engine,
             gossip_service,
             topic_tracker,
+            member_keys,
         })
     }
 

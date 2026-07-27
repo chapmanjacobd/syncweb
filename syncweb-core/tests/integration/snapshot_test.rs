@@ -15,7 +15,7 @@ use crate::test_utils::TestDirectory;
 
 async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
     let identity = IdentityManager::new(directory.path().join("identity.key"))?;
-    Ok(IrohNode::new(identity, directory.path().join("data"), RelayMode::Default).await?)
+    Ok(IrohNode::new(identity, directory.path().join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?)
 }
 
 async fn test_node_with_relay(directory: &TestDirectory, name: &str, relay_map: iroh::RelayMap) -> Result<IrohNode> {
@@ -28,6 +28,7 @@ async fn test_node_with_relay(directory: &TestDirectory, name: &str, relay_map: 
             map: relay_map,
             insecure: true,
         },
+        crate::test_utils::empty_member_keys(),
     )
     .await?)
 }

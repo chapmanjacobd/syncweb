@@ -20,7 +20,7 @@ use crate::test_utils::TestDirectory;
 async fn node(directory: &TestDirectory, name: &str) -> Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?)
 }
 
 #[tokio::test]

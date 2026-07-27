@@ -45,7 +45,6 @@ pub struct FindQuery {
     pub follow_links: bool,
     pub absolute_path: bool,
     pub downloadable: bool,
-    pub sync_mode: Option<String>,
 }
 
 impl FindQuery {
@@ -305,14 +304,6 @@ pub fn filter_entries(entries: &[FileEntry], query: &FindQuery) -> Vec<FileEntry
             if !query.hidden
                 && let Some(name) = entry.name()
                 && name.starts_with('.')
-            {
-                return false;
-            }
-
-            // Downloadable filtering (exclude PublicReadOnly or SendOnly)
-            if query.downloadable
-                && let Some(ref mode) = query.sync_mode
-                && (mode == "publicreadonly" || mode == "sendonly")
             {
                 return false;
             }

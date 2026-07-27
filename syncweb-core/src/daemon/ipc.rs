@@ -2583,13 +2583,15 @@ mod tests {
     async fn setup_ipc_test() -> IpcTestFixture {
         use crate::node::identity::IdentityManager;
         use crate::node::iroh_node::RelayMode;
+        use std::collections::HashSet;
+        use tokio::sync::RwLock;
 
         let directory = std::env::temp_dir().join(format!("syncweb-ipc-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&directory).expect("test directory should be created");
 
         let identity = IdentityManager::new(directory.join("identity.key")).expect("test identity should open");
         let node = Arc::new(
-            IrohNode::new(identity, directory.join("data"), RelayMode::Default)
+            IrohNode::new(identity, directory.join("data"), RelayMode::Default, Arc::new(RwLock::new(HashSet::new())))
                 .await
                 .expect("test node should start"),
         );

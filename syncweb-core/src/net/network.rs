@@ -55,6 +55,7 @@ impl FromStr for NetworkId {
 pub struct NetworkOptions {
     pub label: String,
     pub invite_only: bool,
+    pub is_public: bool,
 }
 
 impl NetworkOptions {
@@ -67,6 +68,12 @@ impl NetworkOptions {
     #[must_use]
     pub const fn invite_only(mut self, invite_only: bool) -> Self {
         self.invite_only = invite_only;
+        self
+    }
+
+    #[must_use]
+    pub const fn is_public(mut self, is_public: bool) -> Self {
+        self.is_public = is_public;
         self
     }
 }
@@ -84,6 +91,7 @@ pub struct Network {
     pub folders: HashSet<NamespaceId>,
     pub(crate) shared_secret: Option<[u8; 32]>,
     pub doc_ticket: Option<String>,
+    pub is_public: bool,
 }
 
 impl Network {
@@ -104,6 +112,7 @@ impl Network {
             folders: HashSet::new(),
             shared_secret: options.invite_only.then(rand::random),
             doc_ticket: None,
+            is_public: options.is_public,
         }
     }
 
@@ -135,6 +144,7 @@ pub struct NetworkTicket {
     pub folders: HashSet<NamespaceId>,
     pub(crate) shared_secret: Option<[u8; 32]>,
     pub doc_ticket: Option<String>,
+    pub is_public: bool,
 }
 
 impl NetworkTicket {

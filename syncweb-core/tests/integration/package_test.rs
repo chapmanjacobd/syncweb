@@ -31,6 +31,7 @@ async fn relay_node(
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
     memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node.endpoint().id()).with_relay_url(relay_url));

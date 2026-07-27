@@ -906,8 +906,12 @@ async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> 
     };
 
     let result = if let Some(ref network_str) = command.network {
-        let network_mgr =
-            syncweb_core::net::NetworkManager::new(open_node_db(data_dir)?, node.endpoint().secret_key().public())?;
+        let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
+        let network_mgr = syncweb_core::net::NetworkManager::new(
+            open_node_db(data_dir)?,
+            node.endpoint().secret_key().public(),
+            empty_keys,
+        )?;
         let network = network_mgr
             .get_by_name(network_str)
             .or_else(|| {
@@ -3389,7 +3393,8 @@ fn handle_network_health(
 fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
-    Ok(NetworkManager::new(db, identity.node_id())?)
+    let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
+    Ok(NetworkManager::new(db, identity.node_id(), empty_keys)?)
 }
 
 fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {

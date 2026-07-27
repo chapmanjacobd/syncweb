@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -8,7 +8,7 @@ use std::{
 use iroh_docs::NamespaceId;
 use n0_future::StreamExt;
 use tokio::{
-    sync::{broadcast, mpsc, oneshot},
+    sync::{broadcast, mpsc, oneshot, RwLock},
     task::JoinHandle,
 };
 
@@ -126,13 +126,14 @@ impl Daemon {
         node_db: &NodeDatabase,
         pid_lock: &PidLock,
         relay_mode: crate::node::iroh_node::RelayMode,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
         let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
             let _ = node_db.remove_lifecycle();
             let _ = pid_lock.release();
         })?;
         let node = Arc::new(
-            IrohNode::new(identity, data_dir.join("data"), relay_mode)
+            IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys)
                 .await
                 .inspect_err(|_| {
                     let _ = node_db.remove_lifecycle();
@@ -219,8 +220,23 @@ impl Daemon {
         let (schedule_manager, filter_engine, initial_state) =
             Self::load_app_state(&node_db, &pid_lock, &config.data_dir)?;
 
-        let (node, folder_manager, mut sync_engine) =
-            Self::open_identity_and_node(&config.data_dir, &node_db, &pid_lock, config.relay_mode.clone()).await?;
+        let member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>> = {
+            let networks = node_db.list_networks()?;
+            let keys: HashSet<iroh::PublicKey> = networks
+                .iter()
+                .flat_map(|n| n.members.iter().copied())
+                .collect();
+            Arc::new(RwLock::new(keys))
+        };
+
+        let (node, folder_manager, mut sync_engine) = Self::open_identity_and_node(
+            &config.data_dir,
+            &node_db,
+            &pid_lock,
+            config.relay_mode.clone(),
+            member_keys.clone(),
+        )
+        .await?;
         sync_engine = sync_engine.with_node_db(node_db.clone());
 
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
@@ -261,12 +277,12 @@ impl Daemon {
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
         let network_logger = NetworkLogger::new(stats_db.clone());
         let local_node_id = node.endpoint().id();
-        let nm_result = Self::create_network_manager(&node_db, &local_node_id, &network_logger);
+        let nm_result = Self::create_network_manager(&node_db, &local_node_id, &network_logger, Arc::clone(&member_keys));
         let network_manager = match nm_result {
             Ok(nm) => nm,
             Err(error) => {
                 tracing::warn!("failed to create network manager with logger: {error}");
-                NetworkManager::new(node_db.clone(), local_node_id)?
+                NetworkManager::new(node_db.clone(), local_node_id, member_keys)?
             }
         };
         let mut ipc_server = Self::build_ipc_server(&config, &handle, &node, &archive_pool, &folder_manager, &node_db);
@@ -307,8 +323,9 @@ impl Daemon {
         node_db: &NodeDatabase,
         local_node_id: &iroh::PublicKey,
         network_logger: &NetworkLogger,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<NetworkManager> {
-        NetworkManager::with_logger(node_db.clone(), *local_node_id, network_logger.clone())
+        NetworkManager::with_logger(node_db.clone(), *local_node_id, network_logger.clone(), member_keys)
     }
 
     fn build_ipc_server(

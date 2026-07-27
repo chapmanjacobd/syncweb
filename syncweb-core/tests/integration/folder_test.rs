@@ -16,7 +16,7 @@ use crate::test_utils::TestDirectory;
 async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default).await?)
+    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys()).await?)
 }
 
 #[tokio::test]
@@ -72,31 +72,31 @@ async fn test_sync_modes() -> anyhow::Result<()> {
     let manager = FolderManager::new(&test_node);
 
     let sr = manager.create(SyncMode::SendReceive).await?;
-    anyhow::ensure!(sr.mode().can_write());
+    anyhow::ensure!(sr.mode().can_write_locally());
     anyhow::ensure!(sr.mode().can_receive());
     anyhow::ensure!(!sr.mode().is_public());
     anyhow::ensure!(sr.mode().to_string() == "sendreceive");
 
     let so = manager.create(SyncMode::SendOnly).await?;
-    anyhow::ensure!(so.mode().can_write());
+    anyhow::ensure!(so.mode().can_write_locally());
     anyhow::ensure!(!so.mode().can_receive());
     anyhow::ensure!(!so.mode().is_public());
     anyhow::ensure!(so.mode().to_string() == "sendonly");
 
     let ro = manager.create(SyncMode::ReceiveOnly).await?;
-    anyhow::ensure!(!ro.mode().can_write());
+    anyhow::ensure!(!ro.mode().can_write_locally());
     anyhow::ensure!(ro.mode().can_receive());
     anyhow::ensure!(!ro.mode().is_public());
     anyhow::ensure!(ro.mode().to_string() == "receiveonly");
 
     let re = manager.create(SyncMode::ReceiveEncrypted).await?;
-    anyhow::ensure!(!re.mode().can_write());
+    anyhow::ensure!(!re.mode().can_write_locally());
     anyhow::ensure!(re.mode().can_receive());
     anyhow::ensure!(!re.mode().is_public());
     anyhow::ensure!(re.mode().to_string() == "receiveencrypted");
 
     let pro = manager.create(SyncMode::PublicReadOnly).await?;
-    anyhow::ensure!(!pro.mode().can_write());
+    anyhow::ensure!(!pro.mode().can_write_locally());
     anyhow::ensure!(pro.mode().can_receive());
     anyhow::ensure!(pro.mode().is_public());
     anyhow::ensure!(pro.mode().to_string() == "publicreadonly");
@@ -138,7 +138,7 @@ async fn test_public_readonly_mode_persists_after_manager_restart() -> anyhow::R
     let restarted_manager = FolderManager::new(&node);
     let restored = restarted_manager.get(folder.namespace_id()).await?;
     anyhow::ensure!(restored.mode() == SyncMode::PublicReadOnly);
-    anyhow::ensure!(!restored.mode().can_write());
+    anyhow::ensure!(!restored.mode().can_write_locally());
 
     node.stop().await?;
     Ok(())
@@ -160,6 +160,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
                 insecure: true,
             },
             memory_lookup.clone(),
+            crate::test_utils::empty_member_keys(),
         )
         .await?
     };
@@ -174,6 +175,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
                 insecure: true,
             },
             memory_lookup.clone(),
+            crate::test_utils::empty_member_keys(),
         )
         .await?
     };
@@ -304,6 +306,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 
@@ -317,6 +320,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 
@@ -379,6 +383,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 
@@ -392,6 +397,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 
@@ -400,7 +406,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
 
     let manager_a = FolderManager::new(&node_a);
     let folder_a = manager_a.create(SyncMode::SendOnly).await?;
-    anyhow::ensure!(folder_a.mode().can_write());
+    anyhow::ensure!(folder_a.mode().can_write_locally());
     anyhow::ensure!(!folder_a.mode().can_receive());
 
     folder_a.set_blob("doc.txt", b"sent from A").await?;
@@ -411,7 +417,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
 
     let manager_b = FolderManager::new(&node_b);
     let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
-    anyhow::ensure!(!folder_b.mode().can_write());
+    anyhow::ensure!(!folder_b.mode().can_write_locally());
     anyhow::ensure!(folder_b.mode().can_receive());
 
     node_b.topic_tracker().announce(folder_b.namespace_id()).await?;

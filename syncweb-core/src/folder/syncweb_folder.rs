@@ -144,7 +144,7 @@ impl SyncwebFolder {
     }
 
     pub async fn can_write_as(&self, node_id: PublicKey) -> bool {
-        self.sync_mode.can_write() && self.capability(node_id).await.is_some_and(Capability::can_write)
+        self.sync_mode.can_write_locally() && self.capability(node_id).await.is_some_and(Capability::can_write)
     }
 
     /// Check whether a blob is complete in this folder's local store.
@@ -215,7 +215,7 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the blob fails to be stored or set.
     pub async fn set_blob(&self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Result<Hash> {
-        if !self.sync_mode.can_write() {
+        if !self.sync_mode.can_write_locally() {
             return Err(SyncwebError::WriteDenied {
                 mode: self.sync_mode.to_string(),
             });
@@ -237,7 +237,7 @@ impl SyncwebFolder {
     /// Returns an error if the folder is read-only, the blob is unavailable, or
     /// the document entry cannot be written.
     pub async fn set_blob_ref(&self, key: impl AsRef<[u8]>, hash: Hash, size: u64) -> Result<()> {
-        if !self.sync_mode.can_write() {
+        if !self.sync_mode.can_write_locally() {
             return Err(SyncwebError::WriteDenied {
                 mode: self.sync_mode.to_string(),
             });
@@ -254,7 +254,7 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the folder is read-only or the document entry cannot be deleted.
     pub async fn delete_entry(&self, key: impl AsRef<[u8]>) -> Result<()> {
-        if !self.sync_mode.can_write() {
+        if !self.sync_mode.can_write_locally() {
             return Err(SyncwebError::WriteDenied {
                 mode: self.sync_mode.to_string(),
             });
@@ -266,7 +266,7 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the folder ticket cannot be created.
     pub async fn ticket(&self, endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
-        let mode = if writable && self.sync_mode.can_write() {
+        let mode = if writable && self.sync_mode.can_grant_write() {
             ShareMode::Write
         } else {
             ShareMode::Read

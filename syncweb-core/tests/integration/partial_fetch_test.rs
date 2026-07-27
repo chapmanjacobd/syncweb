@@ -95,6 +95,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 
@@ -108,6 +109,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        crate::test_utils::empty_member_keys(),
     )
     .await?;
 

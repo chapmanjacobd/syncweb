@@ -23,6 +23,7 @@ async fn test_node_with_lookup(
             insecure: true,
         },
         lookup,
+        crate::test_utils::empty_member_keys(),
     )
     .await?)
 }

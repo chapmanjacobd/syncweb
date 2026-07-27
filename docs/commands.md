@@ -399,55 +399,55 @@ syncweb config show filter
 | `stat` | `stat` | File metadata from doc + blob store |
 | `automatic` | `automatic` | Auto-accept/join with filter engine |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
-| NEW | `daemon` | Start the single-writer daemon (`--foreground` keeps it attached) |
-| NEW | `status` | Show daemon status |
-| NEW | `daemon-shutdown` | Ask the daemon to stop |
-| NEW | `daemon-reload` | Ask the daemon to reload configuration |
-| NEW | `daemon-sync` | Ask the daemon to trigger synchronization |
-| NEW | `daemon-add` | Add a folder to the running daemon |
-| NEW | `daemon-remove` | Remove a folder from the running daemon |
+| | `daemon` | Start the single-writer daemon (`--foreground` keeps it attached) |
+| | `status` | Show daemon status |
+| | `daemon-shutdown` | Ask the daemon to stop |
+| | `daemon-reload` | Ask the daemon to reload configuration |
+| | `daemon-sync` | Ask the daemon to trigger synchronization |
+| | `daemon-add` | Add a folder to the running daemon |
+| | `daemon-remove` | Remove a folder from the running daemon |
 | `init` | `init` | Create folder + output shareable sync:// URL |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |
 | `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |
-| NEW | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
-| NEW | `subscribe` | Join public folder via ticket |
-| NEW | `public list` | List announced public folders |
-| NEW | `collection init` | Initialize folder as data package |
-| NEW | `collection add` | Scan + hash files, update manifest |
-| NEW | `collection versions` | Create new version with changelog |
-| NEW | `collection publish` | Store manifest, pin content, and announce a blob ticket |
-| NEW | `package search` | Discover packages via gossip |
-| NEW | `package info` | Detailed package metadata |
-| NEW | `package export` | Export package versions as compressed `.car.zst` drops |
-| NEW | `package import` | Import and install a compressed `.car.zst` drop |
-| NEW | `package install` | Fetch + verify + install package |
-| NEW | `package upgrade` | Update to latest version |
-| NEW | `package remove` | Remove installed package |
-| NEW | `package verify` | Integrity check against manifest |
-| NEW | `package list` | List locally installed packages |
-| NEW | `package versions` | List installed versions |
-| NEW | `package switch` | Change active version |
-| NEW | `health` | Show seeding status per blob (well/under/unseeded) |
-| NEW | `backup` | Create content-addressed snapshot of folder |
-| NEW | `restore` | Restore folder from snapshot |
-| NEW | `snapshots` | List available snapshots |
-| NEW | `network create` | Create named network group |
-| NEW | `network ls` | List networks or network details |
-| NEW | `network join` | Join a network via ticket |
-| NEW | `network leave` | Leave a network |
-| NEW | `network invite` | Invite device to a network |
-| NEW | `network kick` | Remove device from a network |
-| NEW | `stats` | Bandwidth accounting per folder/peer |
-| NEW | `verify` | Integrity verification (re-check local blobs) |
-| NEW | `schedule` | Show/modify sync schedule |
-| NEW | `conflicts` | List/resolve file conflicts |
-| NEW | `watch` | File watcher for real-time sync (lowest priority) |
-| NEW | `network test-relay` | Test Syncthing relay connectivity |
+| | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
+| | `subscribe` | Join public folder via ticket |
+| | `public list` | List announced public folders |
+| | `collection init` | Initialize folder as data package |
+| | `collection add` | Scan + hash files, update manifest |
+| | `collection versions` | Create new version with changelog |
+| | `collection publish` | Store manifest, pin content, and announce a blob ticket |
+| | `package search` | Discover packages via gossip |
+| | `package info` | Detailed package metadata |
+| | `package export` | Export package versions as compressed `.car.zst` drops |
+| | `package import` | Import and install a compressed `.car.zst` drop |
+| | `package install` | Fetch + verify + install package |
+| | `package upgrade` | Update to latest version |
+| | `package remove` | Remove installed package |
+| | `package verify` | Integrity check against manifest |
+| | `package list` | List locally installed packages |
+| | `package versions` | List installed versions |
+| | `package switch` | Change active version |
+| | `health` | Show seeding status per blob (well/under/unseeded) |
+| | `backup` | Create content-addressed snapshot of folder |
+| | `restore` | Restore folder from snapshot |
+| | `snapshots` | List available snapshots |
+| | `network create` | Create named network group |
+| | `network ls` | List networks or network details |
+| | `network join` | Join a network via ticket |
+| | `network leave` | Leave a network |
+| | `network invite` | Invite device to a network |
+| | `network kick` | Remove device from a network |
+| | `stats` | Bandwidth accounting per folder/peer |
+| | `verify` | Integrity verification (re-check local blobs) |
+| | `schedule` | Show/modify sync schedule |
+| | `conflicts` | List/resolve file conflicts |
+| | `watch` | File watcher for real-time sync |
+| | `network test-relay` | Test Syncthing relay connectivity |
 
-### New CLI Options (from iroh-willow)
+### CLI Options
 
 ```bash
 # Global flags (all commands)

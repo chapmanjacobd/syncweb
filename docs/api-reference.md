@@ -4,10 +4,7 @@ Errors should name the layer that failed. For example, `manifest verified; no
 provider reachable`, `capability rejected by peer`, and `materialization blocked:
 path escapes target` are more actionable than `sync failed`.
 
-## Grounded implementation patterns and libraries
-
-The code examples in this plan describe intended boundaries; exact Iroh APIs
-must be confirmed against the pinned crate versions during Phase 1.
+## Implementation patterns and libraries
 
 ### Workspace and service boundaries
 
@@ -24,7 +21,7 @@ cli/        clap parsing and human/JSON rendering
 
 Commands call typed services and render returned values. Core code must not print
 progress or parse CLI strings. This also allows integration tests to use services
-directly and keeps a future daemon or GUI from duplicating behavior.
+directly and keeps a daemon or GUI from duplicating behavior.
 
 ```rust
 struct AppServices<C, S, N> {
@@ -198,7 +195,7 @@ use distributed_topic_tracker::Node;
 let tracker = Node::new(gossip.clone(), endpoint.clone()).await?;
 
 // The tracker provides an AutoDiscoveryGossip extension trait on iroh::Gossip.
-// When subscribed to a gossip topic through the tracker, it will:
+// When subscribed to a gossip topic through the tracker, it:
 // 1. Query the DHT for other nodes on the same topic
 // 2. Decrypt & verify DHT records using time-rotated keys
 // 3. Join discovered peers with pacing
@@ -243,15 +240,4 @@ endpoint.close().await;
 ---
 
 *Document version: 3.2*
-*Amended: 2026-07-17*
 *Target: iroh 1.0.2, iroh-blobs 0.103.0, iroh-docs 0.101.0, iroh-gossip 0.101.0, distributed-topic-tracker 0.3.5*
-*Added: Networks concept (multi-folder + multi-device groups under gossip topics)*
-*Added: find command design (regex/glob/exact search with depth/size/time filters)*
-*Added: stat command design (detailed file metadata, availability, version vectors, local/global diffs)*
-*Added: sort command design (niche, frecency, peers, folder-aggregate sorting)*
-*Added: init/config command design (folder creation + URL output, config management)*
-*Added: BEP Phase 2 minimal identity (DeviceId conversion, --bep flag annotation)*
-*Added: BEP Phase 7 full protocol translation (moved from Phase 7+ deprioritized -- still complex, but identity is cheap)*
-*Added: Standard CS patterns (cache eviction, parallel traversal, bitmask presence, consistent hashing)*
-*Added: Data Package Management (non-apt alternative to dapt) -- full lifecycle with iroh-docs manifests, iroh-blobs content addressing, gossip-based discovery, atomic upgrades, multi-version coexistence*
-*Added: Opt-In Indexing Service (syncweb indexing) for Catalogs, Resilience, and WoT Metadata (merged Proposals 1, 5, 7, 11)*

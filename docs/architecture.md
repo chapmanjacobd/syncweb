@@ -3,7 +3,7 @@
 ## Networks (Multi-Folder Groups)
 
 A Network is a named group of folders + devices under a common gossip topic.
-Replaces Syncthing's implicit cluster config with an explicit, shareable abstraction.
+An explicit, shareable grouping abstraction.
 
 - Network Gossip Topic: `syncweb/net/<network_id>` (derived from network name)
 - Membership: All devices in the network subscribe to this topic
@@ -85,7 +85,7 @@ Use cases:
 - Departments: Separate networks for engineering, design, marketing
 - Home/Plex: Personal network for media + documents + backups
 
-Migration: Single-device users skip networks. Multi-folder multi-device users adopt them naturally.
+Single-device users can skip networks. Multi-folder multi-device users adopt them naturally.
 
 ### Security: Per-Network Process Isolation
 
@@ -237,7 +237,7 @@ impl PayloadForm {
         match self {
             PayloadForm::Raw => entry.to_bytes(),
             PayloadForm::Json => serde_json::to_vec(entry).unwrap(),
-            PayloadForm::Custom(format) => todo!("custom format: {}", format),
+            PayloadForm::Custom(format) => Self::decode_custom(format, data),
         }
     }
 
@@ -246,7 +246,7 @@ impl PayloadForm {
         match self {
             PayloadForm::Raw => Ok(FileEntry::from_bytes(data)),
             PayloadForm::Json => Ok(serde_json::from_slice(data)?),
-            PayloadForm::Custom(format) => todo!("custom format: {}", format),
+            PayloadForm::Custom(format) => Self::decode_custom(format, data),
         }
     }
 }

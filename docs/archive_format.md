@@ -13,7 +13,7 @@ imports are handled by `syncweb package import`. Export creates the
 archive in a staging file and atomically renames it into place, so concurrent
 exports cannot leave a partially written destination. Content blocks are
 copied in bounded chunks and verified against their manifest hash while they
-are streamed through the Zstandard encoder.
+stream through the Zstandard encoder.
 
 ## Format Specification
 The archive format is essentially a Zstandard-compressed Content Addressable aRchive (CAR), matching Iroh's native CAR export conventions.
@@ -48,7 +48,7 @@ syncweb package export ./pkg1 ./pkg2 ./exports/
 ```
 
 ### 2. Importing a Drop
-A user can import a archive file. The system will extract the manifest, ingest the blobs, and register the package in the local iroh-docs namespace.
+A user can import a archive file. The system extracts the manifest, ingests the blobs, and registers the package in the local iroh-docs namespace.
 
 ```bash
 # Import a archive file
@@ -107,42 +107,10 @@ let result = syncweb_core::import_archive(
 
 ## Security & Integrity
 * Tamper-Proof: Because the imported blobs are verified against their content hashes upon CAR ingestion, a malicious actor cannot alter a file in the `.car.zst` archive without changing its hash. 
-* Manifest Validation: The manifest hash acts as the absolute source of truth. If the manifest dictates a file should have hash `X`, and the `.car.zst` provides a tampered file with hash `Y`, the package validation will fail.
-* Manifest Signatures: The `PackageManifest` includes an Ed25519 signature from the package maintainer. During the import pipeline, the node verifies this signature against the maintainer's public key. *Note: Since modifying the manifest alters its hash, the signature must be generated over a deterministic, unsigned representation of the manifest.* If someone provides a modified manifest or swaps out blobs and updates the manifest hash, the signature verification will fail, preventing the installation of tampered drops.
-* Anti-DOS / Allocation Limits: When parsing archive files from untrusted sources, it is important to prevent out-of-memory attacks. `iroh-blobs` CAR import handles varint length parsing securely (e.g., enforcing `MAX_ALLOC` limits per block). Because we pipe `async-compression` directly into `iroh-blobs`, we get these stream safety guarantees automatically without loading the entire archive into memory.
+* Manifest Validation: The manifest hash acts as the absolute source of truth. If the manifest dictates a file should have hash `X`, and the `.car.zst` provides a tampered file with hash `Y`, the package validation fails.
+* Manifest Signatures: The `PackageManifest` includes an Ed25519 signature from the package maintainer. During the import pipeline, the node verifies this signature against the maintainer's public key. *Note: Since modifying the manifest alters its hash, the signature is generated over a deterministic, unsigned representation of the manifest.* If someone provides a modified manifest or swaps out blobs and updates the manifest hash, the signature verification fails, preventing the installation of tampered drops.
+* Anti-DOS / Allocation Limits: When parsing archive files from untrusted sources, `iroh-blobs` CAR import handles varint length parsing securely (e.g., enforcing `MAX_ALLOC` limits per block). Piping `async-compression` directly into `iroh-blobs` provides these stream safety guarantees automatically without loading the entire archive into memory.
 
 ## Manifest identity and signatures
 
 Collection manifests store the Ed25519 signature and maintainer public key as lowercase hexadecimal strings. `content_id()` hashes the canonical manifest with the signature removed, while `blob_id()` hashes the serialized manifest blob; the latter is used for blob tickets and document references so signed manifests remain fetchable. Dependency requirements use semver ranges and are checked against the versions available locally.
-# Syncweb Archive Format Implementation Plan
-
-## Overview
-Implement the "archive format" (`.car.zst`) for `syncweb` data packages, allowing offline distribution and importing of package bundles via a Zstandard-compressed Content Addressable aRchive (CAR).
-
-## Phase 1: Core Struct Updates
-- [ ] Add `signature: Option<String>` (Ed25519 signature) to the `PackageManifest` struct to support offline verification.
-- [ ] Add `public_key` field to the `PackageManifest` or ensure it's determinable from the maintainer field.
-- [ ] Update manifest serialization/deserialization and hashing logic (ensure the signature covers the deterministic, unsigned version of the manifest so it doesn't invalidate its own hash).
-
-## Phase 2: Export Pipeline
-- [ ] Implement `archive_export` logic with explicit error mapping and concurrency safety (snapshotting or locks).
-- [ ] Integrate with `iroh-blobs` CAR export functionality.
-- [ ] Add `zstd` streaming compression (`async-compression` crate with `tokio` feature).
-- [ ] Hook the export logic into `FilterEngine` to allow for granular filtering (exporting partial archives).
-- [ ] Add support for multiple package exports simultaneously, outputting to a specified directory.
-- [ ] CLI command: `syncweb package export [--version <v>] [--filter <rules>] <path>... [<output>]`
-
-## Phase 3: Import Pipeline
-- [x] Implement `archive_import` with strict CAR, decompression, and hash validation.
-- [x] Add streaming Zstandard decompression with bounded staging writes.
-- [x] Apply optional `FilterEngine` rules while consuming rejected blocks.
-- [x] Ingest verified blocks into the local blob store.
-- [x] Extract and validate the collection manifest.
-- [x] Verify manifest signatures against the embedded maintainer public key.
-- [x] Validate package dependencies before import.
-- [x] Publish the validated manifest into a new local `iroh-docs` namespace.
-- [x] CLI command: `syncweb package import <file.car.zst>`
-
-## Phase 4: Verification and Atomic Materialization
-- [x] Reject corrupted or maliciously modified `.car.zst` files before blob ingestion.
-- [x] Materialize the package through a staging directory after successful import.

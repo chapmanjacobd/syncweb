@@ -188,7 +188,7 @@ work        Conflict    1 hour      2 conflicts 5 min ago
 
 ## Peer Availability Tracking (Cached from Natural Flow + DHT Discovery)
 
-Instead of building a custom gossip overlay, we use distributed-topic-tracker for DHT-based topic discovery, then cache peer availability from iroh's natural blob request/response flow.
+Peer availability is discovered through distributed-topic-tracker for DHT-based topic discovery, then cached from iroh's natural blob request/response flow.
 
 ### Cache Eviction Strategy ((standard CS pattern: age-based cache eviction))
 

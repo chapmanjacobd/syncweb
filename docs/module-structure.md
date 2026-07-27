@@ -60,7 +60,7 @@ syncweb/
 |   |   +-- network.rs          # Network struct + management
 |   |   +-- network_manager.rs  # NetworkManager (create, join, leave, invite, kick)
 |   |   +-- bep_bridge.rs       # BEP relay bridge (opt-in with --bep)
-|   |   +-- bep_identity.rs     # BEP DeviceId ↔ Iroh NodeId conversion (Phase 2)
+|   |   +-- bep_identity.rs     # BEP DeviceId ↔ Iroh NodeId conversion
 |   |   +-- tickets.rs          # Ticket parsing/generation
 |   |
 |   +-- filter/

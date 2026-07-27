@@ -1,56 +1,56 @@
 # Testing Strategy
 
 ### Unit Tests
-- [ ] Identity management
-- [ ] DeviceId bidirectional conversion (Syncthing ↔ Iroh)
-- [ ] Ticket parsing/generation
-- [ ] Capability serialization
-- [ ] Filter engine evaluation
-- [ ] Version tracking
-- [ ] PeerTracker age-based cache eviction (LRU/FIFO)
-- [ ] EfficientPeerCache bitmask operations
-- [ ] ParallelScanner directory traversal
-- [ ] Partial fetch: filter by peer count (min_peers/max_peers)
-- [ ] Health check: seeder count per blob
-- [ ] Find engine: regex, glob, exact matching with constraints
-- [ ] Sort engine: niche, frecency, peers, folder-aggregate
-- [ ] Stat output: format, terse, custom template
-- [ ] Network: create, join, leave, invite, kick
+- Identity management
+- DeviceId bidirectional conversion (Syncthing ↔ Iroh)
+- Ticket parsing/generation
+- Capability serialization
+- Filter engine evaluation
+- Version tracking
+- PeerTracker age-based cache eviction (LRU/FIFO)
+- EfficientPeerCache bitmask operations
+- ParallelScanner directory traversal
+- Partial fetch: filter by peer count (min_peers/max_peers)
+- Health check: seeder count per blob
+- Find engine: regex, glob, exact matching with constraints
+- Sort engine: niche, frecency, peers, folder-aggregate
+- Stat output: format, terse, custom template
+- Network: create, join, leave, invite, kick
 
 ### Integration Tests
-- [ ] Two nodes: create folder, join, sync files
-- [ ] Three nodes: sendonly -> sendreceive -> receiveonly
-- [ ] Public folder: publish -> subscribe -> read
-- [ ] Selective sync: ls without download, then download
-- [ ] Network partition: offline edits, reconnect, merge
-- [ ] Data versioning: bump, check, update
-- [ ] Data package lifecycle: init → add → bump → publish → search → install → upgrade → remove
-- [ ] Multi-version coexistence: install v1, install v2, switch between them
-- [ ] Atomic upgrade: verify rollback works if upgrade fails
-- [ ] Package integrity: verify catches corrupted files
-- [ ] Package discovery: publish → search → info across two nodes
-- [ ] Parallel operations: ls/import/export use parallelism by default; `--threads 1` disables it
-- [ ] Partial fetch: download --max-peers improves seeder counts
-- [ ] Cache eviction: test LRU and FIFO under memory pressure
-- [ ] Large peer network: test EfficientPeerCache with 1000+ peers
-- [ ] Networks: two-node network create, invite, join, folder sync
-- [ ] Networks: three-node network with mixed roles
-- [ ] Find: regex, glob, exact search across folder boundaries
-- [ ] Sort: niche, frecency, peers with various filter combinations
-- [ ] Stat: detailed output, local/global diffs, availability display
-- [ ] Init: folder creation with URL output + network membership
+- Two nodes: create folder, join, sync files
+- Three nodes: sendonly -> sendreceive -> receiveonly
+- Public folder: publish -> subscribe -> read
+- Selective sync: ls without download, then download
+- Network partition: offline edits, reconnect, merge
+- Data versioning: bump, check, update
+- Data package lifecycle: init, add, bump, publish, search, install, upgrade, remove
+- Multi-version coexistence: install v1, install v2, switch between them
+- Atomic upgrade: verify rollback works if upgrade fails
+- Package integrity: verify catches corrupted files
+- Package discovery: publish, search, info across two nodes
+- Parallel operations: ls/import/export use parallelism by default; `--threads 1` disables it
+- Partial fetch: download --max-peers improves seeder counts
+- Cache eviction: test LRU and FIFO under memory pressure
+- Large peer network: test EfficientPeerCache with 1000+ peers
+- Networks: two-node network create, invite, join, folder sync
+- Networks: three-node network with mixed roles
+- Find: regex, glob, exact search across folder boundaries
+- Sort: niche, frecency, peers with various filter combinations
+- Stat: detailed output, local/global diffs, availability display
+- Init: folder creation with URL output and network membership
 
-### Interop Tests (Phase 7: with `--bep` flag)
-- [ ] Syncthing node -> syncweb folder join
-- [ ] syncweb -> Syncthing folder join
-- [ ] Bidirectional sync
-- [ ] Relay-only connection
+### Interop Tests (with `--bep` flag)
+- Syncthing node to syncweb folder join
+- syncweb to Syncthing folder join
+- Bidirectional sync
+- Relay-only connection
 
-### Phase 7 Local Tests
-- [x] Schedule parsing, cross-midnight windows, and per-folder overrides
-- [x] Persisted bandwidth statistics and reset behavior
-- [x] CLI JSON output and Phase 7 command discovery
-- [x] Configured schedule persistence
+### Local Tests
+- Schedule parsing, cross-midnight windows, and per-folder overrides
+- Persisted bandwidth statistics and reset behavior
+- CLI JSON output and command discovery
+- Configured schedule persistence
 
 ---
 

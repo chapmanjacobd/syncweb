@@ -214,7 +214,7 @@ There is no persistent global catalog. A folder is only discoverable if a node i
 * Announcement: Contains the folder's descriptive metadata (JSON) and the current Mutable Head pointer.
 * Search: Clients can listen to the gossip topic to populate a local, ephemeral search index of available public folders.
 
-## Why not APT/Debian packaging?
+## Comparison with APT/Debian packaging
 
 | dapt (APT-based) | syncweb (iroh-based) |
 |-------------------|----------------------------|
@@ -231,7 +231,7 @@ There is no persistent global catalog. A folder is only discoverable if a node i
 
 ### 1. Collection & Package Manifests
 
-The package manifest is generalized into a `CollectionManifest`, which replaces dapt's `product.toml` + `.dapt-release.txt` + APT `Packages` index, but also supports virtual collections and datasets.
+The package manifest is generalized into a `CollectionManifest`, supporting both traditional package workflows and virtual collections/datasets.
 Stored in `iroh-blobs`, with their hashes and mutable heads published through `iroh-docs`.
 
 ```rust
@@ -276,7 +276,7 @@ Package Profile: Packages are just collections with dependencies. An adapter lay
 
 ### 2. Publishing Workflow
 
-Full data package lifecycle, replacing dapt's `init-repo` → `new-product` → `release` → `refresh-repo`:
+Full data package lifecycle:
 
 ```bash
 # 1. Initialize a folder as a data package
@@ -419,7 +419,7 @@ enum BumpType { Major, Minor, Patch }
 
 ### 3. Package Discovery Catalog
 
-Gossip-based package registry replaces dapt's APT `Packages` index and `Release` file.
+Gossip-based package registry provides package discovery without a central server.
 Every publisher announces on `syncweb/packages`; consumers subscribe to discover available packages.
 
 ```rust
@@ -502,7 +502,7 @@ syncweb package search --all
 
 ### 4. Install/Remove State Management
 
-Local state file tracks installed packages. Replaces dapt's dpkg status database.
+Local state file tracks installed packages.
 
 ```rust
 /// Local state for installed packages
@@ -576,8 +576,7 @@ syncweb package list
 ### 5. Integrity Verification
 
 Per-package manifest with file-level BLAKE3 hashes. iroh-blobs provides blob-level integrity;
-the manifest provides file-level integrity within a package. Replaces dapt's `dpkg-deb --verify`
-and APT's `Expected-SHA256` checksums.
+the manifest provides file-level integrity within a package.
 
 ```rust
 impl SyncwebFolder {
@@ -650,8 +649,7 @@ syncweb package verify --all
 
 ### 6. Multi-version Coexistence
 
-Optional side-by-side version directories. Replaces dapt's `/var/lib/dapt/store/<product>/<version>/`
-layout. Content-addressed blob storage means identical files between versions share underlying
+Optional side-by-side version directories. Content-addressed blob storage means identical files between versions share underlying
 storage -- no duplication.
 
 ```text

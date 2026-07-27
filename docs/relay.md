@@ -1,4 +1,4 @@
-# Syncthing Relay Piggyback (Phase 2)
+# Syncthing Relay Piggyback
 
 ### Problem
 

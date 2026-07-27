@@ -108,7 +108,7 @@ impl SyncwebFolder {
 }
 ```
 
-### 2. Sync Modes (replaces Syncthing folder types)
+### 2. Sync Modes
 
 | Syncweb Type | Iroh Equivalent | Implementation |
 |--------------|-----------------|----------------|
@@ -117,7 +117,7 @@ impl SyncwebFolder {
 | `receiveonly` | `SyncMode::ReceiveOnly` | Import doc with read cap only |
 | `receiveencrypted` | `SyncMode::ReceiveEncrypted` | Encrypted blob store, no namespace key |
 
-### 3. Capability System (replaces device + folder config)
+### 3. Capability System
 
 ```rust
 #[derive(Serialize, Deserialize, Clone, Debug)]

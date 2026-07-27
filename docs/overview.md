@@ -1,11 +1,9 @@
 # Overview
 
-# syncweb-py to syncweb Conversion Plan
-
 ## Executive Summary
 
-Convert syncweb-py (Python + Syncthing) to syncweb (Rust + Iroh 1.0+).
-Key architectural shift: Syncthing's block-exchange protocol to Iroh's BLAKE3-Bao verified blob sync (iroh-blobs) + document sync (iroh-docs) + gossip (iroh-gossip) + DHT-based peer discovery (distributed-topic-tracker).
+syncweb (Rust + Iroh 1.0+) provides delay-tolerant P2P file synchronization.
+The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), document sync (iroh-docs), gossip (iroh-gossip), and DHT-based peer discovery (distributed-topic-tracker).
 
 ### Key Advantages of Iroh 1.0+
 - Content-addressed blobs (BLAKE3 + Bao trees) - verified streaming, range requests, deduplication
@@ -40,7 +38,7 @@ Key architectural shift: Syncthing's block-exchange protocol to Iroh's BLAKE3-Ba
 | REST API | In-process Rust API |
 | Selective sync (ignore patterns) | Lazy blob fetching + doc subscriptions |
 | Public folders | Public blob tickets (iroh-blobs tickets) |
-| BEP relays | iroh-relay + BEP identity (Phase 2) + BEP bridge (Phase 7) |
+| BEP relays | iroh-relay + BEP identity + BEP bridge |
 | .stignore selective sync | Native lazy fetch (blobs fetched on demand) |
 | Package manifests | Collection manifests (generalized datasets + versions) |
 
@@ -89,8 +87,8 @@ Key architectural shift: Syncthing's block-exchange protocol to Iroh's BLAKE3-Ba
 |                                                                              |
 |  +-----------------------+  +-----------------------+                       |
 |  |   BEP Identity        |  |   BEP Bridge          |                       |
-|  |  (Phase 2: DeviceId   |  |  (Phase 7: full       |                       |
-|  |   conversion, --bep)  |  |   protocol translation)|                       |
+|  |  (DeviceId conversion,|  |  (full protocol       |                       |
+|  |   --bep)              |  |   translation)        |                       |
 |  +-----------------------+  +-----------------------+                       |
 +------------------------------------------------------------------------------+
 ```
@@ -166,7 +164,7 @@ Decision: Piggyback on Syncthing's relay network for CGNAT traversal, not protoc
 
 ### 9. Networks
 Decision: Named multi-folder + multi-device groups under gossip topics
-- Networks provide an explicit grouping abstraction (replaces Syncthing's implicit cluster)
+- Networks provide an explicit grouping abstraction for folders and devices
 - Each network has a gossip topic `syncweb/net/<id>` for discovery
 - Single-device users can ignore networks entirely
 - Optional shared secret for invite-only networks
@@ -209,7 +207,6 @@ Decision: Track deleted-but-previously-seen files
 
 ### 15. DHT-Based Peer Discovery (distributed-topic-tracker)
 Decision: Use distributed-topic-tracker for decentralized gossip topic bootstrap
-- Replaces reliance on iroh's relay infrastructure for peer discovery (which is weak)
 - Uses BitTorrent mainline DHT as the decentralized lookup layer
 - No central bootstrap server required
 - Per-folder gossip topics are discoverable via DHT records
@@ -268,20 +265,18 @@ Decision: Per-device identity with folder-level capabilities
 - Implementation: `CapabilityMap` tracks `NodeId -> Capability` per folder
 - UX: `syncweb devices` shows all devices, `syncweb accept` adds device to folder
 - Note: No concept of "user" in the protocol - just devices with capabilities
-
 ### 21. Living Folders
-Decision: iroh-docs manifests + iroh-blobs content addressing (replaces APT/Debian packaging)
-- dapt packages datasets as `.deb` files and uses APT for version management
-- This approach replaces that entirely with iroh primitives:
-  - iroh-docs entries replace `.deb` control files and `Packages` indices
-  - iroh-blobs BLAKE3 replaces GPG signing for integrity
-  - Content addressing replaces APT version comparison
-  - Blob tickets replace APT repository URLs
-  - Bao tree range requests replace rsync `--compare-dest` delta sync
-  - Gossip announcements replace HTTP repository mirrors
+
+Decision: iroh-docs manifests + iroh-blobs content addressing
+- iroh-docs entries for metadata and indices
+- iroh-blobs BLAKE3 for integrity verification
+- Content addressing for version comparison
+- Blob tickets for repository URLs
+- Bao tree range requests for delta sync
+- Gossip announcements for discovery
 - Platform-independent (no Debian/APT dependency)
 - P2P by default (no central repository server)
-- Atomic upgrades via symlink swap (same as dapt, but with content-addressed storage)
+- Atomic upgrades via symlink swap
 - Multi-version coexistence via versioned directories + shared blob storage
 - Full lifecycle: init → add → bump → publish → search → install → upgrade → remove → verify
 - See "Data Package Management" section for full design

@@ -1,10 +1,10 @@
 # Filter Engine, Logging, and Schedules
 
-## Filter Engine (Replaces Shell Scripts)
+## Filter Engine
 
 ### Design
 
-The `automatic` daemon uses a Rust-native filter engine instead of shell scripts:
+The `automatic` daemon uses a Rust-native filter engine:
 
 ```toml
 # ~/.config/syncweb/filters.toml
@@ -419,6 +419,6 @@ syncweb watch --debounce 500ms ./documents          # Custom debounce
 syncweb watch --exclude ".git/" --exclude "node_modules/" ./documents
 ```
 
-Priority: Lowest -- implement after all core features are stable.
-
 ---
+
+

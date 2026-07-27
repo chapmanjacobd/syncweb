@@ -1,125 +1,118 @@
-# Implementation Phases
+# Feature Areas
 
-### Phase 1: Foundation
-Goal: IrohNode + basic identity + storage + logging
+### Foundation
+IrohNode with basic identity, storage, and logging:
+- `Cargo.toml` with iroh 1.0.2 dependencies and distributed-topic-tracker 0.3.5
+- `IrohNode` with Endpoint, Router, and protocol setup
+- `IdentityManager` for SecretKey persistence and NodeId
+- `BlobStore` via iroh-blobs persistent store
+- `DocsEngine` via iroh-docs
+- `GossipService` via iroh-gossip
+- `TopicTracker` for distributed-topic-tracker integration (DHT-based peer discovery)
+- Basic CLI with `clap`
+- `tracing` structured logging
+- `syncweb version`, `syncweb repl` commands
 
-- [x] `Cargo.toml` with correct iroh 1.0.2 dependencies + distributed-topic-tracker 0.3.5
-- [x] `IrohNode` - Endpoint + Router + protocol setup
-- [x] `IdentityManager` - SecretKey persistence, NodeId
-- [x] `BlobStore` - iroh-blobs persistent store
-- [x] `DocsEngine` - iroh-docs setup
-- [x] `GossipService` - iroh-gossip setup
-- [x] `TopicTracker` - distributed-topic-tracker integration (DHT-based peer discovery)
-- [x] Basic CLI with `clap`
-- [x] `tracing` structured logging setup
-- [x] `syncweb version`, `syncweb repl` commands
+### Folder Core and Syncthing Relay Piggyback
+Folder creation, joining, basic sync, and Syncthing relay fallback for CGNAT traversal:
+- `SyncwebFolder` with NamespaceId, entries, and blob refs
+- `FolderManager` for create, join, list, accept, drop
+- `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
+- `syncweb create`, `syncweb join`, `syncweb accept`, `syncweb drop`
+- `syncweb folders`, `syncweb devices`
+- `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
+- `SyncthingRelayTransport` with bounded framed TCP tunnel
+- `TransportFallback` for ordered configured Syncthing relay attempts
+- Syncthing relay protocol message codec (JoinRelayRequest, SessionInvitation, JoinSessionRequest)
+- Datagram-over-TCP tunnel framing
+- `--relay-fallback` flag on relevant commands
+- `syncweb network test-relay` command
+- Config: `[bep]` section for relay URLs, timeout, auto_fallback
 
-### Phase 2: Folder Core + Syncthing Relay Piggyback
-Goal: Create/join folders, basic sync, Syncthing relay fallback for CGNAT traversal
+### File Operations and Search/Sort/Stat
+Commands for ls, find, sort, stat, download, selective sync, init/config:
+- `FsWatcher` via notify-rs
+- `Scanner` for directory walking and BLAKE3 hashing
+- `ParallelScanner` for parallel directory scanning
+- `Importer` for adding to blob store and updating docs
+- `ParallelImporter` for parallel import pipeline
+- `Exporter` for exporting blobs to local filesystem
+- `ParallelExporter` for parallel export pipeline
+- `LazyFetch` for on-demand blob download
+- `Actor` as dedicated storage actor
+- `SessionMode` for ReconcileOnce and Continuous modes
+- `IntentHandle` as Stream + Sink for sync operations
+- `FindEngine` with regex/glob/exact search and depth/size/time filters
+- `Sorter` with niche, frecency, peers, random, and folder-aggregate sorting
+- `StatOutput` with detailed file metadata and availability
+- `InitResult` for folder creation and shareable URL output
+- `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
+- `syncweb init`, `syncweb config`
+- Streaming output with optional collected sorting
 
-- [x] `SyncwebFolder` - NamespaceId, entries, blob refs
-- [x] `FolderManager` - create, join, list, accept, drop
-- [x] `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
-- [x] `syncweb create`, `syncweb join`, `syncweb accept`, `syncweb drop`
-- [x] `syncweb folders`, `syncweb devices`
-- [x] `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
-- [x] `SyncthingRelayTransport` - bounded framed TCP tunnel
-- [x] `TransportFallback` - ordered configured Syncthing relay attempts
-- [x] Syncthing relay protocol message codec (JoinRelayRequest, SessionInvitation, JoinSessionRequest)
-- [x] Datagram-over-TCP tunnel framing
-- [x] `--relay-fallback` flag on relevant commands
-- [x] `syncweb network test-relay` command
-- [x] Config: `[bep]` section for relay URLs, timeout, auto_fallback
+### Advanced Sync and Networks
+Sync engine, automatic daemon, and networks abstraction:
+- `SyncEngine` for orchestration
+- Progress tracking and transfer stats
+- `PeerTracker` with cached peer availability from natural iroh flow
+- `PeerTracker` with age-based cache eviction
+- `EfficientPeerCache` with memory-efficient bitmask cache
+- `FilterEngine` for rules-based automatic daemon
+- `SubscribeParams` for subscription filtering
+- `DeletedTracker` for tracking deleted-but-previously-seen files
+- `AreaOfInterest` with limits (max_size, max_count)
+- `Network` struct and `NetworkManager` for create, join, leave, invite, kick
+- Network gossip topics (`syncweb/net/<id>`)
+- `syncweb automatic` with filter engine
+- `syncweb subscribe` with SubscribeParams
+- `syncweb network create`, `syncweb network ls`, `syncweb network join`
+- `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
+- `syncweb create --network <name>`, `syncweb join --network <name>`
 
-### Phase 3: File Operations + Search/Sort/Stat
-Goal: ls, find, sort, stat, download, selective sync, init/config
+### Public Folders and Living Folders
+Public sharing and data package versioning:
+- Networks are always private; default daemon (no `--network`) is fully open
+- Blob ticket generation
+- Content pinning (prevent GC for shared blobs)
+- `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
+- `CollectionManifest` struct and iroh-docs storage
+- `CollectionState` local tracking (installed collections, versions)
+- `syncweb collection init` (with package profile) for folder initialization as data package
+- `syncweb collection add` for scanning, hashing files, and updating manifest
+- `syncweb collection versions` for creating new version with changelog
+- `syncweb collection publish` for blob ticket and gossip announcement
+- `syncweb package search` for discovering packages via gossip
+- `syncweb package info` for detailed package metadata
+- `syncweb package install` for fetch, verify, stage, and atomic swap
+- `syncweb package upgrade` for updating to latest version
+- `syncweb package remove` for cleaning up installed packages
+- `syncweb package verify` for integrity check against manifest
+- `syncweb package list` for listing locally installed packages
+- `syncweb package versions` for listing installed versions
+- `syncweb package switch` for changing active version
+- Multi-version coexistence via versioned dirs and `current` symlink
+- Atomic upgrade (stage, verify, symlink swap, cleanup)
 
-- [x] `FsWatcher` - notify-rs
-- [x] `Scanner` - walk dir, BLAKE3 hash
-- [x] `ParallelScanner` - parallel directory scanning
-- [x] `Importer` - add to blob store, update doc
-- [x] `ParallelImporter` - parallel import pipeline
-- [x] `Exporter` - export blobs to local filesystem
-- [x] `ParallelExporter` - parallel export pipeline
-- [x] `LazyFetch` - on-demand blob download
-- [x] `Actor` - dedicated storage actor
-- [x] `SessionMode` - ReconcileOnce vs Continuous
-- [x] `IntentHandle` - Stream + Sink for sync operations
-- [x] `FindEngine` - regex/glob/exact search with depth/size/time filters
-- [x] `Sorter` - niche, frecency, peers, random, folder-aggregate sorting
-- [x] `StatOutput` - detailed file metadata and availability
-- [x] `InitResult` - folder creation and shareable URL output
-- [x] `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
-- [x] `syncweb init`, `syncweb config`
-- [x] Streaming output with optional collected sorting
+### Backup/Snapshot and Partial Fetch
+Content-addressed snapshots and robustness fetch:
+- `syncweb backup` for creating content-addressed snapshots
+- `syncweb restore` for restoring from snapshot
+- `syncweb snapshots` for listing available snapshots
+- `FetchStrategy::Filter` with `min_peers`/`max_peers` for fetch by seeder count
+- `FetchStrategy::Filter` with `min_count`/`max_count` for fetch by file count
+- `syncweb download --max-peers N` for improving folder network health
+- `syncweb health` for showing seeding status per blob
 
-### Phase 4: Advanced Sync + Networks
-Goal: Sync engine, automatic daemon, networks abstraction
-
-- [x] `SyncEngine` - orchestration
-- [x] Progress tracking, transfer stats
-- [x] `PeerTracker` - cached peer availability from natural iroh flow
-- [x] `PeerTracker` - age-based cache eviction ((standard CS pattern: age-based cache eviction))
-- [x] `EfficientPeerCache` - memory-efficient bitmask cache ((standard CS pattern: memory-efficient bitmask presence))
-- [x] `FilterEngine` - rules-based automatic daemon
-- [x] `SubscribeParams` - subscription filtering (from iroh-willow)
-- [x] `DeletedTracker` - track deleted-but-previously-seen files (from iroh-willow)
-- [x] `AreaOfInterest` with limits (max_size, max_count) (from iroh-willow)
-- [x] `Network` struct + `NetworkManager` - create, join, leave, invite, kick
-- [x] Network gossip topics (`syncweb/net/<id>`)
-- [x] `syncweb automatic` with filter engine
-- [x] `syncweb subscribe` with SubscribeParams
-- [x] `syncweb network create`, `syncweb network ls`, `syncweb network join`
-- [x] `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
-- [x] `syncweb create --network <name>`, `syncweb join --network <name>`
-
-### Phase 5: Public Folders + Living Folders
-Goal: Public sharing + data package versioning
-
-- [x] Networks are always private; default daemon (no `--network`) is fully open
-- [x] Blob ticket generation
-- [x] Content pinning (prevent GC for shared blobs)
-- [x] `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
-- [x] `CollectionManifest` struct + iroh-docs storage
-- [x] `CollectionState` local tracking (installed collections, versions)
-- [x] `syncweb collection init` (with package profile) -- initialize folder as data package
-- [x] `syncweb collection add` -- scan + hash files, update manifest
-- [x] `syncweb collection versions` -- create new version with changelog
-- [x] `syncweb collection publish` -- blob ticket + gossip announcement
-- [x] `syncweb package search` -- discover packages via gossip
-- [x] `syncweb package info` -- detailed package metadata
-- [x] `syncweb package install` -- fetch + verify + stage + atomic swap
-- [x] `syncweb package upgrade` -- update to latest version
-- [x] `syncweb package remove` -- clean up installed package
-- [x] `syncweb package verify` -- integrity check against manifest
-- [x] `syncweb package list` -- list locally installed packages
-- [x] `syncweb package versions` -- list installed versions
-- [x] `syncweb package switch` -- change active version
-- [x] Multi-version coexistence (versioned dirs + `current` symlink)
-- [x] Atomic upgrade (stage → verify → symlink swap → cleanup)
-
-### Phase 6: Backup/Snapshot + Partial Fetch
-Goal: Content-addressed snapshots + robustness fetch
-
-- [x] `syncweb backup` - create content-addressed snapshot
-- [x] `syncweb restore` - restore from snapshot
-- [x] `syncweb snapshots` - list available snapshots
-- [x] `FetchStrategy::Filter` with `min_peers`/`max_peers` - fetch by seeder count
-- [x] `FetchStrategy::Filter` with `min_count`/`max_count` - fetch by file count
-- [x] `syncweb download --max-peers N` - improve folder network health
-- [x] `syncweb health` - show seeding status per blob
-
-### Phase 7: Polish + Integrations
-Goal: Full CLI parity + UX + advanced features
-
-- [x] All commands implemented
-- [x] Rich output (tables, progress bars, and JSON output for scripting)
-- [x] Config file support (TOML)
-- [x] Shell completions
-- [x] Integration tests
-- [x] Documentation
-- [x] `syncweb watch` -- file watcher for real-time sync (lowest priority)
-- [x] `syncweb stats` -- bandwidth accounting per folder/peer
-- [x] `syncweb verify` -- integrity verification (re-check all local blobs)
-- [x] Sync schedules (global + per-folder overrides)
-- [x] Platform settings files (suggested configs for laptop/server/phone)
+### Polish and Integrations
+Full CLI parity, UX, and advanced features:
+- All commands implemented
+- Rich output (tables, progress bars, and JSON output for scripting)
+- Config file support (TOML)
+- Shell completions
+- Integration tests
+- Documentation
+- `syncweb watch` for file watcher real-time sync
+- `syncweb stats` for bandwidth accounting per folder/peer
+- `syncweb verify` for integrity verification (re-check all local blobs)
+- Sync schedules (global and per-folder overrides)
+- Platform settings files for laptop/server/phone configurations

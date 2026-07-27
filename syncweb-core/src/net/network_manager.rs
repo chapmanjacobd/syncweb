@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use iroh::PublicKey;
 use iroh_docs::NamespaceId;
@@ -22,7 +20,6 @@ pub struct NetworkManager {
     networks: HashMap<NetworkId, Network>,
     logger: Option<NetworkLogger>,
     member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
-    has_public_network: Arc<AtomicBool>,
 }
 
 impl NetworkManager {
@@ -35,7 +32,6 @@ impl NetworkManager {
         db: NodeDatabase,
         local_node: PublicKey,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
-        has_public_network: Arc<AtomicBool>,
     ) -> Result<Self> {
         let networks = db
             .list_networks()?
@@ -48,7 +44,6 @@ impl NetworkManager {
             networks,
             logger: None,
             member_keys,
-            has_public_network,
         };
         mgr.sync_member_keys();
         Ok(mgr)
@@ -64,9 +59,8 @@ impl NetworkManager {
         local_node: PublicKey,
         logger: NetworkLogger,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
-        has_public_network: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let mut mgr = Self::new(db, local_node, member_keys, has_public_network)?;
+        let mut mgr = Self::new(db, local_node, member_keys)?;
         mgr.logger = Some(logger);
         Ok(mgr)
     }
@@ -173,7 +167,6 @@ impl NetworkManager {
             folders: ticket.folders,
             shared_secret: ticket.shared_secret,
             doc_ticket: ticket.doc_ticket,
-            is_public: ticket.is_public,
         };
         let id = network.id;
         self.db.create_network(&network)?;
@@ -227,7 +220,6 @@ impl NetworkManager {
             folders: network.folders.clone(),
             shared_secret: network.shared_secret,
             doc_ticket: network.doc_ticket.clone(),
-            is_public: network.is_public,
         };
         self.db.add_member(id, device)?;
         self.sync_member_keys();
@@ -264,7 +256,6 @@ impl NetworkManager {
             folders: network.folders.clone(),
             shared_secret: network.shared_secret,
             doc_ticket: network.doc_ticket.clone(),
-            is_public: network.is_public,
         })
     }
 
@@ -444,16 +435,12 @@ impl NetworkManager {
             .collect()
     }
 
-    /// Sync the member_keys set and has_public_network flag from all networks.
+    /// Sync the `member_keys` set from all networks.
     fn sync_member_keys(&self) {
-        let keys: HashSet<iroh::PublicKey> = self
-            .networks
-            .values()
-            .flat_map(|n| n.members.iter().copied())
-            .collect();
-        *self.member_keys.blocking_write() = keys;
-        let public = self.networks.values().any(|n| n.is_public);
-        self.has_public_network.store(public, Ordering::Relaxed);
+        let keys: HashSet<iroh::PublicKey> = self.networks.values().flat_map(|n| n.members.iter().copied()).collect();
+        if let Ok(mut guard) = self.member_keys.write() {
+            *guard = keys;
+        }
     }
 
     fn log_event(

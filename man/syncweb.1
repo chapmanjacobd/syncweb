@@ -4,7 +4,7 @@
 .SH NAME
 syncweb \- Delay\-tolerant web surfing
 .SH SYNOPSIS
-\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-daemon\fR] [\fB\-\-data\-dir\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-daemon\fR] [\fB\-\-data\-dir\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Delay\-tolerant web surfing
 .SH OPTIONS
@@ -20,6 +20,9 @@ Bypass the daemon and use an embedded node for supported commands
 .TP
 \fB\-\-data\-dir\fR \fI<DATA_DIR>\fR [default: .syncweb]
 Directory used for persistent node identity and data
+.TP
+\fB\-\-network\fR \fI<NETWORK>\fR
+Network name for scoped operations (uses data_dir/<network>/). Defaults to \*(Aqdefault\*(Aq if absent.
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

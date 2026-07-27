@@ -22,6 +22,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
     $completions = @(switch ($command) {
         'syncweb' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Network name for scoped operations (uses data_dir/<network>/). Defaults to ''default'' if absent.')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
@@ -153,7 +154,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;create' {
-            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Sync mode: sendreceive, receiveonly, sendonly, or publicreadonly')
+            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Sync mode: sendreceive, receiveonly, or sendonly')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the created folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--relay-fallback', '--relay-fallback', [CompletionResultType]::ParameterName, 'Enable Syncthing relay fallback for this folder')
@@ -314,8 +315,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--follow-links', '--follow-links', [CompletionResultType]::ParameterName, 'Follow symbolic links')
             [CompletionResult]::new('-a', '-a', [CompletionResultType]::ParameterName, 'Print absolute paths')
             [CompletionResult]::new('--absolute-path', '--absolute-path', [CompletionResultType]::ParameterName, 'Print absolute paths')
-            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Exclude sendonly/publicreadonly folders from search')
-            [CompletionResult]::new('--download', '--download', [CompletionResultType]::ParameterName, 'Exclude sendonly/publicreadonly folders from search')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Exclude sendonly folders from search')
+            [CompletionResult]::new('--download', '--download', [CompletionResultType]::ParameterName, 'Exclude sendonly folders from search')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

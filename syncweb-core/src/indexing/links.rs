@@ -562,7 +562,9 @@ impl fmt::Display for PrivateLink {
         write!(
             formatter,
             "{LINK_SCHEME}private/{}/{}?expires={}",
-            self.manifest, hex::encode(self.capability), self.expires_at
+            self.manifest,
+            hex::encode(self.capability),
+            self.expires_at
         )
     }
 }
@@ -589,8 +591,8 @@ impl FromStr for PrivateLink {
             .map_err(|error| SyncwebError::InvalidConfig(format!("invalid private link manifest: {error}")))?;
         let capability_bytes = hex::decode(capability_hex)
             .map_err(|error| SyncwebError::InvalidConfig(format!("invalid private link capability: {error}")))?;
-        let capability: [u8; 32] = capability_bytes.try_into().map_err(|_| {
-            SyncwebError::InvalidConfig("private link capability must be 32 bytes".to_owned())
+        let capability: [u8; 32] = capability_bytes.try_into().map_err(|bytes: Vec<u8>| {
+            SyncwebError::InvalidConfig(format!("private link capability must be 32 bytes, got {}", bytes.len()))
         })?;
         let expires_text = query
             .strip_prefix("expires=")
@@ -1442,7 +1444,7 @@ mod tests {
     #[test]
     fn private_links_expire_and_revoke() {
         let hash = Hash::from_bytes([3; 32]);
-        let cap: [u8; 32] = [1u8; 32];
+        let cap: [u8; 32] = [1_u8; 32];
         let link = PrivateLink::new(hash, cap, 20).expect("private link should build");
         let resolver = LinkResolver::new();
         assert_eq!(
@@ -1461,7 +1463,7 @@ mod tests {
     fn private_link_generates_random_capability() {
         let hash = Hash::from_bytes([4; 32]);
         let link = PrivateLink::generate(hash, 100).expect("should generate");
-        assert_ne!(link.capability, [0u8; 32], "capability should not be zeroed");
+        assert_ne!(link.capability, [0_u8; 32], "capability should not be zeroed");
         assert_eq!(link.manifest, hash);
         assert_eq!(link.expires_at, 100);
         // Two generated links should differ
@@ -1473,10 +1475,8 @@ mod tests {
     fn private_link_uri_round_trip() {
         let hash = Hash::from_bytes([5; 32]);
         let cap: [u8; 32] = [
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-            0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-            0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12,
+            0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
         ];
         let link = PrivateLink::new(hash, cap, 200).expect("should build");
         let uri = link.to_string();

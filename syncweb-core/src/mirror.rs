@@ -89,18 +89,20 @@ pub struct MirrorContext<'a> {
 }
 
 impl<'a> MirrorContext<'a> {
-    #[expect(clippy::too_many_arguments, reason = "grouping args for mirror_network")]
     #[must_use]
     pub const fn new(
         endpoint: &'a Endpoint,
         blobs: &'a BlobStore,
         service: &'a ResilienceService,
-        docs_engine: Option<&'a DocsEngine>,
-        namespace_ids: Option<&'a [NamespaceId]>,
+        docs: Option<(&'a DocsEngine, &'a [NamespaceId])>,
         provider: Option<PublicKey>,
         options: &'a MirrorOptions,
         progress: Option<tokio::sync::mpsc::UnboundedSender<MirrorEvent>>,
     ) -> Self {
+        let (docs_engine, namespace_ids) = match docs {
+            Some((engine, ids)) => (Some(engine), Some(ids)),
+            None => (None, None),
+        };
         Self {
             endpoint,
             blobs,
@@ -113,7 +115,6 @@ impl<'a> MirrorContext<'a> {
         }
     }
 }
-
 /// Discover all blob hashes advertised by a given provider.
 ///
 /// # Errors

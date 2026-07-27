@@ -16,7 +16,13 @@ async fn node(directory: &TestDirectory) -> Result<Arc<IrohNode>> {
     let root = directory.path().join("node");
     let identity = IdentityManager::new(root.join("identity.key"))?;
     Ok(Arc::new(
-        IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?,
+        IrohNode::new(
+            identity,
+            root.join("data"),
+            RelayMode::Default,
+            crate::test_utils::empty_member_keys(),
+        )
+        .await?,
     ))
 }
 

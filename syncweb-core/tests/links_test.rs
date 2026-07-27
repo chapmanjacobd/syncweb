@@ -41,8 +41,15 @@ async fn test_node(
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let relay_mode = relay_map.map_or(RelayMode::Default, |map| RelayMode::Custom { map, insecure: true });
     match address_lookup {
-        Some(lookup) => Ok(IrohNode::new_with_address_lookup(identity, root.join("data"), relay_mode, lookup, test_utils::empty_member_keys(), test_utils::no_public_network()).await?),
-        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode, test_utils::empty_member_keys(), test_utils::no_public_network()).await?),
+        Some(lookup) => Ok(IrohNode::new_with_address_lookup(
+            identity,
+            root.join("data"),
+            relay_mode,
+            lookup,
+            test_utils::empty_member_keys(),
+        )
+        .await?),
+        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode, test_utils::empty_member_keys()).await?),
     }
 }
 
@@ -165,9 +172,7 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
     let link = PrivateLink::generate(hash, 4_000_000_000)?;
     let payload = serde_json::to_vec(&link)?;
     let link_key = format!("sys/links/private/{}", hex::encode(link.capability));
-    folder
-        .set_blob(&link_key, payload)
-        .await?;
+    folder.set_blob(&link_key, payload).await?;
 
     let ticket = folder.ticket(alice.endpoint().addr(), true).await?;
     let bob_manager = FolderManager::new(&bob);
@@ -182,10 +187,7 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
         .await?;
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let entry = bob
-        .docs_engine()
-        .get_any(bob_folder.doc(), &link_key)
-        .await?;
+    let entry = bob.docs_engine().get_any(bob_folder.doc(), &link_key).await?;
     anyhow::ensure!(entry.is_some(), "Bob should see the private link entry after sync");
 
     alice.stop().await?;

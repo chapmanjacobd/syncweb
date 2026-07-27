@@ -24,7 +24,6 @@ async fn test_node_with_lookup(
         },
         lookup,
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?)
 }

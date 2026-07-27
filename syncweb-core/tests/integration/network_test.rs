@@ -3,7 +3,7 @@ use iroh::SecretKey;
 use syncweb_core::net::{NetworkManager, NetworkOptions, NetworkTicket};
 use syncweb_core::storage::node_db::NodeDatabase;
 
-use crate::test_utils::{empty_member_keys, no_public_network};
+use crate::test_utils::empty_member_keys;
 
 #[test]
 fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
@@ -12,7 +12,7 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
     let owner = SecretKey::generate().public();
     let member = SecretKey::generate().public();
     let owner_db = NodeDatabase::open(root.join("owner.db"))?;
-    let mut owner_manager = NetworkManager::new(owner_db.clone(), owner, empty_member_keys(), no_public_network())?;
+    let mut owner_manager = NetworkManager::new(owner_db.clone(), owner, empty_member_keys())?;
     let id = owner_manager.create("work", NetworkOptions::default().with_label("Work").invite_only(true))?;
     let ticket = owner_manager.invite(id, member)?;
     let encoded = ticket.to_string();
@@ -20,7 +20,7 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
     anyhow::ensure!(decoded == ticket);
 
     let member_db = NodeDatabase::open(root.join("member.db"))?;
-    let mut member_manager = NetworkManager::new(member_db, member, empty_member_keys(), no_public_network())?;
+    let mut member_manager = NetworkManager::new(member_db, member, empty_member_keys())?;
     anyhow::ensure!(member_manager.join(decoded)? == id);
     anyhow::ensure!(
         member_manager
@@ -31,7 +31,7 @@ fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {
     owner_manager.kick(id, &member)?;
     anyhow::ensure!(!owner_manager.get(&id).is_some_and(|network| network.is_member(&member)));
     drop(owner_manager);
-    let reloaded = NetworkManager::new(owner_db, owner, empty_member_keys(), no_public_network())?;
+    let reloaded = NetworkManager::new(owner_db, owner, empty_member_keys())?;
     anyhow::ensure!(reloaded.list().len() == 1);
 
     std::fs::remove_dir_all(root)?;
@@ -44,7 +44,7 @@ fn test_network_create_rejects_empty_name() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager = NetworkManager::new(db, owner, empty_member_keys(), no_public_network()).context("unwrap failed")?;
+    let mut manager = NetworkManager::new(db, owner, empty_member_keys()).context("unwrap failed")?;
 
     let result = manager.create("", NetworkOptions::default());
     ensure!(result.is_err());
@@ -63,8 +63,8 @@ fn test_network_invite_rejects_non_owner() -> anyhow::Result<()> {
     let owner = SecretKey::generate().public();
     let other = SecretKey::generate().public();
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager_owner = NetworkManager::new(db.clone(), owner, empty_member_keys(), no_public_network()).context("unwrap failed")?;
-    let mut manager_other = NetworkManager::new(db, other, empty_member_keys(), no_public_network()).context("unwrap failed")?;
+    let mut manager_owner = NetworkManager::new(db.clone(), owner, empty_member_keys()).context("unwrap failed")?;
+    let mut manager_other = NetworkManager::new(db, other, empty_member_keys()).context("unwrap failed")?;
 
     let id = manager_owner
         .create("test", NetworkOptions::default())
@@ -84,7 +84,7 @@ fn test_network_kick_owner_rejected() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager = NetworkManager::new(db, owner, empty_member_keys(), no_public_network()).context("unwrap failed")?;
+    let mut manager = NetworkManager::new(db, owner, empty_member_keys()).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -102,7 +102,7 @@ fn test_network_leave_removes_network() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager = NetworkManager::new(db, owner, empty_member_keys(), no_public_network()).context("unwrap failed")?;
+    let mut manager = NetworkManager::new(db, owner, empty_member_keys()).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -123,7 +123,7 @@ fn test_network_folder_membership() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root).context("unwrap failed")?;
     let owner = SecretKey::generate().public();
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager = NetworkManager::new(db, owner, empty_member_keys(), no_public_network()).context("unwrap failed")?;
+    let mut manager = NetworkManager::new(db, owner, empty_member_keys()).context("unwrap failed")?;
 
     let id = manager
         .create("test", NetworkOptions::default())
@@ -150,7 +150,7 @@ fn test_network_ticket_round_trip_deterministic() -> anyhow::Result<()> {
     std::fs::create_dir_all(&root)?;
 
     let db = NodeDatabase::open(root.join("node.db"))?;
-    let mut manager = NetworkManager::new(db, owner, empty_member_keys(), no_public_network())?;
+    let mut manager = NetworkManager::new(db, owner, empty_member_keys())?;
     let id = manager.create("roundtrip", NetworkOptions::default().with_label("RT"))?;
     let ticket = manager.invite(id, member)?;
 

@@ -1295,7 +1295,7 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
         "output should indicate provider added"
     );
 
-    let db = syncweb_core::indexing::IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+    let db = syncweb_core::indexing::IndexingDatabase::open(data_dir.join("default").join("indexing.sqlite"))?;
     let (_pointers, mirrors, _revoked) = db.load_links()?;
     ensure!(!mirrors.is_empty(), "should have at least one mirror");
 

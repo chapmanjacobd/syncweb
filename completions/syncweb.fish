@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_syncweb_global_optspecs
-    string join \n verbose json no-daemon data-dir= h/help
+    string join \n verbose json no-daemon data-dir= network= h/help
 end
 
 function __fish_syncweb_needs_command
@@ -25,6 +25,7 @@ function __fish_syncweb_using_subcommand
 end
 
 complete -c syncweb -n "__fish_syncweb_needs_command" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_needs_command" -l network -d 'Network name for scoped operations (uses data_dir/<network>/). Defaults to \'default\' if absent.' -r
 complete -c syncweb -n "__fish_syncweb_needs_command" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_needs_command" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_needs_command" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -116,7 +117,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l verbose -d '
 complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l mode -d 'Sync mode: sendreceive, receiveonly, sendonly, or publicreadonly' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l mode -d 'Sync mode: sendreceive, receiveonly, or sendonly' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l network -d 'Add the created folder to a named network' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
@@ -211,7 +212,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s p -l full-path 
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s H -l hidden -d 'Search hidden files and directories'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s L -l follow-links -d 'Follow symbolic links'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s a -l absolute-path -d 'Print absolute paths'
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s d -l download -d 'Exclude sendonly/publicreadonly folders from search'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s d -l download -d 'Exclude sendonly folders from search'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

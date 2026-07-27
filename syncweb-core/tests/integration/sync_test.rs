@@ -102,7 +102,13 @@ fn transfer_stats_report_rate_and_eta() -> anyhow::Result<()> {
 async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
     let root = std::env::temp_dir().join(format!("syncweb-engine-{}", uuid::Uuid::new_v4()));
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    let node = IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?;
+    let node = IrohNode::new(
+        identity,
+        root.join("data"),
+        RelayMode::Default,
+        crate::test_utils::empty_member_keys(),
+    )
+    .await?;
     let folders = FolderManager::new(&node);
     let folder = folders.create(SyncMode::SendReceive).await?;
     let engine = SyncEngine::new(

@@ -96,7 +96,6 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -111,7 +110,6 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 

@@ -16,6 +16,7 @@ _syncweb() {
     local context curcontext="$curcontext" state line
     _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--network=[Network name for scoped operations (uses data_dir/<network>/). Defaults to '\''default'\'' if absent.]:NETWORK:_default' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -117,7 +118,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (create)
 _arguments "${_arguments_options[@]}" : \
-'--mode=[Sync mode\: sendreceive, receiveonly, sendonly, or publicreadonly]:MODE:_default' \
+'--mode=[Sync mode\: sendreceive, receiveonly, or sendonly]:MODE:_default' \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
@@ -319,8 +320,8 @@ _arguments "${_arguments_options[@]}" : \
 '--follow-links[Follow symbolic links]' \
 '-a[Print absolute paths]' \
 '--absolute-path[Print absolute paths]' \
-'-d[Exclude sendonly/publicreadonly folders from search]' \
-'--download[Exclude sendonly/publicreadonly folders from search]' \
+'-d[Exclude sendonly folders from search]' \
+'--download[Exclude sendonly folders from search]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

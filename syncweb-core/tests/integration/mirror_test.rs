@@ -9,7 +9,13 @@ async fn test_node(directory: &TestDirectory, name: &str, relay_map: Option<iroh
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
     let relay_mode = relay_map.map_or(RelayMode::Default, |map| RelayMode::Custom { map, insecure: true });
-    Ok(IrohNode::new(identity, root.join("data"), relay_mode, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?)
+    Ok(IrohNode::new(
+        identity,
+        root.join("data"),
+        relay_mode,
+        crate::test_utils::empty_member_keys(),
+    )
+    .await?)
 }
 
 #[tokio::test]

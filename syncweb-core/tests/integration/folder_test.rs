@@ -16,7 +16,13 @@ use crate::test_utils::TestDirectory;
 async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
     let root = directory.path().join(name);
     let identity = IdentityManager::new(root.join("identity.key"))?;
-    Ok(IrohNode::new(identity, root.join("data"), RelayMode::Default, crate::test_utils::empty_member_keys(), crate::test_utils::no_public_network()).await?)
+    Ok(IrohNode::new(
+        identity,
+        root.join("data"),
+        RelayMode::Default,
+        crate::test_utils::empty_member_keys(),
+    )
+    .await?)
 }
 
 #[tokio::test]
@@ -114,7 +120,6 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
             },
             memory_lookup.clone(),
             crate::test_utils::empty_member_keys(),
-            crate::test_utils::no_public_network(),
         )
         .await?
     };
@@ -130,7 +135,6 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
             },
             memory_lookup.clone(),
             crate::test_utils::empty_member_keys(),
-            crate::test_utils::no_public_network(),
         )
         .await?
     };
@@ -262,7 +266,6 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -277,7 +280,6 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -341,7 +343,6 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 
@@ -356,7 +357,6 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
         },
         memory_lookup.clone(),
         crate::test_utils::empty_member_keys(),
-        crate::test_utils::no_public_network(),
     )
     .await?;
 

@@ -10,7 +10,9 @@ Replaces Syncthing's implicit cluster config with an explicit, shareable abstrac
 - Folders: All folders in the network share the topic for discovery and auto-join
 
 ```rust
-/// A named group of folders and devices sharing a gossip topic
+/// A named group of folders and devices sharing a gossip topic.
+/// Networks are always private — membership is required to access
+/// any data (blobs, docs, or gossip) within the network.
 struct Network {
     /// Unique network ID: blake3("network:" + name)
     id: NetworkId,

@@ -217,6 +217,15 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
             no_daemon,
             network: network.as_deref(),
         };
+        if args.bg {
+            let child = spawn_daemon_process(base, &args, network.as_deref())?;
+            if output_json {
+                println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
+            } else {
+                println!("daemon starting: {}", child.id());
+            }
+            return Ok(());
+        }
         return handle_start(&daemon_ctx, args).await;
     }
     if let Command::Shutdown(args) = command {
@@ -330,15 +339,6 @@ fn generate_manpages(dir: &std::path::Path) -> Result<()> {
 async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    if args.bg {
-        let child = spawn_daemon_process(data_dir, &args, ctx.network)?;
-        if output_json {
-            println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
-        } else {
-            println!("daemon starting: {}", child.id());
-        }
-        return Ok(());
-    }
 
     let app_config = open_node_db(data_dir)?.load_app_config()?;
     let mut daemon_config = DaemonConfig::new(data_dir);
@@ -423,11 +423,12 @@ async fn daemon_client_or_start(
         return Ok(Some(client));
     }
 
+    let base = data_dir.parent().unwrap_or(data_dir);
     let lock = PidLock::new(data_dir);
     let mut daemon_child = if lock.try_acquire()? {
         lock.release()?;
         Some(spawn_daemon_process(
-            data_dir,
+            base,
             &StartArgs {
                 bg: true,
                 data_dir: None,
@@ -906,13 +907,11 @@ async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> 
     };
 
     let result = if let Some(ref network_str) = command.network {
-        let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
-        let no_public = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let empty_keys = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
         let network_mgr = syncweb_core::net::NetworkManager::new(
             open_node_db(data_dir)?,
             node.endpoint().secret_key().public(),
             empty_keys,
-            no_public,
         )?;
         let network = network_mgr
             .get_by_name(network_str)
@@ -931,8 +930,7 @@ async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> 
             node.endpoint(),
             node.blob_store(),
             &resilience,
-            Some(node.docs_engine()),
-            Some(&ns_ids),
+            Some((node.docs_engine(), &ns_ids)),
             provider,
             &options,
             Some(tx),
@@ -3395,9 +3393,8 @@ fn handle_network_health(
 fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
-    let empty_keys = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
-    let no_public = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    Ok(NetworkManager::new(db, identity.node_id(), empty_keys, no_public)?)
+    let empty_keys = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
+    Ok(NetworkManager::new(db, identity.node_id(), empty_keys)?)
 }
 
 fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {

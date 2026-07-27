@@ -19,6 +19,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
     var completions = [
         &'syncweb'= {
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --network 'Network name for scoped operations (uses data_dir/<network>/). Defaults to ''default'' if absent.'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -142,7 +143,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;create'= {
-            cand --mode 'Sync mode: sendreceive, receiveonly, sendonly, or publicreadonly'
+            cand --mode 'Sync mode: sendreceive, receiveonly, or sendonly'
             cand --network 'Add the created folder to a named network'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
@@ -289,8 +290,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --follow-links 'Follow symbolic links'
             cand -a 'Print absolute paths'
             cand --absolute-path 'Print absolute paths'
-            cand -d 'Exclude sendonly/publicreadonly folders from search'
-            cand --download 'Exclude sendonly/publicreadonly folders from search'
+            cand -d 'Exclude sendonly folders from search'
+            cand --download 'Exclude sendonly folders from search'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

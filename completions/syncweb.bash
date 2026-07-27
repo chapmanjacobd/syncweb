@@ -1878,7 +1878,7 @@ _syncweb() {
             fi
             case "${prev}" in
                 --by)
-                    COMPREPLY=($(compgen -W "extension size all" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "extension size all time" -- "${cur}"))
                     return 0
                     ;;
                 --top-largest)

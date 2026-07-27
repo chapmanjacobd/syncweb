@@ -589,7 +589,7 @@ pub struct FileStatsArgs {
     #[arg(
         long,
         default_value = "extension",
-        value_parser = ["extension", "size", "all"]
+        value_parser = ["extension", "size", "all", "time"]
     )]
     pub by: String,
     #[arg(long, help = "Top N largest files by size")]

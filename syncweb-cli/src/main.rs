@@ -1607,7 +1607,7 @@ async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Resul
         if entry.key().starts_with(b"sys/") {
             continue;
         }
-        collector.add_entry_bytes(entry.key(), entry.content_len());
+        collector.add_entry_bytes_with_time(entry.key(), entry.content_len(), Some(entry.timestamp()));
     }
     let report = collector.report();
 
@@ -1634,6 +1634,14 @@ async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Resul
                 table.add_row([label.as_str(), &count.to_string()]);
             }
             println!("{table}");
+        }
+
+        if !report.time_buckets.is_empty() && matches!(command.by.as_str(), "time" | "all") {
+            println!();
+            println!("insertion time distribution:");
+            for (label, count) in &report.time_buckets {
+                println!("  {label:10} {count:>8} files");
+            }
         }
     }
 

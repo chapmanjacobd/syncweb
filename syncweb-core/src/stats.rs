@@ -168,6 +168,9 @@ pub struct FileStatsReport {
     pub total_size: u64,
     pub by_extension: BTreeMap<String, ExtensionGroup>,
     pub size_buckets: BTreeMap<String, u64>,
+    /// Age distribution of entry insertion timestamps.
+    /// Labels: <24h, 1d-7d, 7d-30d, 1m-1y, >1y, unknown.
+    pub time_buckets: BTreeMap<String, u64>,
 }
 
 /// Collects file-level statistics from existing metadata (doc entries).
@@ -177,6 +180,9 @@ pub struct FileStatsReport {
 pub struct FileStatsCollector {
     extensions: BTreeMap<String, ExtensionGroup>,
     sizes: Vec<u64>,
+    /// Entry insertion timestamps in microseconds since Unix epoch.
+    /// `None` when the timestamp was not provided.
+    timestamps: Vec<Option<u64>>,
 }
 
 impl FileStatsCollector {
@@ -206,6 +212,20 @@ impl FileStatsCollector {
         }
     }
 
+    /// Record one file entry with its insertion timestamp (microseconds since Unix epoch).
+    pub fn add_entry_with_time(&mut self, path: &str, size: u64, timestamp_micros: Option<u64>) {
+        self.add_entry(path, size);
+        self.timestamps.push(timestamp_micros);
+    }
+
+    /// UTF-8 bytes variant of [`add_entry_with_time`].
+    /// Non-UTF-8 keys are silently skipped and no timestamp is recorded.
+    pub fn add_entry_bytes_with_time(&mut self, key: &[u8], size: u64, timestamp_micros: Option<u64>) {
+        if let Ok(path) = std::str::from_utf8(key) {
+            self.add_entry_with_time(path, size, timestamp_micros);
+        }
+    }
+
     /// Finalise and return the collected report.
     #[must_use]
     pub fn report(&self) -> FileStatsReport {
@@ -224,11 +244,37 @@ impl FileStatsCollector {
                 size_buckets.get(label).copied().unwrap_or(0).saturating_add(1);
         }
 
+        let now_dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+        let now_micros = now_dur
+            .as_secs()
+            .saturating_mul(1_000_000)
+            .saturating_add(u64::from(now_dur.subsec_micros()));
+        let mut time_buckets = BTreeMap::new();
+        for &ts_opt in &self.timestamps {
+            let label = ts_opt.map_or("unknown", |ts| {
+                let age = now_micros.saturating_sub(ts);
+                if age < 86_400_000_000 {
+                    "<24h"
+                } else if age < 604_800_000_000 {
+                    "1d-7d"
+                } else if age < 2_592_000_000_000 {
+                    "7d-30d"
+                } else if age < 31_536_000_000_000 {
+                    "1m-1y"
+                } else {
+                    ">1y"
+                }
+            });
+            *time_buckets.entry(label.to_owned()).or_insert(0_u64) =
+                time_buckets.get(label).copied().unwrap_or(0).saturating_add(1);
+        }
+
         FileStatsReport {
             total_files,
             total_size,
             by_extension: self.extensions.clone(),
             size_buckets,
+            time_buckets,
         }
     }
 }
@@ -256,6 +302,7 @@ mod tests {
         assert_eq!(report.total_size, 0);
         assert!(report.by_extension.is_empty());
         assert!(report.size_buckets.is_empty());
+        assert!(report.time_buckets.is_empty());
     }
 
     #[test]
@@ -337,5 +384,73 @@ mod tests {
         collector.add_entry("", 0);
         let report = collector.report();
         assert_eq!(report.total_files, 1);
+    }
+
+    #[test]
+    fn filestats_time_distribution() {
+        let mut collector = FileStatsCollector::new();
+        let now = SystemTime::now();
+        let ts = |offset_secs: i64| -> u64 {
+            let t = if offset_secs >= 0 {
+                now + std::time::Duration::from_secs(offset_secs.unsigned_abs())
+            } else {
+                now - std::time::Duration::from_secs(offset_secs.unsigned_abs())
+            };
+            let d = t.duration_since(UNIX_EPOCH).unwrap();
+            d.as_secs()
+                .saturating_mul(1_000_000)
+                .saturating_add(u64::from(d.subsec_micros()))
+        };
+        collector.add_entry_with_time("recent.txt", 100, Some(ts(0)));
+        collector.add_entry_with_time("old.txt", 200, Some(ts(-366 * 24 * 3600)));
+        collector.add_entry_with_time("no_time.txt", 50, None);
+        let report = collector.report();
+        assert_eq!(report.time_buckets.get("<24h").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get(">1y").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get("unknown").copied().unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn filestats_time_all_buckets() {
+        let mut collector = FileStatsCollector::new();
+        let now = SystemTime::now();
+        let micros = |secs_ago: u64| -> u64 {
+            let t = now - std::time::Duration::from_secs(secs_ago);
+            let d = t.duration_since(UNIX_EPOCH).unwrap();
+            d.as_secs()
+                .saturating_mul(1_000_000)
+                .saturating_add(u64::from(d.subsec_micros()))
+        };
+        // <24h: 1 hour ago
+        collector.add_entry_with_time("hour_ago.txt", 10, Some(micros(3600)));
+        // 1d-7d: 2 days ago
+        collector.add_entry_with_time("two_days.txt", 10, Some(micros(2 * 86400)));
+        // 7d-30d: 14 days ago
+        collector.add_entry_with_time("two_weeks.txt", 10, Some(micros(14 * 86400)));
+        // 1m-1y: 60 days ago
+        collector.add_entry_with_time("two_months.txt", 10, Some(micros(60 * 86400)));
+        // >1y: 400 days ago
+        collector.add_entry_with_time("year_plus.txt", 10, Some(micros(400 * 86400)));
+        let report = collector.report();
+        assert_eq!(report.time_buckets.len(), 5, "all five time buckets should be present");
+        assert_eq!(report.time_buckets.get("<24h").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get("1d-7d").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get("7d-30d").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get("1m-1y").copied().unwrap_or(0), 1);
+        assert_eq!(report.time_buckets.get(">1y").copied().unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn filestats_time_via_bytes() {
+        let mut collector = FileStatsCollector::new();
+        collector.add_entry_bytes_with_time(b"a.txt", 5, Some(1_700_000_000_000_000));
+        collector.add_entry_bytes_with_time(b"b.txt", 10, Some(1_700_000_000_000_001));
+        let report = collector.report();
+        assert_eq!(report.total_files, 2);
+        assert!(
+            report.time_buckets.contains_key("<24h")
+                || report.time_buckets.contains_key("1d-7d")
+                || report.time_buckets.contains_key(">1y")
+        );
     }
 }

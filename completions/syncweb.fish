@@ -369,7 +369,8 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l no-daemon -l e
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l by -r -f -a "extension\t''
 size\t''
-all\t''"
+all\t''
+time\t''"
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l top-largest -d 'Top N largest files by size' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l verbose -d 'Enable verbose structured logging'

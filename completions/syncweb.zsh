@@ -617,7 +617,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (filestats)
 _arguments "${_arguments_options[@]}" : \
-'--by=[]:BY:(extension size all)' \
+'--by=[]:BY:(extension size all time)' \
 '--top-largest=[Top N largest files by size]:TOP_LARGEST:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \

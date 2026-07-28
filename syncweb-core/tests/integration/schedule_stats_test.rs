@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use syncweb_core::{
+    bandwidth_stats::BandwidthStats,
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
-    stats::BandwidthStats,
 };
 
 #[test]

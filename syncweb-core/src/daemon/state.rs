@@ -83,10 +83,18 @@ impl DaemonStatusReport {
 pub struct FolderStatusReport {
     pub namespace: String,
     pub path: PathBuf,
+    #[serde(default = "default_kind")]
+    pub kind: String,
     pub session_active: bool,
     pub last_sync_at: Option<u64>,
+    #[serde(default)]
+    pub sync_count: u64,
     pub entries_synced: u64,
     pub errors: Vec<String>,
+}
+
+fn default_kind() -> String {
+    "folder".to_owned()
 }
 
 impl FolderStatusReport {
@@ -102,8 +110,10 @@ impl FolderStatusReport {
         Self {
             namespace: namespace.into(),
             path: path.into(),
+            kind: "folder".to_owned(),
             session_active,
             last_sync_at,
+            sync_count: 0,
             entries_synced,
             errors,
         }
@@ -154,11 +164,8 @@ pub struct StateFile {
 }
 
 impl StateFile {
-    /// Open (or create) the `SQLite` node database in `data_dir`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database cannot be opened or initialized.
+    /// Store the data directory path. The database is not opened yet —
+    /// call [`db()`](Self::db) to open it lazily.
     #[must_use]
     pub fn new(data_dir: &Path) -> Self {
         Self {
@@ -166,6 +173,11 @@ impl StateFile {
         }
     }
 
+    /// Open (or create) the `SQLite` node database in `data_dir`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or initialized.
     fn db(&self) -> Result<NodeDatabase> {
         NodeDatabase::open(self.data_dir.join("node.db"))
     }
@@ -354,12 +366,12 @@ impl PidLock {
             reader.read_to_string(&mut contents)?;
             return Self::parse_pid_from_contents(&contents);
         }
-        drop(held);
         let contents = match fs::read_to_string(&self.lock_path) {
             Ok(contents) => contents,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
+        drop(held);
         Self::parse_pid_from_contents(&contents)
     }
 
@@ -446,9 +458,37 @@ pub fn pid_is_alive(pid: u32) -> bool {
         // a boolean result (ESRCH means no such process).
         unsafe { kill(pid_i32, 0) == 0 }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        false
+        fn is_process_alive(pid: u32) -> bool {
+            use std::ffi::c_void;
+            use std::ptr;
+
+            const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+            const STILL_ACTIVE: u32 = 259;
+
+            type HANDLE = *mut c_void;
+
+            extern "system" {
+                fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
+                fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut u32) -> i32;
+                fn CloseHandle(hObject: HANDLE) -> i32;
+            }
+
+            let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            if handle.is_null() {
+                return false;
+            }
+            let mut exit_code: u32 = 0;
+            let result = unsafe { GetExitCodeProcess(handle, &mut exit_code) };
+            unsafe { CloseHandle(handle) };
+            result != 0 && exit_code == STILL_ACTIVE
+        }
+        is_process_alive(pid)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        true
     }
 }
 

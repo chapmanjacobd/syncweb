@@ -1,5 +1,6 @@
 //! Local filesystem operations used by syncweb.
 
+pub(crate) mod atomic;
 pub mod exporter;
 pub mod importer;
 pub mod scanner;

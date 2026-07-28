@@ -333,6 +333,83 @@ fn reputation_auto_ban_backoff_never_exceeds_maximum() {
 }
 
 #[test]
+fn auto_ban_expired_within_retention_window_is_retained() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    config.temporary_ban_duration = Duration::from_secs(1);
+    config.ban_history_retention = Duration::from_hours(24);
+    let mut store = ProviderReputationStore::new(config);
+    let key = provider(80);
+    for t in 1..=3 {
+        store.record_failure(key, FetchFailureKind::NotFound, t);
+    }
+    assert!(store.auto_ban_count(key) > 0);
+    store.purge_stale(100, Duration::from_mins(1));
+    assert!(
+        store.auto_ban_count(key) > 0,
+        "expired ban within retention window should be retained"
+    );
+}
+
+#[test]
+fn auto_ban_expired_after_retention_window_is_purged() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    config.temporary_ban_duration = Duration::from_secs(1);
+    config.ban_history_retention = Duration::from_secs(0);
+    let mut store = ProviderReputationStore::new(config);
+    let key = provider(81);
+    for t in 1..=3 {
+        store.record_failure(key, FetchFailureKind::NotFound, t);
+    }
+    assert!(store.auto_ban_count(key) > 0);
+    store.purge_stale(100, Duration::from_mins(1));
+    assert_eq!(
+        store.auto_ban_count(key),
+        0,
+        "expired ban past retention window should be purged"
+    );
+}
+
+#[test]
+fn auto_ban_unexpired_never_purged() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    config.temporary_ban_duration = Duration::from_hours(24);
+    config.ban_history_retention = Duration::ZERO;
+    let mut store = ProviderReputationStore::new(config);
+    let key = provider(82);
+    for t in 1..=3 {
+        store.record_failure(key, FetchFailureKind::NotFound, t);
+    }
+    assert!(store.auto_ban_until(key).is_some_and(|u| u > 100));
+    store.purge_stale(100, Duration::from_mins(1));
+    assert!(store.auto_ban_count(key) > 0, "unexpired ban should never be purged");
+}
+
+#[test]
+fn auto_ban_zero_retention_purges_all_expired() {
+    let mut config = ReputationConfig::default();
+    config.min_samples = 1;
+    config.temporary_ban_duration = Duration::from_secs(1);
+    config.ban_history_retention = Duration::ZERO;
+    let mut store = ProviderReputationStore::new(config);
+    let key_a = provider(83);
+    let key_b = provider(84);
+    for t in 1..=3 {
+        store.record_failure(key_a, FetchFailureKind::NotFound, t);
+    }
+    for t in 10..=12 {
+        store.record_failure(key_b, FetchFailureKind::NotFound, t);
+    }
+    assert!(store.auto_ban_count(key_a) > 0);
+    assert!(store.auto_ban_count(key_b) > 0);
+    store.purge_stale(100, Duration::from_mins(1));
+    assert_eq!(store.auto_ban_count(key_a), 0);
+    assert_eq!(store.auto_ban_count(key_b), 0);
+}
+
+#[test]
 fn reputation_new_key_returns_neutral_score() {
     let config = ReputationConfig::default();
     let store = ProviderReputationStore::new(config);

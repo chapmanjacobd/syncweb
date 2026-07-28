@@ -29,6 +29,9 @@ use crate::{
 const CATALOG_METADATA_KEY: &[u8] = b"sys/syncweb/catalog/metadata";
 const CATALOG_RECORD_PREFIX: &[u8] = b"record/";
 const RETRY_COUNT: usize = 20;
+const MAX_CONSECUTIVE_STREAM_ERRORS: usize = 5;
+const STREAM_RETRY_BASE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
+const STREAM_RETRY_MAX_DELAY: std::time::Duration = std::time::Duration::from_mins(1);
 
 /// Metadata describing a catalog namespace.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -506,21 +509,77 @@ impl CatalogService {
 
 async fn consume_catalog_events(
     namespace_id: NamespaceId,
-    mut live_events: impl n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin + 'static,
+    live_events: impl n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin + 'static,
     database: IndexingDatabase,
     blobs: BlobStore,
     docs: DocsEngine,
 ) {
-    while let Some(event_result) = live_events.next().await {
-        let event = match event_result {
-            Ok(event) => event,
-            Err(error) => {
-                tracing::error!(%namespace_id, error = %error, "catalog document event failed");
-                break;
+    let mut consecutive_errors = 0_usize;
+    let mut current_stream: Option<Box<dyn n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin>> =
+        Some(Box::new(live_events));
+    loop {
+        let Some(stream) = current_stream.as_mut() else {
+            match reconnect_catalog_stream(namespace_id, &docs, &mut consecutive_errors).await {
+                Some(new_stream) => {
+                    current_stream = Some(new_stream);
+                    continue;
+                }
+                None if consecutive_errors >= MAX_CONSECUTIVE_STREAM_ERRORS => return,
+                None => continue,
             }
         };
-        if let Err(error) = process_catalog_event(namespace_id, event, &database, &blobs, &docs).await {
-            tracing::error!(%namespace_id, error = %error, "failed to process catalog event");
+        match stream.next().await {
+            Some(Ok(event)) => {
+                consecutive_errors = 0;
+                if let Err(error) = process_catalog_event(namespace_id, event, &database, &blobs, &docs).await {
+                    tracing::error!(%namespace_id, error = %error, "failed to process catalog event");
+                }
+            }
+            Some(Err(error)) => {
+                tracing::error!(%namespace_id, error = %error, "catalog document event stream error");
+                consecutive_errors = consecutive_errors.saturating_add(1);
+                current_stream = None;
+            }
+            None => {
+                tracing::info!(%namespace_id, "catalog document event stream ended");
+                return;
+            }
+        }
+    }
+}
+
+async fn reconnect_catalog_stream(
+    namespace_id: NamespaceId,
+    docs: &DocsEngine,
+    consecutive_errors: &mut usize,
+) -> Option<Box<dyn n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin>> {
+    if *consecutive_errors >= MAX_CONSECUTIVE_STREAM_ERRORS {
+        tracing::error!(
+            %namespace_id,
+            consecutive_errors = *consecutive_errors,
+            "catalog watcher gave up after max retries"
+        );
+        return None;
+    }
+    let delay = STREAM_RETRY_BASE_DELAY
+        .checked_mul(2_u32.pow(u32::try_from(*consecutive_errors).unwrap_or(0)))
+        .unwrap_or(STREAM_RETRY_MAX_DELAY)
+        .min(STREAM_RETRY_MAX_DELAY);
+    tracing::warn!(%namespace_id, delay_ms = delay.as_millis(), "catalog watcher reconnecting");
+    tokio::time::sleep(delay).await;
+    let Ok(Some(doc)) = docs.open(namespace_id).await else {
+        *consecutive_errors = consecutive_errors.saturating_add(1);
+        return None;
+    };
+    match docs.watch(&doc).await {
+        Ok(new_stream) => {
+            *consecutive_errors = 0;
+            Some(Box::new(new_stream))
+        }
+        Err(error) => {
+            tracing::error!(%namespace_id, error = %error, "catalog watcher re-subscribe failed");
+            *consecutive_errors = consecutive_errors.saturating_add(1);
+            None
         }
     }
 }

@@ -17,7 +17,9 @@ use crate::{
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum FilterAction {
+    #[default]
     Accept,
     Reject,
 }
@@ -134,6 +136,9 @@ pub struct FilterConfig {
     pub rules: Vec<FilterRule>,
     #[serde(default)]
     pub folders: HashMap<String, Vec<FilterRule>>,
+    /// Default action when no rules match.
+    #[serde(default)]
+    pub default_action: FilterAction,
 }
 
 #[derive(Clone, Debug)]
@@ -145,10 +150,21 @@ struct CompiledRule {
 }
 
 /// Ordered rules-based evaluator used by automatic synchronization.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct FilterEngine {
     global: Vec<CompiledRule>,
     folders: HashMap<String, Vec<CompiledRule>>,
+    default_action: FilterAction,
+}
+
+impl Default for FilterEngine {
+    fn default() -> Self {
+        Self {
+            global: Vec::new(),
+            folders: HashMap::new(),
+            default_action: FilterAction::Accept,
+        }
+    }
 }
 
 impl FilterEngine {
@@ -164,7 +180,11 @@ impl FilterEngine {
             .into_iter()
             .map(|(folder, rules)| compile_rules(rules).map(|compiled| (folder, compiled)))
             .collect::<Result<HashMap<_, _>>>()?;
-        Ok(Self { global, folders })
+        Ok(Self {
+            global,
+            folders,
+            default_action: config.default_action,
+        })
     }
 
     /// Read and compile a TOML filter file.
@@ -181,10 +201,10 @@ impl FilterEngine {
     }
 
     /// Evaluate global rules. The first matching rule wins; unmatched entries
-    /// are accepted.
+    /// fall back to the configured default action.
     #[must_use]
     pub fn evaluate(&self, entry: &FilterEntry) -> FilterAction {
-        evaluate_rules(&self.global, entry).unwrap_or(FilterAction::Accept)
+        evaluate_rules(&self.global, entry).unwrap_or(self.default_action)
     }
 
     /// Evaluate per-folder rules before global rules.
@@ -230,6 +250,7 @@ impl FilterEngine {
                     )
                 })
                 .collect(),
+            default_action: self.default_action,
         }
     }
 }

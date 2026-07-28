@@ -81,10 +81,14 @@ impl PeerTracker {
     }
 
     #[must_use]
-    pub fn peers(&self, blob_hash: &Hash) -> Vec<PublicKey> {
-        self.entries
-            .get(blob_hash)
-            .map_or_else(Vec::new, |entry| entry.peers.iter().copied().collect())
+    pub fn peers(&mut self, blob_hash: &Hash) -> Vec<PublicKey> {
+        self.clock = self.clock.saturating_add(1);
+        self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
+            if self.strategy == EvictionStrategy::Lru {
+                entry.accessed_at = self.clock;
+            }
+            entry.peers.iter().copied().collect()
+        })
     }
 
     #[must_use]
@@ -157,6 +161,7 @@ pub struct EfficientPeerCache {
     presence: HashMap<Hash, Vec<u64>>,
     peer_index: HashMap<PublicKey, u16>,
     index_peer: Vec<PublicKey>,
+    last_seen: HashMap<PublicKey, Instant>,
 }
 
 impl EfficientPeerCache {
@@ -180,6 +185,7 @@ impl EfficientPeerCache {
             self.peer_index.insert(peer, index);
             index
         };
+        self.last_seen.insert(peer, Instant::now());
         let indices = self.active_indices.entry(hash).or_default();
         match indices.binary_search(&index) {
             Ok(_) => {}
@@ -289,5 +295,44 @@ impl EfficientPeerCache {
         for hash in hashes {
             let _removed = self.remove_presence(&hash, peer);
         }
+        self.last_seen.remove(peer);
+    }
+
+    /// Remove peers whose `last_seen` timestamp exceeds the given TTL.
+    ///
+    /// Fully reclaims each removed peer's index, so the total number of
+    /// tracked peers stays bounded.
+    ///
+    /// Returns the number of peers removed.
+    pub fn retain_active(&mut self, ttl: Duration) -> usize {
+        self.retain_active_at(ttl, Instant::now())
+    }
+
+    /// Like [`retain_active`](Self::retain_active) but with an explicit
+    /// observation time for deterministic testing.
+    fn retain_active_at(&mut self, ttl: Duration, now: Instant) -> usize {
+        let cutoff = now.checked_sub(ttl).unwrap_or(now);
+        let stale: Vec<PublicKey> = self
+            .last_seen
+            .iter()
+            .filter(|(_, last_seen)| **last_seen < cutoff)
+            .map(|(peer, _)| *peer)
+            .collect();
+        let count = stale.len();
+        for peer in stale {
+            self.remove_peer(&peer);
+            if let Some(index) = self.peer_index.remove(&peer) {
+                let last_index = self.index_peer.len().saturating_sub(1);
+                if usize::from(index) != last_index
+                    && let Some(last_peer) = self.index_peer.get(last_index).copied()
+                    && let Some(slot) = self.index_peer.get_mut(usize::from(index))
+                {
+                    *slot = last_peer;
+                    self.peer_index.insert(last_peer, index);
+                }
+                self.index_peer.pop();
+            }
+        }
+        count
     }
 }

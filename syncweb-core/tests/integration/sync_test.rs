@@ -124,7 +124,8 @@ async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
     anyhow::ensure!(intent.next().await == Some(SyncEvent::Started));
     anyhow::ensure!(matches!(intent.next().await, Some(SyncEvent::Progress { .. })));
     anyhow::ensure!(matches!(intent.next().await, Some(SyncEvent::Stats(_))));
-    anyhow::ensure!(intent.next().await == Some(SyncEvent::Finished));
+    intent.cancel()?;
+    anyhow::ensure!(intent.next().await == Some(SyncEvent::Cancelled));
     node.stop().await?;
     std::fs::remove_dir_all(root)?;
     Ok(())
@@ -406,6 +407,59 @@ fn test_efficient_cache_is_idempotent() -> anyhow::Result<()> {
     cache.add_presence(blob(1), peer)?;
 
     anyhow::ensure!(cache.active_peer_count(&blob(1)) == 1);
+    Ok(())
+}
+
+#[test]
+fn test_efficient_cache_retain_active_keeps_recent_peers() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut cache = EfficientPeerCache::new();
+    cache.add_presence(blob(1), peer)?;
+    let removed = cache.retain_active(Duration::from_hours(1));
+    anyhow::ensure!(removed == 0, "recent peer should survive with large TTL");
+    anyhow::ensure!(cache.has_peer(&blob(1), &peer));
+    Ok(())
+}
+
+#[test]
+fn test_efficient_cache_retain_active_zero_ttl_evicts_all() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut cache = EfficientPeerCache::new();
+    cache.add_presence(blob(1), peer)?;
+    let removed = cache.retain_active(Duration::ZERO);
+    anyhow::ensure!(removed == 1, "zero TTL should evict stale peers");
+    anyhow::ensure!(!cache.has_peer(&blob(1), &peer));
+    anyhow::ensure!(cache.peer_count() == 0, "index should be reclaimed");
+    Ok(())
+}
+
+#[test]
+fn test_efficient_cache_retain_active_empty_cache() {
+    let mut cache = EfficientPeerCache::new();
+    let removed = cache.retain_active(Duration::from_hours(1));
+    assert_eq!(removed, 0, "empty cache cleanup should not panic");
+}
+
+#[test]
+fn test_efficient_cache_retain_active_evicts_and_reclaims_index() -> anyhow::Result<()> {
+    let a = SecretKey::generate().public();
+    let b = SecretKey::generate().public();
+    let mut cache = EfficientPeerCache::new();
+
+    cache.add_presence(blob(1), a)?;
+    cache.add_presence(blob(2), b)?;
+    anyhow::ensure!(cache.peer_count() == 2);
+
+    let removed = cache.retain_active(Duration::ZERO);
+    anyhow::ensure!(removed == 2, "both peers should be evicted with zero TTL");
+    anyhow::ensure!(cache.peer_count() == 0, "indices should be reclaimed");
+
+    cache.add_presence(blob(1), a)?;
+    anyhow::ensure!(
+        cache.has_peer(&blob(1), &a),
+        "re-added peer should work after reclamation"
+    );
+    anyhow::ensure!(cache.peer_count() == 1);
     Ok(())
 }
 

@@ -38,6 +38,7 @@ const DEFAULT_MAX_BAN: Duration = Duration::from_hours(24 * 30);
 const DEFAULT_SIGNAL_TTL: Duration = Duration::from_hours(168);
 const DEFAULT_SIGNAL_BATCH_SIZE: usize = 64;
 const AUTO_BAN_FAILURE_THRESHOLD: u32 = 3;
+const DEFAULT_BAN_HISTORY_RETENTION: Duration = Duration::from_hours(720);
 
 /// Historical fetch outcomes for one provider.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +137,7 @@ pub struct ReputationConfig {
     pub temporary_ban_duration: Duration,
     pub auto_ban_backoff_factor: f64,
     pub max_auto_ban_duration: Duration,
+    pub ban_history_retention: Duration,
 }
 
 impl Default for ReputationConfig {
@@ -147,6 +149,7 @@ impl Default for ReputationConfig {
             temporary_ban_duration: DEFAULT_TEMPORARY_BAN,
             auto_ban_backoff_factor: DEFAULT_BACKOFF_FACTOR,
             max_auto_ban_duration: DEFAULT_MAX_BAN,
+            ban_history_retention: DEFAULT_BAN_HISTORY_RETENTION,
         }
     }
 }
@@ -155,6 +158,7 @@ impl Default for ReputationConfig {
 struct AutoBan {
     until: u64,
     count: u32,
+    last_banned_at: u64,
 }
 
 /// Local provider reputation database.
@@ -228,9 +232,16 @@ impl ProviderReputationStore {
             .unwrap_or_default()
             .into_iter()
             .filter_map(|(provider, (until, count))| {
-                until
-                    .filter(|u| *u > now)
-                    .map(|u| (provider, AutoBan { until: u, count }))
+                until.filter(|u| *u > now).map(|u| {
+                    (
+                        provider,
+                        AutoBan {
+                            until: u,
+                            count,
+                            last_banned_at: u,
+                        },
+                    )
+                })
             })
             .collect()
     }
@@ -399,7 +410,9 @@ impl ProviderReputationStore {
             let last = reputation.last_success_at.max(reputation.last_failure_at);
             last.is_some_and(|timestamp| now.saturating_sub(timestamp) <= ttl_seconds)
         });
-        self.auto_bans.retain(|_, ban| ban.until > now || ban.count > 0);
+        let retention_secs = self.config.ban_history_retention.as_secs();
+        self.auto_bans
+            .retain(|_, ban| ban.until > now || now.saturating_sub(ban.last_banned_at) <= retention_secs);
         if let Some(ref database) = self.database {
             let _ = database.delete_stale_reputations(now, ttl_seconds);
         }
@@ -533,6 +546,7 @@ impl ProviderReputationStore {
             AutoBan {
                 until: now.saturating_add(duration.as_secs()),
                 count,
+                last_banned_at: now,
             },
         );
     }
@@ -666,8 +680,9 @@ impl ProviderTrustSignal {
     ///
     /// Returns an error when the signal is malformed, expired, or unsigned.
     pub fn verify_at(&self, now: u64) -> Result<()> {
+        const CLOCK_SKEW_TOLERANCE: u64 = 3600;
         self.validate()?;
-        if self.timestamp > now {
+        if self.timestamp > now.saturating_add(CLOCK_SKEW_TOLERANCE) {
             return Err(SyncwebError::InvalidConfig(
                 "provider trust signal is from the future".to_owned(),
             ));

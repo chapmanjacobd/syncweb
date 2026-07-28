@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Write,
     path::{Path, PathBuf},
     str::FromStr,
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 
 use crate::{
+    daemon::state::FolderStatusReport,
     error::{Result, SyncwebError},
     filter::{FilterConfig, FilterEngine},
     folder::{
@@ -43,6 +44,9 @@ use std::time::Duration;
 
 #[cfg(unix)]
 const IPC_TIMEOUT: Duration = Duration::from_millis(500); // 0.5 s
+
+#[cfg(unix)]
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_millis(200);
 
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -214,23 +218,7 @@ pub enum IpcResponse {
 }
 
 /// A managed folder summary returned by the daemon.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub struct FolderStatus {
-    pub namespace: String,
-    pub path: PathBuf,
-    #[serde(default = "default_kind")]
-    pub kind: String,
-    pub session_active: bool,
-    pub last_sync_at: Option<u64>,
-    pub sync_count: u64,
-    pub entries_synced: u64,
-    pub errors: Vec<String>,
-}
-
-fn default_kind() -> String {
-    "folder".to_owned()
-}
+pub use crate::daemon::state::FolderStatusReport as FolderStatus;
 
 /// A folder managed by the daemon.
 #[non_exhaustive]
@@ -259,8 +247,8 @@ impl FolderEntry {
     }
 
     #[must_use]
-    pub fn status(&self) -> FolderStatus {
-        FolderStatus {
+    pub fn status(&self) -> FolderStatusReport {
+        FolderStatusReport {
             namespace: self.namespace.to_string(),
             path: self.path.clone(),
             kind: "folder".to_owned(),
@@ -278,6 +266,7 @@ impl FolderEntry {
 pub struct FolderRegistry {
     folders: HashMap<String, FolderEntry>,
     subscriptions: HashMap<String, PublicSubscription>,
+    removed: HashSet<String>,
 }
 
 impl FolderRegistry {
@@ -296,6 +285,7 @@ impl FolderRegistry {
         if self.folders.contains_key(&key) {
             return Err(SyncwebError::FolderAlreadyManaged);
         }
+        self.removed.remove(&key);
         self.folders.insert(key, entry);
         Ok(())
     }
@@ -311,16 +301,25 @@ impl FolderRegistry {
         if let Some(existing) = self.folders.get_mut(&key) {
             if existing.path.as_os_str().is_empty() && !entry.path.as_os_str().is_empty() {
                 existing.path = entry.path;
+                self.removed.remove(&key);
                 return Ok(());
             }
             return Err(SyncwebError::FolderAlreadyManaged);
         }
+        self.removed.remove(&key);
         self.folders.insert(key, entry);
         Ok(())
     }
 
     pub fn remove(&mut self, namespace: &iroh_docs::NamespaceId) -> Option<FolderEntry> {
-        self.folders.remove(&namespace.to_string())
+        let key = namespace.to_string();
+        self.removed.insert(key.clone());
+        self.folders.remove(&key)
+    }
+
+    #[must_use]
+    pub fn is_removed(&self, namespace: &str) -> bool {
+        self.removed.contains(namespace)
     }
 
     /// Add a subscription to the registry.
@@ -335,10 +334,10 @@ impl FolderRegistry {
     }
 
     #[must_use]
-    pub fn subscription_statuses(&self) -> Vec<FolderStatus> {
+    pub fn subscription_statuses(&self) -> Vec<FolderStatusReport> {
         self.subscriptions
             .values()
-            .map(|sub| FolderStatus {
+            .map(|sub| FolderStatusReport {
                 namespace: sub.namespace_id(),
                 path: PathBuf::new(),
                 kind: "subscription".to_owned(),
@@ -352,7 +351,7 @@ impl FolderRegistry {
     }
 
     #[must_use]
-    pub fn statuses(&self) -> Vec<FolderStatus> {
+    pub fn statuses(&self) -> Vec<FolderStatusReport> {
         let mut statuses: Vec<_> = self.folders.values().map(FolderEntry::status).collect();
         statuses.extend(self.subscription_statuses());
         statuses.sort_by(|left, right| left.namespace.cmp(&right.namespace));
@@ -823,8 +822,10 @@ impl IpcServer {
                 let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
                 if removed.is_some() {
                     let _ = cancel_session(namespace_id);
-                    if let Some(ref manager) = self.folder_manager {
-                        let _ = manager.drop(namespace_id).await;
+                    if let Some(ref manager) = self.folder_manager
+                        && let Err(error) = manager.drop(namespace_id).await
+                    {
+                        tracing::warn!(%namespace, %error, "failed to drop folder from manager after removal");
                     }
                     IpcResponse::Ok {
                         message: "folder removed".to_owned(),
@@ -901,23 +902,65 @@ impl IpcServer {
             Some(context.node.topic_tracker().clone()),
         );
         let mut intent = sync.fetch(namespace_id, strategy).await?;
+        let bytes_transferred = self.run_download_loop(&mut intent).await?;
+        Ok(bytes_transferred)
+    }
+
+    async fn run_download_loop(&self, intent: &mut crate::sync::IntentHandle) -> Result<u64> {
         let mut bytes_transferred = 0_u64;
-        while let Some(event) = intent.next().await {
-            match event {
-                SyncEvent::Stats(stats) => {
-                    bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
+
+        #[cfg(unix)]
+        {
+            use tokio::time::timeout;
+            let loop_fut = async {
+                while let Some(event) = intent.next().await {
+                    match event {
+                        SyncEvent::Stats(stats) => {
+                            bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
+                        }
+                        SyncEvent::Failed(message) => {
+                            return Err(SyncwebError::operation("daemon download failed", message));
+                        }
+                        SyncEvent::Finished => return Ok(()),
+                        SyncEvent::Started
+                        | SyncEvent::Progress { .. }
+                        | SyncEvent::Paused
+                        | SyncEvent::Resumed
+                        | SyncEvent::Cancelled => {}
+                    }
                 }
-                SyncEvent::Failed(message) => {
-                    return Err(SyncwebError::operation("daemon download failed", message));
+                Ok(())
+            };
+
+            match timeout(DOWNLOAD_TIMEOUT, loop_fut).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(_elapsed) => {
+                    let _ = intent.cancel();
                 }
-                SyncEvent::Finished => break,
-                SyncEvent::Started
-                | SyncEvent::Progress { .. }
-                | SyncEvent::Paused
-                | SyncEvent::Resumed
-                | SyncEvent::Cancelled => {}
             }
         }
+
+        #[cfg(not(unix))]
+        {
+            while let Some(event) = intent.next().await {
+                match event {
+                    SyncEvent::Stats(stats) => {
+                        bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
+                    }
+                    SyncEvent::Failed(message) => {
+                        return Err(SyncwebError::operation("daemon download failed", message));
+                    }
+                    SyncEvent::Finished => break,
+                    SyncEvent::Started
+                    | SyncEvent::Progress { .. }
+                    | SyncEvent::Paused
+                    | SyncEvent::Resumed
+                    | SyncEvent::Cancelled => {}
+                }
+            }
+        }
+
         Ok(bytes_transferred)
     }
 

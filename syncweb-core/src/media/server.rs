@@ -30,7 +30,7 @@ impl MediaServer {
     /// # Errors
     ///
     /// Returns an error if the TCP listener cannot be bound.
-    pub async fn run(self, shutdown: broadcast::Sender<()>) -> Result<(), crate::Error> {
+    pub async fn run(self, shutdown: broadcast::Sender<()>) -> Result<(), crate::SyncwebError> {
         let app = Router::new()
             .route("/media/{hash}", get(serve_media))
             .with_state(self.state);
@@ -58,7 +58,7 @@ impl MediaServer {
     }
 
     #[must_use]
-    pub fn spawn(self, shutdown: broadcast::Sender<()>) -> JoinHandle<Result<(), crate::Error>> {
+    pub fn spawn(self, shutdown: broadcast::Sender<()>) -> JoinHandle<Result<(), crate::SyncwebError>> {
         tokio::spawn(async move { self.run(shutdown).await })
     }
 }

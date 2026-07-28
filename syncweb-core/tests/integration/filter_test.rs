@@ -109,3 +109,52 @@ fn test_filter_size_criteria() -> anyhow::Result<()> {
     anyhow::ensure!(engine.evaluate(&FilterEntry::new("huge.txt", 1000)) == FilterAction::Accept);
     Ok(())
 }
+
+#[test]
+fn test_filter_default_permit_accepts_unmatched() -> anyhow::Result<()> {
+    let config = FilterConfig::default();
+    let engine = FilterEngine::new(config)?;
+    anyhow::ensure!(engine.evaluate(&FilterEntry::new("anything.txt", 100)) == FilterAction::Accept);
+    Ok(())
+}
+
+#[test]
+fn test_filter_default_deny_rejects_unmatched() -> anyhow::Result<()> {
+    let mut config = FilterConfig::default();
+    config.default_action = FilterAction::Reject;
+    let engine = FilterEngine::new(config)?;
+    anyhow::ensure!(engine.evaluate(&FilterEntry::new("anything.txt", 100)) == FilterAction::Reject);
+    Ok(())
+}
+
+#[test]
+fn test_filter_default_deny_with_explicit_rule() -> anyhow::Result<()> {
+    let mut criteria = MatchCriteria::default();
+    criteria.name = Some("important.*".to_owned());
+    let mut config = FilterConfig::default();
+    config.rules.push(FilterRule::new(FilterAction::Reject, criteria));
+    let engine = FilterEngine::new(config)?;
+    anyhow::ensure!(engine.evaluate(&FilterEntry::new("important.txt", 100)) == FilterAction::Reject);
+    anyhow::ensure!(engine.evaluate(&FilterEntry::new("other.txt", 100)) == FilterAction::Accept);
+    Ok(())
+}
+
+#[test]
+fn test_filter_default_deny_folder_rules() -> anyhow::Result<()> {
+    let mut criteria = MatchCriteria::default();
+    criteria.path = Some("allowed/**".to_owned());
+    let mut config = FilterConfig::default();
+    config.default_action = FilterAction::Reject;
+    config.folders.insert(
+        "test-folder".to_owned(),
+        vec![FilterRule::new(FilterAction::Accept, criteria)],
+    );
+    let engine = FilterEngine::new(config)?;
+    anyhow::ensure!(
+        engine.evaluate_for_folder("test-folder", &FilterEntry::new("allowed/file.txt", 10)) == FilterAction::Accept
+    );
+    anyhow::ensure!(
+        engine.evaluate_for_folder("test-folder", &FilterEntry::new("rejected/file.txt", 10)) == FilterAction::Reject
+    );
+    Ok(())
+}

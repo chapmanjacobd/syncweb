@@ -1,6 +1,4 @@
 use std::{
-    fs::OpenOptions,
-    io::Write,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -54,7 +52,7 @@ impl Config {
         let path_ref = path.as_ref();
         let contents = toml::to_string_pretty(self)
             .map_err(|error| SyncwebError::operation("failed to serialize config", error))?;
-        atomic_write(path_ref, contents.as_bytes())
+        crate::fs::atomic::atomic_write(path_ref, contents.as_bytes())
     }
 
     #[must_use]
@@ -142,13 +140,19 @@ impl Default for BandwidthConfig {
 #[non_exhaustive]
 #[derive(Default)]
 pub struct ParallelConfig {
+    /// Thread count for parallel operations. `0` (the default) means
+    /// auto-detect the number of available CPU cores.
     #[serde(default)]
     pub threads: usize,
 }
 
+/// Controls the in-memory peer availability cache used during blob resolution.
+/// This is **not** a blob data cache — it limits how many peer entries are tracked
+/// for which peers serve which blobs.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct CacheConfig {
+    /// Maximum number of entries in the peer availability tracker.
     #[serde(default = "default_cache_size")]
     pub max_cache_size: usize,
 }
@@ -161,9 +165,12 @@ impl Default for CacheConfig {
     }
 }
 
+/// Advanced / experimental configuration options.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct AdvancedConfig {
+    /// Maximum Iroh blob cache size in GiB (default: 2). Controls how much
+    /// local disk space is used for caching synced blob data.
     #[serde(default = "default_blob_cache_size")]
     pub blob_cache_size_gb: u64,
 }
@@ -258,46 +265,4 @@ fn parse_string_list(key: &str, value: &str) -> Result<Vec<String>> {
                 "{key} must be a TOML string array, for example [\"tcp://relay:22270\"]"
             ))
         })
-}
-
-fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| SyncwebError::operation("failed to create config directory", error))?;
-    }
-
-    let temporary_path = temporary_path(path);
-    let result = (|| -> Result<()> {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&temporary_path)
-            .map_err(|error| SyncwebError::operation("failed to create temporary config", error))?;
-        file.write_all(contents)?;
-        file.sync_all()?;
-        std::fs::rename(&temporary_path, path)
-            .map_err(|error| SyncwebError::operation("failed to persist config", error))
-    })();
-
-    if result.is_err()
-        && let Err(error) = std::fs::remove_file(&temporary_path)
-    {
-        tracing::warn!(
-            path = %temporary_path.display(),
-            ?error,
-            "failed to clean up temporary config file"
-        );
-    }
-    result
-}
-
-fn temporary_path(path: &Path) -> PathBuf {
-    path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()))
 }

@@ -155,6 +155,12 @@ impl NetworkManager {
                 "network ticket was issued for another device".to_owned(),
             ));
         }
+        if self.networks.contains_key(&ticket.network_id) {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "already joined network {}",
+                ticket.network_id,
+            )));
+        }
         let mut members = ticket.members;
         members.insert(self.local_node);
         let network = Network {
@@ -476,11 +482,7 @@ impl NetworkManager {
     }
 
     fn network_mut_as_owner(&mut self, id: NetworkId) -> Result<&mut Network> {
-        if self.network_as_owner(id)?.owner != self.local_node {
-            return Err(SyncwebError::InvalidConfig(
-                "only the network owner can manage members".to_owned(),
-            ));
-        }
+        self.network_as_owner(id)?;
         self.network_mut(id)
     }
 }

@@ -102,5 +102,3 @@ impl SyncwebError {
         Self::AccessDenied(reason.into())
     }
 }
-
-pub type Error = SyncwebError;

@@ -383,7 +383,7 @@ fn parse_schedule(active_hours: &str, bandwidth_configs: &[BandwidthWindowConfig
     })
 }
 
-fn current_minute() -> u16 {
+pub(crate) fn current_minute() -> u16 {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());

@@ -26,8 +26,8 @@ struct Network {
     members: HashSet<NodeId>,
     /// Folders in the network
     folders: HashSet<NamespaceId>,
-    /// Optional shared secret for invite-only networks
-    shared_secret: Option<SecretKey>,
+    /// Optional shared secret for invite-only networks (symmetric key, 32 bytes)
+    shared_secret: Option<[u8; 32]>,
 }
 
 /// Network manager - create, join, invite

@@ -341,7 +341,7 @@ impl WsSession {
     }
 
     async fn send_ok(&mut self, seq: u32, payload: &[u8]) -> Result<()> {
-        let frame = build_response(0x80, seq, payload);
+        let frame = build_response(0x80, seq, payload)?;
         self.sender
             .send(Message::Binary(frame.into()))
             .await
@@ -351,7 +351,9 @@ impl WsSession {
     async fn send_error(&mut self, seq: u32, message: &str) {
         let mut payload = Vec::new();
         encoding::write_string(&mut payload, message);
-        let frame = build_response(0x81, seq, &payload);
+        let Ok(frame) = build_response(0x81, seq, &payload) else {
+            return;
+        };
         if let Err(e) = self.sender.send(Message::Binary(frame.into())).await {
             tracing::warn!("failed to send error frame: {e}");
         }
@@ -362,7 +364,9 @@ impl WsSession {
         let mut payload = Vec::new();
         encoding::write_string(&mut payload, status);
         encoding::write_string(&mut payload, &node_id);
-        let frame = build_response(0x83, 0, &payload);
+        let Ok(frame) = build_response(0x83, 0, &payload) else {
+            return;
+        };
         let _ = self.sender.send(Message::Binary(frame.into())).await;
     }
 }
@@ -373,15 +377,20 @@ struct FrameHeader {
     payload_len: u32,
 }
 
-fn build_response(tag: u8, seq: u32, payload: &[u8]) -> Vec<u8> {
-    let payload_len = u32::try_from(payload.len()).unwrap_or(0);
-    let len = FRAME_HEADER_LEN
-        .checked_add(usize::try_from(payload_len).unwrap_or(0))
-        .unwrap_or(FRAME_HEADER_LEN);
+fn build_response(tag: u8, seq: u32, payload: &[u8]) -> Result<Vec<u8>> {
+    let payload_len = u32::try_from(payload.len()).map_err(|e| {
+        SyncwebError::operation(
+            "bridge frame payload exceeds u32::MAX",
+            format!("payload too large: {e}"),
+        )
+    })?;
+    let len = FRAME_HEADER_LEN.checked_add(payload.len()).ok_or_else(|| {
+        SyncwebError::operation("bridge frame size overflow", "payload + header exceeds address space")
+    })?;
     let mut frame = Vec::with_capacity(len);
     frame.push(tag);
     frame.extend_from_slice(&seq.to_be_bytes());
     frame.extend_from_slice(&payload_len.to_be_bytes());
     frame.extend_from_slice(payload);
-    frame
+    Ok(frame)
 }

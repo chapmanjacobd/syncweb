@@ -1602,7 +1602,7 @@ async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Resul
     let folder = resolve_folder(&manager, std::path::Path::new(&command.folder)).await?;
     let entries = node.docs_engine().list_latest(folder.doc()).await?;
 
-    let mut collector = syncweb_core::stats::FileStatsCollector::new();
+    let mut collector = syncweb_core::bandwidth_stats::FileStatsCollector::new();
     for entry in entries {
         if entry.key().starts_with(b"sys/") {
             continue;

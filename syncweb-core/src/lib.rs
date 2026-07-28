@@ -20,6 +20,7 @@
 //! - `search`: Find engine for querying synchronized assets.
 //! - `sync`: The core synchronization engine and session management.
 //!
+pub mod bandwidth_stats;
 pub mod bridge;
 pub mod daemon;
 pub mod editorial;
@@ -40,13 +41,12 @@ pub mod search;
 pub mod snapshot;
 pub mod sort;
 pub mod stat;
-pub mod stats;
 pub mod storage;
 pub mod sync;
 pub mod verify;
 
-pub use error::{Error, Result, SyncwebError};
-pub use folder::archive_export;
+pub use error::{Result, SyncwebError};
+pub use folder::archive_export::{DropExportOptions, DropExportResult, DropExporter, export_archive};
 pub use folder::archive_import;
 pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImporter, import_archive};
 pub use folder::archive_verify::{

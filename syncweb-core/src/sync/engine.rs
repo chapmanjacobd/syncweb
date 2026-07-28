@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
+    pin::Pin,
     time::{Duration, Instant},
 };
 
@@ -21,6 +22,13 @@ use crate::{
 
 use super::checkpoint::SyncCheckpoint;
 use super::{FetchStrategy, IntentHandle, SessionMode, SubscribeParams, SyncCommand, SyncEvent};
+
+type IntentSetup = (
+    IntentState,
+    Pin<Box<tokio::time::Sleep>>,
+    Option<SyncCheckpoint>,
+    HashSet<Vec<u8>>,
+);
 
 /// Current aggregate statistics for a synchronization intent.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -252,42 +260,15 @@ async fn run_intent(
     mut commands: mpsc::UnboundedReceiver<SyncCommand>,
     node_db: Option<NodeDatabase>,
 ) {
+    const SETTLE: Duration = Duration::from_secs(2);
+
     let started = Instant::now();
     if !send_initial_events(&events, started) {
         return;
     }
-    if !config.mode.is_continuous() {
-        let _result = events.send(SyncEvent::Finished);
-        return;
-    }
 
-    let namespace_id = folder.namespace_id();
-    let checkpoint = node_db
-        .as_ref()
-        .and_then(|db| match SyncCheckpoint::resume(db, namespace_id) {
-            Ok(Some(cp)) => {
-                tracing::info!(%namespace_id, session = %cp.session_id(), "resuming sync checkpoint");
-                Some(cp)
-            }
-            Ok(None) => SyncCheckpoint::create_session(db, namespace_id)
-                .map_err(|e| tracing::warn!(%namespace_id, %e, "failed to create checkpoint"))
-                .ok(),
-            Err(err) => {
-                tracing::warn!(%namespace_id, %err, "failed to resume checkpoint");
-                SyncCheckpoint::create_session(db, namespace_id)
-                    .map_err(|e2| tracing::warn!(%namespace_id, %e2, "failed to create checkpoint"))
-                    .ok()
-            }
-        });
-    let completed_keys: HashSet<Vec<u8>> = checkpoint
-        .as_ref()
-        .and_then(|cp| cp.completed_keys().ok())
-        .unwrap_or_default();
+    let (mut state, mut quiesce, checkpoint, completed_keys) = setup_intent_checkpoint(&folder, node_db.as_ref());
 
-    let mut state = IntentState {
-        completed: u64::try_from(completed_keys.len()).unwrap_or(u64::MAX),
-        ..IntentState::default()
-    };
     loop {
         tokio::select! {
             received_command = commands.recv() => {
@@ -300,6 +281,10 @@ async fn run_intent(
                     finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 }
+            }
+            () = &mut quiesce, if !config.mode.is_continuous() && state.sync_finished && state.sizes.is_empty() => {
+                finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                return;
             }
             next_event = live_events.next(), if !state.paused => {
                 let Some(event_result) = next_event else {
@@ -367,6 +352,12 @@ async fn run_intent(
                     finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
                 }
+                if !config.mode.is_continuous() && state.sync_finished {
+                    let deadline = tokio::time::Instant::now()
+                        .checked_add(SETTLE)
+                        .unwrap_or_else(tokio::time::Instant::now);
+                    quiesce.as_mut().reset(deadline);
+                }
                 if !send_progress(&events, &state, started.elapsed()) {
                     finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                     return;
@@ -374,6 +365,36 @@ async fn run_intent(
             }
         }
     }
+}
+
+fn setup_intent_checkpoint(folder: &crate::folder::SyncwebFolder, node_db: Option<&NodeDatabase>) -> IntentSetup {
+    let namespace_id = folder.namespace_id();
+    let checkpoint = node_db.and_then(|db| match SyncCheckpoint::resume(db, namespace_id) {
+        Ok(Some(cp)) => {
+            tracing::info!(%namespace_id, session = %cp.session_id(), "resuming sync checkpoint");
+            Some(cp)
+        }
+        Ok(None) => SyncCheckpoint::create_session(db, namespace_id)
+            .map_err(|e| tracing::warn!(%namespace_id, %e, "failed to create checkpoint"))
+            .ok(),
+        Err(err) => {
+            tracing::warn!(%namespace_id, %err, "failed to resume checkpoint");
+            SyncCheckpoint::create_session(db, namespace_id)
+                .map_err(|e2| tracing::warn!(%namespace_id, %e2, "failed to create checkpoint"))
+                .ok()
+        }
+    });
+    let completed_keys: HashSet<Vec<u8>> = checkpoint
+        .as_ref()
+        .and_then(|cp| cp.completed_keys().ok())
+        .unwrap_or_default();
+
+    let state = IntentState {
+        completed: u64::try_from(completed_keys.len()).unwrap_or(u64::MAX),
+        ..IntentState::default()
+    };
+    let quiesce = Box::pin(tokio::time::sleep(Duration::MAX));
+    (state, quiesce, checkpoint, completed_keys)
 }
 
 fn finalize_checkpoint(
@@ -435,6 +456,7 @@ struct IntentState {
     sizes: HashMap<Hash, u64>,
     area_count: u64,
     area_size: u64,
+    sync_finished: bool,
 }
 
 impl IntentState {
@@ -454,17 +476,20 @@ impl IntentState {
                 self.transferred = self.transferred.saturating_add(self.sizes.remove(&hash).unwrap_or(0));
             }
             LiveEvent::PendingContentReady => {}
-            LiveEvent::SyncFinished(sync_event) => match sync_event.result {
-                Ok(details)
-                    if params.area_filter.is_none() && params.area_of_interest.is_none() && filter.is_none() =>
-                {
-                    self.completed = self
-                        .completed
-                        .saturating_add(u64::try_from(details.entries_received).unwrap_or(u64::MAX));
+            LiveEvent::SyncFinished(sync_event) => {
+                self.sync_finished = true;
+                match sync_event.result {
+                    Ok(details)
+                        if params.area_filter.is_none() && params.area_of_interest.is_none() && filter.is_none() =>
+                    {
+                        self.completed = self
+                            .completed
+                            .saturating_add(u64::try_from(details.entries_received).unwrap_or(u64::MAX));
+                    }
+                    Ok(_details) => {}
+                    Err(error) => return Err(error),
                 }
-                Ok(_details) => {}
-                Err(error) => return Err(error),
-            },
+            }
         }
         Ok(())
     }

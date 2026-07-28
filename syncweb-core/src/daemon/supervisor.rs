@@ -233,7 +233,6 @@ impl IntentSupervisor {
                 {
                     return Ok(supervised);
                 }
-                supervised.retry_count = retry_number;
                 supervised = self
                     .run_intent_with_filter(sync, namespace, params.clone(), options.filter.clone())
                     .await;
@@ -323,10 +322,11 @@ impl IntentSupervisor {
     /// Return the delay for a one-based retry number.
     #[must_use]
     pub fn backoff_delay(&self, retry_number: u32) -> Duration {
+        const MIN_BACKOFF: Duration = Duration::from_millis(100);
         if retry_number == 0 {
             return Duration::ZERO;
         }
-        let mut delay = self.backoff_base;
+        let mut delay = self.backoff_base.max(MIN_BACKOFF);
         for _ in 1..retry_number {
             delay = match delay.checked_mul(2) {
                 Some(value) if value <= self.backoff_max => value,
@@ -383,7 +383,8 @@ mod tests {
     #[test]
     fn backoff_delay_zero_base() {
         let supervisor = IntentSupervisor::new(3, Duration::ZERO, Duration::from_mins(1));
-        assert_eq!(supervisor.backoff_delay(5), Duration::ZERO);
+        assert_eq!(supervisor.backoff_delay(1), Duration::from_millis(100));
+        assert_eq!(supervisor.backoff_delay(5), Duration::from_millis(1600));
     }
 
     #[test]

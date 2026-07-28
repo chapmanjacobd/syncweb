@@ -55,6 +55,7 @@ axum.workspace = true
 hyper.workspace = true
 tokio-util.workspace = true
 mime.workspace = true
+parking_lot.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

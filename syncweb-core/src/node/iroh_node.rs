@@ -94,7 +94,7 @@ impl IrohNode {
             .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
 
         // Register mDNS address lookup for local network peer discovery.
-        if let Ok(_mdns) = iroh_mdns_address_lookup::MdnsAddressLookup::builder()
+        if let Err(error) = iroh_mdns_address_lookup::MdnsAddressLookup::builder()
             .build(endpoint.id())
             .map_err(|error| SyncwebError::operation("failed to build mDNS address lookup", error))
             .and_then(|mdns| {
@@ -104,6 +104,8 @@ impl IrohNode {
                     .map(|lookup| lookup.add(mdns))
             })
         {
+            tracing::warn!(%error, "mDNS address lookup registration failed — local peer discovery unavailable");
+        } else {
             tracing::debug!("mDNS address lookup registered");
         }
 
@@ -204,5 +206,13 @@ impl IrohNode {
     /// Returns an error if stopping the node fails.
     pub async fn shutdown(self) -> Result<()> {
         self.stop().await
+    }
+}
+
+impl Drop for IrohNode {
+    fn drop(&mut self) {
+        if !self.router.is_shutdown() {
+            tracing::warn!("IrohNode dropped without calling stop() — router shutdown may be incomplete");
+        }
     }
 }

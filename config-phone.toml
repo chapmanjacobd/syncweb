@@ -6,5 +6,10 @@ max_download = "500KB/s"
 [parallel]
 threads = 1
 
+# Peer availability tracker entry limit (not a blob data cache).
+[cache]
+max_cache_size = 1000
+
+# Iroh blob data cache size in GiB.
 [advanced]
 blob_cache_size_gb = 2

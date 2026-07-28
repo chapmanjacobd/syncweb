@@ -9,7 +9,7 @@ use rusqlite::{Connection, params};
 
 use crate::{
     Result, SyncwebError,
-    stats::{BandwidthStats, FolderStats, PeerStats},
+    bandwidth_stats::{BandwidthStats, FolderStats, PeerStats},
 };
 
 #[derive(Clone, Debug)]

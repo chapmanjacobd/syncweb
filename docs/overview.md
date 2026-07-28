@@ -13,7 +13,6 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 - iroh-blobs public sharing - Native public read-only folders via ticket sharing
 - BLAKE3 verified streaming - No hash tree sync needed, verified on-the-fly
 - QUIC transport - Built-in NAT traversal, relays, connection migration
-- No separate daemon - Library-first, embeddable
 - Version tracking & Collections - Generalized collection manifests with immutable versions and mutable heads, supporting data packages, datasets, media libraries, and virtual collections.
 - Content pinning - Prevent garbage collection of publicly shared blobs
 - Partial folder fetch - Fetch only well-seeded portions of poorly-available folders

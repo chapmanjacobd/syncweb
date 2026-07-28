@@ -35,7 +35,7 @@ use crate::{
 use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, current_timestamp,
     daemon_socket_path,
-    state::{BandwidthSnapshot, DaemonStatusReport, FolderStatusReport, ScheduleStatus},
+    state::{BandwidthSnapshot, DaemonStatusReport, ScheduleStatus},
     supervisor::{IntentControls, IntentSupervisor, SupervisionOptions},
 };
 
@@ -105,7 +105,7 @@ pub struct Daemon {
     node: Arc<IrohNode>,
     handle: DaemonHandle,
     sync_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Option<String>>>,
-    intent_tasks: Mutex<HashMap<NamespaceId, JoinHandle<()>>>,
+    intent_tasks: Mutex<HashMap<NamespaceId, Option<JoinHandle<()>>>>,
     intent_controls: IntentControls,
     watchers: Mutex<HashMap<String, FsWatcher>>,
     pending_watch_events: Mutex<HashMap<String, PendingWatch>>,
@@ -116,6 +116,7 @@ pub struct Daemon {
     attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     revocation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    maintenance_task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 struct PendingWatch {
@@ -236,14 +237,22 @@ impl Daemon {
             let keys: HashSet<iroh::PublicKey> = networks.iter().flat_map(|n| n.members.iter().copied()).collect();
             Arc::new(RwLock::new(keys))
         };
-        let (node, folder_manager, mut sync_engine) = Self::open_identity_and_node(
+        let (node, folder_manager, mut sync_engine) = match Self::open_identity_and_node(
             &config.data_dir,
             &node_db,
             &pid_lock,
             config.relay_mode.clone(),
             member_keys.clone(),
         )
-        .await?;
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = node_db.remove_lifecycle();
+                let _ = pid_lock.release();
+                return Err(error);
+            }
+        };
         sync_engine = sync_engine.with_node_db(node_db.clone());
 
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
@@ -324,6 +333,7 @@ impl Daemon {
             attestation_listener: tokio::sync::Mutex::new(None),
             report_listener: tokio::sync::Mutex::new(None),
             revocation_listener: tokio::sync::Mutex::new(None),
+            maintenance_task: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -388,28 +398,13 @@ impl Daemon {
             rayon_threads = self.archive_pool.thread_count(),
             "daemon runtime initialized"
         );
-        self.load_folders().await?;
-        self.reannounce_folders().await;
-        self.load_subscriptions().await?;
-        self.start_watching().await?;
-        self.subscribe_network_gossip().await;
-        self.spawn_membership_listeners().await;
-
+        self.run_initial_setup().await?;
         let (mut server_task, bridge_task, media_task) = self.spawn_server_tasks();
-
-        let mut shutdown = self.handle.shutdown_sender.subscribe();
-        let shutdown_sender = self.handle.shutdown_sender.clone();
-        let mut signal_task: SignalTask<'_> = Box::pin(self.handle_signals(shutdown_sender.clone()));
-        let interval_duration = self.config.sync_interval.max(Duration::from_millis(1));
-        let mut interval = tokio::time::interval(interval_duration);
-        let mut watch_interval = tokio::time::interval(Duration::from_millis(100));
+        let (mut shutdown, mut signal_task, mut interval, mut watch_interval, shutdown_sender) = self.runtime_timers();
         if let Err(error) = self.run_cycle().await {
             tracing::error!(%error, "initial daemon cycle failed");
         }
-        self.spawn_attestation_listener().await;
-        self.spawn_report_listener().await;
-        self.spawn_revocation_listener().await;
-        self.spawn_maintenance_task();
+        self.spawn_listeners().await;
         let result = self
             .run_event_loop(
                 &mut server_task,
@@ -423,6 +418,41 @@ impl Daemon {
         send_shutdown(&shutdown_sender);
         self.wait_for_server_tasks(server_task, bridge_task, media_task).await?;
         result
+    }
+
+    async fn run_initial_setup(&self) -> Result<()> {
+        self.load_folders().await?;
+        self.reannounce_folders().await;
+        self.load_subscriptions().await?;
+        self.start_watching().await?;
+        self.subscribe_network_gossip().await;
+        self.spawn_membership_listeners().await;
+        Ok(())
+    }
+
+    fn runtime_timers(
+        &self,
+    ) -> (
+        broadcast::Receiver<()>,
+        SignalTask<'_>,
+        tokio::time::Interval,
+        tokio::time::Interval,
+        broadcast::Sender<()>,
+    ) {
+        let shutdown = self.handle.shutdown_sender.subscribe();
+        let shutdown_sender = self.handle.shutdown_sender.clone();
+        let signal_task: SignalTask<'_> = Box::pin(self.handle_signals(shutdown_sender.clone()));
+        let interval_duration = self.config.sync_interval.max(Duration::from_millis(1));
+        let interval = tokio::time::interval(interval_duration);
+        let watch_interval = tokio::time::interval(Duration::from_millis(100));
+        (shutdown, signal_task, interval, watch_interval, shutdown_sender)
+    }
+
+    async fn spawn_listeners(&self) {
+        self.spawn_attestation_listener().await;
+        self.spawn_report_listener().await;
+        self.spawn_revocation_listener().await;
+        self.spawn_maintenance_task().await;
     }
 
     fn spawn_server_tasks(&self) -> ServerTasks {
@@ -512,7 +542,9 @@ impl Daemon {
 
     async fn run_cycle(&self) -> Result<()> {
         self.reload_if_requested().await?;
-        self.load_folders().await?;
+        if let Err(error) = self.load_folders().await {
+            tracing::warn!(%error, "folder load cycle failed — continuing");
+        }
         self.start_watching().await?;
         let statuses = self.handle.folder_registry.read().await.statuses();
         for folder in statuses {
@@ -554,18 +586,16 @@ impl Daemon {
     }
 
     async fn start_supervision(&self, namespace: NamespaceId) -> Result<()> {
-        if is_active(namespace) {
-            return Ok(());
-        }
         {
             let mut tasks = self
                 .intent_tasks
                 .lock()
                 .map_err(|error| SyncwebError::operation("daemon intent task mutex is poisoned", error))?;
-            tasks.retain(|_, task| !task.is_finished());
-            if tasks.contains_key(&namespace) {
+            tasks.retain(|_, task| task.as_ref().is_none_or(|handle| !handle.is_finished()));
+            if tasks.contains_key(&namespace) || is_active(namespace) {
                 return Ok(());
             }
+            tasks.insert(namespace, None);
         }
         let network_id = {
             let guard = self.network_manager.read().await;
@@ -642,7 +672,7 @@ impl Daemon {
         self.intent_tasks
             .lock()
             .map_err(|error| SyncwebError::operation("daemon intent task mutex is poisoned", error))?
-            .insert(namespace, task);
+            .insert(namespace, Some(task));
         ready_receiver
             .await
             .map_err(|error| SyncwebError::operation("daemon intent startup notification failed", error))?;
@@ -872,7 +902,7 @@ impl Daemon {
         let statuses = self.handle.folder_registry.read().await.statuses();
         let schedule = self.schedule_manager.read().await.clone();
         let schedule_report = schedule.as_ref().map(|manager| {
-            let minute = current_minute();
+            let minute = crate::schedule::current_minute();
             let next = manager.next_active_window_start_at(None, minute);
             let next_window_start = next.map(|next_minute| {
                 let offset = if next_minute >= minute {
@@ -893,17 +923,7 @@ impl Daemon {
             node_id: state.node_id,
             started_at: state.started_at,
             uptime_seconds: current_timestamp().saturating_sub(state.started_at),
-            folders: statuses
-                .into_iter()
-                .map(|folder| FolderStatusReport {
-                    namespace: folder.namespace,
-                    path: folder.path,
-                    session_active: folder.session_active,
-                    last_sync_at: folder.last_sync_at,
-                    entries_synced: folder.entries_synced,
-                    errors: folder.errors,
-                })
-                .collect(),
+            folders: statuses.into_iter().collect(),
             bandwidth: BandwidthSnapshot {
                 upload_total: current_stats.total_upload,
                 download_total: current_stats.total_download,
@@ -920,13 +940,16 @@ impl Daemon {
         let folders = self.folder_manager.list().await?;
         let mut registry = self.handle.folder_registry.write().await;
         for folder in folders {
-            let namespace = folder.namespace_id();
+            let namespace_key = folder.namespace_id().to_string();
+            if registry.is_removed(&namespace_key) {
+                continue;
+            }
             if !registry
                 .statuses()
                 .iter()
-                .any(|status| status.namespace == namespace.to_string())
+                .any(|status| status.namespace == namespace_key)
             {
-                registry.add(FolderEntry::new(namespace, PathBuf::new()))?;
+                registry.add(FolderEntry::new(folder.namespace_id(), PathBuf::new()))?;
             }
         }
         drop(registry);
@@ -997,6 +1020,13 @@ impl Daemon {
         self.node_db.save_lifecycle(&stopping_state)?;
         self.save_status_report().await?;
 
+        self.cancel_active_sessions().await;
+        self.join_intent_tasks().await?;
+        self.abort_listeners().await;
+        self.finalize_node_stop().await
+    }
+
+    async fn cancel_active_sessions(&self) {
         let namespaces: Vec<_> = self
             .handle
             .folder_registry
@@ -1011,7 +1041,9 @@ impl Daemon {
                 tracing::warn!(%namespace, "intent did not accept shutdown cancellation");
             }
         }
+    }
 
+    async fn join_intent_tasks(&self) -> Result<()> {
         let tasks = {
             let mut task_map = self
                 .intent_tasks
@@ -1020,31 +1052,45 @@ impl Daemon {
             std::mem::take(&mut *task_map)
         };
         for (_, task) in tasks {
-            task.await
-                .map_err(|error| SyncwebError::operation("daemon intent task failed", error))?;
+            if let Some(handle) = task {
+                handle
+                    .await
+                    .map_err(|error| SyncwebError::operation("daemon intent task failed", error))?;
+            }
         }
+        Ok(())
+    }
 
+    async fn abort_listeners(&self) {
         let attestation_handle = self.attestation_listener.lock().await.take();
-        if let Some(handle) = attestation_handle {
-            handle.abort();
+        if let Some(inner) = attestation_handle {
+            inner.abort();
         }
-
         let report_handle = self.report_listener.lock().await.take();
-        if let Some(handle) = report_handle {
-            handle.abort();
+        if let Some(inner) = report_handle {
+            inner.abort();
         }
-
         let revocation_handle = self.revocation_listener.lock().await.take();
-        if let Some(handle) = revocation_handle {
-            handle.abort();
+        if let Some(inner) = revocation_handle {
+            inner.abort();
         }
+        let maintenance_handle = self.maintenance_task.lock().await.take();
+        if let Some(inner) = maintenance_handle {
+            inner.abort();
+        }
+    }
 
-        let node_result = self.node.stop().await;
+    async fn finalize_node_stop(&self) -> Result<()> {
+        let node_result = tokio::time::timeout(Duration::from_secs(30), self.node.stop()).await;
         self.handle.set_status(DaemonStatus::Stopped).await;
         let remove_result = self.node_db.remove_lifecycle();
         let remove_status_result = self.node_db.remove_status();
         let release_result = self.pid_lock.release();
-        node_result?;
+        match node_result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::warn!(%error, "node stop reported an error"),
+            Err(_) => tracing::warn!("node stop timed out after 30s"),
+        }
         remove_result?;
         remove_status_result?;
         release_result?;
@@ -1089,11 +1135,11 @@ impl Daemon {
 
     /// Spawn a background task that periodically vacuums databases with
     /// excessive freelist pages.
-    fn spawn_maintenance_task(&self) {
+    async fn spawn_maintenance_task(&self) {
         let node_db = self.node_db.clone();
         let stats_db = self.stats_db.clone();
         let mut shutdown = self.handle.shutdown_sender.subscribe();
-        tokio::spawn(async move {
+        let handle: tokio::task::JoinHandle<()> = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_hours(24));
             loop {
                 tokio::select! {
@@ -1119,6 +1165,7 @@ impl Daemon {
                 }
             }
         });
+        *self.maintenance_task.lock().await = Some(handle);
     }
 
     async fn subscribe_network_gossip(&self) {
@@ -1268,13 +1315,6 @@ fn send_shutdown(sender: &broadcast::Sender<()>) {
     match sender.send(()) {
         Ok(_) | Err(broadcast::error::SendError(())) => {}
     }
-}
-
-fn current_minute() -> u16 {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs());
-    u16::try_from((seconds % 86_400).div_euclid(60)).unwrap_or(0)
 }
 
 fn is_recoverable_watch_error(error: &SyncwebError) -> bool {

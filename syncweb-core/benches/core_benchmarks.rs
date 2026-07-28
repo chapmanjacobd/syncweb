@@ -37,6 +37,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use iroh::SecretKey;
 use iroh_blobs::Hash;
 use syncweb_core::{
+    bandwidth_stats::BandwidthStats,
     daemon::{
         BandwidthSnapshot, DaemonHandle, DaemonState, DaemonStatus, DaemonStatusReport, FolderStatusReport, IpcClient,
         IpcCommand, IpcRequest, IpcResponse, IpcServer, ManagedPool, StateFile,
@@ -51,7 +52,6 @@ use syncweb_core::{
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
     sort::{SortConfig, SortCriterion, SortEntry, Sorter},
-    stats::BandwidthStats,
 };
 
 fn make_criteria(extensions: Option<Vec<String>>, min_seeders: Option<usize>, max_size: Option<u64>) -> MatchCriteria {

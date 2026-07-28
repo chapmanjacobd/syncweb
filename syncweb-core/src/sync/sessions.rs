@@ -1,4 +1,5 @@
-use std::sync::{Mutex, OnceLock};
+use parking_lot::Mutex;
+use std::sync::OnceLock;
 
 use iroh_docs::NamespaceId;
 use tokio::sync::mpsc;
@@ -21,28 +22,28 @@ pub struct ActiveSession {
 impl ActiveSession {
     #[must_use]
     pub fn register(namespace: NamespaceId, cancel: CancelSender) -> Self {
-        if let Ok(mut guard) = registry().lock() {
-            guard.retain(|(id, _)| *id != namespace);
-            guard.push((namespace, cancel));
-        }
+        let mut guard = registry().lock();
+        guard.retain(|(id, _)| *id != namespace);
+        guard.push((namespace, cancel));
+        drop(guard);
         Self { namespace }
     }
 }
 
 impl Drop for ActiveSession {
     fn drop(&mut self) {
-        if let Ok(mut guard) = registry().lock() {
-            guard.retain(|(id, _)| *id != self.namespace);
-        }
+        let mut guard = registry().lock();
+        guard.retain(|(id, _)| *id != self.namespace);
+        drop(guard);
     }
 }
 
 #[must_use]
 pub fn cancel_session(namespace: NamespaceId) -> bool {
-    if let Ok(mut guard) = registry().lock()
-        && let Some(pos) = guard.iter().position(|(id, _)| *id == namespace)
-    {
+    let mut guard = registry().lock();
+    if let Some(pos) = guard.iter().position(|(id, _)| *id == namespace) {
         let (_, cancel) = guard.remove(pos);
+        drop(guard);
         return cancel.send(SyncCommand::Cancel).is_ok();
     }
     false
@@ -50,7 +51,8 @@ pub fn cancel_session(namespace: NamespaceId) -> bool {
 
 #[must_use]
 pub fn is_active(namespace: NamespaceId) -> bool {
-    registry()
-        .lock()
-        .is_ok_and(|guard| guard.iter().any(|(id, _)| *id == namespace))
+    let guard = registry().lock();
+    let active = guard.iter().any(|(id, _)| *id == namespace);
+    drop(guard);
+    active
 }

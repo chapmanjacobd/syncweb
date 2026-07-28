@@ -17,7 +17,7 @@ use crate::{
         BandwidthSnapshot, DaemonState, DaemonStatus, DaemonStatusReport, FolderStatusReport, ScheduleStatus,
         current_timestamp,
     },
-    filter::{FilterEngine, FilterEntry, FilterRule},
+    filter::{FilterAction, FilterEngine, FilterEntry, FilterRule},
     folder::{CollectionState, InstalledCollection},
     net::network::{Network, NetworkId, network_topic, parse_public_key},
     storage::config::Config as AppConfig,
@@ -1062,6 +1062,7 @@ impl NodeDatabase {
         let filter_config = crate::filter::FilterConfig {
             rules: global_rules,
             folders: folder_rules,
+            default_action: FilterAction::default(),
         };
         FilterEngine::new(filter_config).map(Some)
     }

@@ -52,10 +52,10 @@ impl EditorialState {
         )
     }
 
-    /// Whether the content has been withdrawn (retracted OR archived).
+    /// Whether the content has been withdrawn (retracted).
     #[must_use]
     pub const fn is_withdrawn(self) -> bool {
-        matches!(self, Self::Retracted | Self::Archived)
+        matches!(self, Self::Retracted)
     }
 
     /// Check whether a transition from `self` to `target` is a valid editorial

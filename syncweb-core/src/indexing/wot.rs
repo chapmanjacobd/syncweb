@@ -1313,10 +1313,24 @@ impl WotService {
     /// Create a service backed by an indexing database.
     #[must_use]
     pub fn with_database(database: IndexingDatabase, policy: TrustPolicy) -> Self {
+        let mut state = WotState::default();
+        if let Ok(records) = database.load_provider_trust_records() {
+            let now = current_epoch_seconds();
+            for record in records {
+                if record.expires_at.is_some_and(|e| e <= now) {
+                    continue;
+                }
+                if record.verify_signature().is_err() {
+                    tracing::warn!("skipping provider trust record with invalid signature on load");
+                    continue;
+                }
+                state.provider_trust.entry(record.provider).or_default().push(record);
+            }
+        }
         Self {
             database,
             policy: Arc::new(Mutex::new(policy)),
-            state: Arc::new(Mutex::new(WotState::default())),
+            state: Arc::new(Mutex::new(state)),
         }
     }
 
@@ -1431,21 +1445,32 @@ impl WotService {
                 "provider trust record issuer is not trusted for its scope".to_owned(),
             ));
         }
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|error| SyncwebError::operation("Web-of-Trust state lock poisoned", error))?;
-        let records = state.provider_trust.entry(record.provider).or_default();
-        if records.iter().any(|existing| {
-            existing.issuer == record.issuer && existing.scope == record.scope && existing.sequence >= record.sequence
-        }) {
-            return Ok(false);
-        }
-        records.retain(|existing| {
-            !(existing.issuer == record.issuer && existing.scope == record.scope && existing.sequence < record.sequence)
-        });
-        records.push(record);
-        drop(state);
+        let all_records = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|error| SyncwebError::operation("Web-of-Trust state lock poisoned", error))?;
+            let records = state.provider_trust.entry(record.provider).or_default();
+            if records.iter().any(|existing| {
+                existing.issuer == record.issuer
+                    && existing.scope == record.scope
+                    && existing.sequence >= record.sequence
+            }) {
+                return Ok(false);
+            }
+            records.retain(|existing| {
+                !(existing.issuer == record.issuer
+                    && existing.scope == record.scope
+                    && existing.sequence < record.sequence)
+            });
+            records.push(record);
+            state
+                .provider_trust
+                .values()
+                .flat_map(|v| v.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+        self.database.save_provider_trust_records(&all_records)?;
         Ok(true)
     }
 

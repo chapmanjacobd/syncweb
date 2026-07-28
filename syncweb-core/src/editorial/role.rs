@@ -48,6 +48,6 @@ impl EditorialRole {
     /// Whether a holder of this role may retract or archive published content.
     #[must_use]
     pub const fn can_withdraw(self) -> bool {
-        matches!(self, Self::Owner | Self::Maintainer)
+        matches!(self, Self::Owner | Self::Maintainer | Self::Publisher)
     }
 }

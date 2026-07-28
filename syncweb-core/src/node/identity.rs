@@ -93,37 +93,8 @@ impl IdentityManager {
 }
 
 fn write_secret_key(path: &Path, secret_key: &SecretKey) -> Result<()> {
-    use std::io::Write;
-
-    let temporary_path = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-
-    let result = (|| -> Result<()> {
-        let mut file = options
-            .open(&temporary_path)
-            .map_err(|error| SyncwebError::identity(path, error))?;
-        let encoded = base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &secret_key.to_bytes());
-        file.write_all(encoded.as_bytes())?;
-        file.sync_all()?;
-        std::fs::rename(&temporary_path, path).map_err(|error| SyncwebError::identity(path, error))
-    })();
-
-    if result.is_err()
-        && let Err(error) = std::fs::remove_file(&temporary_path)
-    {
-        tracing::warn!(
-            path = %temporary_path.display(),
-            ?error,
-            "failed to clean up temporary identity file"
-        );
-    }
-    result
+    let encoded = base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &secret_key.to_bytes());
+    crate::fs::atomic::atomic_write(path, encoded.as_bytes()).map_err(|error| SyncwebError::identity(path, error))
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

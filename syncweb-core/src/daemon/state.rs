@@ -444,14 +444,13 @@ pub fn pid_is_alive(pid: u32) -> bool {
     {
         fn is_process_alive(pid: u32) -> bool {
             use std::ffi::c_void;
-            use std::ptr;
 
             const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
             const STILL_ACTIVE: u32 = 259;
 
             type HANDLE = *mut c_void;
 
-            extern "system" {
+            unsafe extern "system" {
                 fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
                 fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut u32) -> i32;
                 fn CloseHandle(hObject: HANDLE) -> i32;

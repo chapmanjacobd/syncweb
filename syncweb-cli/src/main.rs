@@ -459,7 +459,10 @@ async fn daemon_client_or_start(
         return Ok(Some(client));
     }
 
-    let base = data_dir.parent().unwrap_or(data_dir);
+    let base = data_dir
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(data_dir);
     let lock = PidLock::new(data_dir);
     let mut daemon_child = if lock.try_acquire()? {
         lock.release()?;

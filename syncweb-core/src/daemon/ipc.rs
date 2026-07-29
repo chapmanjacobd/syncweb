@@ -912,30 +912,30 @@ impl IpcServer {
     async fn run_download_loop(&self, intent: &mut crate::sync::IntentHandle) -> Result<u64> {
         let mut bytes_transferred = 0_u64;
 
+        let loop_body = async {
+            while let Some(event) = intent.next().await {
+                match event {
+                    SyncEvent::Stats(stats) => {
+                        bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
+                    }
+                    SyncEvent::Failed(message) => {
+                        return Err(SyncwebError::operation("daemon download failed", message));
+                    }
+                    SyncEvent::Finished => return Ok(()),
+                    SyncEvent::Started
+                    | SyncEvent::Progress { .. }
+                    | SyncEvent::Paused
+                    | SyncEvent::Resumed
+                    | SyncEvent::Cancelled => {}
+                }
+            }
+            Ok(())
+        };
+
         #[cfg(unix)]
         {
             use tokio::time::timeout;
-            let loop_fut = async {
-                while let Some(event) = intent.next().await {
-                    match event {
-                        SyncEvent::Stats(stats) => {
-                            bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
-                        }
-                        SyncEvent::Failed(message) => {
-                            return Err(SyncwebError::operation("daemon download failed", message));
-                        }
-                        SyncEvent::Finished => return Ok(()),
-                        SyncEvent::Started
-                        | SyncEvent::Progress { .. }
-                        | SyncEvent::Paused
-                        | SyncEvent::Resumed
-                        | SyncEvent::Cancelled => {}
-                    }
-                }
-                Ok(())
-            };
-
-            match timeout(DOWNLOAD_TIMEOUT, loop_fut).await {
+            match timeout(DOWNLOAD_TIMEOUT, loop_body).await {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => return Err(error),
                 Err(_elapsed) => {
@@ -945,24 +945,7 @@ impl IpcServer {
         }
 
         #[cfg(not(unix))]
-        {
-            while let Some(event) = intent.next().await {
-                match event {
-                    SyncEvent::Stats(stats) => {
-                        bytes_transferred = bytes_transferred.max(stats.bytes_transferred);
-                    }
-                    SyncEvent::Failed(message) => {
-                        return Err(SyncwebError::operation("daemon download failed", message));
-                    }
-                    SyncEvent::Finished => break,
-                    SyncEvent::Started
-                    | SyncEvent::Progress { .. }
-                    | SyncEvent::Paused
-                    | SyncEvent::Resumed
-                    | SyncEvent::Cancelled => {}
-                }
-            }
-        }
+        loop_body.await?;
 
         Ok(bytes_transferred)
     }

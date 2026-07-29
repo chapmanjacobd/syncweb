@@ -286,9 +286,13 @@ impl Daemon {
             sync_sender,
             initial_handle.reload_requested.clone(),
         );
-        let resilience = IndexingService::new(config.data_dir.join("indexing.sqlite"))
-            .ok()
-            .map(|indexing| indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default())));
+        let resilience = match IndexingService::new(config.data_dir.join("indexing.sqlite")) {
+            Ok(indexing) => Some(indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default()))),
+            Err(error) => {
+                tracing::warn!(%error, "failed to open indexing database; resilience disabled");
+                None
+            }
+        };
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
         let network_logger = NetworkLogger::new(stats_db.clone());
         let local_node_id = node.endpoint().id();

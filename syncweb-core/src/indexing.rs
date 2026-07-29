@@ -1090,14 +1090,40 @@ impl IndexingDatabase {
                 && let Ok(rev_rows) = rev_stmt.query_map([], |row| {
                     let manifest_bytes: Vec<u8> = row.get(0)?;
                     let capability_blob: Vec<u8> = row.get(1)?;
-                    let manifests: [u8; 32] = manifest_bytes.try_into().unwrap_or([0_u8; 32]);
+                    if manifest_bytes.len() != 32 {
+                        return Err(rusqlite::Error::InvalidColumnType(
+                            0,
+                            "manifest must be 32 bytes".to_owned(),
+                            rusqlite::types::Type::Blob,
+                        ));
+                    }
+                    if capability_blob.len() != 32 {
+                        return Err(rusqlite::Error::InvalidColumnType(
+                            1,
+                            "capability must be 32 bytes".to_owned(),
+                            rusqlite::types::Type::Blob,
+                        ));
+                    }
+                    let Ok(manifests) = manifest_bytes.try_into() else {
+                        return Err(rusqlite::Error::InvalidColumnType(
+                            0,
+                            "manifest conversion failed despite length check".to_owned(),
+                            rusqlite::types::Type::Blob,
+                        ));
+                    };
                     let hash = Hash::from_bytes(manifests);
-                    Ok((hash, capability_blob))
+                    let Ok(cap) = capability_blob.try_into() else {
+                        return Err(rusqlite::Error::InvalidColumnType(
+                            1,
+                            "capability conversion failed despite length check".to_owned(),
+                            rusqlite::types::Type::Blob,
+                        ));
+                    };
+                    Ok((hash, cap))
                 })
             {
                 for row in rev_rows.flatten() {
-                    let cap: [u8; 32] = row.1.try_into().unwrap_or([0_u8; 32]);
-                    if let Ok(link) = PrivateLink::new(row.0, cap, u64::MAX) {
+                    if let Ok(link) = PrivateLink::new(row.0, row.1, u64::MAX) {
                         revoked.push(link);
                     }
                 }
@@ -2989,23 +3015,16 @@ impl ReportRecord {
 
 impl SignedGossipMessage for ReportRecord {
     fn verify_signature(&self) -> Result<()> {
-        match &self.reporter {
-            Some(reporter_hex) => {
-                let bytes = hex::decode(reporter_hex).map_err(|e| SyncwebError::operation("decode reporter key", e))?;
-                let key_len = bytes.len();
-                let key_bytes: [u8; 32] = bytes.try_into().map_err(|_v| {
-                    SyncwebError::InvalidSignature(format!(
-                        "reporter key has wrong length (expected 32, got {key_len})"
-                    ))
-                })?;
-                let public_key = VerifyingKey::from_bytes(&key_bytes)
-                    .map_err(|e| SyncwebError::InvalidSignature(format!("invalid reporter key: {e}")))?;
-                self.verify(&public_key)
-            }
-            None => {
-                // Unsigned local report — accept without verification
-                Ok(())
-            }
-        }
+        let reporter_hex = self.reporter.as_ref().ok_or_else(|| {
+            SyncwebError::MissingSignature("report has no reporter; unsigned reports must not be gossiped".into())
+        })?;
+        let bytes = hex::decode(reporter_hex).map_err(|e| SyncwebError::operation("decode reporter key", e))?;
+        let key_len = bytes.len();
+        let key_bytes: [u8; 32] = bytes.try_into().map_err(|_v| {
+            SyncwebError::InvalidSignature(format!("reporter key has wrong length (expected 32, got {key_len})"))
+        })?;
+        let public_key = VerifyingKey::from_bytes(&key_bytes)
+            .map_err(|e| SyncwebError::InvalidSignature(format!("invalid reporter key: {e}")))?;
+        self.verify(&public_key)
     }
 }

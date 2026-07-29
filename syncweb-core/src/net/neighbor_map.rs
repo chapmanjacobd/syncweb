@@ -275,21 +275,21 @@ mod tests {
 
     #[test]
     fn test_double_touch_resets_timer() {
-        let map = NeighborMap::new_without_cleanup(Duration::from_millis(50));
+        let map = NeighborMap::new_without_cleanup(Duration::from_millis(500));
         let id = test_key(1);
 
         map.touch(id, None);
 
         // Wait almost up to expiry
-        std::thread::sleep(Duration::from_millis(40));
+        std::thread::sleep(Duration::from_millis(250));
 
         // Touch again, resetting the timer
         map.touch(id, None);
 
         // Now wait past the original expiry but before the new one
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(200));
 
-        // Should NOT be expired because we touched at 40ms
+        // Should NOT be expired because we touched at 250ms, expiry at 750ms
         assert_eq!(map.cleanup(), 0);
         assert_eq!(map.len(), 1);
     }

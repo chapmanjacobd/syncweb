@@ -250,9 +250,12 @@ async fn mirror_hashes(
                 }
             }
             Ok(_) => {
-                pinned = pinned.saturating_add(1);
+                failed = failed.saturating_add(1);
                 if let Some(ref sender) = progress {
-                    let _ = sender.send(MirrorEvent::Pinned { hash: *hash });
+                    let _ = sender.send(MirrorEvent::Failed {
+                        hash: *hash,
+                        error: "blob was fetched but not pinned".to_owned(),
+                    });
                 }
             }
             Err(error) => {

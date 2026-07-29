@@ -26,6 +26,7 @@ use super::{FetchStrategy, IntentHandle, SessionMode, SubscribeParams, SyncComma
 type IntentSetup = (
     IntentState,
     Pin<Box<tokio::time::Sleep>>,
+    Pin<Box<tokio::time::Sleep>>,
     Option<SyncCheckpoint>,
     HashSet<Vec<u8>>,
 );
@@ -259,13 +260,15 @@ async fn run_intent(
     node_db: Option<NodeDatabase>,
 ) {
     const SETTLE: Duration = Duration::from_secs(2);
+    const FORCED_QUIESCE: Duration = Duration::from_secs(10);
 
     let started = Instant::now();
     if !send_initial_events(&events, started) {
         return;
     }
 
-    let (mut state, mut quiesce, checkpoint, completed_keys) = setup_intent_checkpoint(&folder, node_db.as_ref());
+    let (mut state, mut quiesce, mut forced_quiesce, checkpoint, completed_keys) =
+        setup_intent_checkpoint(&folder, node_db.as_ref());
 
     loop {
         tokio::select! {
@@ -281,6 +284,14 @@ async fn run_intent(
                 }
             }
             () = &mut quiesce, if !config.mode.is_continuous() && state.sync_finished && state.sizes.is_empty() => {
+                finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                return;
+            }
+            () = &mut forced_quiesce, if !config.mode.is_continuous() && state.sync_finished => {
+                let pending = state.sizes.len();
+                if pending > 0 {
+                    tracing::warn!(%pending, "forced quiesce: content for some blobs never arrived");
+                }
                 finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                 return;
             }
@@ -318,9 +329,8 @@ async fn run_intent(
                     match blob_store.has(*hash).await {
                         Ok(true) => {}
                         Ok(false) => {
-                            let _result = events.send(SyncEvent::Failed(format!(
-                                "content-ready blob {hash} is missing locally"
-                            )));
+                            let msg = format!("content-ready blob {hash} is missing locally");
+                            let _result = events.send(SyncEvent::Failed(msg));
                             finalize_checkpoint(checkpoint.as_ref(), &state, &events);
                             return;
                         }
@@ -330,30 +340,10 @@ async fn run_intent(
                             return;
                         }
                     }
-                    if let Some(rate) = config
-                        .params
-                        .bandwidth
-                        .as_ref()
-                        .and_then(|limits| limits.max_download)
-                        && rate > 0
-                    {
-                        let bytes = state.sizes.get(hash).copied().unwrap_or(0);
-                        let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
-                        if milliseconds > 0 {
-                            tokio::select! {
-                                () = tokio::time::sleep(Duration::from_millis(milliseconds)) => {}
-                                received_command = commands.recv() => {
-                                    let Some(command) = received_command else {
-                                        let _result = folder.doc().leave().await;
-                                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                                        return;
-                                    };
-                                    handle_command(&folder, command, &mut state.paused, &events).await;
-                                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                                    return;
-                                }
-                            }
-                        }
+                    if let Some(cmd) = throttle_bandwidth(hash, &state, &config, &mut commands).await {
+                        let _ = handle_command(&folder, cmd, &mut state.paused, &events).await;
+                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                        return;
                     }
                     if let Some(ref cp) = checkpoint {
                         let _ = cp.mark_completed(hash.as_bytes(), *hash, state.sizes.get(hash).copied().unwrap_or(0));
@@ -365,10 +355,9 @@ async fn run_intent(
                     return;
                 }
                 if !config.mode.is_continuous() && state.sync_finished {
-                    let deadline = tokio::time::Instant::now()
-                        .checked_add(SETTLE)
-                        .unwrap_or_else(tokio::time::Instant::now);
-                    quiesce.as_mut().reset(deadline);
+                    let now = tokio::time::Instant::now();
+                    quiesce.as_mut().reset(now.checked_add(SETTLE).unwrap_or(now));
+                    forced_quiesce.as_mut().reset(now.checked_add(FORCED_QUIESCE).unwrap_or(now));
                 }
                 if !send_progress(&events, &state, started.elapsed()) {
                     finalize_checkpoint(checkpoint.as_ref(), &state, &events);
@@ -377,6 +366,29 @@ async fn run_intent(
             }
         }
     }
+}
+
+async fn throttle_bandwidth(
+    hash: &iroh_blobs::Hash,
+    state: &IntentState,
+    config: &IntentConfig,
+    commands: &mut mpsc::UnboundedReceiver<SyncCommand>,
+) -> Option<SyncCommand> {
+    if let Some(rate) = config.params.bandwidth.as_ref().and_then(|limits| limits.max_download)
+        && rate > 0
+    {
+        let bytes = state.sizes.get(hash).copied().unwrap_or(0);
+        let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
+        if milliseconds > 0 {
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_millis(milliseconds)) => {}
+                received_command = commands.recv() => {
+                    return received_command;
+                }
+            }
+        }
+    }
+    None
 }
 
 fn setup_intent_checkpoint(folder: &crate::folder::SyncwebFolder, node_db: Option<&NodeDatabase>) -> IntentSetup {
@@ -406,7 +418,8 @@ fn setup_intent_checkpoint(folder: &crate::folder::SyncwebFolder, node_db: Optio
         ..IntentState::default()
     };
     let quiesce = Box::pin(tokio::time::sleep(Duration::MAX));
-    (state, quiesce, checkpoint, completed_keys)
+    let forced_quiesce = Box::pin(tokio::time::sleep(Duration::MAX));
+    (state, quiesce, forced_quiesce, checkpoint, completed_keys)
 }
 
 fn finalize_checkpoint(

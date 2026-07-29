@@ -217,8 +217,10 @@ impl FileStatsCollector {
                 1_048_576..=104_857_599 => "1MB-100MB",
                 _ => ">100MB",
             };
-            *size_buckets.entry(label.to_owned()).or_insert(0_u64) =
-                size_buckets.get(label).copied().unwrap_or(0).saturating_add(1);
+            size_buckets
+                .entry(label.to_owned())
+                .and_modify(|count: &mut u64| *count = count.saturating_add(1))
+                .or_insert(1_u64);
         }
 
         let now_dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();

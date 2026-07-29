@@ -345,6 +345,16 @@ impl Sorter {
 
         let frecency_weight = self.config.frecency_weight;
 
+        if self.config.criteria.iter().any(|(c, _)| *c == SortCriterion::Random) {
+            let mut rng = rand::rng();
+            entries.shuffle(&mut rng);
+            return SortResult {
+                entries,
+                limit_size: self.config.limit_size,
+                folder_aggregates,
+            };
+        }
+
         entries.sort_by(|left, right| {
             for (criterion, descending) in &self.config.criteria {
                 let ordering = match criterion {
@@ -439,12 +449,6 @@ impl Sorter {
             }
             std::cmp::Ordering::Equal
         });
-
-        // Handle random shuffle if needed
-        if self.config.criteria.iter().any(|(c, _)| *c == SortCriterion::Random) {
-            let mut rng = rand::rng();
-            entries.shuffle(&mut rng);
-        }
 
         SortResult {
             entries,

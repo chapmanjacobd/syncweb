@@ -60,17 +60,22 @@ impl EditorialState {
 
     /// Check whether a transition from `self` to `target` is a valid editorial
     /// workflow step.
+    ///
+    /// Content that enters the editorial pipeline at `Draft` must go through
+    /// review (`Proposed → InReview → Approved`) before being published.
+    /// Retracted content must complete the full review cycle again before
+    /// re-publishing — `Draft → Published` is not permitted.
     #[must_use]
     pub const fn can_transition_to(self, target: Self) -> bool {
         use EditorialState as S;
         matches!(
             (self, target),
-            (S::Draft | S::Approved, S::Proposed | S::Published)
+            (S::Draft | S::Approved, S::Proposed)
                 | (S::Proposed, S::InReview | S::Draft)
                 | (S::InReview, S::ChangesRequested | S::Approved)
                 | (S::ChangesRequested, S::Proposed | S::Draft)
+                | (S::Approved | S::Archived, S::Published)
                 | (S::Published, S::Archived | S::Retracted)
-                | (S::Archived, S::Published)
                 | (S::Retracted, S::Draft)
         )
     }

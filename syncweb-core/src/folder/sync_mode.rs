@@ -45,11 +45,27 @@ impl FromStr for SyncMode {
     type Err = SyncwebError;
 
     fn from_str(value: &str) -> Result<Self> {
-        match value.to_ascii_lowercase().replace(['-', '_'], "").as_str() {
-            "sendreceive" => Ok(Self::SendReceive),
-            "sendonly" => Ok(Self::SendOnly),
-            "receiveonly" => Ok(Self::ReceiveOnly),
-            "receiveencrypted" => Ok(Self::ReceiveEncrypted),
+        // Normalize: lowercase, replace hyphens and underscores with
+        // a single hyphen, strip leading/trailing separators.
+        let mut normalized = String::with_capacity(value.len());
+        let mut last_was_sep = true;
+        for ch in value.chars().flat_map(char::to_lowercase) {
+            if ch == '-' || ch == '_' {
+                if !last_was_sep {
+                    normalized.push('-');
+                    last_was_sep = true;
+                }
+            } else {
+                normalized.push(ch);
+                last_was_sep = false;
+            }
+        }
+        let trimmed = normalized.trim_end_matches('-');
+        match trimmed {
+            "send-receive" | "sendreceive" => Ok(Self::SendReceive),
+            "send-only" | "sendonly" => Ok(Self::SendOnly),
+            "receive-only" | "receiveonly" => Ok(Self::ReceiveOnly),
+            "receive-encrypted" | "receiveencrypted" => Ok(Self::ReceiveEncrypted),
             _ => Err(SyncwebError::InvalidSyncMode(value.to_owned())),
         }
     }

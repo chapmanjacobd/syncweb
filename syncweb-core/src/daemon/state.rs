@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, SyncwebError};
 use crate::storage::node_db::NodeDatabase;
 
-const STATE_FILE_NAME: &str = "daemon.state";
-const STATUS_FILE_NAME: &str = "daemon.status";
 const LOCK_FILE_NAME: &str = "daemon.lock";
 const SOCKET_FILE_NAME: &str = "daemon.sock";
 const RUNTIME_SOCKET_FILE_PREFIX: &str = "syncweb-";
@@ -262,23 +260,13 @@ impl StateFile {
             matches!(state.status, DaemonStatus::Starting | DaemonStatus::Running) && pid_is_alive(state.pid)
         }))
     }
-
-    #[must_use]
-    pub fn path(&self) -> PathBuf {
-        self.data_dir.join(STATE_FILE_NAME)
-    }
-
-    #[must_use]
-    pub fn status_path(&self) -> PathBuf {
-        self.data_dir.join(STATUS_FILE_NAME)
-    }
 }
 
-/// Exclusive process lock protecting the redb-backed node.
+/// Exclusive process lock preventing multiple daemon instances on the same
+/// data directory.
 #[derive(Debug)]
 pub struct PidLock {
     lock_path: PathBuf,
-    state_path: PathBuf,
     lock: Mutex<Option<File>>,
 }
 
@@ -287,7 +275,6 @@ impl PidLock {
     pub fn new(data_dir: &Path) -> Self {
         Self {
             lock_path: data_dir.join(LOCK_FILE_NAME),
-            state_path: data_dir.join(STATE_FILE_NAME),
             lock: Mutex::new(None),
         }
     }
@@ -390,11 +377,6 @@ impl PidLock {
     #[must_use]
     pub fn lock_path(&self) -> &Path {
         &self.lock_path
-    }
-
-    #[must_use]
-    pub fn state_path(&self) -> &Path {
-        &self.state_path
     }
 }
 

@@ -4,6 +4,8 @@ use n0_future::{SinkExt, StreamExt, split};
 use tokio::sync::broadcast;
 use tokio_tungstenite::tungstenite::Message;
 
+use tracing;
+
 use crate::error::{Result, SyncwebError};
 
 use super::{encoding, service::BridgeService};
@@ -365,9 +367,12 @@ impl WsSession {
         encoding::write_string(&mut payload, status);
         encoding::write_string(&mut payload, &node_id);
         let Ok(frame) = build_response(0x83, 0, &payload) else {
+            tracing::warn!("failed to build node status frame");
             return;
         };
-        let _ = self.sender.send(Message::Binary(frame.into())).await;
+        if let Err(e) = self.sender.send(Message::Binary(frame.into())).await {
+            tracing::warn!("failed to send node status frame: {e}");
+        }
     }
 }
 

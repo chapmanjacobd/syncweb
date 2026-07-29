@@ -242,9 +242,6 @@ impl SyncwebFolder {
                 mode: self.sync_mode.to_string(),
             });
         }
-        if !self.blob_store.has(hash).await? {
-            return Err(SyncwebError::InvalidConfig(format!("blob is missing: {hash}")));
-        }
         self.docs_engine.set_blob(&self.doc, self.author, key, hash, size).await
     }
 
@@ -286,10 +283,11 @@ impl SyncwebFolder {
                 "cannot publish missing blob {hash}"
             )));
         }
+        let ticket = self.blob_store.ticket_for_addr(endpoint, hash);
         self.blob_store
             .pin(public_pin_name(self.namespace_id, hash), hash)
             .await?;
-        Ok(self.blob_store.ticket_for_addr(endpoint, hash))
+        Ok(ticket)
     }
 
     /// Remove the public-sharing pin from a folder blob.

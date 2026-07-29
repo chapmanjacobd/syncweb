@@ -8,6 +8,8 @@ use iroh_docs::NamespaceId;
 use iroh_gossip::api::GossipSender;
 use tokio::sync::{RwLock, broadcast};
 
+use tracing;
+
 use crate::{
     error::{Result, SyncwebError},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
@@ -124,8 +126,15 @@ impl BridgeService {
     async fn persist_doc_map(&self) {
         let path = self.data_dir.join(DOC_MAP_FILENAME);
         let content = self.serialize_doc_map().await;
-        if let Some(data) = content {
-            let _ = tokio::fs::write(&path, data).await;
+        match content {
+            Some(data) => {
+                if let Err(error) = tokio::fs::write(&path, data).await {
+                    tracing::warn!(%error, "failed to persist doc map");
+                }
+            }
+            None => {
+                tracing::warn!("failed to serialize doc map");
+            }
         }
     }
 
@@ -134,7 +143,13 @@ impl BridgeService {
             let guard = self.doc_map.read().await;
             guard.iter().map(|(k, v)| (k.clone(), *v)).collect()
         };
-        serde_json::to_string_pretty(&serializable).ok()
+        match serde_json::to_string_pretty(&serializable) {
+            Ok(s) => Some(s),
+            Err(error) => {
+                tracing::warn!(%error, "failed to serialize doc map");
+                None
+            }
+        }
     }
 
     /// Subscribe to a gossip topic.

@@ -156,7 +156,6 @@ impl Daemon {
             folder_manager.clone(),
             node.blob_store().clone(),
             node.docs_engine().clone(),
-            node.gossip_service().clone(),
             Some(node.topic_tracker().clone()),
         );
         Ok((node, folder_manager, sync_engine))
@@ -1051,11 +1050,17 @@ impl Daemon {
                 .map_err(|error| SyncwebError::operation("daemon intent task mutex is poisoned", error))?;
             std::mem::take(&mut *task_map)
         };
-        for (_, task) in tasks {
+        for (namespace, task) in tasks {
             if let Some(handle) = task {
-                handle
-                    .await
-                    .map_err(|error| SyncwebError::operation("daemon intent task failed", error))?;
+                match tokio::time::timeout(Duration::from_secs(10), handle).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        tracing::warn!(%namespace, %error, "daemon intent task failed");
+                    }
+                    Err(_) => {
+                        tracing::warn!(%namespace, "daemon intent task did not shut down within 10s timeout");
+                    }
+                }
             }
         }
         Ok(())

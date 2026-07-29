@@ -101,7 +101,7 @@ impl TimeWindow {
     #[must_use]
     pub const fn contains(self, minute: u16) -> bool {
         if self.start == self.end {
-            return true;
+            return false;
         }
         if self.start < self.end {
             minute >= self.start && minute < self.end

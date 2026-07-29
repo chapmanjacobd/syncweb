@@ -43,10 +43,10 @@ use super::{
 use std::time::Duration;
 
 #[cfg(unix)]
-const IPC_TIMEOUT: Duration = Duration::from_millis(500); // 0.5 s
+const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[cfg(unix)]
-const DOWNLOAD_TIMEOUT: Duration = Duration::from_millis(200);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -702,7 +702,9 @@ impl IpcServer {
         if let IpcCommand::BroadcastTrustSignal(signal) = cmd {
             return self.handle_broadcast_trust_signal_response(signal).await;
         }
-        unreachable!()
+        IpcResponse::Error {
+            message: format!("unhandled network command: {cmd:?}"),
+        }
     }
 
     async fn handle_simple_group(&self, cmd: IpcCommand) -> IpcResponse {
@@ -715,7 +717,9 @@ impl IpcServer {
         if matches!(cmd, IpcCommand::ReloadConfig) {
             return self.handle_reload_config();
         }
-        unreachable!()
+        IpcResponse::Error {
+            message: format!("unhandled simple command: {cmd:?}"),
+        }
     }
 
     /// Handle one decoded request without requiring a socket.
@@ -898,7 +902,6 @@ impl IpcServer {
             FolderManager::new(&context.node),
             context.node.blob_store().clone(),
             context.node.docs_engine().clone(),
-            context.node.gossip_service().clone(),
             Some(context.node.topic_tracker().clone()),
         );
         let mut intent = sync.fetch(namespace_id, strategy).await?;
@@ -1150,7 +1153,6 @@ impl IpcServer {
             manager,
             context.node.blob_store().clone(),
             context.node.docs_engine().clone(),
-            context.node.gossip_service().clone(),
             Some(context.node.topic_tracker().clone()),
         );
         match sync.subscribe(namespace_id, params).await {

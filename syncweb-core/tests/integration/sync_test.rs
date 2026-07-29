@@ -111,13 +111,7 @@ async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
     .await?;
     let folders = FolderManager::new(&node);
     let folder = folders.create(SyncMode::SendReceive).await?;
-    let engine = SyncEngine::new(
-        folders,
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-        node.gossip_service().clone(),
-        None,
-    );
+    let engine = SyncEngine::new(folders, node.blob_store().clone(), node.docs_engine().clone(), None);
     let mut intent = engine
         .sync(folder.namespace_id(), syncweb_core::sync::SessionMode::ReconcileOnce)
         .await?;
@@ -429,7 +423,7 @@ fn test_efficient_cache_retain_active_zero_ttl_evicts_all() -> anyhow::Result<()
     let removed = cache.retain_active(Duration::ZERO);
     anyhow::ensure!(removed == 1, "zero TTL should evict stale peers");
     anyhow::ensure!(!cache.has_peer(&blob(1), &peer));
-    anyhow::ensure!(cache.peer_count() == 0, "index should be reclaimed");
+    anyhow::ensure!(cache.total_peers() == 0, "index should be reclaimed");
     Ok(())
 }
 
@@ -448,18 +442,18 @@ fn test_efficient_cache_retain_active_evicts_and_reclaims_index() -> anyhow::Res
 
     cache.add_presence(blob(1), a)?;
     cache.add_presence(blob(2), b)?;
-    anyhow::ensure!(cache.peer_count() == 2);
+    anyhow::ensure!(cache.total_peers() == 2);
 
     let removed = cache.retain_active(Duration::ZERO);
     anyhow::ensure!(removed == 2, "both peers should be evicted with zero TTL");
-    anyhow::ensure!(cache.peer_count() == 0, "indices should be reclaimed");
+    anyhow::ensure!(cache.total_peers() == 0, "indices should be reclaimed");
 
     cache.add_presence(blob(1), a)?;
     anyhow::ensure!(
         cache.has_peer(&blob(1), &a),
         "re-added peer should work after reclamation"
     );
-    anyhow::ensure!(cache.peer_count() == 1);
+    anyhow::ensure!(cache.total_peers() == 1);
     Ok(())
 }
 

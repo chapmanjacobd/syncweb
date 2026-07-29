@@ -392,9 +392,17 @@ impl Sorter {
                         left_size.cmp(&right_size)
                     }
                     SortCriterion::FolderAvgSize => {
-                        let left_size = folder_aggregates.get(&left.folder).map_or(0, |agg| agg.size_median);
-                        let right_size = folder_aggregates.get(&right.folder).map_or(0, |agg| agg.size_median);
-                        left_size.cmp(&right_size)
+                        let avg_size = |agg: &FolderAggregate| -> u64 {
+                            if agg.file_count > 0 {
+                                let count = u64::try_from(agg.file_count).unwrap_or(u64::MAX);
+                                agg.size_sum.checked_div(count).unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        };
+                        let left_avg = folder_aggregates.get(&left.folder).map_or(0, avg_size);
+                        let right_avg = folder_aggregates.get(&right.folder).map_or(0, avg_size);
+                        left_avg.cmp(&right_avg)
                     }
                     SortCriterion::FolderDate => {
                         let left_time = folder_aggregates

@@ -16,7 +16,7 @@ use crate::{
     folder::FolderManager,
     node::discovery::TopicTracker,
     node::iroh_node::IrohNode,
-    node::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService},
+    node::{blob_store::BlobStore, docs_engine::DocsEngine},
     storage::node_db::NodeDatabase,
 };
 
@@ -80,11 +80,10 @@ pub struct SyncEngine {
 
 impl SyncEngine {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         folder_manager: FolderManager,
         blob_store: BlobStore,
         docs_engine: DocsEngine,
-        _gossip: GossipService,
         topic_tracker: Option<TopicTracker>,
     ) -> Self {
         Self {
@@ -109,7 +108,6 @@ impl SyncEngine {
             folder_manager,
             node.blob_store().clone(),
             node.docs_engine().clone(),
-            node.gossip_service().clone(),
             Some(node.topic_tracker().clone()),
         )
     }
@@ -341,7 +339,21 @@ async fn run_intent(
                     {
                         let bytes = state.sizes.get(hash).copied().unwrap_or(0);
                         let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
-                        tokio::time::sleep(Duration::from_millis(milliseconds)).await;
+                        if milliseconds > 0 {
+                            tokio::select! {
+                                () = tokio::time::sleep(Duration::from_millis(milliseconds)) => {}
+                                received_command = commands.recv() => {
+                                    let Some(command) = received_command else {
+                                        let _result = folder.doc().leave().await;
+                                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                                        return;
+                                    };
+                                    handle_command(&folder, command, &mut state.paused, &events).await;
+                                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                                    return;
+                                }
+                            }
+                        }
                     }
                     if let Some(ref cp) = checkpoint {
                         let _ = cp.mark_completed(hash.as_bytes(), *hash, state.sizes.get(hash).copied().unwrap_or(0));
@@ -406,7 +418,7 @@ fn finalize_checkpoint(
         if state.completed > 0 {
             let _ = cp.complete();
         } else {
-            let _ = cp.mark_incomplete();
+            let _ = cp.leave_unfinished();
         }
     }
     let _ = events.send(SyncEvent::Finished);
@@ -528,20 +540,24 @@ async fn handle_command(
     events: &mpsc::UnboundedSender<SyncEvent>,
 ) -> bool {
     match command {
-        SyncCommand::Pause if !*paused => {
-            if let Err(error) = folder.doc().leave().await {
-                let _result = events.send(SyncEvent::Failed(error.to_string()));
-                return false;
+        SyncCommand::Pause => {
+            if !*paused {
+                if let Err(error) = folder.doc().leave().await {
+                    let _result = events.send(SyncEvent::Failed(error.to_string()));
+                    return false;
+                }
+                *paused = true;
             }
-            *paused = true;
             events.send(SyncEvent::Paused).is_ok()
         }
-        SyncCommand::Resume if *paused => {
-            if let Err(error) = folder.doc().start_sync(Vec::new()).await {
-                let _result = events.send(SyncEvent::Failed(error.to_string()));
-                return false;
+        SyncCommand::Resume => {
+            if *paused {
+                if let Err(error) = folder.doc().start_sync(Vec::new()).await {
+                    let _result = events.send(SyncEvent::Failed(error.to_string()));
+                    return false;
+                }
+                *paused = false;
             }
-            *paused = false;
             events.send(SyncEvent::Resumed).is_ok()
         }
         SyncCommand::Cancel => {
@@ -552,7 +568,6 @@ async fn handle_command(
             let _result = events.send(SyncEvent::Cancelled);
             false
         }
-        SyncCommand::Pause | SyncCommand::Resume => true,
     }
 }
 

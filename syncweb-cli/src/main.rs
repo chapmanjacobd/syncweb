@@ -312,6 +312,11 @@ fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result
         Some(ConfigCommand::Set { key, value }) => {
             config.set(&key, &value)?;
             node_db.save_app_config(&config)?;
+            // Keep the TOML config file in sync for user inspection/editing.
+            let config_path = data_dir.join("config.toml");
+            if let Err(error) = config.save(&config_path) {
+                tracing::warn!(%error, "failed to write TOML config file");
+            }
             if output_json {
                 println!(
                     "{}",

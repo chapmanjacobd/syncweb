@@ -600,33 +600,28 @@ async fn process_catalog_event(
             record.catalog_namespace_id = namespace_id;
             database.upsert_catalog_record(&record)?;
         }
-        LiveEvent::ContentReady { .. } => reindex_catalog(docs, blobs, database, namespace_id).await?,
+        LiveEvent::ContentReady { hash } => {
+            let doc = docs
+                .open(namespace_id)
+                .await?
+                .ok_or(SyncwebError::NamespaceNotAvailable)?;
+            for entry in docs.list_latest(&doc).await? {
+                if !is_record_key(entry.key()) || entry.content_hash() != hash {
+                    continue;
+                }
+                let Ok(bytes) = blobs.get(entry.content_hash()).await else {
+                    continue;
+                };
+                let mut record = CatalogRecord::from_bytes(bytes)?;
+                record.catalog_namespace_id = namespace_id;
+                database.upsert_catalog_record(&record)?;
+                break;
+            }
+        }
         LiveEvent::PendingContentReady
         | LiveEvent::NeighborUp(_)
         | LiveEvent::NeighborDown(_)
         | LiveEvent::SyncFinished(_) => {}
-    }
-    Ok(())
-}
-
-async fn reindex_catalog(
-    docs: &DocsEngine,
-    blobs: &BlobStore,
-    database: &IndexingDatabase,
-    namespace_id: NamespaceId,
-) -> Result<()> {
-    let doc = docs
-        .open(namespace_id)
-        .await?
-        .ok_or(SyncwebError::NamespaceNotAvailable)?;
-    for entry in docs.list_latest(&doc).await? {
-        if !is_record_key(entry.key()) {
-            continue;
-        }
-        let bytes = blobs.get(entry.content_hash()).await?;
-        let mut record = CatalogRecord::from_bytes(bytes)?;
-        record.catalog_namespace_id = namespace_id;
-        database.upsert_catalog_record(&record)?;
     }
     Ok(())
 }

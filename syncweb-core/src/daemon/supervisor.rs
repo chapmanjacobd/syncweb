@@ -268,7 +268,6 @@ impl IntentSupervisor {
             Self::remove_control(options.controls.as_ref(), namespace)?;
             match event {
                 Some(SyncEvent::Started) => {
-                    supervised.retry_count = 0;
                     supervised.last_error = None;
                     supervised.last_started_at = Some(current_timestamp());
                     supervised.handle = Some(handle);

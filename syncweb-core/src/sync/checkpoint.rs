@@ -3,7 +3,41 @@ use std::collections::HashSet;
 use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 
-use crate::{Result, storage::node_db::NodeDatabase};
+use crate::{Result, SyncwebError, storage::node_db::NodeDatabase};
+
+/// Status of a sync entry within a checkpoint session.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum EntryStatus {
+    #[default]
+    Completed,
+    Failed,
+    Skipped,
+}
+
+impl EntryStatus {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+impl TryFrom<&str> for EntryStatus {
+    type Error = SyncwebError;
+
+    fn try_from(value: &str) -> Result<Self> {
+        match value {
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "skipped" => Ok(Self::Skipped),
+            other => Err(SyncwebError::InvalidConfig(format!("invalid entry status: {other}"))),
+        }
+    }
+}
 
 /// Manages sync session checkpointing for crash recovery.
 ///
@@ -91,7 +125,7 @@ impl SyncCheckpoint {
                 entry_key,
                 hash: &hash.to_string().into_bytes(),
                 size,
-                status: "completed",
+                status: EntryStatus::Completed.as_str(),
                 retries: 0,
                 error_message: None,
             })
@@ -110,7 +144,7 @@ impl SyncCheckpoint {
                 entry_key,
                 hash: &[],
                 size: 0,
-                status: "failed",
+                status: EntryStatus::Failed.as_str(),
                 retries: 0,
                 error_message: Some(error),
             })
@@ -129,7 +163,7 @@ impl SyncCheckpoint {
                 entry_key,
                 hash: &hash.to_string().into_bytes(),
                 size,
-                status: "skipped",
+                status: EntryStatus::Skipped.as_str(),
                 retries: 0,
                 error_message: None,
             })
@@ -141,8 +175,11 @@ impl SyncCheckpoint {
     ///
     /// Returns an error if the database query fails.
     pub fn completed_entries(&self) -> Result<Vec<EntryProgress>> {
-        self.database
-            .list_sync_entries(&self.namespace_id.to_string(), &self.session_id, "completed")
+        self.database.list_sync_entries(
+            &self.namespace_id.to_string(),
+            &self.session_id,
+            EntryStatus::Completed.as_str(),
+        )
     }
 
     /// Get all failed entries for this session (for retry).
@@ -151,8 +188,11 @@ impl SyncCheckpoint {
     ///
     /// Returns an error if the database query fails.
     pub fn failed_entries(&self) -> Result<Vec<EntryProgress>> {
-        self.database
-            .list_sync_entries(&self.namespace_id.to_string(), &self.session_id, "failed")
+        self.database.list_sync_entries(
+            &self.namespace_id.to_string(),
+            &self.session_id,
+            EntryStatus::Failed.as_str(),
+        )
     }
 
     /// Get all completed entry keys as a `HashSet` for fast lookup.
@@ -185,12 +225,15 @@ impl SyncCheckpoint {
             .update_checkpoint_status(&self.namespace_id.to_string(), &self.session_id, "completed")
     }
 
-    /// Mark session as incomplete (has leftovers for next resume).
+    /// Leave the session status as `running` so it is picked up on resume.
+    ///
+    /// Unlike [`complete`](Self::complete), this does not persist a terminal
+    /// status.  The checkpoint remains active for the next daemon start.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database write fails.
-    pub const fn mark_incomplete(&self) -> Result<()> {
+    /// This method always returns `Ok(())`.
+    pub const fn leave_unfinished(&self) -> Result<()> {
         // Leave the status as 'running' so it's picked up on resume
         Ok(())
     }

@@ -150,7 +150,6 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
         FolderManager::new(&node_b),
         node_b.blob_store().clone(),
         node_b.docs_engine().clone(),
-        node_b.gossip_service().clone(),
         None,
     );
 

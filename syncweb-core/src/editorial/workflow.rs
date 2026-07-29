@@ -28,7 +28,7 @@ const fn role_can_transition(role: EditorialRole, source: EditorialState, target
         (S::Proposed | S::ChangesRequested | S::Retracted, S::Draft)
         | (S::Draft | S::ChangesRequested | S::Approved, S::Proposed) => role.can_initiate(),
         (S::Proposed, S::InReview) | (S::InReview, S::ChangesRequested | S::Approved) => role.can_review(),
-        (S::Approved | S::Archived | S::Draft, S::Published) => role.can_publish(),
+        (S::Approved | S::Archived, S::Published) => role.can_publish(),
         (S::Published, S::Archived | S::Retracted) => role.can_withdraw(),
         _ => false,
     }

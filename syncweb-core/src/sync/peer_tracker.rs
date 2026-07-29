@@ -22,7 +22,10 @@ struct Availability {
     last_seen: Instant,
 }
 
-/// Bounded cache of peers observed serving individual blobs.
+/// Bounded cache mapping blob hashes to the peers observed serving them.
+///
+/// `len()` returns the number of unique blob hashes tracked, not the total
+/// number of peers. Use [`peer_count`](Self::peer_count) for per-blob counts.
 #[derive(Clone, Debug)]
 pub struct PeerTracker {
     entries: HashMap<Hash, Availability>,
@@ -253,8 +256,10 @@ impl EfficientPeerCache {
         })
     }
 
+    /// Return the total number of *unique* peers registered across all blobs.
+    /// For per-blob counts see [`active_peer_count`](Self::active_peer_count).
     #[must_use]
-    pub const fn peer_count(&self) -> usize {
+    pub const fn total_peers(&self) -> usize {
         self.index_peer.len()
     }
 
@@ -321,18 +326,63 @@ impl EfficientPeerCache {
         let count = stale.len();
         for peer in stale {
             self.remove_peer(&peer);
-            if let Some(index) = self.peer_index.remove(&peer) {
+            if let Some(stale_index) = self.peer_index.remove(&peer) {
                 let last_index = self.index_peer.len().saturating_sub(1);
-                if usize::from(index) != last_index
+                if usize::from(stale_index) != last_index
                     && let Some(last_peer) = self.index_peer.get(last_index).copied()
-                    && let Some(slot) = self.index_peer.get_mut(usize::from(index))
                 {
-                    *slot = last_peer;
-                    self.peer_index.insert(last_peer, index);
+                    // Update presence bitmask for the moved peer: its bit
+                    // is still at last_index but must be moved to stale_index.
+                    self.remap_presence(last_index, usize::from(stale_index));
+                    if let Some(slot) = self.index_peer.get_mut(usize::from(stale_index)) {
+                        *slot = last_peer;
+                    }
+                    self.peer_index.insert(last_peer, stale_index);
                 }
                 self.index_peer.pop();
             }
         }
         count
+    }
+
+    /// Move all presence bits from `old_index` to `new_index` after a
+    /// swap-remove compaction of `index_peer`.
+    fn remap_presence(&mut self, old_index: usize, new_index: usize) {
+        let old_u16 = u16::try_from(old_index).unwrap_or(u16::MAX);
+        let new_u16 = u16::try_from(new_index).unwrap_or(u16::MAX);
+        for (hash, indices) in &mut self.active_indices {
+            // binary_search returns a valid index in the Ok case
+            let Ok(pos) = indices.binary_search(&old_u16) else {
+                continue;
+            };
+            if let Some(slot) = indices.get_mut(pos) {
+                *slot = new_u16;
+            }
+            let mut p = pos;
+            while p > 0 {
+                let prev = p.wrapping_sub(1);
+                if indices.get(prev).is_none_or(|&v| v <= new_u16) {
+                    break;
+                }
+                indices.swap(prev, p);
+                p = prev;
+            }
+            // Update bitvector: clear old bit, set new bit
+            if let Some(words) = self.presence.get_mut(hash) {
+                let old_word = old_index.checked_div(64).unwrap_or(0);
+                let old_bit = old_index.checked_rem(64).unwrap_or(0);
+                if let Some(word) = words.get_mut(old_word) {
+                    *word &= !(1_u64 << old_bit);
+                }
+                let new_word = new_index.checked_div(64).unwrap_or(0);
+                let new_bit = new_index.checked_rem(64).unwrap_or(0);
+                if new_word >= words.len() {
+                    words.resize(new_word.saturating_add(1), 0);
+                }
+                if let Some(word) = words.get_mut(new_word) {
+                    *word |= 1_u64 << new_bit;
+                }
+            }
+        }
     }
 }

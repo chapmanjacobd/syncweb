@@ -160,9 +160,9 @@ impl PeerTracker {
 /// Compact peer presence cache using stable integer indices.
 #[derive(Clone, Debug, Default)]
 pub struct EfficientPeerCache {
-    active_indices: HashMap<Hash, Vec<u16>>,
+    hash_to_indices: HashMap<Hash, Vec<u16>>,
     presence: HashMap<Hash, Vec<u64>>,
-    peer_index: HashMap<PublicKey, u16>,
+    peer_to_index: HashMap<PublicKey, u16>,
     index_peer: Vec<PublicKey>,
     last_seen: HashMap<PublicKey, Instant>,
 }
@@ -179,17 +179,17 @@ impl EfficientPeerCache {
     ///
     /// Returns an error after all `u16` peer indices have been allocated.
     pub fn add_presence(&mut self, hash: Hash, peer: PublicKey) -> crate::Result<()> {
-        let index = if let Some(index) = self.peer_index.get(&peer) {
+        let index = if let Some(index) = self.peer_to_index.get(&peer) {
             *index
         } else {
             let index = u16::try_from(self.index_peer.len())
                 .map_err(|error| crate::SyncwebError::operation("peer cache capacity exceeded", error))?;
             self.index_peer.push(peer);
-            self.peer_index.insert(peer, index);
+            self.peer_to_index.insert(peer, index);
             index
         };
         self.last_seen.insert(peer, Instant::now());
-        let indices = self.active_indices.entry(hash).or_default();
+        let indices = self.hash_to_indices.entry(hash).or_default();
         match indices.binary_search(&index) {
             Ok(_) => {}
             Err(position) => indices.insert(position, index),
@@ -207,10 +207,10 @@ impl EfficientPeerCache {
     }
 
     pub fn remove_presence(&mut self, hash: &Hash, peer: &PublicKey) -> bool {
-        let Some(index) = self.peer_index.get(peer) else {
+        let Some(index) = self.peer_to_index.get(peer) else {
             return false;
         };
-        let Some(indices) = self.active_indices.get_mut(hash) else {
+        let Some(indices) = self.hash_to_indices.get_mut(hash) else {
             return false;
         };
         let removed = indices.binary_search(index).is_ok_and(|position| {
@@ -218,7 +218,7 @@ impl EfficientPeerCache {
             true
         });
         if indices.is_empty() {
-            self.active_indices.remove(hash);
+            self.hash_to_indices.remove(hash);
         }
         if removed {
             let index_usize = usize::from(*index);
@@ -234,7 +234,7 @@ impl EfficientPeerCache {
 
     #[must_use]
     pub fn has_peer(&self, hash: &Hash, peer: &PublicKey) -> bool {
-        self.peer_index.get(peer).is_some_and(|index| {
+        self.peer_to_index.get(peer).is_some_and(|index| {
             let index_usize = usize::from(*index);
             let word_index = index_usize.checked_div(64).unwrap_or(0);
             let bit_index = index_usize.checked_rem(64).unwrap_or(0);
@@ -248,7 +248,7 @@ impl EfficientPeerCache {
 
     #[must_use]
     pub fn peers(&self, hash: &Hash) -> Vec<PublicKey> {
-        self.active_indices.get(hash).map_or_else(Vec::new, |indices| {
+        self.hash_to_indices.get(hash).map_or_else(Vec::new, |indices| {
             indices
                 .iter()
                 .filter_map(|index| self.index_peer.get(usize::from(*index)).copied())
@@ -265,7 +265,7 @@ impl EfficientPeerCache {
 
     #[must_use]
     pub fn active_peer_count(&self, hash: &Hash) -> usize {
-        self.active_indices.get(hash).map_or(0, Vec::len)
+        self.hash_to_indices.get(hash).map_or(0, Vec::len)
     }
 
     #[must_use]
@@ -276,14 +276,14 @@ impl EfficientPeerCache {
             .map(|words| words.len().saturating_mul(8))
             .sum::<usize>();
         let index_bytes = self
-            .active_indices
+            .hash_to_indices
             .values()
             .map(|indices| indices.len().saturating_mul(2))
             .sum::<usize>();
         word_bytes
             .saturating_add(index_bytes)
             .saturating_add(
-                self.peer_index
+                self.peer_to_index
                     .len()
                     .saturating_mul(std::mem::size_of::<PublicKey>().saturating_add(2)),
             )
@@ -293,10 +293,10 @@ impl EfficientPeerCache {
     /// Remove a peer from every blob while retaining stable indices for peers
     /// that may be observed again later.
     pub fn remove_peer(&mut self, peer: &PublicKey) {
-        if !self.peer_index.contains_key(peer) {
+        if !self.peer_to_index.contains_key(peer) {
             return;
         }
-        let hashes = self.active_indices.keys().copied().collect::<Vec<_>>();
+        let hashes = self.hash_to_indices.keys().copied().collect::<Vec<_>>();
         for hash in hashes {
             let _removed = self.remove_presence(&hash, peer);
         }
@@ -326,7 +326,7 @@ impl EfficientPeerCache {
         let count = stale.len();
         for peer in stale {
             self.remove_peer(&peer);
-            if let Some(stale_index) = self.peer_index.remove(&peer) {
+            if let Some(stale_index) = self.peer_to_index.remove(&peer) {
                 let last_index = self.index_peer.len().saturating_sub(1);
                 if usize::from(stale_index) != last_index
                     && let Some(last_peer) = self.index_peer.get(last_index).copied()
@@ -337,7 +337,7 @@ impl EfficientPeerCache {
                     if let Some(slot) = self.index_peer.get_mut(usize::from(stale_index)) {
                         *slot = last_peer;
                     }
-                    self.peer_index.insert(last_peer, stale_index);
+                    self.peer_to_index.insert(last_peer, stale_index);
                 }
                 self.index_peer.pop();
             }
@@ -350,7 +350,7 @@ impl EfficientPeerCache {
     fn remap_presence(&mut self, old_index: usize, new_index: usize) {
         let old_u16 = u16::try_from(old_index).unwrap_or(u16::MAX);
         let new_u16 = u16::try_from(new_index).unwrap_or(u16::MAX);
-        for (hash, indices) in &mut self.active_indices {
+        for (hash, indices) in &mut self.hash_to_indices {
             // binary_search returns a valid index in the Ok case
             let Ok(pos) = indices.binary_search(&old_u16) else {
                 continue;

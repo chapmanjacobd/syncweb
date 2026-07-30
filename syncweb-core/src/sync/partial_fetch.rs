@@ -209,21 +209,21 @@ impl HealthReport {
         }
     }
 
-    /// Build a report with real peer counts from a `hash -> verified_count` map.
+    /// Build a report with verified peer counts from a `hash -> verified_count` map.
     ///
     /// Each candidate's `peer_count` is overridden with the value from
-    /// `peer_counts` when present. This lets the health display reflect live
+    /// `peers_per_hash` when present. This lets the health display reflect live
     /// provider-lease data instead of always showing zero.
     #[must_use]
-    pub fn from_candidates_with_peer_counts(
+    pub fn from_candidates_with_peers_per_hash(
         candidates: &[FetchCandidate],
-        peer_counts: &HashMap<Hash, usize>,
+        peers_per_hash: &HashMap<Hash, usize>,
         well_seeded_threshold: usize,
     ) -> Self {
         let enriched: Vec<FetchCandidate> = candidates
             .iter()
             .map(|c| {
-                let peers = peer_counts.get(&c.hash).copied().unwrap_or(c.peer_count);
+                let peers = peers_per_hash.get(&c.hash).copied().unwrap_or(c.peer_count);
                 FetchCandidate::new(&c.path, c.hash, c.size, peers, c.local)
             })
             .collect();

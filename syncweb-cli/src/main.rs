@@ -1284,7 +1284,7 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
         hashes.push(hash);
     }
 
-    let peer_counts = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite")).map_or_else(
+    let peers_per_hash = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite")).map_or_else(
         |_| std::collections::HashMap::new(),
         |indexing| {
             let resilience = indexing.resilience_service(syncweb_core::indexing::ResilienceConfig::new(
@@ -1296,7 +1296,7 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
             )
         },
     );
-    let report = HealthReport::from_candidates_with_peer_counts(&candidates, &peer_counts, 4);
+    let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
     if output_json {
         println!(
             "{}",

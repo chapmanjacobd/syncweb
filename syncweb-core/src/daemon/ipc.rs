@@ -1298,7 +1298,7 @@ impl IpcServer {
             hashes.push(hash);
         }
 
-        let peer_counts: HashMap<iroh_blobs::Hash, usize> = match &self.resilience {
+        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> = match &self.resilience {
             Some(resilience) => match resilience.health_batch(&hashes) {
                 Ok(health_map) => health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
                 Err(error) => {
@@ -1308,7 +1308,7 @@ impl IpcServer {
             None => HashMap::new(),
         };
 
-        let report = HealthReport::from_candidates_with_peer_counts(&candidates, &peer_counts, 4);
+        let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
         IpcResponse::Ok {
             message: format!(
                 "total: {}, well-seeded: {}, under-seeded: {}, unseeded: {}",
@@ -1342,7 +1342,7 @@ impl IpcServer {
             hashes.push(hash);
         }
 
-        let peer_counts: HashMap<iroh_blobs::Hash, usize> =
+        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> =
             self.resilience.as_ref().map_or_else(HashMap::new, |resilience| {
                 resilience.health_batch(&hashes).map_or_else(
                     |_| HashMap::new(),
@@ -1353,7 +1353,7 @@ impl IpcServer {
         let result: HashMap<String, usize> = path_map
             .into_iter()
             .map(|(path_str, hash)| {
-                let count = peer_counts.get(&hash).copied().unwrap_or(0);
+                let count = peers_per_hash.get(&hash).copied().unwrap_or(0);
                 (path_str, count)
             })
             .collect();

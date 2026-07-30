@@ -50,7 +50,6 @@ async-trait = "0.1"
 async-compression.workspace = true
 rusqlite.workspace = true
 libc.workspace = true
-tokio-tungstenite.workspace = true
 axum.workspace = true
 hyper.workspace = true
 tokio-util.workspace = true

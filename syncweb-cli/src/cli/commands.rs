@@ -546,8 +546,6 @@ pub struct StartArgs {
     pub sync_interval: Option<u64>,
     #[arg(long, help = "Disable Iroh relay mode (no relay server connections)")]
     pub no_relay: bool,
-    #[arg(long, help = "WebSocket bridge listen address (e.g. 127.0.0.1:9192)")]
-    pub bridge_listen: Option<std::net::SocketAddr>,
     #[arg(long, help = "Media HTTP server listen address (e.g. 127.0.0.1:9193)")]
     pub media_listen: Option<std::net::SocketAddr>,
 }

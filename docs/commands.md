@@ -377,7 +377,15 @@ syncweb config set default_sync_mode SendReceive
 # Config sections
 syncweb config show networks
 syncweb config show bep
+syncweb config show discovery
 syncweb config show filter
+
+# Discovery keys
+syncweb config set discovery.mdns true
+syncweb config set discovery.beacon true
+syncweb config set discovery.beacon_base_port 15200
+syncweb config set discovery.beacon_interval_ms 1000
+syncweb config set discovery.interface eth0
 ```
 
 ---
@@ -544,6 +552,12 @@ syncweb init ./documents
 syncweb init --network work ./documents
 syncweb config set default_path ~/Syncweb
 
+# Start/daemon with discovery options
+syncweb start --no-mdns                    # Disable mDNS local peer discovery
+syncweb start --no-beacon                  # Disable the UDP beacon local discovery
+syncweb start --beacon-port 15200          # Override the beacon base port
+syncweb start --discovery-interface eth0   # Bind the beacon to one interface
+
 # BEP-compatible device ID display
 syncweb devices --bep
 
@@ -572,10 +586,20 @@ node_name = "my-device"
 urls = ["https://relay.iroh.computer"]
 
 [discovery]
-# Enable/disable discovery mechanisms
-local_mdns = true
-iroh_gossip = true
-mainline_dht = true
+# Local (LAN) peer discovery. Both mechanisms are scoped to the daemon's
+# network name when one is set, so unrelated networks never discover each
+# other. Set both to false for relay/DHT-only discovery.
+mdns = true
+beacon = true
+# Base UDP port for the UDP beacon. The effective port is derived from the
+# network scope: base + (scope[0..2] % 2048).
+beacon_base_port = 15200
+# How often the beacon re-broadcasts endpoint data, in milliseconds.
+beacon_interval_ms = 1000
+# Restrict the beacon to a single network interface by name (e.g. "eth0").
+# Applies to the beacon only; mDNS always uses the default multicast
+# interface.
+# interface = "eth0"
 
 [discovery.topic_tracker]
 # distributed-topic-tracker settings

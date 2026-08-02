@@ -18,7 +18,7 @@ use syncweb_core::{
     node::{
         gossip_service::GossipService,
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
 };
 
@@ -46,10 +46,18 @@ async fn test_node(
             root.join("data"),
             relay_mode,
             lookup,
+            DiscoveryConfig::disabled(),
             test_utils::empty_member_keys(),
         )
         .await?),
-        None => Ok(IrohNode::new(identity, root.join("data"), relay_mode, test_utils::empty_member_keys()).await?),
+        None => Ok(IrohNode::new(
+            identity,
+            root.join("data"),
+            relay_mode,
+            test_utils::empty_member_keys(),
+            DiscoveryConfig::disabled(),
+        )
+        .await?),
     }
 }
 

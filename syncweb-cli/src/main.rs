@@ -307,7 +307,8 @@ fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result
         Some(ConfigCommand::Show { section: Some(section) }) => match section.as_str() {
             "bep" => print_config_section(&config.bep, output_json)?,
             "schedule" => print_config_section(&config.schedule, output_json)?,
-            _ => anyhow::bail!("unsupported config section {section:?}; supported sections: bep, schedule"),
+            "discovery" => print_config_section(&config.discovery, output_json)?,
+            _ => anyhow::bail!("unsupported config section {section:?}; supported sections: bep, schedule, discovery"),
         },
         Some(ConfigCommand::Set { key, value }) => {
             config.set(&key, &value)?;
@@ -380,6 +381,14 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
         syncweb_core::node::iroh_node::RelayMode::Default
     };
     daemon_config.media_listen = args.media_listen;
+    daemon_config.discovery.mdns = !args.no_mdns;
+    daemon_config.discovery.beacon = !args.no_beacon;
+    if let Some(port) = args.beacon_port {
+        daemon_config.discovery.beacon_base_port = port;
+    }
+    if let Some(interface) = args.discovery_interface.clone() {
+        daemon_config.discovery.interface = Some(interface);
+    }
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     if output_json {
@@ -471,6 +480,10 @@ async fn daemon_client_or_start(
                 max_threads: None,
                 sync_interval: None,
                 no_relay: false,
+                no_mdns: false,
+                no_beacon: false,
+                beacon_port: None,
+                discovery_interface: None,
                 media_listen: None,
             },
             network,
@@ -2091,6 +2104,10 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
             max_threads: None,
             sync_interval: None,
             no_relay: false,
+            no_mdns: false,
+            no_beacon: false,
+            beacon_port: None,
+            discovery_interface: None,
             media_listen: None,
         },
     )

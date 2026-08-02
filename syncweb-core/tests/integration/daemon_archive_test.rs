@@ -6,7 +6,7 @@ use syncweb_core::{
     folder::{CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
 };
 
@@ -21,6 +21,7 @@ async fn node(directory: &TestDirectory) -> Result<Arc<IrohNode>> {
             root.join("data"),
             RelayMode::Default,
             crate::test_utils::empty_member_keys(),
+            DiscoveryConfig::disabled(),
         )
         .await?,
     ))

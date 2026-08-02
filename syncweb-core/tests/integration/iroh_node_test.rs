@@ -3,7 +3,7 @@ use std::time::Duration;
 use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
 use syncweb_core::node::identity::IdentityManager;
-use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
+use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
 
 use super::test_node;
 use crate::test_utils::TestDirectory;
@@ -24,6 +24,7 @@ async fn test_node_with_lookup(
             insecure: true,
         },
         lookup,
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?)

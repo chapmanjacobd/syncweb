@@ -4,7 +4,7 @@
 .SH NAME
 start \- Start the local syncweb daemon
 .SH SYNOPSIS
-\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-bridge\-listen\fR] [\fB\-\-media\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-no\-mdns\fR] [\fB\-\-no\-beacon\fR] [\fB\-\-beacon\-port\fR] [\fB\-\-discovery\-interface\fR] [\fB\-\-media\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Start the local syncweb daemon
 .SH OPTIONS
@@ -27,8 +27,17 @@ Write daemon logs to this file
 \fB\-\-no\-relay\fR
 Disable Iroh relay mode (no relay server connections)
 .TP
-\fB\-\-bridge\-listen\fR \fI<BRIDGE_LISTEN>\fR
-WebSocket bridge listen address (e.g. 127.0.0.1:9192)
+\fB\-\-no\-mdns\fR
+Disable mDNS local peer discovery
+.TP
+\fB\-\-no\-beacon\fR
+Disable the UDP beacon local peer discovery
+.TP
+\fB\-\-beacon\-port\fR \fI<BEACON_PORT>\fR
+Base UDP port the beacon spreads network scopes over
+.TP
+\fB\-\-discovery\-interface\fR \fI<DISCOVERY_INTERFACE>\fR
+Restrict the beacon to a single network interface by name
 .TP
 \fB\-\-media\-listen\fR \fI<MEDIA_LISTEN>\fR
 Media HTTP server listen address (e.g. 127.0.0.1:9193)

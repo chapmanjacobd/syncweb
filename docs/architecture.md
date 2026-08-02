@@ -9,6 +9,25 @@ An explicit, shareable grouping abstraction.
 - Membership: All devices in the network subscribe to this topic
 - Folders: All folders in the network share the topic for discovery and auto-join
 
+### Local (LAN) Discovery
+
+Each per-network daemon additionally registers two LAN address lookups on its
+iroh endpoint, both scoped by the first 16 bytes of the network id:
+
+- mDNS with service name `syncweb-<hex(scope[..8])>` (the network-agnostic
+  default daemon keeps iroh's generic `_irohv1` name for interop).
+- A UDP beacon (Zyre-inspired) on port `15200 + (scope[..2] % 2048)`, which
+  broadcasts the node's direct addresses and optional relay URL as a small JSON
+  datagram every second and on change, so two peers on a LAN find each other
+  even where mDNS is blocked. Every datagram carries the scope token, so
+  different networks never accept each other's beacons. Scoping is hygiene,
+  not access control; membership is enforced by the connection-level peer
+  allowlist (see `docs/security-model.md`).
+
+Both lookups are fallbacks for local discovery; the gossip topic above and the
+DHT remain available for remote peers. They can be disabled per daemon with
+`--no-mdns` / `--no-beacon`.
+
 ```rust
 /// A named group of folders and devices sharing a gossip topic.
 /// Networks are always private — membership is required to access

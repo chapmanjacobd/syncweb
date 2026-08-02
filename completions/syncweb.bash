@@ -5979,7 +5979,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__start)
-            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --no-relay --bridge-listen --media-listen --verbose --json --embedded --no-daemon --help"
+            opts="-h --bg --data-dir --log-file --max-threads --sync-interval --no-relay --no-mdns --no-beacon --beacon-port --discovery-interface --media-listen --verbose --json --embedded --no-daemon --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -6001,7 +6001,11 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --bridge-listen)
+                --beacon-port)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --discovery-interface)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

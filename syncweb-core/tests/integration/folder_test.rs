@@ -7,7 +7,7 @@ use syncweb_core::{
     folder::{Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
 };
 
@@ -21,6 +21,7 @@ async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode>
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?)
 }
@@ -119,6 +120,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
                 insecure: true,
             },
             memory_lookup.clone(),
+            DiscoveryConfig::disabled(),
             crate::test_utils::empty_member_keys(),
         )
         .await?
@@ -134,6 +136,7 @@ async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
                 insecure: true,
             },
             memory_lookup.clone(),
+            DiscoveryConfig::disabled(),
             crate::test_utils::empty_member_keys(),
         )
         .await?
@@ -265,6 +268,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;
@@ -279,6 +283,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;
@@ -342,6 +347,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;
@@ -356,6 +362,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;

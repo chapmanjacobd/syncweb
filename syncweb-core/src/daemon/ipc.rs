@@ -2651,6 +2651,7 @@ mod tests {
                 directory.join("data"),
                 RelayMode::Default,
                 Arc::new(std::sync::RwLock::new(HashSet::new())),
+                crate::node::iroh_node::DiscoveryConfig::disabled(),
             )
             .await
             .expect("test node should start"),

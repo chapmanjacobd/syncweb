@@ -6,7 +6,7 @@ use syncweb_core::{
     folder::{FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     snapshot::{Snapshot, SnapshotEntry, SnapshotStore},
 };
@@ -20,6 +20,7 @@ async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
         directory.path().join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?)
 }
@@ -35,6 +36,7 @@ async fn test_node_with_relay(directory: &TestDirectory, name: &str, relay_map: 
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?)
 }

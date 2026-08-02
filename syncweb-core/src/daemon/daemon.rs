@@ -32,6 +32,8 @@ use crate::{
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
 };
 
+use crate::node::iroh_node::discovery_scope;
+
 use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, current_timestamp,
     daemon_socket_path,
@@ -56,6 +58,7 @@ pub struct DaemonConfig {
     pub watch_debounce: Duration,
     pub relay_mode: crate::node::iroh_node::RelayMode,
     pub media_listen: Option<SocketAddr>,
+    pub discovery: crate::node::iroh_node::DiscoveryConfig,
 }
 
 impl Default for DaemonConfig {
@@ -74,6 +77,7 @@ impl Default for DaemonConfig {
             watch_debounce: Duration::from_millis(500),
             relay_mode: crate::node::iroh_node::RelayMode::Default,
             media_listen: None,
+            discovery: crate::node::iroh_node::DiscoveryConfig::default(),
         }
     }
 }
@@ -130,6 +134,7 @@ impl Daemon {
         node_db: &NodeDatabase,
         pid_lock: &PidLock,
         relay_mode: crate::node::iroh_node::RelayMode,
+        discovery: crate::node::iroh_node::DiscoveryConfig,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
         let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
@@ -137,7 +142,7 @@ impl Daemon {
             let _ = pid_lock.release();
         })?;
         let node = Arc::new(
-            IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys)
+            IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
                 .await
                 .inspect_err(|_| {
                     let _ = node_db.remove_lifecycle();
@@ -229,11 +234,14 @@ impl Daemon {
             let keys: HashSet<iroh::PublicKey> = networks.iter().flat_map(|n| n.members.iter().copied()).collect();
             Arc::new(RwLock::new(keys))
         };
+        let mut node_discovery = config.discovery.clone();
+        node_discovery.scope = discovery_scope(config.network.as_deref());
         let (node, folder_manager, mut sync_engine) = match Self::open_identity_and_node(
             &config.data_dir,
             &node_db,
             &pid_lock,
             config.relay_mode.clone(),
+            node_discovery,
             member_keys.clone(),
         )
         .await

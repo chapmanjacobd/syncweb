@@ -86,10 +86,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l data-dir -d 'O
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l log-file -d 'Write daemon logs to this file' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l max-threads -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l sync-interval -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l bridge-listen -d 'WebSocket bridge listen address (e.g. 127.0.0.1:9192)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l beacon-port -d 'Base UDP port the beacon spreads network scopes over' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l discovery-interface -d 'Restrict the beacon to a single network interface by name' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l media-listen -d 'Media HTTP server listen address (e.g. 127.0.0.1:9193)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l bg -d 'Run in the background (daemon mode)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-relay -d 'Disable Iroh relay mode (no relay server connections)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-mdns -d 'Disable mDNS local peer discovery'
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-beacon -d 'Disable the UDP beacon local peer discovery'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

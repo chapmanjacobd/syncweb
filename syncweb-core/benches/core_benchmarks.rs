@@ -47,7 +47,7 @@ use syncweb_core::{
     indexing::{FetchFailure, FetchFailureKind, ProviderLeaseTracker, ProviderReputationStore, ReputationConfig},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
@@ -568,6 +568,7 @@ fn archive_benchmark_fixture() -> ArchiveBenchmarkFixture {
                 directory.join("data"),
                 RelayMode::Default,
                 empty_member_keys(),
+                DiscoveryConfig::disabled(),
             )
             .await
             .expect("benchmark node should start"),
@@ -692,6 +693,7 @@ fn bench_ipc_create_folder(c: &mut Criterion) {
                     directory.join("data"),
                     RelayMode::Default,
                     empty_member_keys(),
+                    DiscoveryConfig::disabled(),
                 )
                 .await
                 .expect("benchmark node should start"),
@@ -745,6 +747,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
                     directory.join("data"),
                     RelayMode::Default,
                     empty_member_keys(),
+                    DiscoveryConfig::disabled(),
                 )
                 .await
                 .expect("benchmark node should start"),
@@ -821,6 +824,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
                     directory.join("data"),
                     RelayMode::Default,
                     empty_member_keys(),
+                    DiscoveryConfig::disabled(),
                 )
                 .await
                 .expect("benchmark node should start"),
@@ -907,6 +911,7 @@ fn bench_daemon_start_stop(c: &mut Criterion) {
                         directory.join("data"),
                         RelayMode::Default,
                         empty_member_keys(),
+                        DiscoveryConfig::disabled(),
                     )
                     .await
                     .expect("benchmark node should start");

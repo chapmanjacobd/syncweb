@@ -8,7 +8,7 @@ use syncweb_core::{
     folder::{CollectionEntry, CollectionManifest, DropExportOptions, DropExporter},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
 };
 use tokio::io::{AsyncReadExt, BufReader};
@@ -23,6 +23,7 @@ async fn test_node(directory: &TestDirectory) -> Result<IrohNode> {
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?)
 }

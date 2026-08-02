@@ -38,5 +38,12 @@ impl InitResult {
 pub async fn open_node(data_dir: &std::path::Path) -> crate::error::Result<IrohNode> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let empty_keys = Arc::new(RwLock::new(HashSet::new()));
-    IrohNode::new(identity, data_dir.join("data"), RelayMode::Default, empty_keys).await
+    IrohNode::new(
+        identity,
+        data_dir.join("data"),
+        RelayMode::Default,
+        empty_keys,
+        crate::node::iroh_node::DiscoveryConfig::default(),
+    )
+    .await
 }

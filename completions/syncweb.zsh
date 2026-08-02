@@ -49,10 +49,13 @@ _arguments "${_arguments_options[@]}" : \
 '--log-file=[Write daemon logs to this file]:LOG_FILE:_files' \
 '--max-threads=[]:MAX_THREADS:_default' \
 '--sync-interval=[]:SYNC_INTERVAL:_default' \
-'--bridge-listen=[WebSocket bridge listen address (e.g. 127.0.0.1\:9192)]:BRIDGE_LISTEN:_default' \
+'--beacon-port=[Base UDP port the beacon spreads network scopes over]:BEACON_PORT:_default' \
+'--discovery-interface=[Restrict the beacon to a single network interface by name]:DISCOVERY_INTERFACE:_default' \
 '--media-listen=[Media HTTP server listen address (e.g. 127.0.0.1\:9193)]:MEDIA_LISTEN:_default' \
 '--bg[Run in the background (daemon mode)]' \
 '--no-relay[Disable Iroh relay mode (no relay server connections)]' \
+'--no-mdns[Disable mDNS local peer discovery]' \
+'--no-beacon[Disable the UDP beacon local peer discovery]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

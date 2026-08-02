@@ -10,7 +10,7 @@ use syncweb_core::{
     },
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
 };
 
@@ -96,6 +96,7 @@ async fn indexing_service_consumes_folder_events() -> anyhow::Result<()> {
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
@@ -134,6 +135,7 @@ async fn catalog_publish_and_search_uses_global_fts() -> anyhow::Result<()> {
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
@@ -175,6 +177,7 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let subscriber_root = directory.path().join("subscriber");
@@ -187,6 +190,7 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
 
@@ -250,6 +254,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let subscriber_root = directory.path().join("resilience-subscriber");
@@ -262,6 +267,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
             insecure: true,
         },
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
 

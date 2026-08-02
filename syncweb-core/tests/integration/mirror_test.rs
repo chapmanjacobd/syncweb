@@ -1,7 +1,7 @@
 use anyhow::{Result, ensure};
 use syncweb_core::indexing::{ProviderLease, ReplicationBudget, ResilienceConfig, ResilienceService};
 use syncweb_core::node::identity::IdentityManager;
-use syncweb_core::node::iroh_node::{IrohNode, RelayMode};
+use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
 
 use crate::test_utils::TestDirectory;
 
@@ -14,6 +14,7 @@ async fn test_node(directory: &TestDirectory, name: &str, relay_map: Option<iroh
         root.join("data"),
         relay_mode,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?)
 }

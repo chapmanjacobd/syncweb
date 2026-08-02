@@ -25,6 +25,8 @@ pub struct Config {
     #[serde(default)]
     pub advanced: AdvancedConfig,
     #[serde(default)]
+    pub discovery: DiscoveryConfig,
+    #[serde(default)]
     pub default_path: Option<PathBuf>,
     #[serde(default = "default_sync_mode")]
     pub default_sync_mode: String,
@@ -100,6 +102,19 @@ impl Config {
                     SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
                 })?;
             }
+            "discovery.mdns" => self.discovery.mdns = parse_bool(key, value)?,
+            "discovery.beacon" => self.discovery.beacon = parse_bool(key, value)?,
+            "discovery.beacon_base_port" => {
+                self.discovery.beacon_base_port = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a valid port number: {error}"))
+                })?;
+            }
+            "discovery.beacon_interval_ms" => {
+                self.discovery.beacon_interval_ms = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
+            "discovery.interface" => self.discovery.interface = Some(value.to_owned()),
             "default_path" => self.default_path = Some(PathBuf::from(value)),
             "default_sync_mode" => {
                 value.parse::<crate::folder::SyncMode>()?;
@@ -110,7 +125,8 @@ impl Config {
                     "unsupported config key {key:?}; supported keys: \
                      bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback, schedule.active_hours, \
                      bandwidth.max_upload, bandwidth.max_download, parallel.threads, cache.max_cache_size, \
-                     advanced.blob_cache_size_gb, default_path, default_sync_mode"
+                     advanced.blob_cache_size_gb, discovery.mdns, discovery.beacon, discovery.beacon_base_port, \
+                     discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode"
                 )));
             }
         }
@@ -181,6 +197,52 @@ impl Default for AdvancedConfig {
             blob_cache_size_gb: default_blob_cache_size(),
         }
     }
+}
+
+/// Local discovery settings. `interface` only applies to the UDP beacon; the
+/// mDNS lookup always uses the system's default multicast interface.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct DiscoveryConfig {
+    /// Whether the mDNS address lookup is registered (default: true).
+    #[serde(default = "default_discovery_enabled")]
+    pub mdns: bool,
+    /// Whether the UDP beacon address lookup is registered (default: true).
+    #[serde(default = "default_discovery_enabled")]
+    pub beacon: bool,
+    /// Base UDP port the beacon spreads network scopes over (default: 15200).
+    #[serde(default = "default_beacon_base_port")]
+    pub beacon_base_port: u16,
+    /// How often the beacon re-broadcasts, in milliseconds (default: 1000).
+    #[serde(default = "default_beacon_interval_ms")]
+    pub beacon_interval_ms: u64,
+    /// Restrict the beacon to a single network interface by name, if any.
+    #[serde(default)]
+    pub interface: Option<String>,
+}
+
+impl Default for DiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            mdns: default_discovery_enabled(),
+            beacon: default_discovery_enabled(),
+            beacon_base_port: default_beacon_base_port(),
+            beacon_interval_ms: default_beacon_interval_ms(),
+            interface: None,
+        }
+    }
+}
+
+const fn default_discovery_enabled() -> bool {
+    true
+}
+
+const fn default_beacon_base_port() -> u16 {
+    crate::node::beacon_lookup::DEFAULT_BEACON_PORT
+}
+
+const fn default_beacon_interval_ms() -> u64 {
+    1_000
 }
 
 fn default_sync_mode() -> String {

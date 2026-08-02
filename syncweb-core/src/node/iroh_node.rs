@@ -6,9 +6,11 @@ use iroh_gossip::net::Gossip;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use crate::error::{Result, SyncwebError};
 
+use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::discovery::TopicTracker;
 use super::identity::IdentityManager;
 use super::membership_hook::MembershipHook;
@@ -20,6 +22,130 @@ pub enum RelayMode {
     Default,
     Custom { map: iroh::RelayMap, insecure: bool },
     None,
+}
+
+/// Runtime configuration for the local discovery mechanisms attached to a node.
+///
+/// `scope` is a 16-byte token derived from the daemon's network name. When
+/// present it scopes both mDNS and the UDP beacon so that unrelated networks
+/// do not discover each other; `None` keeps the default iroh mDNS service name
+/// and a scope-less beacon (used by the network-agnostic default daemon).
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct DiscoveryConfig {
+    /// Whether the mDNS address lookup is registered.
+    pub mdns: bool,
+    /// Whether the UDP beacon address lookup is registered.
+    pub beacon: bool,
+    /// Base UDP port the beacon spreads scopes over.
+    pub beacon_base_port: u16,
+    /// How often the beacon re-broadcasts its endpoint data.
+    pub beacon_interval: Duration,
+    /// Restrict the beacon to a single network interface by name, if any.
+    pub interface: Option<String>,
+    /// 16-byte discovery scope derived from the network name, if any.
+    pub scope: Option<[u8; 16]>,
+}
+
+impl Default for DiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            mdns: true,
+            beacon: true,
+            beacon_base_port: DEFAULT_BEACON_PORT,
+            beacon_interval: Duration::from_secs(1),
+            interface: None,
+            scope: None,
+        }
+    }
+}
+
+impl DiscoveryConfig {
+    /// A discovery configuration with every mechanism disabled.
+    #[must_use]
+    pub const fn disabled() -> Self {
+        Self {
+            mdns: false,
+            beacon: false,
+            beacon_base_port: DEFAULT_BEACON_PORT,
+            beacon_interval: Duration::from_secs(1),
+            interface: None,
+            scope: None,
+        }
+    }
+}
+
+/// mDNS service name for a scope, or the default iroh name when unscoped.
+fn mdns_service_name(scope: Option<&[u8; 16]>) -> String {
+    scope.map_or_else(
+        || "irohv1".to_owned(),
+        |bytes| format!("syncweb-{}", hex::encode(&bytes[..8])),
+    )
+}
+
+/// Derive a discovery scope (first 16 bytes of the network id) from a network
+/// name. `None` for networks without a name, keeping the default daemon
+/// compatible with plain iroh peers on the LAN.
+#[must_use]
+pub fn discovery_scope(network: Option<&str>) -> Option<[u8; 16]> {
+    let name = network?;
+    let id = crate::net::NetworkId::from_name(name);
+    let bytes = id.as_bytes();
+    let mut scope = [0_u8; 16];
+    scope.copy_from_slice(&bytes[..16]);
+    Some(scope)
+}
+
+/// Registers the scoped mDNS and UDP beacon address lookups on an endpoint.
+fn register_discovery(endpoint: &iroh::Endpoint, discovery: &DiscoveryConfig) {
+    if discovery.mdns {
+        register_mdns(endpoint, discovery);
+    }
+    if discovery.beacon {
+        register_beacon(endpoint, discovery);
+    }
+}
+
+fn register_mdns(endpoint: &iroh::Endpoint, discovery: &DiscoveryConfig) {
+    let service_name = mdns_service_name(discovery.scope.as_ref());
+    match iroh_mdns_address_lookup::MdnsAddressLookup::builder()
+        .service_name(service_name)
+        .build(endpoint.id())
+        .map_err(|error| SyncwebError::operation("failed to build mDNS address lookup", error))
+        .and_then(|mdns| {
+            endpoint
+                .address_lookup()
+                .map_err(|error| SyncwebError::operation("no address lookup service available", error))
+                .map(|lookup| lookup.add(mdns))
+        }) {
+        Ok(()) => tracing::debug!("mDNS address lookup registered"),
+        Err(error) => tracing::warn!(
+            %error,
+            "mDNS address lookup registration failed — local peer discovery unavailable"
+        ),
+    }
+}
+
+fn register_beacon(endpoint: &iroh::Endpoint, discovery: &DiscoveryConfig) {
+    let Ok(beacon) = BeaconAddressLookup::new(
+        endpoint.id(),
+        discovery.scope,
+        discovery.beacon_base_port,
+        discovery.beacon_interval,
+        discovery.interface.as_deref(),
+    ) else {
+        return;
+    };
+    match endpoint.address_lookup() {
+        Ok(lookup) => {
+            lookup.add(beacon);
+            tracing::debug!("beacon address lookup registered");
+        }
+        Err(error) => tracing::warn!(
+            %error,
+            "beacon address lookup registration failed — no address lookup service available"
+        ),
+    }
 }
 
 pub struct IrohNode {
@@ -45,8 +171,17 @@ impl IrohNode {
         data_dir: PathBuf,
         relay_mode: RelayMode,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        discovery: DiscoveryConfig,
     ) -> Result<Self> {
-        Self::new_with_address_lookup(identity, data_dir, relay_mode, MemoryLookup::new(), member_keys).await
+        Self::new_with_address_lookup(
+            identity,
+            data_dir,
+            relay_mode,
+            MemoryLookup::new(),
+            discovery,
+            member_keys,
+        )
+        .await
     }
 
     /// # Errors
@@ -57,6 +192,7 @@ impl IrohNode {
         data_dir: PathBuf,
         relay_mode: RelayMode,
         address_lookup: MemoryLookup,
+        discovery: DiscoveryConfig,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir)
@@ -93,21 +229,11 @@ impl IrohNode {
             .await
             .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
 
-        // Register mDNS address lookup for local network peer discovery.
-        if let Err(error) = iroh_mdns_address_lookup::MdnsAddressLookup::builder()
-            .build(endpoint.id())
-            .map_err(|error| SyncwebError::operation("failed to build mDNS address lookup", error))
-            .and_then(|mdns| {
-                endpoint
-                    .address_lookup()
-                    .map_err(|error| SyncwebError::operation("no address lookup service available", error))
-                    .map(|lookup| lookup.add(mdns))
-            })
-        {
-            tracing::warn!(%error, "mDNS address lookup registration failed — local peer discovery unavailable");
-        } else {
-            tracing::debug!("mDNS address lookup registered");
-        }
+        // Register mDNS and UDP beacon address lookups for local peer discovery.
+        // Both are scoped by `discovery.scope` when the daemon belongs to a
+        // network; failures are logged and leave the other discovery mechanism
+        // (or remote relay/DHT discovery) in charge.
+        register_discovery(&endpoint, &discovery);
 
         let fs_blob_store = iroh_blobs::store::fs::FsStore::load(data_dir.join("blobs"))
             .await

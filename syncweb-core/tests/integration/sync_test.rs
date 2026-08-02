@@ -9,7 +9,7 @@ use syncweb_core::{
     folder::{FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     sync::{
         AreaFilter, AreaOfInterest, DeletedTracker, EfficientPeerCache, EvictionStrategy, PeerTracker, SubscribeParams,
@@ -107,6 +107,7 @@ async fn sync_engine_emits_lifecycle_and_stats() -> anyhow::Result<()> {
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let folders = FolderManager::new(&node);

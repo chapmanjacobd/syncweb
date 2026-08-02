@@ -546,6 +546,14 @@ pub struct StartArgs {
     pub sync_interval: Option<u64>,
     #[arg(long, help = "Disable Iroh relay mode (no relay server connections)")]
     pub no_relay: bool,
+    #[arg(long, help = "Disable mDNS local peer discovery")]
+    pub no_mdns: bool,
+    #[arg(long, help = "Disable the UDP beacon local peer discovery")]
+    pub no_beacon: bool,
+    #[arg(long, help = "Base UDP port the beacon spreads network scopes over")]
+    pub beacon_port: Option<u16>,
+    #[arg(long, help = "Restrict the beacon to a single network interface by name")]
+    pub discovery_interface: Option<String>,
     #[arg(long, help = "Media HTTP server listen address (e.g. 127.0.0.1:9193)")]
     pub media_listen: Option<std::net::SocketAddr>,
 }

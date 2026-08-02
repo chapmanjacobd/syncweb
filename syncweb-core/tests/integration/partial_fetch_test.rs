@@ -9,7 +9,7 @@ use syncweb_core::{
     folder::{Capability, FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
 };
@@ -95,6 +95,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;
@@ -109,6 +110,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
             insecure: true,
         },
         memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
         crate::test_utils::empty_member_keys(),
     )
     .await?;

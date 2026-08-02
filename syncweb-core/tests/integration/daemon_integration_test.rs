@@ -13,7 +13,7 @@ use syncweb_core::{
     },
     node::{
         identity::IdentityManager,
-        iroh_node::{IrohNode, RelayMode},
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     schedule::BandwidthWindowConfig,
     storage::node_db::NodeDatabase,
@@ -30,6 +30,7 @@ async fn create_folder(directory: &TestDirectory, root: &Path) -> Result<iroh_do
         directory.path().join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
     )
     .await?;
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
@@ -324,6 +325,7 @@ async fn test_daemon_import_export_archive_via_ipc() -> Result<()> {
             directory.path().join("data"),
             RelayMode::Default,
             crate::test_utils::empty_member_keys(),
+            DiscoveryConfig::disabled(),
         )
         .await?,
     );

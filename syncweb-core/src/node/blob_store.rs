@@ -10,7 +10,7 @@ use iroh_blobs::{
     ticket::BlobTicket,
 };
 use n0_future::StreamExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Result, SyncwebError};
 use crate::net::NetworkContext;
@@ -65,6 +65,7 @@ impl BlobStore {
     ///
     /// Returns an error if the file fails to be read or added to the store.
     pub async fn add_file(&self, path: impl AsRef<Path>) -> Result<Hash> {
+        let path = absolute_path(path)?;
         Ok(self
             .store
             .add_path(path)
@@ -83,10 +84,11 @@ impl BlobStore {
     ///
     /// Returns an error if the file fails to be read or added to the store.
     pub async fn add_file_ref(&self, path: impl AsRef<Path>) -> Result<Hash> {
+        let path = absolute_path(path)?;
         Ok(self
             .store
             .add_path_with_opts(AddPathOptions {
-                path: path.as_ref().to_owned(),
+                path,
                 mode: ImportMode::TryReference,
                 format: BlobFormat::Raw,
             })
@@ -325,4 +327,9 @@ impl BlobStore {
             .map_err(|error| SyncwebError::operation("failed to force-fetch blob", error))?;
         Ok(())
     }
+}
+
+fn absolute_path(path: impl AsRef<Path>) -> Result<PathBuf> {
+    std::path::absolute(path.as_ref())
+        .map_err(|error| SyncwebError::operation("failed to resolve blob file path", error))
 }

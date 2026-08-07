@@ -5,7 +5,7 @@ use comfy_table::Table;
 
 use std::{
     io::IsTerminal,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
     time::{Duration, Instant},
@@ -18,7 +18,9 @@ use cli::{
     commands::{
         CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MediaArgs,
         MirrorArgs, NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
-        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, VerifyArgs, WatchArgs,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, TransferAllocateArgs,
+        TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs,
+        TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -27,6 +29,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
+    allocation::{AllocationCandidate, RootCapacity, StorageRoot, allocate},
     cancel_session,
     daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
@@ -47,7 +50,11 @@ use syncweb_core::{
     snapshot::SnapshotStore,
     sort::{SortConfig, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
-    storage::{Config as AppConfig, node_db::NodeDatabase, stats_db::StatsDatabase},
+    storage::{
+        Config as AppConfig,
+        node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
+        stats_db::StatsDatabase,
+    },
     sync::{
         ActiveSession, AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport,
         SubscribeParams, SyncEngine, SyncEvent,
@@ -160,6 +167,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         }
         Command::FileStats(command) => handle_filestats(&ctx, command).await?,
         Command::Health(command) => handle_health(&ctx, command).await?,
+        Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Init(command) => handle_init(&ctx, command).await?,
         Command::Automatic(command) => handle_automatic(&ctx, command).await?,
@@ -1233,6 +1241,389 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             Ok(())
         }
     }
+}
+
+fn transfer_root_capacity(db: &NodeDatabase, root: &StorageRootRecord) -> Result<RootCapacity> {
+    let total = fs4::total_space(&root.path)
+        .with_context(|| format!("failed to inspect storage root {}", root.path.display()))?;
+    let free = fs4::available_space(&root.path)
+        .with_context(|| format!("failed to inspect storage root {}", root.path.display()))?;
+    let reserved = db.reserved_transfer_bytes(&root.id)?;
+    Ok(RootCapacity::new(total, free, reserved))
+}
+
+fn existing_destination_size(path: &Path, expected_hash: &[u8; 32]) -> Result<Option<u64>> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        anyhow::bail!("materialization destination is not a regular file: {}", path.display());
+    }
+    let bytes = std::fs::read(path)?;
+    if blake3::hash(&bytes).as_bytes() != expected_hash {
+        anyhow::bail!("materialization destination has a different blob: {}", path.display());
+    }
+    Ok(Some(
+        u64::try_from(bytes.len()).context("materialized file is too large")?,
+    ))
+}
+
+fn transfer_group(job: &syncweb_core::storage::node_db::TransferJobRecord, group_by: Option<&str>) -> String {
+    match group_by {
+        Some("namespace") => job.namespace_id.clone(),
+        Some("root") => job.root_id.clone().unwrap_or_else(|| "-".to_owned()),
+        Some("state") => job.state.clone(),
+        _ => String::new(),
+    }
+}
+
+async fn handle_transfer(ctx: &CliContext<'_>, command: TransferCommand) -> Result<()> {
+    match command {
+        TransferCommand::Info(args) => handle_transfer_info(ctx, &args),
+        TransferCommand::Remaining => handle_transfer_remaining(ctx),
+        TransferCommand::Root(args) => handle_transfer_root(ctx, args),
+        TransferCommand::Enqueue(args) => handle_transfer_enqueue(ctx, args),
+        TransferCommand::Allocate(args) => handle_transfer_allocate(ctx, &args),
+        TransferCommand::Materialize(args) => handle_transfer_materialize(ctx, args).await,
+        TransferCommand::Pause(args) => handle_transfer_state(ctx, &args, "paused", "paused"),
+        TransferCommand::Resume(args) => handle_transfer_state(ctx, &args, "queued", "resumed"),
+        TransferCommand::Cancel(args) => handle_transfer_state(ctx, &args, "cancelled", "cancelled"),
+        TransferCommand::Retry(args) => handle_transfer_retry(ctx, &args),
+    }
+}
+
+fn handle_transfer_info(ctx: &CliContext<'_>, args: &TransferInfoArgs) -> Result<()> {
+    let db = open_node_db(ctx.data_dir)?;
+    let mut jobs = db.list_transfer_jobs(args.namespace.as_deref(), args.state.as_deref())?;
+    jobs.sort_by(|left, right| match args.sort.as_str() {
+        "updated" => left.updated_at.cmp(&right.updated_at).then(left.id.cmp(&right.id)),
+        "size" => right.size.cmp(&left.size).then(left.id.cmp(&right.id)),
+        "peers" => right.peer_count.cmp(&left.peer_count).then(left.id.cmp(&right.id)),
+        "path" => left.entry_key.cmp(&right.entry_key).then(left.id.cmp(&right.id)),
+        _ => left.created_at.cmp(&right.created_at).then(left.id.cmp(&right.id)),
+    });
+    if let Some(limit) = args.limit {
+        jobs.truncate(limit);
+    }
+    if ctx.output_json {
+        let output = jobs
+            .iter()
+            .map(|job| {
+                serde_json::json!({
+                    "id": job.id,
+                    "namespace": job.namespace_id,
+                    "path": String::from_utf8_lossy(&job.entry_key),
+                    "hash": hex::encode(job.hash),
+                    "size": job.size,
+                    "root": job.root_id,
+                    "destination": job.destination.as_ref().map(|path| path.display().to_string()),
+                    "state": job.state,
+                    "bytes_transferred": job.bytes_transferred,
+                    "peer_count": job.peer_count,
+                    "eta_seconds": job.eta_seconds,
+                    "retries": job.retries,
+                    "error": job.error_message,
+                    "group": transfer_group(job, args.group_by.as_deref()),
+                    "created_at": job.created_at,
+                    "updated_at": job.updated_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        let mut table = Table::new();
+        if args.group_by.is_some() {
+            table.set_header([
+                "Group",
+                "ID",
+                "Namespace",
+                "Path",
+                "State",
+                "Size",
+                "Progress",
+                "Peers",
+                "Root",
+            ]);
+        } else {
+            table.set_header(["ID", "Namespace", "Path", "State", "Size", "Progress", "Peers", "Root"]);
+        }
+        for job in jobs {
+            let group = transfer_group(&job, args.group_by.as_deref());
+            let row = [
+                job.id,
+                job.namespace_id,
+                String::from_utf8_lossy(&job.entry_key).into_owned(),
+                job.state,
+                format_bytes(job.size),
+                format!("{}/{}", format_bytes(job.bytes_transferred), format_bytes(job.size)),
+                job.peer_count.to_string(),
+                job.root_id.unwrap_or_else(|| "-".to_owned()),
+            ];
+            if args.group_by.is_some() {
+                table.add_row(std::iter::once(group).chain(row).collect::<Vec<_>>());
+            } else {
+                table.add_row(row);
+            }
+        }
+        println!("{table}");
+    }
+    Ok(())
+}
+
+fn transfer_remaining_row(root: &serde_json::Value) -> [String; 7] {
+    [
+        root.get("id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("-")
+            .to_owned(),
+        root.get("path")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("-")
+            .to_owned(),
+        format_bytes(root.get("free").and_then(serde_json::Value::as_u64).unwrap_or_default()),
+        format_bytes(
+            root.get("reserved")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default(),
+        ),
+        format_bytes(
+            root.get("available")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default(),
+        ),
+        format_bytes(
+            root.get("allocatable")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default(),
+        ),
+        root.get("enabled")
+            .map_or_else(|| "null".to_owned(), ToString::to_string),
+    ]
+}
+
+fn handle_transfer_remaining(ctx: &CliContext<'_>) -> Result<()> {
+    let db = open_node_db(ctx.data_dir)?;
+    let roots = db.list_storage_roots()?;
+    let mut output = Vec::new();
+    for root in roots {
+        let capacity = transfer_root_capacity(&db, &root)?;
+        output.push(serde_json::json!({
+            "id": root.id,
+            "path": root.path,
+            "enabled": root.enabled,
+            "total": capacity.total,
+            "free": capacity.free,
+            "reserved": capacity.reserved,
+            "available": capacity.available,
+            "allocatable": capacity.allocatable(root.min_free),
+            "min_free": root.min_free,
+        }));
+    }
+    if ctx.output_json {
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        let mut table = Table::new();
+        table.set_header([
+            "Root",
+            "Path",
+            "Free",
+            "Reserved",
+            "Available",
+            "Allocatable",
+            "Enabled",
+        ]);
+        for root in &output {
+            table.add_row(transfer_remaining_row(root));
+        }
+        println!("{table}");
+    }
+    Ok(())
+}
+
+fn handle_transfer_root(ctx: &CliContext<'_>, args: TransferRootArgs) -> Result<()> {
+    let input_root = StorageRootRecord::new(args.id, args.path, args.min_free, !args.disabled);
+    std::fs::create_dir_all(&input_root.path)
+        .with_context(|| format!("failed to create storage root {}", input_root.path.display()))?;
+    let canonical_path = std::fs::canonicalize(&input_root.path)
+        .with_context(|| format!("failed to resolve storage root {}", input_root.path.display()))?;
+    let canonical_root = StorageRootRecord::new(input_root.id, canonical_path, input_root.min_free, input_root.enabled);
+    let db = open_node_db(ctx.data_dir)?;
+    db.upsert_storage_root(&canonical_root)?;
+    if ctx.output_json {
+        println!("{}", serde_json::json!({"status": "saved", "id": canonical_root.id}));
+    } else {
+        println!("saved storage root {}", canonical_root.id);
+    }
+    Ok(())
+}
+
+fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> Result<()> {
+    let namespace = iroh_docs::NamespaceId::from_str(&args.namespace)
+        .with_context(|| format!("invalid namespace: {}", args.namespace))?;
+    let hash = iroh_blobs::Hash::from_str(&args.hash).with_context(|| format!("invalid blob hash: {}", args.hash))?;
+    let path = args.path;
+    let entry_key = path.to_string_lossy().into_owned();
+    let namespace_id = namespace.to_string();
+    let db = open_node_db(ctx.data_dir)?;
+    let job_id = db.enqueue_transfer_job(&NewTransferJob::new(
+        &namespace_id,
+        entry_key.as_bytes(),
+        hash.as_bytes(),
+        args.size,
+        None,
+        None,
+    ))?;
+    if ctx.output_json {
+        println!("{}", serde_json::json!({"status": "queued", "id": job_id}));
+    } else {
+        println!("queued transfer job {job_id}");
+    }
+    Ok(())
+}
+
+fn handle_transfer_allocate(ctx: &CliContext<'_>, args: &TransferAllocateArgs) -> Result<()> {
+    let db = open_node_db(ctx.data_dir)?;
+    let roots = db.list_storage_roots()?;
+    let mut root_inputs = Vec::new();
+    for root in roots {
+        let capacity = transfer_root_capacity(&db, &root)?;
+        root_inputs.push((
+            StorageRoot::new(&root.id, &root.path, root.min_free).with_enabled(root.enabled),
+            capacity,
+        ));
+    }
+    let jobs = db.list_transfer_jobs(None, Some("queued"))?;
+    let mut candidates = Vec::new();
+    for job in &jobs {
+        if job.root_id.is_some() {
+            continue;
+        }
+        let path = PathBuf::from(
+            String::from_utf8(job.entry_key.clone())
+                .with_context(|| format!("job {} has a non-UTF-8 entry path", job.id))?,
+        );
+        if args
+            .namespace
+            .as_deref()
+            .is_some_and(|namespace| namespace != job.namespace_id)
+            || args.min_size.is_some_and(|size| job.size < size)
+            || args.max_size.is_some_and(|size| job.size > size)
+            || args
+                .path_prefix
+                .as_ref()
+                .is_some_and(|prefix| !path.starts_with(prefix))
+        {
+            continue;
+        }
+        let namespace = iroh_docs::NamespaceId::from_str(&job.namespace_id)
+            .with_context(|| format!("job {} has an invalid namespace", job.id))?;
+        candidates.push(AllocationCandidate::new(
+            namespace,
+            path,
+            iroh_blobs::Hash::from(job.hash),
+            job.size,
+            usize::try_from(job.peer_count).unwrap_or(usize::MAX),
+            job.state == "completed",
+        ));
+    }
+    let (decisions, unallocated) = allocate(&root_inputs, &candidates);
+    if !args.dry_run {
+        let mut assignments = Vec::new();
+        for decision in &decisions {
+            if let Some(job) = jobs.iter().find(|job| {
+                job.root_id.is_none()
+                    && job.namespace_id == decision.candidate.namespace.to_string()
+                    && job.entry_key == decision.candidate.path.to_string_lossy().as_bytes()
+                    && job.hash == *decision.candidate.hash.as_bytes()
+            }) {
+                let existing_size =
+                    existing_destination_size(&decision.destination, decision.candidate.hash.as_bytes())?;
+                assignments.push((job.id.clone(), decision, existing_size));
+            }
+        }
+        for (job_id, decision, existing_size) in assignments {
+            db.assign_transfer_job(&job_id, &decision.root_id, &decision.destination)?;
+            if let Some(size) = existing_size {
+                let peer_count = u64::try_from(decision.candidate.peer_count).context("peer count exceeds u64")?;
+                db.update_transfer_job_progress(&job_id, size, peer_count, None, 0)?;
+                db.update_transfer_job_state(&job_id, "completed", None)?;
+            }
+        }
+    }
+    let result = serde_json::json!({
+        "dry_run": args.dry_run,
+        "allocated": decisions,
+        "unallocated": unallocated,
+    });
+    if ctx.output_json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        println!(
+            "{} allocated, {} did not fit{}",
+            decisions.len(),
+            unallocated.len(),
+            if args.dry_run { " (dry run)" } else { "" }
+        );
+        for decision in decisions {
+            println!(
+                "{} -> {}",
+                decision.candidate.path.display(),
+                decision.destination.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+async fn handle_transfer_materialize(ctx: &CliContext<'_>, args: TransferMaterializeArgs) -> Result<()> {
+    let Some(client) = daemon_client_or_start(ctx.data_dir, ctx.no_daemon, ctx.network).await? else {
+        anyhow::bail!("transfer materialization requires a running daemon");
+    };
+    let response = client
+        .send(IpcRequest::new(IpcCommand::MaterializeTransfers {
+            namespace: args.namespace,
+        }))
+        .await?;
+    if let IpcResponse::TransferJobsProcessed { completed, failed } = response {
+        if ctx.output_json {
+            println!("{}", serde_json::json!({"completed": completed, "failed": failed}));
+        } else {
+            println!("materialized {completed} transfer jobs ({failed} failed)");
+        }
+    } else {
+        print_daemon_message(response, ctx.output_json)?;
+    }
+    Ok(())
+}
+
+fn handle_transfer_state(ctx: &CliContext<'_>, args: &TransferJobArgs, state: &str, action: &str) -> Result<()> {
+    let db = open_node_db(ctx.data_dir)?;
+    db.update_transfer_job_state(&args.id, state, None)?;
+    println!(
+        "{}",
+        if ctx.output_json {
+            serde_json::json!({"status": state, "id": args.id}).to_string()
+        } else {
+            format!("{action} transfer job {}", args.id)
+        }
+    );
+    Ok(())
+}
+
+fn handle_transfer_retry(ctx: &CliContext<'_>, args: &TransferJobArgs) -> Result<()> {
+    let db = open_node_db(ctx.data_dir)?;
+    db.retry_transfer_job(&args.id)?;
+    println!(
+        "{}",
+        if ctx.output_json {
+            serde_json::json!({"status": "queued", "id": args.id}).to_string()
+        } else {
+            format!("requeued transfer job {}", args.id)
+        }
+    );
+    Ok(())
 }
 
 #[async_recursion]

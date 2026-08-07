@@ -51,6 +51,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
             [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
+            [CompletionResult]::new('transfer', 'transfer', [CompletionResultType]::ParameterValue, 'Inspect and control durable transfer jobs')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
             [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
@@ -507,6 +508,190 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'List durable transfer jobs')
+            [CompletionResult]::new('remaining', 'remaining', [CompletionResultType]::ParameterValue, 'Show configured roots and remaining capacity')
+            [CompletionResult]::new('root', 'root', [CompletionResultType]::ParameterValue, 'Add or update a materialization root')
+            [CompletionResult]::new('enqueue', 'enqueue', [CompletionResultType]::ParameterValue, 'Enqueue an individually addressable file job')
+            [CompletionResult]::new('allocate', 'allocate', [CompletionResultType]::ParameterValue, 'Allocate queued jobs to configured roots')
+            [CompletionResult]::new('materialize', 'materialize', [CompletionResultType]::ParameterValue, 'Fetch and materialize assigned jobs through the daemon')
+            [CompletionResult]::new('pause', 'pause', [CompletionResultType]::ParameterValue, 'Pause a transfer job')
+            [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
+            [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
+            [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;transfer;info' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Limit display to a namespace')
+            [CompletionResult]::new('--state', '--state', [CompletionResultType]::ParameterName, 'Limit display to a lifecycle state')
+            [CompletionResult]::new('--sort', '--sort', [CompletionResultType]::ParameterName, 'sort')
+            [CompletionResult]::new('--group-by', '--group-by', [CompletionResultType]::ParameterName, 'group-by')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;remaining' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;root' {
+            [CompletionResult]::new('--min-free', '--min-free', [CompletionResultType]::ParameterName, 'Free bytes to preserve on this root')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--disabled', '--disabled', [CompletionResultType]::ParameterName, 'Disable this root for allocation')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;enqueue' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'namespace')
+            [CompletionResult]::new('--path', '--path', [CompletionResultType]::ParameterName, 'Relative materialization path')
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, '32-byte blob hash in hexadecimal')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;allocate' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Limit allocation to a namespace')
+            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only allocate paths below this relative prefix')
+            [CompletionResult]::new('--min-size', '--min-size', [CompletionResultType]::ParameterName, 'min-size')
+            [CompletionResult]::new('--max-size', '--max-size', [CompletionResultType]::ParameterName, 'max-size')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Report allocations without persisting them')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;materialize' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Limit processing to a namespace')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;pause' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;resume' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;cancel' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;retry' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;transfer;help' {
+            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'List durable transfer jobs')
+            [CompletionResult]::new('remaining', 'remaining', [CompletionResultType]::ParameterValue, 'Show configured roots and remaining capacity')
+            [CompletionResult]::new('root', 'root', [CompletionResultType]::ParameterValue, 'Add or update a materialization root')
+            [CompletionResult]::new('enqueue', 'enqueue', [CompletionResultType]::ParameterValue, 'Enqueue an individually addressable file job')
+            [CompletionResult]::new('allocate', 'allocate', [CompletionResultType]::ParameterValue, 'Allocate queued jobs to configured roots')
+            [CompletionResult]::new('materialize', 'materialize', [CompletionResultType]::ParameterValue, 'Fetch and materialize assigned jobs through the daemon')
+            [CompletionResult]::new('pause', 'pause', [CompletionResultType]::ParameterValue, 'Pause a transfer job')
+            [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
+            [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
+            [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'syncweb;transfer;help;info' {
+            break
+        }
+        'syncweb;transfer;help;remaining' {
+            break
+        }
+        'syncweb;transfer;help;root' {
+            break
+        }
+        'syncweb;transfer;help;enqueue' {
+            break
+        }
+        'syncweb;transfer;help;allocate' {
+            break
+        }
+        'syncweb;transfer;help;materialize' {
+            break
+        }
+        'syncweb;transfer;help;pause' {
+            break
+        }
+        'syncweb;transfer;help;resume' {
+            break
+        }
+        'syncweb;transfer;help;cancel' {
+            break
+        }
+        'syncweb;transfer;help;retry' {
+            break
+        }
+        'syncweb;transfer;help;help' {
             break
         }
         'syncweb;init' {
@@ -1973,6 +2158,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
             [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
+            [CompletionResult]::new('transfer', 'transfer', [CompletionResultType]::ParameterValue, 'Inspect and control durable transfer jobs')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
             [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
             [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
@@ -2092,6 +2278,49 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help;health' {
+            break
+        }
+        'syncweb;help;transfer' {
+            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'List durable transfer jobs')
+            [CompletionResult]::new('remaining', 'remaining', [CompletionResultType]::ParameterValue, 'Show configured roots and remaining capacity')
+            [CompletionResult]::new('root', 'root', [CompletionResultType]::ParameterValue, 'Add or update a materialization root')
+            [CompletionResult]::new('enqueue', 'enqueue', [CompletionResultType]::ParameterValue, 'Enqueue an individually addressable file job')
+            [CompletionResult]::new('allocate', 'allocate', [CompletionResultType]::ParameterValue, 'Allocate queued jobs to configured roots')
+            [CompletionResult]::new('materialize', 'materialize', [CompletionResultType]::ParameterValue, 'Fetch and materialize assigned jobs through the daemon')
+            [CompletionResult]::new('pause', 'pause', [CompletionResultType]::ParameterValue, 'Pause a transfer job')
+            [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
+            [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
+            [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
+            break
+        }
+        'syncweb;help;transfer;info' {
+            break
+        }
+        'syncweb;help;transfer;remaining' {
+            break
+        }
+        'syncweb;help;transfer;root' {
+            break
+        }
+        'syncweb;help;transfer;enqueue' {
+            break
+        }
+        'syncweb;help;transfer;allocate' {
+            break
+        }
+        'syncweb;help;transfer;materialize' {
+            break
+        }
+        'syncweb;help;transfer;pause' {
+            break
+        }
+        'syncweb;help;transfer;resume' {
+            break
+        }
+        'syncweb;help;transfer;cancel' {
+            break
+        }
+        'syncweb;help;transfer;retry' {
             break
         }
         'syncweb;help;init' {

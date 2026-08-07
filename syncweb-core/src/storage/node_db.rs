@@ -9,6 +9,7 @@ use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::{Deserialize, Serialize};
 use tracing;
 use uuid::Uuid;
 
@@ -38,6 +39,119 @@ pub struct SyncEntryParams<'a> {
     pub error_message: Option<&'a str>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct StorageRootRecord {
+    pub id: String,
+    pub path: PathBuf,
+    pub min_free: u64,
+    pub enabled: bool,
+}
+
+impl StorageRootRecord {
+    /// Create a storage root record.
+    #[must_use]
+    pub fn new(id: impl Into<String>, path: impl Into<PathBuf>, min_free: u64, enabled: bool) -> Self {
+        Self {
+            id: id.into(),
+            path: path.into(),
+            min_free,
+            enabled,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct TransferJobRecord {
+    pub id: String,
+    pub namespace_id: String,
+    pub entry_key: Vec<u8>,
+    pub hash: [u8; 32],
+    pub size: u64,
+    pub root_id: Option<String>,
+    pub destination: Option<PathBuf>,
+    pub state: String,
+    pub bytes_transferred: u64,
+    pub peer_count: u64,
+    pub eta_seconds: Option<u64>,
+    pub retries: u32,
+    pub error_message: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct NewTransferJob<'a> {
+    pub namespace_id: &'a str,
+    pub entry_key: &'a [u8],
+    pub hash: &'a [u8; 32],
+    pub size: u64,
+    pub root_id: Option<&'a str>,
+    pub destination: Option<&'a Path>,
+}
+
+impl<'a> NewTransferJob<'a> {
+    /// Create a transfer job insertion record.
+    #[must_use]
+    pub const fn new(
+        namespace_id: &'a str,
+        entry_key: &'a [u8],
+        hash: &'a [u8; 32],
+        size: u64,
+        root_id: Option<&'a str>,
+        destination: Option<&'a Path>,
+    ) -> Self {
+        Self {
+            namespace_id,
+            entry_key,
+            hash,
+            size,
+            root_id,
+            destination,
+        }
+    }
+}
+
+fn transfer_job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferJobRecord> {
+    let hash_bytes: Vec<u8> = row.get(3)?;
+    let hash = hash_bytes.try_into().map_err(|bytes: Vec<u8>| {
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Blob,
+            format!("expected 32-byte hash, got {} bytes", bytes.len()).into(),
+        )
+    })?;
+    let size: i64 = row.get(4)?;
+    let bytes_transferred: i64 = row.get(8)?;
+    let peer_count: i64 = row.get(9)?;
+    let eta_seconds: Option<i64> = row.get(10)?;
+    let retries: i64 = row.get(11)?;
+    let created_at: i64 = row.get(13)?;
+    let updated_at: i64 = row.get(14)?;
+    let retry_count = u32::try_from(retries).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(11, rusqlite::types::Type::Integer, Box::new(error))
+    })?;
+    Ok(TransferJobRecord {
+        id: row.get(0)?,
+        namespace_id: row.get(1)?,
+        entry_key: row.get(2)?,
+        hash,
+        size: size.cast_unsigned(),
+        root_id: row.get(5)?,
+        destination: row.get::<_, Option<String>>(6)?.map(PathBuf::from),
+        state: row.get(7)?,
+        bytes_transferred: bytes_transferred.cast_unsigned(),
+        peer_count: peer_count.cast_unsigned(),
+        eta_seconds: eta_seconds.map(i64::cast_unsigned),
+        retries: retry_count,
+        error_message: row.get(12)?,
+        created_at: created_at.cast_unsigned(),
+        updated_at: updated_at.cast_unsigned(),
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct NodeDatabase {
     connection: Arc<Mutex<Connection>>,
@@ -64,8 +178,7 @@ impl NodeDatabase {
         Ok(db)
     }
 
-    /// Returns the SQL statements to create the database schema.
-    const fn create_schema_sql() -> &'static str {
+    const CREATE_SCHEMA_SQL: &'static str =
         "CREATE TABLE IF NOT EXISTS schema_version (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -193,7 +306,39 @@ impl NodeDatabase {
             updated_at INTEGER NOT NULL,
             PRIMARY KEY(namespace_id, session_id, entry_key),
             FOREIGN KEY(namespace_id, session_id) REFERENCES sync_checkpoints(namespace_id, session_id) ON DELETE CASCADE
-        );"
+        );
+        CREATE TABLE IF NOT EXISTS storage_roots (
+            id TEXT PRIMARY KEY,
+            path TEXT NOT NULL UNIQUE,
+            min_free INTEGER NOT NULL DEFAULT 0 CHECK(min_free >= 0),
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS transfer_jobs (
+            id TEXT PRIMARY KEY,
+            namespace_id TEXT NOT NULL,
+            entry_key BLOB NOT NULL,
+            hash BLOB NOT NULL CHECK(length(hash) = 32),
+            size INTEGER NOT NULL CHECK(size >= 0),
+            root_id TEXT,
+            destination TEXT,
+            state TEXT NOT NULL DEFAULT 'queued'
+                CHECK(state IN ('queued','fetching','materializing','paused','completed','failed','cancelled')),
+            bytes_transferred INTEGER NOT NULL DEFAULT 0 CHECK(bytes_transferred >= 0),
+            peer_count INTEGER NOT NULL DEFAULT 0 CHECK(peer_count >= 0),
+            eta_seconds INTEGER,
+            retries INTEGER NOT NULL DEFAULT 0 CHECK(retries >= 0),
+            error_message TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(namespace_id, entry_key, root_id),
+            FOREIGN KEY(root_id) REFERENCES storage_roots(id) ON DELETE SET NULL
+        );";
+
+    /// Returns the SQL statements to create the database schema.
+    const fn create_schema_sql() -> &'static str {
+        Self::CREATE_SCHEMA_SQL
     }
 
     /// Initialize the database schema, creating tables and indexes if they don't exist.
@@ -220,6 +365,13 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
         if let Err(error) = connection.execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT") {
             tracing::debug!(%error, "migration: add doc_ticket (may already exist)");
+        }
+        if let Err(error) = connection.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_transfer_jobs_namespace ON transfer_jobs(namespace_id);
+             CREATE INDEX IF NOT EXISTS idx_transfer_jobs_state ON transfer_jobs(state);
+             CREATE INDEX IF NOT EXISTS idx_transfer_jobs_root ON transfer_jobs(root_id);",
+        ) {
+            tracing::debug!(%error, "migration: add transfer job indexes (may already exist)");
         }
 
         connection
@@ -1471,6 +1623,413 @@ impl NodeDatabase {
     }
 
     // ------------------------------------------------------------------
+    // Transfer roots and job methods
+    // ------------------------------------------------------------------
+
+    /// Add or update a configured materialization root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn upsert_storage_root(&self, root: &StorageRootRecord) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO storage_roots(id, path, min_free, enabled, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+                path = excluded.path,
+                min_free = excluded.min_free,
+                enabled = excluded.enabled,
+                updated_at = excluded.updated_at",
+                params![
+                    root.id,
+                    root.path.to_string_lossy().as_ref(),
+                    root.min_free.cast_signed(),
+                    i64::from(root.enabled),
+                    now,
+                ],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save storage root", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// List configured materialization roots.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn list_storage_roots(&self) -> Result<Vec<StorageRootRecord>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut statement = connection
+            .prepare("SELECT id, path, min_free, enabled FROM storage_roots ORDER BY id")
+            .map_err(|error| SyncwebError::operation("failed to prepare storage root query", error))?;
+        let roots = statement
+            .query_map([], |row| {
+                let min_free: i64 = row.get(2)?;
+                let enabled: i64 = row.get(3)?;
+                Ok(StorageRootRecord {
+                    id: row.get(0)?,
+                    path: PathBuf::from(row.get::<_, String>(1)?),
+                    min_free: min_free.cast_unsigned(),
+                    enabled: enabled != 0,
+                })
+            })
+            .map_err(|error| SyncwebError::operation("failed to query storage roots", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read storage root rows", error))?;
+        drop(statement);
+        drop(connection);
+        Ok(roots)
+    }
+
+    /// Remove a storage root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn remove_storage_root(&self, id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute("DELETE FROM storage_roots WHERE id = ?1", params![id])
+            .map_err(|error| SyncwebError::operation("failed to remove storage root", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Enqueue a materialization or fetch job and return its durable ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn enqueue_transfer_job(&self, job: &NewTransferJob<'_>) -> Result<String> {
+        let id = Uuid::new_v4().to_string();
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO transfer_jobs(
+                    id, namespace_id, entry_key, hash, size, root_id, destination,
+                    state, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?8)",
+                params![
+                    id,
+                    job.namespace_id,
+                    job.entry_key,
+                    job.hash.as_slice(),
+                    job.size.cast_signed(),
+                    job.root_id,
+                    job.destination.map(|path| path.to_string_lossy().into_owned()),
+                    now,
+                ],
+            )
+            .map_err(|error| SyncwebError::operation("failed to enqueue transfer job", error))?;
+        drop(connection);
+        Ok(id)
+    }
+
+    /// List durable transfer jobs, optionally scoped by namespace and state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn list_transfer_jobs(
+        &self,
+        namespace_id: Option<&str>,
+        state: Option<&str>,
+    ) -> Result<Vec<TransferJobRecord>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let jobs = match (namespace_id, state) {
+            (Some(namespace_filter), Some(state_filter)) => {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT id, namespace_id, entry_key, hash, size, root_id, destination,
+                            state, bytes_transferred, peer_count, eta_seconds, retries,
+                            error_message, created_at, updated_at
+                         FROM transfer_jobs
+                         WHERE namespace_id = ?1 AND state = ?2
+                         ORDER BY created_at, id",
+                    )
+                    .map_err(|error| SyncwebError::operation("failed to prepare transfer job query", error))?;
+                statement
+                    .query_map(params![namespace_filter, state_filter], transfer_job_from_row)
+                    .map_err(|error| SyncwebError::operation("failed to query transfer jobs", error))?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|error| SyncwebError::operation("failed to read transfer job rows", error))?
+            }
+            (Some(namespace_filter), None) => {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT id, namespace_id, entry_key, hash, size, root_id, destination,
+                            state, bytes_transferred, peer_count, eta_seconds, retries,
+                            error_message, created_at, updated_at
+                         FROM transfer_jobs
+                         WHERE namespace_id = ?1
+                         ORDER BY created_at, id",
+                    )
+                    .map_err(|error| SyncwebError::operation("failed to prepare transfer job query", error))?;
+                statement
+                    .query_map(params![namespace_filter], transfer_job_from_row)
+                    .map_err(|error| SyncwebError::operation("failed to query transfer jobs", error))?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|error| SyncwebError::operation("failed to read transfer job rows", error))?
+            }
+            (None, Some(state_filter)) => {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT id, namespace_id, entry_key, hash, size, root_id, destination,
+                            state, bytes_transferred, peer_count, eta_seconds, retries,
+                            error_message, created_at, updated_at
+                         FROM transfer_jobs
+                         WHERE state = ?1
+                         ORDER BY created_at, id",
+                    )
+                    .map_err(|error| SyncwebError::operation("failed to prepare transfer job query", error))?;
+                statement
+                    .query_map(params![state_filter], transfer_job_from_row)
+                    .map_err(|error| SyncwebError::operation("failed to query transfer jobs", error))?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|error| SyncwebError::operation("failed to read transfer job rows", error))?
+            }
+            (None, None) => {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT id, namespace_id, entry_key, hash, size, root_id, destination,
+                            state, bytes_transferred, peer_count, eta_seconds, retries,
+                            error_message, created_at, updated_at
+                         FROM transfer_jobs
+                         ORDER BY created_at, id",
+                    )
+                    .map_err(|error| SyncwebError::operation("failed to prepare transfer job query", error))?;
+                statement
+                    .query_map([], transfer_job_from_row)
+                    .map_err(|error| SyncwebError::operation("failed to query transfer jobs", error))?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|error| SyncwebError::operation("failed to read transfer job rows", error))?
+            }
+        };
+        drop(connection);
+        Ok(jobs)
+    }
+
+    /// Update a job lifecycle state and optional error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn update_transfer_job_state(&self, id: &str, state: &str, error_message: Option<&str>) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let updated = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET state = ?1, error_message = ?2, updated_at = ?3
+                 WHERE id = ?4",
+                params![state, error_message, now, id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to update transfer job state", error))?;
+        if updated == 0 {
+            return Err(SyncwebError::InvalidConfig(format!("transfer job not found: {id}")));
+        }
+        drop(connection);
+        Ok(())
+    }
+
+    /// Transition a job only if it is still in the expected state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn transition_transfer_job_state(
+        &self,
+        id: &str,
+        expected_state: &str,
+        state: &str,
+        error_message: Option<&str>,
+    ) -> Result<bool> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let updated = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET state = ?1, error_message = ?2, updated_at = ?3
+                 WHERE id = ?4 AND state = ?5",
+                params![state, error_message, now, id, expected_state],
+            )
+            .map_err(|error| SyncwebError::operation("failed to transition transfer job state", error))?;
+        drop(connection);
+        Ok(updated != 0)
+    }
+
+    /// Assign a queued job to a root and its stable materialization path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn assign_transfer_job(&self, id: &str, root_id: &str, destination: &Path) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let updated = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET root_id = ?1, destination = ?2, updated_at = ?3
+                 WHERE id = ?4 AND state = 'queued'",
+                params![root_id, destination.to_string_lossy().as_ref(), now, id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to assign transfer job", error))?;
+        if updated == 0 {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "transfer job is missing or not queued: {id}"
+            )));
+        }
+        drop(connection);
+        Ok(())
+    }
+
+    /// Update per-job transfer counters and retry metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn update_transfer_job_progress(
+        &self,
+        id: &str,
+        bytes_transferred: u64,
+        peer_count: u64,
+        eta_seconds: Option<u64>,
+        retries: u32,
+    ) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let updated = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET bytes_transferred = ?1, peer_count = ?2, eta_seconds = ?3,
+                     retries = ?4, updated_at = ?5
+                 WHERE id = ?6",
+                params![
+                    bytes_transferred.cast_signed(),
+                    peer_count.cast_signed(),
+                    eta_seconds.map(u64::cast_signed),
+                    retries.cast_signed(),
+                    now,
+                    id,
+                ],
+            )
+            .map_err(|error| SyncwebError::operation("failed to update transfer job progress", error))?;
+        if updated == 0 {
+            return Err(SyncwebError::InvalidConfig(format!("transfer job not found: {id}")));
+        }
+        drop(connection);
+        Ok(())
+    }
+
+    /// Requeue a failed or paused job while recording a retry attempt.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn retry_transfer_job(&self, id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let updated = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET state = 'queued', error_message = NULL,
+                     retries = retries + 1, updated_at = ?1
+                 WHERE id = ?2 AND state IN ('failed', 'paused', 'cancelled')",
+                params![now, id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to retry transfer job", error))?;
+        if updated == 0 {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "transfer job is missing or not retryable: {id}"
+            )));
+        }
+        drop(connection);
+        Ok(())
+    }
+
+    /// Requeue jobs interrupted by a daemon restart.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn recover_transfer_jobs(&self) -> Result<usize> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        let recovered = connection
+            .execute(
+                "UPDATE transfer_jobs
+                 SET state = 'queued', updated_at = ?1
+                 WHERE state IN ('fetching', 'materializing')",
+                params![now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to recover transfer jobs", error))?;
+        drop(connection);
+        Ok(recovered)
+    }
+
+    /// Return bytes reserved by pending jobs for a root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn reserved_transfer_bytes(&self, root_id: &str) -> Result<u64> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let reserved: i64 = connection
+            .query_row(
+                "SELECT COALESCE(SUM(size), 0)
+                 FROM transfer_jobs
+                 WHERE root_id = ?1
+                   AND state IN ('queued', 'fetching', 'materializing', 'paused')",
+                params![root_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| SyncwebError::operation("failed to query reserved transfer bytes", error))?;
+        drop(connection);
+        Ok(reserved.cast_unsigned())
+    }
+
+    // ------------------------------------------------------------------
     // Sync checkpoint methods
     // ------------------------------------------------------------------
 
@@ -1844,5 +2403,75 @@ mod tests {
     fn test_is_peer_network_member_false() {
         let db = test_db();
         assert!(!db.is_peer_network_member("unknown-peer").unwrap());
+    }
+
+    #[test]
+    fn test_transfer_roots_and_jobs_survive_lifecycle_updates() {
+        let db = test_db();
+        db.upsert_storage_root(&StorageRootRecord {
+            id: "root".to_owned(),
+            path: PathBuf::from("/tmp/syncweb-root"),
+            min_free: 10,
+            enabled: true,
+        })
+        .unwrap();
+        let hash = [7_u8; 32];
+        let entry_key = b"dir/file.bin";
+        let job_id = db
+            .enqueue_transfer_job(&NewTransferJob {
+                namespace_id: "namespace",
+                entry_key,
+                hash: &hash,
+                size: 25,
+                root_id: Some("root"),
+                destination: Some(Path::new("/tmp/syncweb-root/namespace/dir/file.bin")),
+            })
+            .unwrap();
+
+        assert_eq!(db.reserved_transfer_bytes("root").unwrap(), 25);
+        let jobs = db.list_transfer_jobs(Some("namespace"), Some("queued")).unwrap();
+        assert_eq!(jobs.len(), 1);
+        let job = jobs.first().expect("queued transfer job should be listed");
+        assert_eq!(job.id, job_id);
+        assert_eq!(job.hash, hash);
+        assert_eq!(
+            job.destination.as_deref(),
+            Some(Path::new("/tmp/syncweb-root/namespace/dir/file.bin"))
+        );
+
+        db.update_transfer_job_progress(&job_id, 12, 2, Some(4), 1).unwrap();
+        db.update_transfer_job_state(&job_id, "materializing", None).unwrap();
+        assert_eq!(db.recover_transfer_jobs().unwrap(), 1);
+        let recovered = db.list_transfer_jobs(None, Some("queued")).unwrap();
+        let recovered_job = recovered.first().expect("recovered transfer job should be listed");
+        assert_eq!(recovered_job.bytes_transferred, 12);
+        assert_eq!(recovered_job.retries, 1);
+    }
+
+    #[test]
+    fn test_assign_transfer_job_requires_queued_job() {
+        let db = test_db();
+        db.upsert_storage_root(&StorageRootRecord {
+            id: "root".to_owned(),
+            path: PathBuf::from("/tmp/syncweb-root"),
+            min_free: 0,
+            enabled: true,
+        })
+        .unwrap();
+        let hash = [3_u8; 32];
+        let job_id = db
+            .enqueue_transfer_job(&NewTransferJob {
+                namespace_id: "namespace",
+                entry_key: b"file",
+                hash: &hash,
+                size: 1,
+                root_id: None,
+                destination: None,
+            })
+            .unwrap();
+        db.assign_transfer_job(&job_id, "root", Path::new("/tmp/file")).unwrap();
+        let jobs = db.list_transfer_jobs(None, None).unwrap();
+        let job = jobs.first().expect("assigned transfer job should be listed");
+        assert_eq!(job.root_id.as_deref(), Some("root"));
     }
 }

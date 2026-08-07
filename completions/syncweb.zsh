@@ -560,6 +560,222 @@ _arguments "${_arguments_options[@]}" : \
 '::path:_files' \
 && ret=0
 ;;
+(transfer)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__transfer_commands" \
+"*::: :->transfer" \
+&& ret=0
+
+    case $state in
+    (transfer)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-transfer-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[Limit display to a namespace]:NAMESPACE:_default' \
+'--state=[Limit display to a lifecycle state]:STATE:_default' \
+'--sort=[]:SORT:(created updated size peers path)' \
+'--group-by=[]:GROUP_BY:(namespace root state)' \
+'--limit=[]:LIMIT:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(remaining)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(root)
+_arguments "${_arguments_options[@]}" : \
+'--min-free=[Free bytes to preserve on this root]:MIN_FREE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--disabled[Disable this root for allocation]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':id:_default' \
+':path:_files' \
+&& ret=0
+;;
+(enqueue)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[]:NAMESPACE:_default' \
+'--path=[Relative materialization path]:PATH:_files' \
+'--hash=[32-byte blob hash in hexadecimal]:HASH:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':size:_default' \
+&& ret=0
+;;
+(allocate)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[Limit allocation to a namespace]:NAMESPACE:_default' \
+'--path-prefix=[Only allocate paths below this relative prefix]:PATH_PREFIX:_files' \
+'--min-size=[]:MIN_SIZE:_default' \
+'--max-size=[]:MAX_SIZE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--dry-run[Report allocations without persisting them]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(materialize)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[Limit processing to a namespace]:NAMESPACE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(pause)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':id:_default' \
+&& ret=0
+;;
+(resume)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':id:_default' \
+&& ret=0
+;;
+(cancel)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':id:_default' \
+&& ret=0
+;;
+(retry)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':id:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__transfer__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-transfer-help-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remaining)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(root)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(enqueue)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(allocate)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(materialize)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pause)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(resume)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cancel)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(retry)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (init)
 _arguments "${_arguments_options[@]}" : \
 '--mode=[]:MODE:_default' \
@@ -2651,6 +2867,62 @@ esac
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(transfer)
+_arguments "${_arguments_options[@]}" : \
+":: :_syncweb__subcmd__help__subcmd__transfer_commands" \
+"*::: :->transfer" \
+&& ret=0
+
+    case $state in
+    (transfer)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-help-transfer-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remaining)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(root)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(enqueue)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(allocate)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(materialize)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pause)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(resume)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cancel)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(retry)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (init)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -3213,6 +3485,7 @@ _syncweb_commands() {
 'import:Import local files into a synchronized folder' \
 'snapshot:Manage content-addressed snapshots' \
 'health:Show seeding status per folder blob' \
+'transfer:Inspect and control durable transfer jobs' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
@@ -3536,6 +3809,7 @@ _syncweb__subcmd__help_commands() {
 'import:Import local files into a synchronized folder' \
 'snapshot:Manage content-addressed snapshots' \
 'health:Show seeding status per folder blob' \
+'transfer:Inspect and control durable transfer jobs' \
 'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
@@ -4113,6 +4387,72 @@ _syncweb__subcmd__help__subcmd__status_commands() {
 _syncweb__subcmd__help__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb help subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer_commands() {
+    local commands; commands=(
+'info:List durable transfer jobs' \
+'remaining:Show configured roots and remaining capacity' \
+'root:Add or update a materialization root' \
+'enqueue:Enqueue an individually addressable file job' \
+'allocate:Allocate queued jobs to configured roots' \
+'materialize:Fetch and materialize assigned jobs through the daemon' \
+'pause:Pause a transfer job' \
+'resume:Resume a paused transfer job' \
+'cancel:Cancel a transfer job' \
+'retry:Retry a failed transfer job' \
+    )
+    _describe -t commands 'syncweb help transfer commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__allocate_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__allocate_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer allocate commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__cancel_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__cancel_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer cancel commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__enqueue_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__enqueue_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer enqueue commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__info_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__materialize_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__materialize_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer materialize commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__pause_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__pause_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer pause commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__remaining_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__remaining_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer remaining commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__resume_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__resume_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer resume commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__retry_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__retry_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer retry commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__root_commands] )) ||
+_syncweb__subcmd__help__subcmd__transfer__subcmd__root_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb help transfer root commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help__subcmd__trust_commands] )) ||
 _syncweb__subcmd__help__subcmd__trust_commands() {
@@ -5042,6 +5382,145 @@ _syncweb__subcmd__status_commands() {
 _syncweb__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb subscribe commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer_commands] )) ||
+_syncweb__subcmd__transfer_commands() {
+    local commands; commands=(
+'info:List durable transfer jobs' \
+'remaining:Show configured roots and remaining capacity' \
+'root:Add or update a materialization root' \
+'enqueue:Enqueue an individually addressable file job' \
+'allocate:Allocate queued jobs to configured roots' \
+'materialize:Fetch and materialize assigned jobs through the daemon' \
+'pause:Pause a transfer job' \
+'resume:Resume a paused transfer job' \
+'cancel:Cancel a transfer job' \
+'retry:Retry a failed transfer job' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb transfer commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__allocate_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__allocate_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer allocate commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__cancel_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__cancel_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer cancel commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__enqueue_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__enqueue_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer enqueue commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help_commands() {
+    local commands; commands=(
+'info:List durable transfer jobs' \
+'remaining:Show configured roots and remaining capacity' \
+'root:Add or update a materialization root' \
+'enqueue:Enqueue an individually addressable file job' \
+'allocate:Allocate queued jobs to configured roots' \
+'materialize:Fetch and materialize assigned jobs through the daemon' \
+'pause:Pause a transfer job' \
+'resume:Resume a paused transfer job' \
+'cancel:Cancel a transfer job' \
+'retry:Retry a failed transfer job' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'syncweb transfer help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__allocate_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__allocate_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help allocate commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__cancel_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__cancel_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help cancel commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__enqueue_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__enqueue_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help enqueue commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__help_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help help commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__info_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__materialize_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__materialize_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help materialize commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__pause_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__pause_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help pause commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__remaining_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__remaining_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help remaining commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__resume_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__resume_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help resume commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__retry_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__retry_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help retry commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__root_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__help__subcmd__root_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer help root commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__info_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__materialize_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__materialize_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer materialize commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__pause_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__pause_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer pause commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__remaining_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__remaining_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer remaining commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__resume_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__resume_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer resume commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__retry_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__retry_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer retry commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__root_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__root_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer root commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust_commands] )) ||
 _syncweb__subcmd__trust_commands() {

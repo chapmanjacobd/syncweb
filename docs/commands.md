@@ -439,6 +439,13 @@ syncweb config set discovery.interface eth0
 | | `package versions` | List installed versions |
 | | `package switch` | Change active version |
 | | `health` | Show seeding status per blob (well/under/unseeded) |
+| | `transfer info` | Inspect durable per-item transfer state, progress, errors, and grouping |
+| | `transfer remaining` | Show root capacity after materialized files and pending reservations |
+| | `transfer root` | Configure a materialization root and minimum-free-space policy |
+| | `transfer enqueue` | Queue an individually addressable blob/file job |
+| | `transfer allocate` | Dry-run or persist capacity-aware placement decisions |
+| | `transfer materialize` | Fetch and verify assigned jobs through the daemon |
+| | `transfer pause/resume/cancel/retry` | Control an individual durable transfer job |
 | | `backup` | Create content-addressed snapshot of folder |
 | | `restore` | Restore folder from snapshot |
 | | `snapshots` | List available snapshots |
@@ -509,6 +516,14 @@ syncweb export /path/to/output
 
 # Health check (show seeding status)
 syncweb health audio/
+
+# Capacity-aware transfer placement
+syncweb transfer root media /srv/media --min-free 10GB
+syncweb transfer remaining
+syncweb transfer info --state failed --sort updated --group-by namespace
+syncweb transfer allocate --dry-run
+syncweb transfer allocate
+syncweb transfer materialize
 
 # Download poorly-seeded blobs to improve network health
 syncweb download --max-peers 2 audio/

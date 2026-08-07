@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 
 use crate::{
+    allocation::{AllocationCandidate, StorageRoot, materialization_path},
     daemon::state::FolderStatusReport,
     error::{Result, SyncwebError},
     filter::{FilterConfig, FilterEngine},
@@ -26,10 +27,10 @@ use crate::{
     indexing::{ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
-    storage::node_db::NodeDatabase,
+    storage::node_db::{NodeDatabase, TransferJobRecord},
     sync::{
-        ActiveSession, FetchCandidate, FetchStrategy, HealthReport, SubscribeParams, SyncEngine, SyncEvent,
-        cancel_session,
+        ActiveSession, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams, SyncEngine,
+        SyncEvent, cancel_session,
     },
     verify::IntegrityChecker,
 };
@@ -39,14 +40,13 @@ use super::{
     state::{DaemonStatus, daemon_socket_path},
 };
 
-#[cfg(unix)]
 use std::time::Duration;
 
-#[cfg(unix)]
 const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
-#[cfg(unix)]
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
+
+const TRANSFER_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -89,6 +89,9 @@ pub enum IpcCommand {
     Download {
         namespace: String,
         strategy: FetchStrategy,
+    },
+    MaterializeTransfers {
+        namespace: Option<String>,
     },
     ImportFiles {
         namespace: Option<String>,
@@ -210,6 +213,7 @@ pub enum IpcResponse {
     Status(DaemonStatus),
     FolderList(Vec<FolderStatus>),
     DownloadComplete { bytes_transferred: u64 },
+    TransferJobsProcessed { completed: u64, failed: u64 },
     ImportFilesComplete { entries: u64 },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
@@ -526,6 +530,19 @@ struct ArchiveContext {
     pool: Arc<ManagedPool>,
 }
 
+#[derive(Clone, Copy)]
+enum TransferJobOutcome {
+    Completed,
+    Failed,
+    Skipped,
+}
+
+enum TransferPreparation {
+    Ready,
+    Failed,
+    Skipped,
+}
+
 impl IpcServer {
     #[must_use]
     pub const fn new(socket_path: PathBuf, daemon_handle: DaemonHandle) -> Self {
@@ -742,6 +759,7 @@ impl IpcServer {
                 output,
             } => self.handle_export_archive_response(namespace, version, output).await,
             C::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
+            C::MaterializeTransfers { namespace } => self.handle_materialize_transfers(namespace).await,
             C::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
             C::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
             C::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
@@ -885,6 +903,180 @@ impl IpcServer {
         }
     }
 
+    async fn handle_materialize_transfers(&self, namespace: Option<String>) -> IpcResponse {
+        let Some(context) = self.archive_context.clone() else {
+            return IpcResponse::Error {
+                message: "transfer materialization requires daemon node context".to_owned(),
+            };
+        };
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "transfer materialization requires node database".to_owned(),
+            };
+        };
+        let jobs = match node_db.list_transfer_jobs(namespace.as_deref(), Some("queued")) {
+            Ok(jobs) => jobs,
+            Err(error) => return response_from_error(error),
+        };
+        let mut completed = 0_u64;
+        let mut failed = 0_u64;
+        for job in jobs {
+            match self.process_transfer_job(&context, &node_db, job).await {
+                TransferJobOutcome::Completed => completed = completed.saturating_add(1),
+                TransferJobOutcome::Failed => failed = failed.saturating_add(1),
+                TransferJobOutcome::Skipped => {}
+            }
+        }
+        IpcResponse::TransferJobsProcessed { completed, failed }
+    }
+
+    async fn process_transfer_job(
+        &self,
+        context: &ArchiveContext,
+        node_db: &NodeDatabase,
+        job: TransferJobRecord,
+    ) -> TransferJobOutcome {
+        let Some(destination) = job.destination.as_ref() else {
+            mark_transfer_job_failed(
+                node_db,
+                &job.id,
+                &"job has no allocated destination",
+                "missing transfer destination",
+            );
+            return TransferJobOutcome::Failed;
+        };
+        let hash = iroh_blobs::Hash::from(job.hash);
+        if let Err(error) = Self::validate_transfer_job(node_db, &job, destination, hash) {
+            mark_transfer_job_failed(node_db, &job.id, &error, "transfer path validation error");
+            return TransferJobOutcome::Failed;
+        }
+        match self.prepare_transfer_job(context, node_db, &job, hash).await {
+            TransferPreparation::Ready => {}
+            TransferPreparation::Failed => return TransferJobOutcome::Failed,
+            TransferPreparation::Skipped => return TransferJobOutcome::Skipped,
+        }
+        match materialize_transfer(context, destination, hash).await {
+            Ok(size) => complete_transfer_job(node_db, &job, size),
+            Err(error) => {
+                mark_transfer_job_failed(node_db, &job.id, &error, "transfer materialization error");
+                TransferJobOutcome::Failed
+            }
+        }
+    }
+
+    async fn prepare_transfer_job(
+        &self,
+        context: &ArchiveContext,
+        node_db: &NodeDatabase,
+        job: &TransferJobRecord,
+        hash: iroh_blobs::Hash,
+    ) -> TransferPreparation {
+        let fetch_claimed = match node_db.transition_transfer_job_state(&job.id, "queued", "fetching", None) {
+            Ok(claimed) => claimed,
+            Err(error) => {
+                tracing::error!(%error, job_id = %job.id, "failed to mark transfer job fetching");
+                return TransferPreparation::Failed;
+            }
+        };
+        if !fetch_claimed {
+            return TransferPreparation::Skipped;
+        }
+
+        let has_blob = match context.node.blob_store().has(hash).await {
+            Ok(has_blob) => has_blob,
+            Err(error) => {
+                mark_transfer_job_failed(node_db, &job.id, &error, "blob lookup error");
+                return TransferPreparation::Failed;
+            }
+        };
+        if !has_blob {
+            let path = match String::from_utf8(job.entry_key.clone()) {
+                Ok(path) => path,
+                Err(error) => {
+                    mark_transfer_job_failed(
+                        node_db,
+                        &job.id,
+                        &format!("job entry path is not UTF-8: {error}"),
+                        "invalid transfer path",
+                    );
+                    return TransferPreparation::Failed;
+                }
+            };
+            let filter = FetchFilter::new().with_paths(vec![PathBuf::from(path)]);
+            if let Err(error) = self
+                .handle_download_with_timeout(
+                    job.namespace_id.clone(),
+                    FetchStrategy::filter(filter),
+                    TRANSFER_TIMEOUT,
+                )
+                .await
+            {
+                mark_transfer_job_failed(node_db, &job.id, &error, "transfer fetch error");
+                return TransferPreparation::Failed;
+            }
+        }
+
+        let materialization_claimed =
+            match node_db.transition_transfer_job_state(&job.id, "fetching", "materializing", None) {
+                Ok(claimed) => claimed,
+                Err(error) => {
+                    tracing::error!(%error, job_id = %job.id, "failed to mark transfer job materializing");
+                    return TransferPreparation::Failed;
+                }
+            };
+        if materialization_claimed {
+            TransferPreparation::Ready
+        } else {
+            TransferPreparation::Skipped
+        }
+    }
+
+    /// Validate that a queued job still points at its allocated root and path.
+    fn validate_transfer_job(
+        node_db: &NodeDatabase,
+        job: &TransferJobRecord,
+        destination: &Path,
+        hash: iroh_blobs::Hash,
+    ) -> Result<()> {
+        let root_id = job
+            .root_id
+            .as_deref()
+            .ok_or_else(|| SyncwebError::InvalidConfig("job has no storage root".to_owned()))?;
+        let root = node_db
+            .list_storage_roots()?
+            .into_iter()
+            .find(|root| root.id == root_id)
+            .ok_or_else(|| SyncwebError::InvalidConfig(format!("storage root not found: {root_id}")))?;
+        let job_namespace = iroh_docs::NamespaceId::from_str(&job.namespace_id)
+            .map_err(|error| SyncwebError::operation("job has invalid namespace", error))?;
+        let path = String::from_utf8(job.entry_key.clone())
+            .map_err(|error| SyncwebError::operation("job entry path is not UTF-8", error))?;
+        let root_path = root.path.clone();
+        let candidate = AllocationCandidate::new(
+            job_namespace,
+            PathBuf::from(path),
+            hash,
+            job.size,
+            usize::try_from(job.peer_count).unwrap_or(usize::MAX),
+            false,
+        );
+        let expected = materialization_path(
+            &StorageRoot::new(root.id, &root_path, root.min_free).with_enabled(root.enabled),
+            &candidate,
+        )?;
+        if expected != destination {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "job destination does not match its allocated root: {}",
+                destination.display()
+            )));
+        }
+        reject_symlink_components(
+            expected.strip_prefix(&root_path).unwrap_or_else(|_| Path::new("")),
+            &root_path,
+        )?;
+        Ok(())
+    }
+
     async fn handle_import_files_response(&self, namespace: Option<String>, path: PathBuf) -> IpcResponse {
         match self.handle_import_files(namespace, path).await {
             Ok(entries) => IpcResponse::ImportFilesComplete { entries },
@@ -893,6 +1085,16 @@ impl IpcServer {
     }
 
     async fn handle_download(&self, namespace: String, strategy: FetchStrategy) -> Result<u64> {
+        self.handle_download_with_timeout(namespace, strategy, DOWNLOAD_TIMEOUT)
+            .await
+    }
+
+    async fn handle_download_with_timeout(
+        &self,
+        namespace: String,
+        strategy: FetchStrategy,
+        timeout_duration: Duration,
+    ) -> Result<u64> {
         let context = self.archive_context.clone().ok_or_else(|| {
             SyncwebError::operation("daemon download IPC is unavailable", "server has no node context")
         })?;
@@ -905,11 +1107,24 @@ impl IpcServer {
             Some(context.node.topic_tracker().clone()),
         );
         let mut intent = sync.fetch(namespace_id, strategy).await?;
-        let bytes_transferred = self.run_download_loop(&mut intent).await?;
+        let bytes_transferred = if timeout_duration == DOWNLOAD_TIMEOUT {
+            self.run_download_loop(&mut intent).await?
+        } else {
+            self.run_download_loop_with_timeout(&mut intent, timeout_duration)
+                .await?
+        };
         Ok(bytes_transferred)
     }
 
     async fn run_download_loop(&self, intent: &mut crate::sync::IntentHandle) -> Result<u64> {
+        self.run_download_loop_with_timeout(intent, DOWNLOAD_TIMEOUT).await
+    }
+
+    async fn run_download_loop_with_timeout(
+        &self,
+        intent: &mut crate::sync::IntentHandle,
+        timeout_duration: Duration,
+    ) -> Result<u64> {
         let mut bytes_transferred = 0_u64;
 
         let loop_body = async {
@@ -935,7 +1150,7 @@ impl IpcServer {
         #[cfg(unix)]
         {
             use tokio::time::timeout;
-            match timeout(DOWNLOAD_TIMEOUT, loop_body).await {
+            match timeout(timeout_duration, loop_body).await {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => return Err(error),
                 Err(_elapsed) => {
@@ -945,7 +1160,10 @@ impl IpcServer {
         }
 
         #[cfg(not(unix))]
-        loop_body.await?;
+        {
+            let _ = timeout_duration;
+            loop_body.await?;
+        }
 
         Ok(bytes_transferred)
     }
@@ -1989,6 +2207,58 @@ impl IpcServer {
     }
 }
 
+fn mark_transfer_job_failed(node_db: &NodeDatabase, job_id: &str, message: &dyn std::fmt::Display, context: &str) {
+    let rendered_message = message.to_string();
+    if let Err(error) = node_db.update_transfer_job_state(job_id, "failed", Some(&rendered_message)) {
+        tracing::error!(%error, %job_id, context, "failed to record transfer job failure");
+    }
+}
+
+async fn materialize_transfer(context: &ArchiveContext, destination: &Path, hash: iroh_blobs::Hash) -> Result<u64> {
+    if let Ok(metadata) = std::fs::symlink_metadata(destination) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "materialization destination is not a regular file: {}",
+                destination.display()
+            )));
+        }
+        let existing = std::fs::read(destination)?;
+        if blake3::hash(&existing).as_bytes() != hash.as_bytes() {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "materialization destination has a different blob: {}",
+                destination.display()
+            )));
+        }
+    }
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    context.node.blob_store().export_to_path(hash, destination).await?;
+    let bytes = std::fs::read(destination)?;
+    if blake3::hash(&bytes).as_bytes() != hash.as_bytes() {
+        return Err(SyncwebError::operation(
+            "materialized transfer hash does not match",
+            destination.display(),
+        ));
+    }
+    u64::try_from(bytes.len()).map_err(|error| SyncwebError::operation("materialized transfer size is invalid", error))
+}
+
+fn complete_transfer_job(node_db: &NodeDatabase, job: &TransferJobRecord, size: u64) -> TransferJobOutcome {
+    if let Err(error) = node_db.update_transfer_job_progress(&job.id, size, job.peer_count, None, job.retries) {
+        tracing::error!(%error, job_id = %job.id, "failed to record transfer completion progress");
+        return TransferJobOutcome::Failed;
+    }
+    match node_db.transition_transfer_job_state(&job.id, "materializing", "completed", None) {
+        Ok(true) => TransferJobOutcome::Completed,
+        Ok(false) => TransferJobOutcome::Skipped,
+        Err(error) => {
+            tracing::error!(%error, job_id = %job.id, "failed to record transfer completion");
+            TransferJobOutcome::Failed
+        }
+    }
+}
+
 fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
     IpcResponse::Error {
         message: error.to_string(),
@@ -2156,7 +2426,8 @@ impl IpcClient {
                 | IpcResponse::ImportFilesComplete { .. }
                 | IpcResponse::ImportComplete(_)
                 | IpcResponse::ExportComplete(_)
-                | IpcResponse::EnrichData(_) => Err(SyncwebError::operation(
+                | IpcResponse::EnrichData(_)
+                | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),
@@ -2170,6 +2441,25 @@ impl IpcClient {
             ))
         }
     }
+}
+
+fn reject_symlink_components(relative: &Path, root: &Path) -> Result<()> {
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component.as_os_str());
+        let metadata = match std::fs::symlink_metadata(&current) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "materialization path contains a symlink: {}",
+                current.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -2559,6 +2849,19 @@ mod tests {
         assert!(matches!(
             response,
             IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_materialize_transfers_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::MaterializeTransfers { namespace: None }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("node context")
         ));
     }
 

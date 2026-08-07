@@ -31,13 +31,14 @@ n0-future.workspace = true
 uuid.workspace = true
 async-recursion.workspace = true
 notify.workspace = true
-comfy-table = "7.2"
+comfy-table = "8.0"
 dialoguer = "0.12"
 ed25519-dalek.workspace = true
 hex.workspace = true
 indicatif = "0.18"
 bao-tree = "0.16"
 iroh-io = "0.6"
+fs4.workspace = true
 
 [lints]
 workspace = true

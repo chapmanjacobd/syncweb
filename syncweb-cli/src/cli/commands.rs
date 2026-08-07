@@ -54,6 +54,11 @@ pub enum Command {
     },
     #[command(about = "Show seeding status per folder blob")]
     Health(HealthArgs),
+    #[command(about = "Inspect and control durable transfer jobs")]
+    Transfer {
+        #[command(subcommand)]
+        command: TransferCommand,
+    },
     #[command(about = "Initialize a folder and print a shareable URL")]
     Init(InitArgs),
     #[command(about = "Run rules-based automatic synchronization")]
@@ -157,6 +162,90 @@ pub enum ConfigCommand {
     Set { key: String, value: String },
     #[command(about = "Show configuration, optionally limited to a section")]
     Show { section: Option<String> },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TransferCommand {
+    #[command(about = "List durable transfer jobs")]
+    Info(TransferInfoArgs),
+    #[command(about = "Show configured roots and remaining capacity")]
+    Remaining,
+    #[command(about = "Add or update a materialization root")]
+    Root(TransferRootArgs),
+    #[command(about = "Enqueue an individually addressable file job")]
+    Enqueue(TransferEnqueueArgs),
+    #[command(about = "Allocate queued jobs to configured roots")]
+    Allocate(TransferAllocateArgs),
+    #[command(about = "Fetch and materialize assigned jobs through the daemon")]
+    Materialize(TransferMaterializeArgs),
+    #[command(about = "Pause a transfer job")]
+    Pause(TransferJobArgs),
+    #[command(about = "Resume a paused transfer job")]
+    Resume(TransferJobArgs),
+    #[command(about = "Cancel a transfer job")]
+    Cancel(TransferJobArgs),
+    #[command(about = "Retry a failed transfer job")]
+    Retry(TransferJobArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct TransferInfoArgs {
+    #[arg(long, help = "Limit display to a namespace")]
+    pub namespace: Option<String>,
+    #[arg(long, help = "Limit display to a lifecycle state")]
+    pub state: Option<String>,
+    #[arg(long, value_parser = ["created", "updated", "size", "peers", "path"], default_value = "created")]
+    pub sort: String,
+    #[arg(long, value_parser = ["namespace", "root", "state"])]
+    pub group_by: Option<String>,
+    #[arg(long)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Args)]
+pub struct TransferRootArgs {
+    pub id: String,
+    pub path: PathBuf,
+    #[arg(long, default_value_t = 0, help = "Free bytes to preserve on this root")]
+    pub min_free: u64,
+    #[arg(long, help = "Disable this root for allocation")]
+    pub disabled: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct TransferEnqueueArgs {
+    #[arg(long)]
+    pub namespace: String,
+    #[arg(long, help = "Relative materialization path")]
+    pub path: PathBuf,
+    #[arg(long, help = "32-byte blob hash in hexadecimal")]
+    pub hash: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Args)]
+pub struct TransferAllocateArgs {
+    #[arg(long, help = "Report allocations without persisting them")]
+    pub dry_run: bool,
+    #[arg(long, help = "Limit allocation to a namespace")]
+    pub namespace: Option<String>,
+    #[arg(long, help = "Only allocate paths below this relative prefix")]
+    pub path_prefix: Option<PathBuf>,
+    #[arg(long)]
+    pub min_size: Option<u64>,
+    #[arg(long)]
+    pub max_size: Option<u64>,
+}
+
+#[derive(Debug, Args)]
+pub struct TransferMaterializeArgs {
+    #[arg(long, help = "Limit processing to a namespace")]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct TransferJobArgs {
+    pub id: String,
 }
 
 #[derive(Debug, Subcommand)]

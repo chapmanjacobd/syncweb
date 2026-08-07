@@ -226,6 +226,7 @@ impl Daemon {
     pub async fn new(config: DaemonConfig) -> Result<Self> {
         std::fs::create_dir_all(&config.data_dir)?;
         let (node_db, stats_db, pid_lock) = Self::init_databases(&config)?;
+        node_db.recover_transfer_jobs()?;
         let (schedule_manager, filter_engine, initial_state) =
             Self::load_app_state(&node_db, &pid_lock, &config.data_dir)?;
 

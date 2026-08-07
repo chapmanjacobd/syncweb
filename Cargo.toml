@@ -31,7 +31,7 @@ tracing-test = "0.2"
 rayon = "1"
 blake3 = { version = "1", features = ["serde"] }
 dashmap = "6"
-fs2 = "0.4"
+fs4 = "1.1"
 rand = "0.10"
 hex = "0.4"
 base32 = "0.5"

@@ -65,10 +65,10 @@ impl BlobStore {
     ///
     /// Returns an error if the file fails to be read or added to the store.
     pub async fn add_file(&self, path: impl AsRef<Path>) -> Result<Hash> {
-        let path = absolute_path(path)?;
+        let absolute_path = absolute_path(path)?;
         Ok(self
             .store
-            .add_path(path)
+            .add_path(absolute_path)
             .await
             .map_err(|error| SyncwebError::operation("failed to add blob file", error))?
             .hash)
@@ -84,11 +84,11 @@ impl BlobStore {
     ///
     /// Returns an error if the file fails to be read or added to the store.
     pub async fn add_file_ref(&self, path: impl AsRef<Path>) -> Result<Hash> {
-        let path = absolute_path(path)?;
+        let absolute_path = absolute_path(path)?;
         Ok(self
             .store
             .add_path_with_opts(AddPathOptions {
-                path,
+                path: absolute_path,
                 mode: ImportMode::TryReference,
                 format: BlobFormat::Raw,
             })

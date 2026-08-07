@@ -1,0 +1,47 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH transfer 1  "transfer " 
+.SH NAME
+transfer \- Inspect and control durable transfer jobs
+.SH SYNOPSIS
+\fBtransfer\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Inspect and control durable transfer jobs
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+transfer\-info(1)
+List durable transfer jobs
+.TP
+transfer\-remaining(1)
+Show configured roots and remaining capacity
+.TP
+transfer\-root(1)
+Add or update a materialization root
+.TP
+transfer\-enqueue(1)
+Enqueue an individually addressable file job
+.TP
+transfer\-allocate(1)
+Allocate queued jobs to configured roots
+.TP
+transfer\-materialize(1)
+Fetch and materialize assigned jobs through the daemon
+.TP
+transfer\-pause(1)
+Pause a transfer job
+.TP
+transfer\-resume(1)
+Resume a paused transfer job
+.TP
+transfer\-cancel(1)
+Cancel a transfer job
+.TP
+transfer\-retry(1)
+Retry a failed transfer job
+.TP
+transfer\-help(1)
+Print this message or the help of the given subcommand(s)

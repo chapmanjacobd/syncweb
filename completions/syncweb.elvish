@@ -48,6 +48,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand import 'Import local files into a synchronized folder'
             cand snapshot 'Manage content-addressed snapshots'
             cand health 'Show seeding status per folder blob'
+            cand transfer 'Inspect and control durable transfer jobs'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand watch 'Watch a folder and import filesystem changes'
@@ -464,6 +465,167 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
+        }
+        &'syncweb;transfer'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand info 'List durable transfer jobs'
+            cand remaining 'Show configured roots and remaining capacity'
+            cand root 'Add or update a materialization root'
+            cand enqueue 'Enqueue an individually addressable file job'
+            cand allocate 'Allocate queued jobs to configured roots'
+            cand materialize 'Fetch and materialize assigned jobs through the daemon'
+            cand pause 'Pause a transfer job'
+            cand resume 'Resume a paused transfer job'
+            cand cancel 'Cancel a transfer job'
+            cand retry 'Retry a failed transfer job'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;transfer;info'= {
+            cand --namespace 'Limit display to a namespace'
+            cand --state 'Limit display to a lifecycle state'
+            cand --sort 'sort'
+            cand --group-by 'group-by'
+            cand --limit 'limit'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;remaining'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;root'= {
+            cand --min-free 'Free bytes to preserve on this root'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --disabled 'Disable this root for allocation'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;enqueue'= {
+            cand --namespace 'namespace'
+            cand --path 'Relative materialization path'
+            cand --hash '32-byte blob hash in hexadecimal'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;allocate'= {
+            cand --namespace 'Limit allocation to a namespace'
+            cand --path-prefix 'Only allocate paths below this relative prefix'
+            cand --min-size 'min-size'
+            cand --max-size 'max-size'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --dry-run 'Report allocations without persisting them'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;materialize'= {
+            cand --namespace 'Limit processing to a namespace'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;pause'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;resume'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;cancel'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;retry'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;transfer;help'= {
+            cand info 'List durable transfer jobs'
+            cand remaining 'Show configured roots and remaining capacity'
+            cand root 'Add or update a materialization root'
+            cand enqueue 'Enqueue an individually addressable file job'
+            cand allocate 'Allocate queued jobs to configured roots'
+            cand materialize 'Fetch and materialize assigned jobs through the daemon'
+            cand pause 'Pause a transfer job'
+            cand resume 'Resume a paused transfer job'
+            cand cancel 'Cancel a transfer job'
+            cand retry 'Retry a failed transfer job'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'syncweb;transfer;help;info'= {
+        }
+        &'syncweb;transfer;help;remaining'= {
+        }
+        &'syncweb;transfer;help;root'= {
+        }
+        &'syncweb;transfer;help;enqueue'= {
+        }
+        &'syncweb;transfer;help;allocate'= {
+        }
+        &'syncweb;transfer;help;materialize'= {
+        }
+        &'syncweb;transfer;help;pause'= {
+        }
+        &'syncweb;transfer;help;resume'= {
+        }
+        &'syncweb;transfer;help;cancel'= {
+        }
+        &'syncweb;transfer;help;retry'= {
+        }
+        &'syncweb;transfer;help;help'= {
         }
         &'syncweb;init'= {
             cand --mode 'mode'
@@ -1740,6 +1902,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand import 'Import local files into a synchronized folder'
             cand snapshot 'Manage content-addressed snapshots'
             cand health 'Show seeding status per folder blob'
+            cand transfer 'Inspect and control durable transfer jobs'
             cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand watch 'Watch a folder and import filesystem changes'
@@ -1830,6 +1993,38 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;help;snapshot;delete'= {
         }
         &'syncweb;help;health'= {
+        }
+        &'syncweb;help;transfer'= {
+            cand info 'List durable transfer jobs'
+            cand remaining 'Show configured roots and remaining capacity'
+            cand root 'Add or update a materialization root'
+            cand enqueue 'Enqueue an individually addressable file job'
+            cand allocate 'Allocate queued jobs to configured roots'
+            cand materialize 'Fetch and materialize assigned jobs through the daemon'
+            cand pause 'Pause a transfer job'
+            cand resume 'Resume a paused transfer job'
+            cand cancel 'Cancel a transfer job'
+            cand retry 'Retry a failed transfer job'
+        }
+        &'syncweb;help;transfer;info'= {
+        }
+        &'syncweb;help;transfer;remaining'= {
+        }
+        &'syncweb;help;transfer;root'= {
+        }
+        &'syncweb;help;transfer;enqueue'= {
+        }
+        &'syncweb;help;transfer;allocate'= {
+        }
+        &'syncweb;help;transfer;materialize'= {
+        }
+        &'syncweb;help;transfer;pause'= {
+        }
+        &'syncweb;help;transfer;resume'= {
+        }
+        &'syncweb;help;transfer;cancel'= {
+        }
+        &'syncweb;help;transfer;retry'= {
         }
         &'syncweb;help;init'= {
         }

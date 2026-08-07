@@ -83,7 +83,7 @@ let endpoint = builder
     .await?;
 ```
 
-Local discovery (mDNS and the UDP beacon) is scoped to the daemon's network name so unrelated networks do not advertise to each other: the network name hashes to a 16-byte scope token that both selects the mDNS service name and offsets/spins the beacon port, and every beacon datagram carries the scope token. This scoping is a *hygiene* measure only — it keeps discovery traffic between networks separate, but it is **not** an access boundary. Any peer that learns the derived service name or port/scope can still resolve a member's addresses; membership is enforced solely by the Layer 2 allowlist above, which rejects any connection from a non-member regardless of how the address was discovered. Both mechanisms can be disabled with `--no-mdns`/`--no-beacon` for relay/DHT-only discovery.
+Local discovery (mDNS and the UDP beacon) is scoped to the daemon's network name so unrelated networks do not advertise to each other: the network name hashes to a 16-byte scope token that both selects the mDNS service name and offsets/spins the beacon port, and every beacon datagram carries the scope token. This scoping is a *hygiene* measure only — it keeps discovery traffic between networks separate, but it is not an access boundary. Any peer that learns the derived service name or port/scope can still resolve a member's addresses; membership is enforced solely by the Layer 2 allowlist above, which rejects any connection from a non-member regardless of how the address was discovered. Both mechanisms can be disabled with `--no-mdns`/`--no-beacon` for relay/DHT-only discovery.
 
 ### Layer 3: Blob Authorization (Connection-Level)
 

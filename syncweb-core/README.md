@@ -13,6 +13,7 @@ This crate provides the foundational building blocks for the syncweb application
 
 ### Modules
 
+* `allocation`: Deterministic, capacity-aware storage allocation.
 * `error`: Common error types and `Result` aliases.
 * `filter`: Tools for filtering files during synchronization and scanning.
 * `folder`: Management of synchronized folders, collections, and packages.

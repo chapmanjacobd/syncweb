@@ -10,6 +10,7 @@
 //!
 //! ## Modules
 //!
+//! - `allocation`: Deterministic, capacity-aware storage allocation.
 //! - `error`: Common error types and `Result` aliases.
 //! - `filter`: Tools for filtering files during synchronization and scanning.
 //! - `folder`: Management of synchronized folders, collections, and packages.
@@ -20,6 +21,7 @@
 //! - `search`: Find engine for querying synchronized assets.
 //! - `sync`: The core synchronization engine and session management.
 //!
+pub mod allocation;
 pub mod bandwidth_stats;
 pub mod daemon;
 pub mod editorial;

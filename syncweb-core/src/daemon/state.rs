@@ -6,7 +6,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SyncwebError};
@@ -304,11 +303,11 @@ impl PidLock {
             .read(true)
             .write(true)
             .open(&self.lock_path)?;
-        if let Err(error) = candidate.try_lock_exclusive() {
-            if error.kind() == std::io::ErrorKind::WouldBlock {
-                return Ok(false);
+        if let Err(lock_result) = fs4::FileExt::try_lock(&candidate) {
+            match lock_result {
+                fs4::TryLockError::WouldBlock => return Ok(false),
+                fs4::TryLockError::Error(lock_error) => return Err(lock_error.into()),
             }
-            return Err(error.into());
         }
         candidate.set_len(0)?;
         writeln!(candidate, "{}", std::process::id())?;
@@ -329,7 +328,7 @@ impl PidLock {
             .lock()
             .map_err(|error| SyncwebError::operation("daemon lock mutex is poisoned", error))?;
         if let Some(file) = held.take() {
-            file.unlock()?;
+            fs4::FileExt::unlock(&file)?;
         }
         drop(held);
         Ok(())
@@ -385,7 +384,7 @@ impl Drop for PidLock {
         if let Ok(mut held) = self.lock.lock()
             && let Some(file) = held.take()
         {
-            let _ = file.unlock();
+            let _ = fs4::FileExt::unlock(&file);
         }
     }
 }

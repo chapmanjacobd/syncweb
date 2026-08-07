@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use cli::{
-    args::{Cli, CliContext, effective_data_dir},
+    args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MediaArgs,
         MirrorArgs, NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
@@ -124,13 +124,65 @@ fn format_bytes(bytes: u64) -> String {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    if let Some(code) = top_level_help_exit_code(&args) {
+        cli::args::print_grouped_help();
+        std::process::exit(code);
+    }
     let cli = Cli::parse();
     init_tracing(cli.verbose)?;
-    tracing::debug!(command = ?cli.command, "cli initialized");
+    tracing::debug!(command = ?cli.command, category = category_of(&cli.command), "cli initialized");
     execute_cli(cli).await
 }
 
+/// Detect a top-level help request (no subcommand selected) in the raw argument
+/// list, returning the exit code to use if the grouped help should be shown.
+fn top_level_help_exit_code(args: &[std::ffi::OsString]) -> Option<i32> {
+    let mut iter = args.iter().skip(1);
+    let mut saw_help = false;
+    while let Some(arg) = iter.next() {
+        let s = arg.to_str().unwrap_or_default();
+        if s == "-h" || s == "--help" {
+            saw_help = true;
+            continue;
+        }
+        if s == "--data-dir" || s == "--network" {
+            iter.next();
+            continue;
+        }
+        if s.starts_with("--data-dir=") || s.starts_with("--network=") {
+            continue;
+        }
+        if s == "--verbose" || s == "--json" || s == "--no-daemon" || s == "--embedded" {
+            continue;
+        }
+        return None;
+    }
+    if saw_help { Some(0) } else { Some(2) }
+}
+
+fn handle_help(command: Option<&str>) -> Result<()> {
+    match command {
+        None => {
+            cli::args::print_grouped_help();
+            Ok(())
+        }
+        Some(name) => {
+            let mut cmd = Cli::command();
+            cmd.build();
+            let sc = cmd
+                .find_subcommand_mut(name)
+                .ok_or_else(|| anyhow::anyhow!("unrecognized subcommand '{name}'"))?;
+            sc.write_help(&mut std::io::stdout()).context("write subcommand help")?;
+            Ok(())
+        }
+    }
+}
+
 async fn execute_cli(cli: Cli) -> Result<()> {
+    if let Command::Help { command } = &cli.command {
+        return handle_help(command.as_deref());
+    }
     if is_auxiliary_command(&cli.command) {
         return execute_auxiliary_command(cli).await;
     }
@@ -199,7 +251,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Config { .. }
         | Command::Completions { .. }
         | Command::Manpages { .. }
-        | Command::Db { .. } => anyhow::bail!("auxiliary command dispatch failed"),
+        | Command::Db { .. }
+        | Command::Help { .. } => anyhow::bail!("auxiliary command dispatch failed"),
     }
     Ok(())
 }

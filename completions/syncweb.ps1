@@ -244,7 +244,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Set a configuration value')
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show configuration, optionally limited to a section')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;config;set' {
@@ -265,21 +264,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;config;help' {
-            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Set a configuration value')
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show configuration, optionally limited to a section')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;config;help;set' {
-            break
-        }
-        'syncweb;config;help;show' {
-            break
-        }
-        'syncweb;config;help;help' {
             break
         }
         'syncweb;ls' {
@@ -415,7 +399,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
             [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
             [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;snapshot;create' {
@@ -470,33 +453,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;snapshot;help' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
-            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
-            [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
-            [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;snapshot;help;create' {
-            break
-        }
-        'syncweb;snapshot;help;restore' {
-            break
-        }
-        'syncweb;snapshot;help;list' {
-            break
-        }
-        'syncweb;snapshot;help;diff' {
-            break
-        }
-        'syncweb;snapshot;help;delete' {
-            break
-        }
-        'syncweb;snapshot;help;help' {
-            break
-        }
         'syncweb;health' {
             [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
             [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
@@ -528,7 +484,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
             [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
             [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;transfer;info' {
@@ -647,53 +602,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;transfer;help' {
-            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'List durable transfer jobs')
-            [CompletionResult]::new('remaining', 'remaining', [CompletionResultType]::ParameterValue, 'Show configured roots and remaining capacity')
-            [CompletionResult]::new('root', 'root', [CompletionResultType]::ParameterValue, 'Add or update a materialization root')
-            [CompletionResult]::new('enqueue', 'enqueue', [CompletionResultType]::ParameterValue, 'Enqueue an individually addressable file job')
-            [CompletionResult]::new('allocate', 'allocate', [CompletionResultType]::ParameterValue, 'Allocate queued jobs to configured roots')
-            [CompletionResult]::new('materialize', 'materialize', [CompletionResultType]::ParameterValue, 'Fetch and materialize assigned jobs through the daemon')
-            [CompletionResult]::new('pause', 'pause', [CompletionResultType]::ParameterValue, 'Pause a transfer job')
-            [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
-            [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
-            [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;transfer;help;info' {
-            break
-        }
-        'syncweb;transfer;help;remaining' {
-            break
-        }
-        'syncweb;transfer;help;root' {
-            break
-        }
-        'syncweb;transfer;help;enqueue' {
-            break
-        }
-        'syncweb;transfer;help;allocate' {
-            break
-        }
-        'syncweb;transfer;help;materialize' {
-            break
-        }
-        'syncweb;transfer;help;pause' {
-            break
-        }
-        'syncweb;transfer;help;resume' {
-            break
-        }
-        'syncweb;transfer;help;cancel' {
-            break
-        }
-        'syncweb;transfer;help;retry' {
-            break
-        }
-        'syncweb;transfer;help;help' {
-            break
-        }
         'syncweb;init' {
             [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
@@ -787,7 +695,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Update the global schedule')
             [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Set schedule overrides for a named folder')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;schedule;set' {
@@ -814,21 +721,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;schedule;help' {
-            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Update the global schedule')
-            [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Set schedule overrides for a named folder')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;schedule;help;set' {
-            break
-        }
-        'syncweb;schedule;help;folder' {
-            break
-        }
-        'syncweb;schedule;help;help' {
             break
         }
         'syncweb;subscribe' {
@@ -881,7 +773,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Scan files and update the local collection manifest')
             [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'Create a new collection manifest version')
             [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Store a collection manifest and mutable head in a folder')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;collection;init' {
@@ -931,29 +822,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;collection;help' {
-            [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a directory as a versioned collection')
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Scan files and update the local collection manifest')
-            [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'Create a new collection manifest version')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Store a collection manifest and mutable head in a folder')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;collection;help;init' {
-            break
-        }
-        'syncweb;collection;help;add' {
-            break
-        }
-        'syncweb;collection;help;versions' {
-            break
-        }
-        'syncweb;collection;help;publish' {
-            break
-        }
-        'syncweb;collection;help;help' {
-            break
-        }
         'syncweb;package' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -973,7 +841,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List locally installed collections')
             [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'List installed versions for a collection')
             [CompletionResult]::new('switch', 'switch', [CompletionResultType]::ParameterValue, 'Switch the active installed collection version')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;package;export' {
@@ -1096,57 +963,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;package;help' {
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
-            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'List locally installed packages, optionally filtering by text')
-            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest from a ticket or blob hash')
-            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
-            [CompletionResult]::new('upgrade', 'upgrade', [CompletionResultType]::ParameterValue, 'Install a newer collection manifest version via ticket')
-            [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Remove a non-current installed collection version')
-            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify an installed collection version')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List locally installed collections')
-            [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'List installed versions for a collection')
-            [CompletionResult]::new('switch', 'switch', [CompletionResultType]::ParameterValue, 'Switch the active installed collection version')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;package;help;export' {
-            break
-        }
-        'syncweb;package;help;import' {
-            break
-        }
-        'syncweb;package;help;search' {
-            break
-        }
-        'syncweb;package;help;info' {
-            break
-        }
-        'syncweb;package;help;install' {
-            break
-        }
-        'syncweb;package;help;upgrade' {
-            break
-        }
-        'syncweb;package;help;remove' {
-            break
-        }
-        'syncweb;package;help;verify' {
-            break
-        }
-        'syncweb;package;help;list' {
-            break
-        }
-        'syncweb;package;help;versions' {
-            break
-        }
-        'syncweb;package;help;switch' {
-            break
-        }
-        'syncweb;package;help;help' {
-            break
-        }
         'syncweb;network' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1164,7 +980,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Show recent network events')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show network connectivity health')
             [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;network;create' {
@@ -1262,49 +1077,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;network;help' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a named network')
-            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List networks or inspect one')
-            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a network from an invitation')
-            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a network')
-            [CompletionResult]::new('invite', 'invite', [CompletionResultType]::ParameterValue, 'Generate a network invitation')
-            [CompletionResult]::new('kick', 'kick', [CompletionResultType]::ParameterValue, 'Remove a device from a network')
-            [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Show recent network events')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show network connectivity health')
-            [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;network;help;create' {
-            break
-        }
-        'syncweb;network;help;ls' {
-            break
-        }
-        'syncweb;network;help;join' {
-            break
-        }
-        'syncweb;network;help;leave' {
-            break
-        }
-        'syncweb;network;help;invite' {
-            break
-        }
-        'syncweb;network;help;kick' {
-            break
-        }
-        'syncweb;network;help;events' {
-            break
-        }
-        'syncweb;network;help;health' {
-            break
-        }
-        'syncweb;network;help;test-relay' {
-            break
-        }
-        'syncweb;network;help;help' {
-            break
-        }
         'syncweb;db' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1317,7 +1089,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('vacuum', 'vacuum', [CompletionResultType]::ParameterValue, 'Run VACUUM to reclaim space in all databases')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show database sizes and table statistics')
             [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Back up all databases to a directory')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;db;check' {
@@ -1361,29 +1132,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;db;help' {
-            [CompletionResult]::new('check', 'check', [CompletionResultType]::ParameterValue, 'Run integrity check on all databases')
-            [CompletionResult]::new('vacuum', 'vacuum', [CompletionResultType]::ParameterValue, 'Run VACUUM to reclaim space in all databases')
-            [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show database sizes and table statistics')
-            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Back up all databases to a directory')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;db;help;check' {
-            break
-        }
-        'syncweb;db;help;vacuum' {
-            break
-        }
-        'syncweb;db;help;stats' {
-            break
-        }
-        'syncweb;db;help;backup' {
-            break
-        }
-        'syncweb;db;help;help' {
-            break
-        }
         'syncweb;indexing' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1399,7 +1147,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
             [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
             [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;indexing;enable' {
@@ -1464,7 +1211,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;indexing;meta;add' {
@@ -1478,17 +1224,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;indexing;meta;help' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;indexing;meta;help;add' {
-            break
-        }
-        'syncweb;indexing;meta;help;help' {
-            break
-        }
         'syncweb;indexing;filter' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1499,7 +1234,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
             [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;indexing;filter;add' {
@@ -1522,68 +1256,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;indexing;filter;help' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;indexing;filter;help;add' {
-            break
-        }
-        'syncweb;indexing;filter;help;subscribe' {
-            break
-        }
-        'syncweb;indexing;filter;help;help' {
-            break
-        }
-        'syncweb;indexing;help' {
-            [CompletionResult]::new('enable', 'enable', [CompletionResultType]::ParameterValue, 'Opt a synchronized folder into indexing')
-            [CompletionResult]::new('disable', 'disable', [CompletionResultType]::ParameterValue, 'Remove a folder from the local index')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
-            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search subscribed catalogs')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
-            [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
-            [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;indexing;help;enable' {
-            break
-        }
-        'syncweb;indexing;help;disable' {
-            break
-        }
-        'syncweb;indexing;help;publish' {
-            break
-        }
-        'syncweb;indexing;help;search' {
-            break
-        }
-        'syncweb;indexing;help;health' {
-            break
-        }
-        'syncweb;indexing;help;meta' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
-            break
-        }
-        'syncweb;indexing;help;meta;add' {
-            break
-        }
-        'syncweb;indexing;help;filter' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
-            break
-        }
-        'syncweb;indexing;help;filter;add' {
-            break
-        }
-        'syncweb;indexing;help;filter;subscribe' {
-            break
-        }
-        'syncweb;indexing;help;help' {
-            break
-        }
         'syncweb;link' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1595,7 +1267,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
             [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
             [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;link;create' {
@@ -1636,25 +1307,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;link;help' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
-            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
-            [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;link;help;create' {
-            break
-        }
-        'syncweb;link;help;resolve' {
-            break
-        }
-        'syncweb;link;help;revoke' {
-            break
-        }
-        'syncweb;link;help;help' {
-            break
-        }
         'syncweb;mirror' {
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Network name or ID to mirror all blobs across')
             [CompletionResult]::new('--min-providers', '--min-providers', [CompletionResultType]::ParameterName, 'Minimum replication budget per blob (default 3)')
@@ -1679,7 +1331,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;provider;add' {
@@ -1690,17 +1341,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;provider;help' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;provider;help;add' {
-            break
-        }
-        'syncweb;provider;help;help' {
             break
         }
         'syncweb;trust' {
@@ -1716,7 +1356,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
             [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
             [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;trust;show' {
@@ -1768,7 +1407,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
             [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
             [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;trust;provider;show' {
@@ -1842,37 +1480,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;trust;provider;help' {
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
-            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
-            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
-            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
-            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;trust;provider;help;show' {
-            break
-        }
-        'syncweb;trust;provider;help;list' {
-            break
-        }
-        'syncweb;trust;provider;help;ban' {
-            break
-        }
-        'syncweb;trust;provider;help;unban' {
-            break
-        }
-        'syncweb;trust;provider;help;vouch' {
-            break
-        }
-        'syncweb;trust;provider;help;distrust' {
-            break
-        }
-        'syncweb;trust;provider;help;help' {
-            break
-        }
         'syncweb;trust;stream' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1883,7 +1490,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
             [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;trust;stream;subscribe' {
@@ -1910,80 +1516,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;trust;stream;help' {
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;trust;stream;help;subscribe' {
-            break
-        }
-        'syncweb;trust;stream;help;publish' {
-            break
-        }
-        'syncweb;trust;stream;help;help' {
-            break
-        }
-        'syncweb;trust;help' {
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
-            [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
-            [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
-            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
-            [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;trust;help;show' {
-            break
-        }
-        'syncweb;trust;help;delegate' {
-            break
-        }
-        'syncweb;trust;help;revoke-delegation' {
-            break
-        }
-        'syncweb;trust;help;provider' {
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
-            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
-            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
-            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
-            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
-            break
-        }
-        'syncweb;trust;help;provider;show' {
-            break
-        }
-        'syncweb;trust;help;provider;list' {
-            break
-        }
-        'syncweb;trust;help;provider;ban' {
-            break
-        }
-        'syncweb;trust;help;provider;unban' {
-            break
-        }
-        'syncweb;trust;help;provider;vouch' {
-            break
-        }
-        'syncweb;trust;help;provider;distrust' {
-            break
-        }
-        'syncweb;trust;help;stream' {
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
-            break
-        }
-        'syncweb;trust;help;stream;subscribe' {
-            break
-        }
-        'syncweb;trust;help;stream;publish' {
-            break
-        }
-        'syncweb;trust;help;help' {
-            break
-        }
         'syncweb;attest' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -1994,7 +1526,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Sign and optionally broadcast a content attestation')
             [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify attestations for content from the network')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;attest;create' {
@@ -2023,21 +1554,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;attest;help' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Sign and optionally broadcast a content attestation')
-            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify attestations for content from the network')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;attest;help;create' {
-            break
-        }
-        'syncweb;attest;help;verify' {
-            break
-        }
-        'syncweb;attest;help;help' {
-            break
-        }
         'syncweb;moderation' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -2049,7 +1565,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
             [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
             [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Sign and submit a moderation report (broadcasts via gossip)')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'syncweb;moderation;ls' {
@@ -2085,25 +1600,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;moderation;help' {
-            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
-            [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
-            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Sign and submit a moderation report (broadcasts via gossip)')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;moderation;help;ls' {
-            break
-        }
-        'syncweb;moderation;help;hide' {
-            break
-        }
-        'syncweb;moderation;help;report' {
-            break
-        }
-        'syncweb;moderation;help;help' {
-            break
-        }
         'syncweb;completions' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -2136,514 +1632,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;help' {
-            [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Show syncweb version information')
-            [CompletionResult]::new('start', 'start', [CompletionResultType]::ParameterValue, 'Start the local syncweb daemon')
-            [CompletionResult]::new('shutdown', 'shutdown', [CompletionResultType]::ParameterValue, 'Stop the local syncweb node')
-            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Show the local daemon status')
-            [CompletionResult]::new('reload', 'reload', [CompletionResultType]::ParameterValue, 'Ask the local daemon to reload configuration')
-            [CompletionResult]::new('daemon-sync', 'daemon-sync', [CompletionResultType]::ParameterValue, 'Ask the local daemon to trigger synchronization')
-            [CompletionResult]::new('unwatch', 'unwatch', [CompletionResultType]::ParameterValue, 'Stop watching a folder for local changes')
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder')
-            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
-            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave and remove a synchronized folder')
-            [CompletionResult]::new('unsubscribe', 'unsubscribe', [CompletionResultType]::ParameterValue, 'Unsubscribe from a folder''s live sync loop')
-            [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
-            [CompletionResult]::new('devices', 'devices', [CompletionResultType]::ParameterValue, 'Show this device''s Iroh and Syncthing identities')
-            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Show or update local configuration')
-            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List files in a local folder')
-            [CompletionResult]::new('find', 'find', [CompletionResultType]::ParameterValue, 'Search local files')
-            [CompletionResult]::new('sort', 'sort', [CompletionResultType]::ParameterValue, 'Sort local files by discovery criteria')
-            [CompletionResult]::new('stat', 'stat', [CompletionResultType]::ParameterValue, 'Show detailed metadata for a local file')
-            [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download folder content or copy a local file')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
-            [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
-            [CompletionResult]::new('transfer', 'transfer', [CompletionResultType]::ParameterValue, 'Inspect and control durable transfer jobs')
-            [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a folder and print a shareable URL')
-            [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
-            [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
-            [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show persisted bandwidth accounting')
-            [CompletionResult]::new('filestats', 'filestats', [CompletionResultType]::ParameterValue, 'Show file-level statistics for synced folder content')
-            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Re-check local folder blob integrity')
-            [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Show or update synchronization schedules')
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a folder with event filters')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a folder or blob for public read access')
-            [CompletionResult]::new('unpublish', 'unpublish', [CompletionResultType]::ParameterValue, 'Remove a public blob pin')
-            [CompletionResult]::new('collection', 'collection', [CompletionResultType]::ParameterValue, 'Create and publish versioned content collections')
-            [CompletionResult]::new('package', 'package', [CompletionResultType]::ParameterValue, 'Manage locally installed collection packages')
-            [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
-            [CompletionResult]::new('db', 'db', [CompletionResultType]::ParameterValue, 'Database maintenance: check, vacuum, stats, backup')
-            [CompletionResult]::new('indexing', 'indexing', [CompletionResultType]::ParameterValue, 'Manage opt-in indexing, catalogs, and metadata')
-            [CompletionResult]::new('link', 'link', [CompletionResultType]::ParameterValue, 'Create and resolve stable syncweb links')
-            [CompletionResult]::new('mirror', 'mirror', [CompletionResultType]::ParameterValue, 'Mirror all blobs from a provider or network')
-            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage blob provider registrations')
-            [CompletionResult]::new('trust', 'trust', [CompletionResultType]::ParameterValue, 'Inspect and delegate local trust')
-            [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Sign content provenance attestations')
-            [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
-            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
-            [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
-            [CompletionResult]::new('media', 'media', [CompletionResultType]::ParameterValue, 'Serve media blobs via HTTP (standalone media server)')
-            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'syncweb;help;version' {
-            break
-        }
-        'syncweb;help;start' {
-            break
-        }
-        'syncweb;help;shutdown' {
-            break
-        }
-        'syncweb;help;status' {
-            break
-        }
-        'syncweb;help;reload' {
-            break
-        }
-        'syncweb;help;daemon-sync' {
-            break
-        }
-        'syncweb;help;unwatch' {
-            break
-        }
-        'syncweb;help;create' {
-            break
-        }
-        'syncweb;help;join' {
-            break
-        }
-        'syncweb;help;leave' {
-            break
-        }
-        'syncweb;help;unsubscribe' {
-            break
-        }
-        'syncweb;help;folders' {
-            break
-        }
-        'syncweb;help;devices' {
-            break
-        }
-        'syncweb;help;config' {
-            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Set a configuration value')
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show configuration, optionally limited to a section')
-            break
-        }
-        'syncweb;help;config;set' {
-            break
-        }
-        'syncweb;help;config;show' {
-            break
-        }
-        'syncweb;help;ls' {
-            break
-        }
-        'syncweb;help;find' {
-            break
-        }
-        'syncweb;help;sort' {
-            break
-        }
-        'syncweb;help;stat' {
-            break
-        }
-        'syncweb;help;download' {
-            break
-        }
-        'syncweb;help;import' {
-            break
-        }
-        'syncweb;help;snapshot' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a content-addressed snapshot')
-            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a snapshot to a folder or directory')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List local snapshots')
-            [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Compare two snapshots')
-            [CompletionResult]::new('delete', 'delete', [CompletionResultType]::ParameterValue, 'Delete a snapshot and release its pins')
-            break
-        }
-        'syncweb;help;snapshot;create' {
-            break
-        }
-        'syncweb;help;snapshot;restore' {
-            break
-        }
-        'syncweb;help;snapshot;list' {
-            break
-        }
-        'syncweb;help;snapshot;diff' {
-            break
-        }
-        'syncweb;help;snapshot;delete' {
-            break
-        }
-        'syncweb;help;health' {
-            break
-        }
-        'syncweb;help;transfer' {
-            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'List durable transfer jobs')
-            [CompletionResult]::new('remaining', 'remaining', [CompletionResultType]::ParameterValue, 'Show configured roots and remaining capacity')
-            [CompletionResult]::new('root', 'root', [CompletionResultType]::ParameterValue, 'Add or update a materialization root')
-            [CompletionResult]::new('enqueue', 'enqueue', [CompletionResultType]::ParameterValue, 'Enqueue an individually addressable file job')
-            [CompletionResult]::new('allocate', 'allocate', [CompletionResultType]::ParameterValue, 'Allocate queued jobs to configured roots')
-            [CompletionResult]::new('materialize', 'materialize', [CompletionResultType]::ParameterValue, 'Fetch and materialize assigned jobs through the daemon')
-            [CompletionResult]::new('pause', 'pause', [CompletionResultType]::ParameterValue, 'Pause a transfer job')
-            [CompletionResult]::new('resume', 'resume', [CompletionResultType]::ParameterValue, 'Resume a paused transfer job')
-            [CompletionResult]::new('cancel', 'cancel', [CompletionResultType]::ParameterValue, 'Cancel a transfer job')
-            [CompletionResult]::new('retry', 'retry', [CompletionResultType]::ParameterValue, 'Retry a failed transfer job')
-            break
-        }
-        'syncweb;help;transfer;info' {
-            break
-        }
-        'syncweb;help;transfer;remaining' {
-            break
-        }
-        'syncweb;help;transfer;root' {
-            break
-        }
-        'syncweb;help;transfer;enqueue' {
-            break
-        }
-        'syncweb;help;transfer;allocate' {
-            break
-        }
-        'syncweb;help;transfer;materialize' {
-            break
-        }
-        'syncweb;help;transfer;pause' {
-            break
-        }
-        'syncweb;help;transfer;resume' {
-            break
-        }
-        'syncweb;help;transfer;cancel' {
-            break
-        }
-        'syncweb;help;transfer;retry' {
-            break
-        }
-        'syncweb;help;init' {
-            break
-        }
-        'syncweb;help;automatic' {
-            break
-        }
-        'syncweb;help;watch' {
-            break
-        }
-        'syncweb;help;stats' {
-            break
-        }
-        'syncweb;help;filestats' {
-            break
-        }
-        'syncweb;help;verify' {
-            break
-        }
-        'syncweb;help;schedule' {
-            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Update the global schedule')
-            [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Set schedule overrides for a named folder')
-            break
-        }
-        'syncweb;help;schedule;set' {
-            break
-        }
-        'syncweb;help;schedule;folder' {
-            break
-        }
-        'syncweb;help;subscribe' {
-            break
-        }
-        'syncweb;help;publish' {
-            break
-        }
-        'syncweb;help;unpublish' {
-            break
-        }
-        'syncweb;help;collection' {
-            [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize a directory as a versioned collection')
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Scan files and update the local collection manifest')
-            [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'Create a new collection manifest version')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Store a collection manifest and mutable head in a folder')
-            break
-        }
-        'syncweb;help;collection;init' {
-            break
-        }
-        'syncweb;help;collection;add' {
-            break
-        }
-        'syncweb;help;collection;versions' {
-            break
-        }
-        'syncweb;help;collection;publish' {
-            break
-        }
-        'syncweb;help;package' {
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
-            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
-            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'List locally installed packages, optionally filtering by text')
-            [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest from a ticket or blob hash')
-            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
-            [CompletionResult]::new('upgrade', 'upgrade', [CompletionResultType]::ParameterValue, 'Install a newer collection manifest version via ticket')
-            [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Remove a non-current installed collection version')
-            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify an installed collection version')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List locally installed collections')
-            [CompletionResult]::new('versions', 'versions', [CompletionResultType]::ParameterValue, 'List installed versions for a collection')
-            [CompletionResult]::new('switch', 'switch', [CompletionResultType]::ParameterValue, 'Switch the active installed collection version')
-            break
-        }
-        'syncweb;help;package;export' {
-            break
-        }
-        'syncweb;help;package;import' {
-            break
-        }
-        'syncweb;help;package;search' {
-            break
-        }
-        'syncweb;help;package;info' {
-            break
-        }
-        'syncweb;help;package;install' {
-            break
-        }
-        'syncweb;help;package;upgrade' {
-            break
-        }
-        'syncweb;help;package;remove' {
-            break
-        }
-        'syncweb;help;package;verify' {
-            break
-        }
-        'syncweb;help;package;list' {
-            break
-        }
-        'syncweb;help;package;versions' {
-            break
-        }
-        'syncweb;help;package;switch' {
-            break
-        }
-        'syncweb;help;network' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a named network')
-            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List networks or inspect one')
-            [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a network from an invitation')
-            [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a network')
-            [CompletionResult]::new('invite', 'invite', [CompletionResultType]::ParameterValue, 'Generate a network invitation')
-            [CompletionResult]::new('kick', 'kick', [CompletionResultType]::ParameterValue, 'Remove a device from a network')
-            [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Show recent network events')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show network connectivity health')
-            [CompletionResult]::new('test-relay', 'test-relay', [CompletionResultType]::ParameterValue, 'Test a Syncthing relay TCP connection')
-            break
-        }
-        'syncweb;help;network;create' {
-            break
-        }
-        'syncweb;help;network;ls' {
-            break
-        }
-        'syncweb;help;network;join' {
-            break
-        }
-        'syncweb;help;network;leave' {
-            break
-        }
-        'syncweb;help;network;invite' {
-            break
-        }
-        'syncweb;help;network;kick' {
-            break
-        }
-        'syncweb;help;network;events' {
-            break
-        }
-        'syncweb;help;network;health' {
-            break
-        }
-        'syncweb;help;network;test-relay' {
-            break
-        }
-        'syncweb;help;db' {
-            [CompletionResult]::new('check', 'check', [CompletionResultType]::ParameterValue, 'Run integrity check on all databases')
-            [CompletionResult]::new('vacuum', 'vacuum', [CompletionResultType]::ParameterValue, 'Run VACUUM to reclaim space in all databases')
-            [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show database sizes and table statistics')
-            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Back up all databases to a directory')
-            break
-        }
-        'syncweb;help;db;check' {
-            break
-        }
-        'syncweb;help;db;vacuum' {
-            break
-        }
-        'syncweb;help;db;stats' {
-            break
-        }
-        'syncweb;help;db;backup' {
-            break
-        }
-        'syncweb;help;indexing' {
-            [CompletionResult]::new('enable', 'enable', [CompletionResultType]::ParameterValue, 'Opt a synchronized folder into indexing')
-            [CompletionResult]::new('disable', 'disable', [CompletionResultType]::ParameterValue, 'Remove a folder from the local index')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
-            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search subscribed catalogs')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show verified provider health for a content hash')
-            [CompletionResult]::new('meta', 'meta', [CompletionResultType]::ParameterValue, 'Manage signed metadata')
-            [CompletionResult]::new('filter', 'filter', [CompletionResultType]::ParameterValue, 'Manage local and federated denylists')
-            break
-        }
-        'syncweb;help;indexing;enable' {
-            break
-        }
-        'syncweb;help;indexing;disable' {
-            break
-        }
-        'syncweb;help;indexing;publish' {
-            break
-        }
-        'syncweb;help;indexing;search' {
-            break
-        }
-        'syncweb;help;indexing;health' {
-            break
-        }
-        'syncweb;help;indexing;meta' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Append signed metadata to a content hash')
-            break
-        }
-        'syncweb;help;indexing;meta;add' {
-            break
-        }
-        'syncweb;help;indexing;filter' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Add a device, file, or hash denylist rule')
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Import a signed federated filter list')
-            break
-        }
-        'syncweb;help;indexing;filter;add' {
-            break
-        }
-        'syncweb;help;indexing;filter;subscribe' {
-            break
-        }
-        'syncweb;help;link' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create an immutable, private, or mutable link')
-            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable link')
-            [CompletionResult]::new('revoke', 'revoke', [CompletionResultType]::ParameterValue, 'Revoke a private capability link')
-            break
-        }
-        'syncweb;help;link;create' {
-            break
-        }
-        'syncweb;help;link;resolve' {
-            break
-        }
-        'syncweb;help;link;revoke' {
-            break
-        }
-        'syncweb;help;mirror' {
-            break
-        }
-        'syncweb;help;provider' {
-            [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Register a blob ticket as an alternate provider')
-            break
-        }
-        'syncweb;help;provider;add' {
-            break
-        }
-        'syncweb;help;trust' {
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show trust and moderation state')
-            [CompletionResult]::new('delegate', 'delegate', [CompletionResultType]::ParameterValue, 'Delegate trust to a publisher identity')
-            [CompletionResult]::new('revoke-delegation', 'revoke-delegation', [CompletionResultType]::ParameterValue, 'Revoke a trust delegation')
-            [CompletionResult]::new('provider', 'provider', [CompletionResultType]::ParameterValue, 'Manage provider trust and bans')
-            [CompletionResult]::new('stream', 'stream', [CompletionResultType]::ParameterValue, 'Publish or subscribe to provider trust signals')
-            break
-        }
-        'syncweb;help;trust;show' {
-            break
-        }
-        'syncweb;help;trust;delegate' {
-            break
-        }
-        'syncweb;help;trust;revoke-delegation' {
-            break
-        }
-        'syncweb;help;trust;provider' {
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show provider reputation, bans, and trust records')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List providers known to the local index')
-            [CompletionResult]::new('ban', 'ban', [CompletionResultType]::ParameterValue, 'Ban a provider globally or for one content hash')
-            [CompletionResult]::new('unban', 'unban', [CompletionResultType]::ParameterValue, 'Remove a provider''s global and scoped bans')
-            [CompletionResult]::new('vouch', 'vouch', [CompletionResultType]::ParameterValue, 'Vouch for a provider')
-            [CompletionResult]::new('distrust', 'distrust', [CompletionResultType]::ParameterValue, 'Distrust a provider')
-            break
-        }
-        'syncweb;help;trust;provider;show' {
-            break
-        }
-        'syncweb;help;trust;provider;list' {
-            break
-        }
-        'syncweb;help;trust;provider;ban' {
-            break
-        }
-        'syncweb;help;trust;provider;unban' {
-            break
-        }
-        'syncweb;help;trust;provider;vouch' {
-            break
-        }
-        'syncweb;help;trust;provider;distrust' {
-            break
-        }
-        'syncweb;help;trust;stream' {
-            [CompletionResult]::new('subscribe', 'subscribe', [CompletionResultType]::ParameterValue, 'Subscribe to a provider trust stream ticket or file')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a signed provider trust signal')
-            break
-        }
-        'syncweb;help;trust;stream;subscribe' {
-            break
-        }
-        'syncweb;help;trust;stream;publish' {
-            break
-        }
-        'syncweb;help;attest' {
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Sign and optionally broadcast a content attestation')
-            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify attestations for content from the network')
-            break
-        }
-        'syncweb;help;attest;create' {
-            break
-        }
-        'syncweb;help;attest;verify' {
-            break
-        }
-        'syncweb;help;moderation' {
-            [CompletionResult]::new('ls', 'ls', [CompletionResultType]::ParameterValue, 'List local moderation records')
-            [CompletionResult]::new('hide', 'hide', [CompletionResultType]::ParameterValue, 'Hide a content record locally')
-            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Sign and submit a moderation report (broadcasts via gossip)')
-            break
-        }
-        'syncweb;help;moderation;ls' {
-            break
-        }
-        'syncweb;help;moderation;hide' {
-            break
-        }
-        'syncweb;help;moderation;report' {
-            break
-        }
-        'syncweb;help;completions' {
-            break
-        }
-        'syncweb;help;manpages' {
-            break
-        }
-        'syncweb;help;media' {
-            break
-        }
-        'syncweb;help;help' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
     })

@@ -250,34 +250,6 @@ _arguments "${_arguments_options[@]}" : \
 '::section:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__config__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-config-help-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -501,46 +473,6 @@ _arguments "${_arguments_options[@]}" : \
 ':snapshot:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__snapshot__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-snapshot-help-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(restore)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(diff)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(delete)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -712,66 +644,6 @@ _arguments "${_arguments_options[@]}" : \
 ':id:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__transfer__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-transfer-help-command-$line[1]:"
-        case $line[1] in
-            (info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(remaining)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(root)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(enqueue)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(allocate)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(materialize)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(pause)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(resume)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(cancel)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(retry)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -917,34 +789,6 @@ _arguments "${_arguments_options[@]}" : \
 ':name:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__schedule__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-schedule-help-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(folder)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -1066,42 +910,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 '::path:_files' \
 && ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__collection__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-collection-help-command-$line[1]:"
-        case $line[1] in
-            (init)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(versions)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -1269,70 +1077,6 @@ _arguments "${_arguments_options[@]}" : \
 ':version:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__package__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-package-help-command-$line[1]:"
-        case $line[1] in
-            (export)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(import)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(install)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(upgrade)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(remove)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(versions)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(switch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -1469,62 +1213,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__network__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-network-help-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(ls)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(join)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(leave)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(invite)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(kick)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(events)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(test-relay)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -1592,42 +1280,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__db__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-db-help-command-$line[1]:"
-        case $line[1] in
-            (check)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(vacuum)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(stats)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(backup)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -1749,30 +1401,6 @@ _arguments "${_arguments_options[@]}" : \
 ':value:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__indexing__subcmd__meta__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-meta-help-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -1819,118 +1447,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_default' \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__indexing__subcmd__filter__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-filter-help-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-        esac
-    ;;
-esac
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__indexing__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-help-command-$line[1]:"
-        case $line[1] in
-            (enable)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(disable)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(meta)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__indexing__subcmd__help__subcmd__meta_commands" \
-"*::: :->meta" \
-&& ret=0
-
-    case $state in
-    (meta)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-help-meta-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(filter)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__indexing__subcmd__help__subcmd__filter_commands" \
-"*::: :->filter" \
-&& ret=0
-
-    case $state in
-    (filter)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-help-filter-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
         esac
@@ -2004,38 +1520,6 @@ _arguments "${_arguments_options[@]}" : \
 ':link:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__link__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-link-help-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(resolve)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(revoke)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -2088,30 +1572,6 @@ _arguments "${_arguments_options[@]}" : \
 ':collection:_default' \
 ':provider:_default' \
 && ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__provider__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-provider-help-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -2278,50 +1738,6 @@ _arguments "${_arguments_options[@]}" : \
 ':provider:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-provider-help-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(ban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(vouch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(distrust)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -2370,130 +1786,6 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-stream-help-command-$line[1]:"
-        case $line[1] in
-            (subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-        esac
-    ;;
-esac
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__trust__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-help-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(delegate)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(revoke-delegation)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(provider)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands" \
-"*::: :->provider" \
-&& ret=0
-
-    case $state in
-    (provider)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-help-provider-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(ban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(vouch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(distrust)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(stream)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands" \
-"*::: :->stream" \
-&& ret=0
-
-    case $state in
-    (stream)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-help-stream-command-$line[1]:"
-        case $line[1] in
-            (subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
         esac
@@ -2552,34 +1844,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 ':hash:_default' \
 && ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__attest__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-attest-help-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -2643,38 +1907,6 @@ _arguments "${_arguments_options[@]}" : \
 ':record -- Content hash to report:_default' \
 && ret=0
 ;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__moderation__subcmd__help_commands" \
-"*::: :->help" \
-&& ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-moderation-help-command-$line[1]:"
-        case $line[1] in
-            (ls)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(hide)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(report)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
         esac
     ;;
 esac
@@ -2717,743 +1949,15 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help_commands" \
-"*::: :->help" \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::command:_default' \
 && ret=0
-
-    case $state in
-    (help)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-command-$line[1]:"
-        case $line[1] in
-            (version)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(start)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(shutdown)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(status)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(reload)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(daemon-sync)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unwatch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(join)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(leave)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unsubscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(folders)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(devices)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(config)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__config_commands" \
-"*::: :->config" \
-&& ret=0
-
-    case $state in
-    (config)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-config-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(ls)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(find)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(sort)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(stat)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(download)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(import)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(snapshot)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__snapshot_commands" \
-"*::: :->snapshot" \
-&& ret=0
-
-    case $state in
-    (snapshot)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-snapshot-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(restore)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(diff)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(delete)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(transfer)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__transfer_commands" \
-"*::: :->transfer" \
-&& ret=0
-
-    case $state in
-    (transfer)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-transfer-command-$line[1]:"
-        case $line[1] in
-            (info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(remaining)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(root)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(enqueue)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(allocate)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(materialize)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(pause)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(resume)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(cancel)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(retry)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(init)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(automatic)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(watch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(stats)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(filestats)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(schedule)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__schedule_commands" \
-"*::: :->schedule" \
-&& ret=0
-
-    case $state in
-    (schedule)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-schedule-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(folder)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unpublish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(collection)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__collection_commands" \
-"*::: :->collection" \
-&& ret=0
-
-    case $state in
-    (collection)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-collection-command-$line[1]:"
-        case $line[1] in
-            (init)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(versions)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(package)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__package_commands" \
-"*::: :->package" \
-&& ret=0
-
-    case $state in
-    (package)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-package-command-$line[1]:"
-        case $line[1] in
-            (export)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(import)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(install)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(upgrade)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(remove)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(versions)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(switch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(network)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__network_commands" \
-"*::: :->network" \
-&& ret=0
-
-    case $state in
-    (network)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-network-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(ls)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(join)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(leave)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(invite)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(kick)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(events)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(test-relay)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(db)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__db_commands" \
-"*::: :->db" \
-&& ret=0
-
-    case $state in
-    (db)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-db-command-$line[1]:"
-        case $line[1] in
-            (check)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(vacuum)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(stats)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(backup)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(indexing)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__indexing_commands" \
-"*::: :->indexing" \
-&& ret=0
-
-    case $state in
-    (indexing)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-indexing-command-$line[1]:"
-        case $line[1] in
-            (enable)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(disable)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(meta)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__indexing__subcmd__meta_commands" \
-"*::: :->meta" \
-&& ret=0
-
-    case $state in
-    (meta)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-indexing-meta-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(filter)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__indexing__subcmd__filter_commands" \
-"*::: :->filter" \
-&& ret=0
-
-    case $state in
-    (filter)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-indexing-filter-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-        esac
-    ;;
-esac
-;;
-(link)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__link_commands" \
-"*::: :->link" \
-&& ret=0
-
-    case $state in
-    (link)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-link-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(resolve)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(revoke)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(mirror)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(provider)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__provider_commands" \
-"*::: :->provider" \
-&& ret=0
-
-    case $state in
-    (provider)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-provider-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(trust)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__trust_commands" \
-"*::: :->trust" \
-&& ret=0
-
-    case $state in
-    (trust)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-trust-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(delegate)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(revoke-delegation)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(provider)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands" \
-"*::: :->provider" \
-&& ret=0
-
-    case $state in
-    (provider)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-trust-provider-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(ban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(unban)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(vouch)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(distrust)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(stream)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands" \
-"*::: :->stream" \
-&& ret=0
-
-    case $state in
-    (stream)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-trust-stream-command-$line[1]:"
-        case $line[1] in
-            (subscribe)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-        esac
-    ;;
-esac
-;;
-(attest)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__attest_commands" \
-"*::: :->attest" \
-&& ret=0
-
-    case $state in
-    (attest)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-attest-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(moderation)
-_arguments "${_arguments_options[@]}" : \
-":: :_syncweb__subcmd__help__subcmd__moderation_commands" \
-"*::: :->moderation" \
-&& ret=0
-
-    case $state in
-    (moderation)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-help-moderation-command-$line[1]:"
-        case $line[1] in
-            (ls)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(hide)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(report)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(completions)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(manpages)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(media)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(help)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -3519,7 +2023,6 @@ _syncweb__subcmd__attest_commands() {
     local commands; commands=(
 'create:Sign and optionally broadcast a content attestation' \
 'verify:Verify attestations for content from the network' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb attest commands' commands "$@"
 }
@@ -3527,30 +2030,6 @@ _syncweb__subcmd__attest_commands() {
 _syncweb__subcmd__attest__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb attest create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__help_commands] )) ||
-_syncweb__subcmd__attest__subcmd__help_commands() {
-    local commands; commands=(
-'create:Sign and optionally broadcast a content attestation' \
-'verify:Verify attestations for content from the network' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb attest help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__create_commands] )) ||
-_syncweb__subcmd__attest__subcmd__help__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__attest__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__help__subcmd__verify_commands] )) ||
-_syncweb__subcmd__attest__subcmd__help__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest help verify commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__attest__subcmd__verify_commands] )) ||
 _syncweb__subcmd__attest__subcmd__verify_commands() {
@@ -3569,7 +2048,6 @@ _syncweb__subcmd__collection_commands() {
 'add:Scan files and update the local collection manifest' \
 'versions:Create a new collection manifest version' \
 'publish:Store a collection manifest and mutable head in a folder' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb collection commands' commands "$@"
 }
@@ -3577,42 +2055,6 @@ _syncweb__subcmd__collection_commands() {
 _syncweb__subcmd__collection__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb collection add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help_commands() {
-    local commands; commands=(
-'init:Initialize a directory as a versioned collection' \
-'add:Scan files and update the local collection manifest' \
-'versions:Create a new collection manifest version' \
-'publish:Store a collection manifest and mutable head in a folder' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb collection help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__add_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection help add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__init_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help__subcmd__init_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection help init commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__publish_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection help publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__help__subcmd__versions_commands] )) ||
-_syncweb__subcmd__collection__subcmd__help__subcmd__versions_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection help versions commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__collection__subcmd__init_commands] )) ||
 _syncweb__subcmd__collection__subcmd__init_commands() {
@@ -3639,33 +2081,8 @@ _syncweb__subcmd__config_commands() {
     local commands; commands=(
 'set:Set a configuration value' \
 'show:Show configuration, optionally limited to a section' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb config commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__help_commands] )) ||
-_syncweb__subcmd__config__subcmd__help_commands() {
-    local commands; commands=(
-'set:Set a configuration value' \
-'show:Show configuration, optionally limited to a section' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb config help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__config__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb config help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__help__subcmd__set_commands] )) ||
-_syncweb__subcmd__config__subcmd__help__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb config help set commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__help__subcmd__show_commands] )) ||
-_syncweb__subcmd__config__subcmd__help__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb config help show commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__config__subcmd__set_commands] )) ||
 _syncweb__subcmd__config__subcmd__set_commands() {
@@ -3694,7 +2111,6 @@ _syncweb__subcmd__db_commands() {
 'vacuum:Run VACUUM to reclaim space in all databases' \
 'stats:Show database sizes and table statistics' \
 'backup:Back up all databases to a directory' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb db commands' commands "$@"
 }
@@ -3707,42 +2123,6 @@ _syncweb__subcmd__db__subcmd__backup_commands() {
 _syncweb__subcmd__db__subcmd__check_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb db check commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help_commands] )) ||
-_syncweb__subcmd__db__subcmd__help_commands() {
-    local commands; commands=(
-'check:Run integrity check on all databases' \
-'vacuum:Run VACUUM to reclaim space in all databases' \
-'stats:Show database sizes and table statistics' \
-'backup:Back up all databases to a directory' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb db help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__backup_commands] )) ||
-_syncweb__subcmd__db__subcmd__help__subcmd__backup_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db help backup commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__check_commands] )) ||
-_syncweb__subcmd__db__subcmd__help__subcmd__check_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db help check commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__db__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__stats_commands] )) ||
-_syncweb__subcmd__db__subcmd__help__subcmd__stats_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db help stats commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__help__subcmd__vacuum_commands] )) ||
-_syncweb__subcmd__db__subcmd__help__subcmd__vacuum_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db help vacuum commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__db__subcmd__stats_commands] )) ||
 _syncweb__subcmd__db__subcmd__stats_commands() {
@@ -3786,789 +2166,8 @@ _syncweb__subcmd__health_commands() {
 }
 (( $+functions[_syncweb__subcmd__help_commands] )) ||
 _syncweb__subcmd__help_commands() {
-    local commands; commands=(
-'version:Show syncweb version information' \
-'start:Start the local syncweb daemon' \
-'shutdown:Stop the local syncweb node' \
-'status:Show the local daemon status' \
-'reload:Ask the local daemon to reload configuration' \
-'daemon-sync:Ask the local daemon to trigger synchronization' \
-'unwatch:Stop watching a folder for local changes' \
-'create:Create a synchronized folder' \
-'join:Join a folder from an Iroh document ticket' \
-'leave:Leave and remove a synchronized folder' \
-'unsubscribe:Unsubscribe from a folder'\''s live sync loop' \
-'folders:List managed folders' \
-'devices:Show this device'\''s Iroh and Syncthing identities' \
-'config:Show or update local configuration' \
-'ls:List files in a local folder' \
-'find:Search local files' \
-'sort:Sort local files by discovery criteria' \
-'stat:Show detailed metadata for a local file' \
-'download:Download folder content or copy a local file' \
-'import:Import local files into a synchronized folder' \
-'snapshot:Manage content-addressed snapshots' \
-'health:Show seeding status per folder blob' \
-'transfer:Inspect and control durable transfer jobs' \
-'init:Initialize a folder and print a shareable URL' \
-'automatic:Run rules-based automatic synchronization' \
-'watch:Watch a folder and import filesystem changes' \
-'stats:Show persisted bandwidth accounting' \
-'filestats:Show file-level statistics for synced folder content' \
-'verify:Re-check local folder blob integrity' \
-'schedule:Show or update synchronization schedules' \
-'subscribe:Subscribe to a folder with event filters' \
-'publish:Publish a folder or blob for public read access' \
-'unpublish:Remove a public blob pin' \
-'collection:Create and publish versioned content collections' \
-'package:Manage locally installed collection packages' \
-'network:Network connectivity utilities' \
-'db:Database maintenance\: check, vacuum, stats, backup' \
-'indexing:Manage opt-in indexing, catalogs, and metadata' \
-'link:Create and resolve stable syncweb links' \
-'mirror:Mirror all blobs from a provider or network' \
-'provider:Manage blob provider registrations' \
-'trust:Inspect and delegate local trust' \
-'attest:Sign content provenance attestations' \
-'moderation:Manage local moderation decisions' \
-'completions:Generate shell completions' \
-'manpages:Generate manpages' \
-'media:Serve media blobs via HTTP (standalone media server)' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
+    local commands; commands=()
     _describe -t commands 'syncweb help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__attest_commands] )) ||
-_syncweb__subcmd__help__subcmd__attest_commands() {
-    local commands; commands=(
-'create:Sign and optionally broadcast a content attestation' \
-'verify:Verify attestations for content from the network' \
-    )
-    _describe -t commands 'syncweb help attest commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__attest__subcmd__create_commands] )) ||
-_syncweb__subcmd__help__subcmd__attest__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help attest create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__attest__subcmd__verify_commands] )) ||
-_syncweb__subcmd__help__subcmd__attest__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help attest verify commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__automatic_commands] )) ||
-_syncweb__subcmd__help__subcmd__automatic_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help automatic commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__collection_commands] )) ||
-_syncweb__subcmd__help__subcmd__collection_commands() {
-    local commands; commands=(
-'init:Initialize a directory as a versioned collection' \
-'add:Scan files and update the local collection manifest' \
-'versions:Create a new collection manifest version' \
-'publish:Store a collection manifest and mutable head in a folder' \
-    )
-    _describe -t commands 'syncweb help collection commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__add_commands] )) ||
-_syncweb__subcmd__help__subcmd__collection__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help collection add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__init_commands] )) ||
-_syncweb__subcmd__help__subcmd__collection__subcmd__init_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help collection init commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__publish_commands] )) ||
-_syncweb__subcmd__help__subcmd__collection__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help collection publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__collection__subcmd__versions_commands] )) ||
-_syncweb__subcmd__help__subcmd__collection__subcmd__versions_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help collection versions commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__completions_commands] )) ||
-_syncweb__subcmd__help__subcmd__completions_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help completions commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__config_commands] )) ||
-_syncweb__subcmd__help__subcmd__config_commands() {
-    local commands; commands=(
-'set:Set a configuration value' \
-'show:Show configuration, optionally limited to a section' \
-    )
-    _describe -t commands 'syncweb help config commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__config__subcmd__set_commands] )) ||
-_syncweb__subcmd__help__subcmd__config__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help config set commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__config__subcmd__show_commands] )) ||
-_syncweb__subcmd__help__subcmd__config__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help config show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__create_commands] )) ||
-_syncweb__subcmd__help__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__daemon-sync_commands] )) ||
-_syncweb__subcmd__help__subcmd__daemon-sync_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help daemon-sync commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__db_commands] )) ||
-_syncweb__subcmd__help__subcmd__db_commands() {
-    local commands; commands=(
-'check:Run integrity check on all databases' \
-'vacuum:Run VACUUM to reclaim space in all databases' \
-'stats:Show database sizes and table statistics' \
-'backup:Back up all databases to a directory' \
-    )
-    _describe -t commands 'syncweb help db commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__backup_commands] )) ||
-_syncweb__subcmd__help__subcmd__db__subcmd__backup_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help db backup commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__check_commands] )) ||
-_syncweb__subcmd__help__subcmd__db__subcmd__check_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help db check commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__stats_commands] )) ||
-_syncweb__subcmd__help__subcmd__db__subcmd__stats_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help db stats commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__db__subcmd__vacuum_commands] )) ||
-_syncweb__subcmd__help__subcmd__db__subcmd__vacuum_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help db vacuum commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__devices_commands] )) ||
-_syncweb__subcmd__help__subcmd__devices_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help devices commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__download_commands] )) ||
-_syncweb__subcmd__help__subcmd__download_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help download commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__filestats_commands] )) ||
-_syncweb__subcmd__help__subcmd__filestats_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help filestats commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__find_commands] )) ||
-_syncweb__subcmd__help__subcmd__find_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help find commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__folders_commands] )) ||
-_syncweb__subcmd__help__subcmd__folders_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help folders commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__health_commands] )) ||
-_syncweb__subcmd__help__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__import_commands] )) ||
-_syncweb__subcmd__help__subcmd__import_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help import commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing_commands() {
-    local commands; commands=(
-'enable:Opt a synchronized folder into indexing' \
-'disable:Remove a folder from the local index' \
-'publish:Publish folder metadata to a catalog' \
-'search:Search subscribed catalogs' \
-'health:Show verified provider health for a content hash' \
-'meta:Manage signed metadata' \
-'filter:Manage local and federated denylists' \
-    )
-    _describe -t commands 'syncweb help indexing commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__disable_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__disable_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing disable commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__enable_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__enable_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing enable commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__filter_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__filter_commands() {
-    local commands; commands=(
-'add:Add a device, file, or hash denylist rule' \
-'subscribe:Import a signed federated filter list' \
-    )
-    _describe -t commands 'syncweb help indexing filter commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__filter__subcmd__add_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__filter__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing filter add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__filter__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__filter__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing filter subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__health_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__meta_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__meta_commands() {
-    local commands; commands=(
-'add:Append signed metadata to a content hash' \
-    )
-    _describe -t commands 'syncweb help indexing meta commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__meta__subcmd__add_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing meta add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__publish_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__indexing__subcmd__search_commands] )) ||
-_syncweb__subcmd__help__subcmd__indexing__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help indexing search commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__init_commands] )) ||
-_syncweb__subcmd__help__subcmd__init_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help init commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__join_commands] )) ||
-_syncweb__subcmd__help__subcmd__join_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help join commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__leave_commands] )) ||
-_syncweb__subcmd__help__subcmd__leave_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help leave commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__link_commands] )) ||
-_syncweb__subcmd__help__subcmd__link_commands() {
-    local commands; commands=(
-'create:Create an immutable, private, or mutable link' \
-'resolve:Resolve a stable link' \
-'revoke:Revoke a private capability link' \
-    )
-    _describe -t commands 'syncweb help link commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__link__subcmd__create_commands] )) ||
-_syncweb__subcmd__help__subcmd__link__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help link create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__link__subcmd__resolve_commands] )) ||
-_syncweb__subcmd__help__subcmd__link__subcmd__resolve_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help link resolve commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__link__subcmd__revoke_commands] )) ||
-_syncweb__subcmd__help__subcmd__link__subcmd__revoke_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help link revoke commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__ls_commands] )) ||
-_syncweb__subcmd__help__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__manpages_commands] )) ||
-_syncweb__subcmd__help__subcmd__manpages_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help manpages commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__media_commands] )) ||
-_syncweb__subcmd__help__subcmd__media_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help media commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__mirror_commands] )) ||
-_syncweb__subcmd__help__subcmd__mirror_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help mirror commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__moderation_commands] )) ||
-_syncweb__subcmd__help__subcmd__moderation_commands() {
-    local commands; commands=(
-'ls:List local moderation records' \
-'hide:Hide a content record locally' \
-'report:Sign and submit a moderation report (broadcasts via gossip)' \
-    )
-    _describe -t commands 'syncweb help moderation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__moderation__subcmd__hide_commands] )) ||
-_syncweb__subcmd__help__subcmd__moderation__subcmd__hide_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help moderation hide commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__moderation__subcmd__ls_commands] )) ||
-_syncweb__subcmd__help__subcmd__moderation__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help moderation ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__moderation__subcmd__report_commands] )) ||
-_syncweb__subcmd__help__subcmd__moderation__subcmd__report_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help moderation report commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network_commands] )) ||
-_syncweb__subcmd__help__subcmd__network_commands() {
-    local commands; commands=(
-'create:Create a named network' \
-'ls:List networks or inspect one' \
-'join:Join a network from an invitation' \
-'leave:Leave a network' \
-'invite:Generate a network invitation' \
-'kick:Remove a device from a network' \
-'events:Show recent network events' \
-'health:Show network connectivity health' \
-'test-relay:Test a Syncthing relay TCP connection' \
-    )
-    _describe -t commands 'syncweb help network commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__create_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__events_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__events_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network events commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__health_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__invite_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__invite_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network invite commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__join_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__join_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network join commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__kick_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__kick_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network kick commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__leave_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__leave_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network leave commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__ls_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands] )) ||
-_syncweb__subcmd__help__subcmd__network__subcmd__test-relay_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help network test-relay commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package_commands] )) ||
-_syncweb__subcmd__help__subcmd__package_commands() {
-    local commands; commands=(
-'export:Export one or more package directories as compressed CAR archive files' \
-'import:Import and install a compressed CAR archive file' \
-'search:List locally installed packages, optionally filtering by text' \
-'info:Show a collection manifest from a ticket or blob hash' \
-'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version via ticket' \
-'remove:Remove a non-current installed collection version' \
-'verify:Verify an installed collection version' \
-'list:List locally installed collections' \
-'versions:List installed versions for a collection' \
-'switch:Switch the active installed collection version' \
-    )
-    _describe -t commands 'syncweb help package commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__export_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__export_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package export commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__import_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__import_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package import commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__info_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package info commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__install_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__install_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package install commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__list_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__remove_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__remove_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package remove commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__search_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package search commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__switch_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__switch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package switch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__upgrade_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__upgrade_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package upgrade commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__verify_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package verify commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__package__subcmd__versions_commands] )) ||
-_syncweb__subcmd__help__subcmd__package__subcmd__versions_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help package versions commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__provider_commands] )) ||
-_syncweb__subcmd__help__subcmd__provider_commands() {
-    local commands; commands=(
-'add:Register a blob ticket as an alternate provider' \
-    )
-    _describe -t commands 'syncweb help provider commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__provider__subcmd__add_commands] )) ||
-_syncweb__subcmd__help__subcmd__provider__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help provider add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__publish_commands] )) ||
-_syncweb__subcmd__help__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__reload_commands] )) ||
-_syncweb__subcmd__help__subcmd__reload_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__schedule_commands] )) ||
-_syncweb__subcmd__help__subcmd__schedule_commands() {
-    local commands; commands=(
-'set:Update the global schedule' \
-'folder:Set schedule overrides for a named folder' \
-    )
-    _describe -t commands 'syncweb help schedule commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__schedule__subcmd__folder_commands] )) ||
-_syncweb__subcmd__help__subcmd__schedule__subcmd__folder_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help schedule folder commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__schedule__subcmd__set_commands] )) ||
-_syncweb__subcmd__help__subcmd__schedule__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help schedule set commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__shutdown_commands] )) ||
-_syncweb__subcmd__help__subcmd__shutdown_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help shutdown commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot_commands() {
-    local commands; commands=(
-'create:Create a content-addressed snapshot' \
-'restore:Restore a snapshot to a folder or directory' \
-'list:List local snapshots' \
-'diff:Compare two snapshots' \
-'delete:Delete a snapshot and release its pins' \
-    )
-    _describe -t commands 'syncweb help snapshot commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot__subcmd__create_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help snapshot create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot__subcmd__delete_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot__subcmd__delete_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help snapshot delete commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot__subcmd__diff_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot__subcmd__diff_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help snapshot diff commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot__subcmd__list_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help snapshot list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__snapshot__subcmd__restore_commands] )) ||
-_syncweb__subcmd__help__subcmd__snapshot__subcmd__restore_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help snapshot restore commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__sort_commands] )) ||
-_syncweb__subcmd__help__subcmd__sort_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help sort commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__start_commands] )) ||
-_syncweb__subcmd__help__subcmd__start_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help start commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__stat_commands] )) ||
-_syncweb__subcmd__help__subcmd__stat_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help stat commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__stats_commands] )) ||
-_syncweb__subcmd__help__subcmd__stats_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help stats commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__status_commands] )) ||
-_syncweb__subcmd__help__subcmd__status_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help status commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__help__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer_commands() {
-    local commands; commands=(
-'info:List durable transfer jobs' \
-'remaining:Show configured roots and remaining capacity' \
-'root:Add or update a materialization root' \
-'enqueue:Enqueue an individually addressable file job' \
-'allocate:Allocate queued jobs to configured roots' \
-'materialize:Fetch and materialize assigned jobs through the daemon' \
-'pause:Pause a transfer job' \
-'resume:Resume a paused transfer job' \
-'cancel:Cancel a transfer job' \
-'retry:Retry a failed transfer job' \
-    )
-    _describe -t commands 'syncweb help transfer commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__allocate_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__allocate_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer allocate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__cancel_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__cancel_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer cancel commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__enqueue_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__enqueue_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer enqueue commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__info_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer info commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__materialize_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__materialize_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer materialize commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__pause_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__pause_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer pause commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__remaining_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__remaining_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer remaining commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__resume_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__resume_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer resume commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__retry_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__retry_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer retry commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__transfer__subcmd__root_commands] )) ||
-_syncweb__subcmd__help__subcmd__transfer__subcmd__root_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help transfer root commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust_commands() {
-    local commands; commands=(
-'show:Show trust and moderation state' \
-'delegate:Delegate trust to a publisher identity' \
-'revoke-delegation:Revoke a trust delegation' \
-'provider:Manage provider trust and bans' \
-'stream:Publish or subscribe to provider trust signals' \
-    )
-    _describe -t commands 'syncweb help trust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__delegate_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__delegate_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust delegate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider_commands() {
-    local commands; commands=(
-'show:Show provider reputation, bans, and trust records' \
-'list:List providers known to the local index' \
-'ban:Ban a provider globally or for one content hash' \
-'unban:Remove a provider'\''s global and scoped bans' \
-'vouch:Vouch for a provider' \
-'distrust:Distrust a provider' \
-    )
-    _describe -t commands 'syncweb help trust provider commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__ban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider ban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__distrust_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider distrust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__unban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider unban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust provider vouch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__revoke-delegation_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__revoke-delegation_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust revoke-delegation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__show_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__stream_commands() {
-    local commands; commands=(
-'subscribe:Subscribe to a provider trust stream ticket or file' \
-'publish:Publish a signed provider trust signal' \
-    )
-    _describe -t commands 'syncweb help trust stream commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust stream publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__help__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help trust stream subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__unpublish_commands] )) ||
-_syncweb__subcmd__help__subcmd__unpublish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help unpublish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__unsubscribe_commands] )) ||
-_syncweb__subcmd__help__subcmd__unsubscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help unsubscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__unwatch_commands] )) ||
-_syncweb__subcmd__help__subcmd__unwatch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help unwatch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__verify_commands] )) ||
-_syncweb__subcmd__help__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help verify commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__version_commands] )) ||
-_syncweb__subcmd__help__subcmd__version_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help version commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__help__subcmd__watch_commands] )) ||
-_syncweb__subcmd__help__subcmd__watch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb help watch commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__import_commands] )) ||
 _syncweb__subcmd__import_commands() {
@@ -4585,7 +2184,6 @@ _syncweb__subcmd__indexing_commands() {
 'health:Show verified provider health for a content hash' \
 'meta:Manage signed metadata' \
 'filter:Manage local and federated denylists' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb indexing commands' commands "$@"
 }
@@ -4604,7 +2202,6 @@ _syncweb__subcmd__indexing__subcmd__filter_commands() {
     local commands; commands=(
 'add:Add a device, file, or hash denylist rule' \
 'subscribe:Import a signed federated filter list' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb indexing filter commands' commands "$@"
 }
@@ -4612,30 +2209,6 @@ _syncweb__subcmd__indexing__subcmd__filter_commands() {
 _syncweb__subcmd__indexing__subcmd__filter__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing filter add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__filter__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__filter__subcmd__help_commands() {
-    local commands; commands=(
-'add:Add a device, file, or hash denylist rule' \
-'subscribe:Import a signed federated filter list' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb indexing filter help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__add_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing filter help add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing filter help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__filter__subcmd__help__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing filter help subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__indexing__subcmd__filter__subcmd__subscribe_commands] )) ||
 _syncweb__subcmd__indexing__subcmd__filter__subcmd__subscribe_commands() {
@@ -4647,85 +2220,10 @@ _syncweb__subcmd__indexing__subcmd__health_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing health commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help_commands() {
-    local commands; commands=(
-'enable:Opt a synchronized folder into indexing' \
-'disable:Remove a folder from the local index' \
-'publish:Publish folder metadata to a catalog' \
-'search:Search subscribed catalogs' \
-'health:Show verified provider health for a content hash' \
-'meta:Manage signed metadata' \
-'filter:Manage local and federated denylists' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb indexing help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__disable_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__disable_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help disable commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__enable_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__enable_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help enable commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__filter_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__filter_commands() {
-    local commands; commands=(
-'add:Add a device, file, or hash denylist rule' \
-'subscribe:Import a signed federated filter list' \
-    )
-    _describe -t commands 'syncweb indexing help filter commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__filter__subcmd__add_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__filter__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help filter add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__filter__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__filter__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help filter subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__health_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__meta_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__meta_commands() {
-    local commands; commands=(
-'add:Append signed metadata to a content hash' \
-    )
-    _describe -t commands 'syncweb indexing help meta commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__meta__subcmd__add_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__meta__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help meta add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__publish_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__help__subcmd__search_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__help__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing help search commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__indexing__subcmd__meta_commands] )) ||
 _syncweb__subcmd__indexing__subcmd__meta_commands() {
     local commands; commands=(
 'add:Append signed metadata to a content hash' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb indexing meta commands' commands "$@"
 }
@@ -4733,24 +2231,6 @@ _syncweb__subcmd__indexing__subcmd__meta_commands() {
 _syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing meta add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta__subcmd__help_commands() {
-    local commands; commands=(
-'add:Append signed metadata to a content hash' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb indexing meta help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__help__subcmd__add_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta__subcmd__help__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing meta help add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing meta help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__indexing__subcmd__publish_commands] )) ||
 _syncweb__subcmd__indexing__subcmd__publish_commands() {
@@ -4783,7 +2263,6 @@ _syncweb__subcmd__link_commands() {
 'create:Create an immutable, private, or mutable link' \
 'resolve:Resolve a stable link' \
 'revoke:Revoke a private capability link' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb link commands' commands "$@"
 }
@@ -4791,36 +2270,6 @@ _syncweb__subcmd__link_commands() {
 _syncweb__subcmd__link__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb link create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__link__subcmd__help_commands] )) ||
-_syncweb__subcmd__link__subcmd__help_commands() {
-    local commands; commands=(
-'create:Create an immutable, private, or mutable link' \
-'resolve:Resolve a stable link' \
-'revoke:Revoke a private capability link' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb link help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__link__subcmd__help__subcmd__create_commands] )) ||
-_syncweb__subcmd__link__subcmd__help__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb link help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__link__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__link__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb link help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__link__subcmd__help__subcmd__resolve_commands] )) ||
-_syncweb__subcmd__link__subcmd__help__subcmd__resolve_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb link help resolve commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__link__subcmd__help__subcmd__revoke_commands] )) ||
-_syncweb__subcmd__link__subcmd__help__subcmd__revoke_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb link help revoke commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__link__subcmd__resolve_commands] )) ||
 _syncweb__subcmd__link__subcmd__resolve_commands() {
@@ -4858,39 +2307,8 @@ _syncweb__subcmd__moderation_commands() {
 'ls:List local moderation records' \
 'hide:Hide a content record locally' \
 'report:Sign and submit a moderation report (broadcasts via gossip)' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb moderation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__help_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__help_commands() {
-    local commands; commands=(
-'ls:List local moderation records' \
-'hide:Hide a content record locally' \
-'report:Sign and submit a moderation report (broadcasts via gossip)' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb moderation help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__help__subcmd__hide_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__help__subcmd__hide_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation help hide commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__help__subcmd__ls_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__help__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation help ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__help__subcmd__report_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__help__subcmd__report_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation help report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__moderation__subcmd__hide_commands] )) ||
 _syncweb__subcmd__moderation__subcmd__hide_commands() {
@@ -4919,7 +2337,6 @@ _syncweb__subcmd__network_commands() {
 'events:Show recent network events' \
 'health:Show network connectivity health' \
 'test-relay:Test a Syncthing relay TCP connection' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
 }
@@ -4937,72 +2354,6 @@ _syncweb__subcmd__network__subcmd__events_commands() {
 _syncweb__subcmd__network__subcmd__health_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help_commands] )) ||
-_syncweb__subcmd__network__subcmd__help_commands() {
-    local commands; commands=(
-'create:Create a named network' \
-'ls:List networks or inspect one' \
-'join:Join a network from an invitation' \
-'leave:Leave a network' \
-'invite:Generate a network invitation' \
-'kick:Remove a device from a network' \
-'events:Show recent network events' \
-'health:Show network connectivity health' \
-'test-relay:Test a Syncthing relay TCP connection' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb network help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__create_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__events_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__events_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help events commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__health_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__invite_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__invite_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help invite commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__join_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__join_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help join commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__kick_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__kick_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help kick commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__leave_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__leave_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help leave commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__ls_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__help__subcmd__test-relay_commands] )) ||
-_syncweb__subcmd__network__subcmd__help__subcmd__test-relay_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network help test-relay commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__invite_commands] )) ||
 _syncweb__subcmd__network__subcmd__invite_commands() {
@@ -5048,7 +2399,6 @@ _syncweb__subcmd__package_commands() {
 'list:List locally installed collections' \
 'versions:List installed versions for a collection' \
 'switch:Switch the active installed collection version' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb package commands' commands "$@"
 }
@@ -5056,84 +2406,6 @@ _syncweb__subcmd__package_commands() {
 _syncweb__subcmd__package__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package export commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help_commands] )) ||
-_syncweb__subcmd__package__subcmd__help_commands() {
-    local commands; commands=(
-'export:Export one or more package directories as compressed CAR archive files' \
-'import:Import and install a compressed CAR archive file' \
-'search:List locally installed packages, optionally filtering by text' \
-'info:Show a collection manifest from a ticket or blob hash' \
-'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version via ticket' \
-'remove:Remove a non-current installed collection version' \
-'verify:Verify an installed collection version' \
-'list:List locally installed collections' \
-'versions:List installed versions for a collection' \
-'switch:Switch the active installed collection version' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb package help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__export_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__export_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help export commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__import_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__import_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help import commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__info_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help info commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__install_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__install_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help install commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__list_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__remove_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__remove_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help remove commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__search_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help search commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__switch_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__switch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help switch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__upgrade_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__upgrade_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help upgrade commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__verify_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help verify commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__help__subcmd__versions_commands] )) ||
-_syncweb__subcmd__package__subcmd__help__subcmd__versions_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package help versions commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__import_commands] )) ||
 _syncweb__subcmd__package__subcmd__import_commands() {
@@ -5189,7 +2461,6 @@ _syncweb__subcmd__package__subcmd__versions_commands() {
 _syncweb__subcmd__provider_commands() {
     local commands; commands=(
 'add:Register a blob ticket as an alternate provider' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb provider commands' commands "$@"
 }
@@ -5197,24 +2468,6 @@ _syncweb__subcmd__provider_commands() {
 _syncweb__subcmd__provider__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb provider add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__provider__subcmd__help_commands] )) ||
-_syncweb__subcmd__provider__subcmd__help_commands() {
-    local commands; commands=(
-'add:Register a blob ticket as an alternate provider' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb provider help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__provider__subcmd__help__subcmd__add_commands] )) ||
-_syncweb__subcmd__provider__subcmd__help__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb provider help add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__provider__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__provider__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb provider help help commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__publish_commands] )) ||
 _syncweb__subcmd__publish_commands() {
@@ -5231,7 +2484,6 @@ _syncweb__subcmd__schedule_commands() {
     local commands; commands=(
 'set:Update the global schedule' \
 'folder:Set schedule overrides for a named folder' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb schedule commands' commands "$@"
 }
@@ -5239,30 +2491,6 @@ _syncweb__subcmd__schedule_commands() {
 _syncweb__subcmd__schedule__subcmd__folder_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb schedule folder commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__help_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__help_commands() {
-    local commands; commands=(
-'set:Update the global schedule' \
-'folder:Set schedule overrides for a named folder' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb schedule help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__folder_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__help__subcmd__folder_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb schedule help folder commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb schedule help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__help__subcmd__set_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__help__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb schedule help set commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__schedule__subcmd__set_commands] )) ||
 _syncweb__subcmd__schedule__subcmd__set_commands() {
@@ -5282,7 +2510,6 @@ _syncweb__subcmd__snapshot_commands() {
 'list:List local snapshots' \
 'diff:Compare two snapshots' \
 'delete:Delete a snapshot and release its pins' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb snapshot commands' commands "$@"
 }
@@ -5300,48 +2527,6 @@ _syncweb__subcmd__snapshot__subcmd__delete_commands() {
 _syncweb__subcmd__snapshot__subcmd__diff_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb snapshot diff commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help_commands() {
-    local commands; commands=(
-'create:Create a content-addressed snapshot' \
-'restore:Restore a snapshot to a folder or directory' \
-'list:List local snapshots' \
-'diff:Compare two snapshots' \
-'delete:Delete a snapshot and release its pins' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb snapshot help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__create_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__delete_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__delete_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help delete commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__diff_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__diff_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help diff commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__list_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__snapshot__subcmd__help__subcmd__restore_commands] )) ||
-_syncweb__subcmd__snapshot__subcmd__help__subcmd__restore_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb snapshot help restore commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__snapshot__subcmd__list_commands] )) ||
 _syncweb__subcmd__snapshot__subcmd__list_commands() {
@@ -5396,7 +2581,6 @@ _syncweb__subcmd__transfer_commands() {
 'resume:Resume a paused transfer job' \
 'cancel:Cancel a transfer job' \
 'retry:Retry a failed transfer job' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb transfer commands' commands "$@"
 }
@@ -5414,78 +2598,6 @@ _syncweb__subcmd__transfer__subcmd__cancel_commands() {
 _syncweb__subcmd__transfer__subcmd__enqueue_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer enqueue commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help_commands() {
-    local commands; commands=(
-'info:List durable transfer jobs' \
-'remaining:Show configured roots and remaining capacity' \
-'root:Add or update a materialization root' \
-'enqueue:Enqueue an individually addressable file job' \
-'allocate:Allocate queued jobs to configured roots' \
-'materialize:Fetch and materialize assigned jobs through the daemon' \
-'pause:Pause a transfer job' \
-'resume:Resume a paused transfer job' \
-'cancel:Cancel a transfer job' \
-'retry:Retry a failed transfer job' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb transfer help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__allocate_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__allocate_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help allocate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__cancel_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__cancel_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help cancel commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__enqueue_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__enqueue_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help enqueue commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__info_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help info commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__materialize_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__materialize_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help materialize commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__pause_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__pause_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help pause commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__remaining_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__remaining_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help remaining commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__resume_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__resume_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help resume commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__retry_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__retry_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help retry commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__help__subcmd__root_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__help__subcmd__root_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer help root commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__transfer__subcmd__info_commands] )) ||
 _syncweb__subcmd__transfer__subcmd__info_commands() {
@@ -5530,7 +2642,6 @@ _syncweb__subcmd__trust_commands() {
 'revoke-delegation:Revoke a trust delegation' \
 'provider:Manage provider trust and bans' \
 'stream:Publish or subscribe to provider trust signals' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb trust commands' commands "$@"
 }
@@ -5538,98 +2649,6 @@ _syncweb__subcmd__trust_commands() {
 _syncweb__subcmd__trust__subcmd__delegate_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust delegate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help_commands() {
-    local commands; commands=(
-'show:Show trust and moderation state' \
-'delegate:Delegate trust to a publisher identity' \
-'revoke-delegation:Revoke a trust delegation' \
-'provider:Manage provider trust and bans' \
-'stream:Publish or subscribe to provider trust signals' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb trust help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__delegate_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__delegate_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help delegate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider_commands() {
-    local commands; commands=(
-'show:Show provider reputation, bans, and trust records' \
-'list:List providers known to the local index' \
-'ban:Ban a provider globally or for one content hash' \
-'unban:Remove a provider'\''s global and scoped bans' \
-'vouch:Vouch for a provider' \
-'distrust:Distrust a provider' \
-    )
-    _describe -t commands 'syncweb trust help provider commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__ban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider ban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__distrust_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider distrust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__unban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider unban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__provider__subcmd__vouch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help provider vouch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__revoke-delegation_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__revoke-delegation_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help revoke-delegation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__show_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__stream_commands() {
-    local commands; commands=(
-'subscribe:Subscribe to a provider trust stream ticket or file' \
-'publish:Publish a signed provider trust signal' \
-    )
-    _describe -t commands 'syncweb trust help stream commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help stream publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__trust__subcmd__help__subcmd__stream__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust help stream subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust__subcmd__provider_commands] )) ||
 _syncweb__subcmd__trust__subcmd__provider_commands() {
@@ -5640,7 +2659,6 @@ _syncweb__subcmd__trust__subcmd__provider_commands() {
 'unban:Remove a provider'\''s global and scoped bans' \
 'vouch:Vouch for a provider' \
 'distrust:Distrust a provider' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb trust provider commands' commands "$@"
 }
@@ -5653,54 +2671,6 @@ _syncweb__subcmd__trust__subcmd__provider__subcmd__ban_commands() {
 _syncweb__subcmd__trust__subcmd__provider__subcmd__distrust_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust provider distrust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help_commands() {
-    local commands; commands=(
-'show:Show provider reputation, bans, and trust records' \
-'list:List providers known to the local index' \
-'ban:Ban a provider globally or for one content hash' \
-'unban:Remove a provider'\''s global and scoped bans' \
-'vouch:Vouch for a provider' \
-'distrust:Distrust a provider' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb trust provider help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__ban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help ban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__distrust_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help distrust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__unban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help unban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__help__subcmd__vouch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider help vouch commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands] )) ||
 _syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands() {
@@ -5737,33 +2707,8 @@ _syncweb__subcmd__trust__subcmd__stream_commands() {
     local commands; commands=(
 'subscribe:Subscribe to a provider trust stream ticket or file' \
 'publish:Publish a signed provider trust signal' \
-'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb trust stream commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__help_commands() {
-    local commands; commands=(
-'subscribe:Subscribe to a provider trust stream ticket or file' \
-'publish:Publish a signed provider trust signal' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'syncweb trust stream help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust stream help help commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust stream help publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__help__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust stream help subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands] )) ||
 _syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands() {

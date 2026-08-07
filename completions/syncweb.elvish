@@ -227,7 +227,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand set 'Set a configuration value'
             cand show 'Show configuration, optionally limited to a section'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;config;set'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -246,17 +245,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
-        }
-        &'syncweb;config;help'= {
-            cand set 'Set a configuration value'
-            cand show 'Show configuration, optionally limited to a section'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;config;help;set'= {
-        }
-        &'syncweb;config;help;show'= {
-        }
-        &'syncweb;config;help;help'= {
         }
         &'syncweb;ls'= {
             cand --sort 'Collect and sort output instead of streaming it'
@@ -385,7 +373,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand list 'List local snapshots'
             cand diff 'Compare two snapshots'
             cand delete 'Delete a snapshot and release its pins'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;snapshot;create'= {
             cand --description 'description'
@@ -434,26 +421,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;snapshot;help'= {
-            cand create 'Create a content-addressed snapshot'
-            cand restore 'Restore a snapshot to a folder or directory'
-            cand list 'List local snapshots'
-            cand diff 'Compare two snapshots'
-            cand delete 'Delete a snapshot and release its pins'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;snapshot;help;create'= {
-        }
-        &'syncweb;snapshot;help;restore'= {
-        }
-        &'syncweb;snapshot;help;list'= {
-        }
-        &'syncweb;snapshot;help;diff'= {
-        }
-        &'syncweb;snapshot;help;delete'= {
-        }
-        &'syncweb;snapshot;help;help'= {
-        }
         &'syncweb;health'= {
             cand --hash 'Content hash(es) to select (can repeat)'
             cand --path-prefix 'Only entries whose path starts with this prefix'
@@ -484,7 +451,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand resume 'Resume a paused transfer job'
             cand cancel 'Cancel a transfer job'
             cand retry 'Retry a failed transfer job'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;transfer;info'= {
             cand --namespace 'Limit display to a namespace'
@@ -592,41 +558,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;transfer;help'= {
-            cand info 'List durable transfer jobs'
-            cand remaining 'Show configured roots and remaining capacity'
-            cand root 'Add or update a materialization root'
-            cand enqueue 'Enqueue an individually addressable file job'
-            cand allocate 'Allocate queued jobs to configured roots'
-            cand materialize 'Fetch and materialize assigned jobs through the daemon'
-            cand pause 'Pause a transfer job'
-            cand resume 'Resume a paused transfer job'
-            cand cancel 'Cancel a transfer job'
-            cand retry 'Retry a failed transfer job'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;transfer;help;info'= {
-        }
-        &'syncweb;transfer;help;remaining'= {
-        }
-        &'syncweb;transfer;help;root'= {
-        }
-        &'syncweb;transfer;help;enqueue'= {
-        }
-        &'syncweb;transfer;help;allocate'= {
-        }
-        &'syncweb;transfer;help;materialize'= {
-        }
-        &'syncweb;transfer;help;pause'= {
-        }
-        &'syncweb;transfer;help;resume'= {
-        }
-        &'syncweb;transfer;help;cancel'= {
-        }
-        &'syncweb;transfer;help;retry'= {
-        }
-        &'syncweb;transfer;help;help'= {
-        }
         &'syncweb;init'= {
             cand --mode 'mode'
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -714,7 +645,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand set 'Update the global schedule'
             cand folder 'Set schedule overrides for a named folder'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;schedule;set'= {
             cand --active 'active'
@@ -739,17 +669,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
-        }
-        &'syncweb;schedule;help'= {
-            cand set 'Update the global schedule'
-            cand folder 'Set schedule overrides for a named folder'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;schedule;help;set'= {
-        }
-        &'syncweb;schedule;help;folder'= {
-        }
-        &'syncweb;schedule;help;help'= {
         }
         &'syncweb;subscribe'= {
             cand --sync-prefix 'Area prefix filter for subscription entries'
@@ -798,7 +717,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand add 'Scan files and update the local collection manifest'
             cand versions 'Create a new collection manifest version'
             cand publish 'Store a collection manifest and mutable head in a folder'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;collection;init'= {
             cand --version 'version'
@@ -843,23 +761,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;collection;help'= {
-            cand init 'Initialize a directory as a versioned collection'
-            cand add 'Scan files and update the local collection manifest'
-            cand versions 'Create a new collection manifest version'
-            cand publish 'Store a collection manifest and mutable head in a folder'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;collection;help;init'= {
-        }
-        &'syncweb;collection;help;add'= {
-        }
-        &'syncweb;collection;help;versions'= {
-        }
-        &'syncweb;collection;help;publish'= {
-        }
-        &'syncweb;collection;help;help'= {
-        }
         &'syncweb;package'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -879,7 +780,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;package;export'= {
             cand --version 'version'
@@ -990,44 +890,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;package;help'= {
-            cand export 'Export one or more package directories as compressed CAR archive files'
-            cand import 'Import and install a compressed CAR archive file'
-            cand search 'List locally installed packages, optionally filtering by text'
-            cand info 'Show a collection manifest from a ticket or blob hash'
-            cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version via ticket'
-            cand remove 'Remove a non-current installed collection version'
-            cand verify 'Verify an installed collection version'
-            cand list 'List locally installed collections'
-            cand versions 'List installed versions for a collection'
-            cand switch 'Switch the active installed collection version'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;package;help;export'= {
-        }
-        &'syncweb;package;help;import'= {
-        }
-        &'syncweb;package;help;search'= {
-        }
-        &'syncweb;package;help;info'= {
-        }
-        &'syncweb;package;help;install'= {
-        }
-        &'syncweb;package;help;upgrade'= {
-        }
-        &'syncweb;package;help;remove'= {
-        }
-        &'syncweb;package;help;verify'= {
-        }
-        &'syncweb;package;help;list'= {
-        }
-        &'syncweb;package;help;versions'= {
-        }
-        &'syncweb;package;help;switch'= {
-        }
-        &'syncweb;package;help;help'= {
-        }
         &'syncweb;network'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1045,7 +907,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand events 'Show recent network events'
             cand health 'Show network connectivity health'
             cand test-relay 'Test a Syncthing relay TCP connection'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;network;create'= {
             cand --label 'label'
@@ -1133,38 +994,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;network;help'= {
-            cand create 'Create a named network'
-            cand ls 'List networks or inspect one'
-            cand join 'Join a network from an invitation'
-            cand leave 'Leave a network'
-            cand invite 'Generate a network invitation'
-            cand kick 'Remove a device from a network'
-            cand events 'Show recent network events'
-            cand health 'Show network connectivity health'
-            cand test-relay 'Test a Syncthing relay TCP connection'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;network;help;create'= {
-        }
-        &'syncweb;network;help;ls'= {
-        }
-        &'syncweb;network;help;join'= {
-        }
-        &'syncweb;network;help;leave'= {
-        }
-        &'syncweb;network;help;invite'= {
-        }
-        &'syncweb;network;help;kick'= {
-        }
-        &'syncweb;network;help;events'= {
-        }
-        &'syncweb;network;help;health'= {
-        }
-        &'syncweb;network;help;test-relay'= {
-        }
-        &'syncweb;network;help;help'= {
-        }
         &'syncweb;db'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1177,7 +1006,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand vacuum 'Run VACUUM to reclaim space in all databases'
             cand stats 'Show database sizes and table statistics'
             cand backup 'Back up all databases to a directory'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;db;check'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1216,23 +1044,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;db;help'= {
-            cand check 'Run integrity check on all databases'
-            cand vacuum 'Run VACUUM to reclaim space in all databases'
-            cand stats 'Show database sizes and table statistics'
-            cand backup 'Back up all databases to a directory'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;db;help;check'= {
-        }
-        &'syncweb;db;help;vacuum'= {
-        }
-        &'syncweb;db;help;stats'= {
-        }
-        &'syncweb;db;help;backup'= {
-        }
-        &'syncweb;db;help;help'= {
-        }
         &'syncweb;indexing'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1248,7 +1059,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand health 'Show verified provider health for a content hash'
             cand meta 'Manage signed metadata'
             cand filter 'Manage local and federated denylists'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;indexing;enable'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1307,7 +1117,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Append signed metadata to a content hash'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;indexing;meta;add'= {
             cand --sequence 'sequence'
@@ -1319,14 +1128,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;indexing;meta;help'= {
-            cand add 'Append signed metadata to a content hash'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;indexing;meta;help;add'= {
-        }
-        &'syncweb;indexing;meta;help;help'= {
-        }
         &'syncweb;indexing;filter'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1337,7 +1138,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand add 'Add a device, file, or hash denylist rule'
             cand subscribe 'Import a signed federated filter list'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;indexing;filter;add'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1357,52 +1157,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;indexing;filter;help'= {
-            cand add 'Add a device, file, or hash denylist rule'
-            cand subscribe 'Import a signed federated filter list'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;indexing;filter;help;add'= {
-        }
-        &'syncweb;indexing;filter;help;subscribe'= {
-        }
-        &'syncweb;indexing;filter;help;help'= {
-        }
-        &'syncweb;indexing;help'= {
-            cand enable 'Opt a synchronized folder into indexing'
-            cand disable 'Remove a folder from the local index'
-            cand publish 'Publish folder metadata to a catalog'
-            cand search 'Search subscribed catalogs'
-            cand health 'Show verified provider health for a content hash'
-            cand meta 'Manage signed metadata'
-            cand filter 'Manage local and federated denylists'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;indexing;help;enable'= {
-        }
-        &'syncweb;indexing;help;disable'= {
-        }
-        &'syncweb;indexing;help;publish'= {
-        }
-        &'syncweb;indexing;help;search'= {
-        }
-        &'syncweb;indexing;help;health'= {
-        }
-        &'syncweb;indexing;help;meta'= {
-            cand add 'Append signed metadata to a content hash'
-        }
-        &'syncweb;indexing;help;meta;add'= {
-        }
-        &'syncweb;indexing;help;filter'= {
-            cand add 'Add a device, file, or hash denylist rule'
-            cand subscribe 'Import a signed federated filter list'
-        }
-        &'syncweb;indexing;help;filter;add'= {
-        }
-        &'syncweb;indexing;help;filter;subscribe'= {
-        }
-        &'syncweb;indexing;help;help'= {
-        }
         &'syncweb;link'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1414,7 +1168,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand create 'Create an immutable, private, or mutable link'
             cand resolve 'Resolve a stable link'
             cand revoke 'Revoke a private capability link'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;link;create'= {
             cand --name 'name'
@@ -1451,20 +1204,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;link;help'= {
-            cand create 'Create an immutable, private, or mutable link'
-            cand resolve 'Resolve a stable link'
-            cand revoke 'Revoke a private capability link'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;link;help;create'= {
-        }
-        &'syncweb;link;help;resolve'= {
-        }
-        &'syncweb;link;help;revoke'= {
-        }
-        &'syncweb;link;help;help'= {
-        }
         &'syncweb;mirror'= {
             cand --network 'Network name or ID to mirror all blobs across'
             cand --min-providers 'Minimum replication budget per blob (default 3)'
@@ -1488,7 +1227,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Register a blob ticket as an alternate provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;provider;add'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1498,14 +1236,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
-        }
-        &'syncweb;provider;help'= {
-            cand add 'Register a blob ticket as an alternate provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;provider;help;add'= {
-        }
-        &'syncweb;provider;help;help'= {
         }
         &'syncweb;trust'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1520,7 +1250,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand revoke-delegation 'Revoke a trust delegation'
             cand provider 'Manage provider trust and bans'
             cand stream 'Publish or subscribe to provider trust signals'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;trust;show'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1568,7 +1297,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand unban 'Remove a provider''s global and scoped bans'
             cand vouch 'Vouch for a provider'
             cand distrust 'Distrust a provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;trust;provider;show'= {
             cand --hash 'Evaluate content-scoped trust for this hash'
@@ -1635,29 +1363,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;trust;provider;help'= {
-            cand show 'Show provider reputation, bans, and trust records'
-            cand list 'List providers known to the local index'
-            cand ban 'Ban a provider globally or for one content hash'
-            cand unban 'Remove a provider''s global and scoped bans'
-            cand vouch 'Vouch for a provider'
-            cand distrust 'Distrust a provider'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;trust;provider;help;show'= {
-        }
-        &'syncweb;trust;provider;help;list'= {
-        }
-        &'syncweb;trust;provider;help;ban'= {
-        }
-        &'syncweb;trust;provider;help;unban'= {
-        }
-        &'syncweb;trust;provider;help;vouch'= {
-        }
-        &'syncweb;trust;provider;help;distrust'= {
-        }
-        &'syncweb;trust;provider;help;help'= {
-        }
         &'syncweb;trust;stream'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1668,7 +1373,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand subscribe 'Subscribe to a provider trust stream ticket or file'
             cand publish 'Publish a signed provider trust signal'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;trust;stream;subscribe'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1692,61 +1396,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;trust;stream;help'= {
-            cand subscribe 'Subscribe to a provider trust stream ticket or file'
-            cand publish 'Publish a signed provider trust signal'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;trust;stream;help;subscribe'= {
-        }
-        &'syncweb;trust;stream;help;publish'= {
-        }
-        &'syncweb;trust;stream;help;help'= {
-        }
-        &'syncweb;trust;help'= {
-            cand show 'Show trust and moderation state'
-            cand delegate 'Delegate trust to a publisher identity'
-            cand revoke-delegation 'Revoke a trust delegation'
-            cand provider 'Manage provider trust and bans'
-            cand stream 'Publish or subscribe to provider trust signals'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;trust;help;show'= {
-        }
-        &'syncweb;trust;help;delegate'= {
-        }
-        &'syncweb;trust;help;revoke-delegation'= {
-        }
-        &'syncweb;trust;help;provider'= {
-            cand show 'Show provider reputation, bans, and trust records'
-            cand list 'List providers known to the local index'
-            cand ban 'Ban a provider globally or for one content hash'
-            cand unban 'Remove a provider''s global and scoped bans'
-            cand vouch 'Vouch for a provider'
-            cand distrust 'Distrust a provider'
-        }
-        &'syncweb;trust;help;provider;show'= {
-        }
-        &'syncweb;trust;help;provider;list'= {
-        }
-        &'syncweb;trust;help;provider;ban'= {
-        }
-        &'syncweb;trust;help;provider;unban'= {
-        }
-        &'syncweb;trust;help;provider;vouch'= {
-        }
-        &'syncweb;trust;help;provider;distrust'= {
-        }
-        &'syncweb;trust;help;stream'= {
-            cand subscribe 'Subscribe to a provider trust stream ticket or file'
-            cand publish 'Publish a signed provider trust signal'
-        }
-        &'syncweb;trust;help;stream;subscribe'= {
-        }
-        &'syncweb;trust;help;stream;publish'= {
-        }
-        &'syncweb;trust;help;help'= {
-        }
         &'syncweb;attest'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1757,7 +1406,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand create 'Sign and optionally broadcast a content attestation'
             cand verify 'Verify attestations for content from the network'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;attest;create'= {
             cand --license 'license'
@@ -1783,17 +1431,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;attest;help'= {
-            cand create 'Sign and optionally broadcast a content attestation'
-            cand verify 'Verify attestations for content from the network'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;attest;help;create'= {
-        }
-        &'syncweb;attest;help;verify'= {
-        }
-        &'syncweb;attest;help;help'= {
-        }
         &'syncweb;moderation'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1805,7 +1442,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand ls 'List local moderation records'
             cand hide 'Hide a content record locally'
             cand report 'Sign and submit a moderation report (broadcasts via gossip)'
-            cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'syncweb;moderation;ls'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1837,20 +1473,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;moderation;help'= {
-            cand ls 'List local moderation records'
-            cand hide 'Hide a content record locally'
-            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;moderation;help;ls'= {
-        }
-        &'syncweb;moderation;help;hide'= {
-        }
-        &'syncweb;moderation;help;report'= {
-        }
-        &'syncweb;moderation;help;help'= {
-        }
         &'syncweb;completions'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1880,387 +1502,13 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;help'= {
-            cand version 'Show syncweb version information'
-            cand start 'Start the local syncweb daemon'
-            cand shutdown 'Stop the local syncweb node'
-            cand status 'Show the local daemon status'
-            cand reload 'Ask the local daemon to reload configuration'
-            cand daemon-sync 'Ask the local daemon to trigger synchronization'
-            cand unwatch 'Stop watching a folder for local changes'
-            cand create 'Create a synchronized folder'
-            cand join 'Join a folder from an Iroh document ticket'
-            cand leave 'Leave and remove a synchronized folder'
-            cand unsubscribe 'Unsubscribe from a folder''s live sync loop'
-            cand folders 'List managed folders'
-            cand devices 'Show this device''s Iroh and Syncthing identities'
-            cand config 'Show or update local configuration'
-            cand ls 'List files in a local folder'
-            cand find 'Search local files'
-            cand sort 'Sort local files by discovery criteria'
-            cand stat 'Show detailed metadata for a local file'
-            cand download 'Download folder content or copy a local file'
-            cand import 'Import local files into a synchronized folder'
-            cand snapshot 'Manage content-addressed snapshots'
-            cand health 'Show seeding status per folder blob'
-            cand transfer 'Inspect and control durable transfer jobs'
-            cand init 'Initialize a folder and print a shareable URL'
-            cand automatic 'Run rules-based automatic synchronization'
-            cand watch 'Watch a folder and import filesystem changes'
-            cand stats 'Show persisted bandwidth accounting'
-            cand filestats 'Show file-level statistics for synced folder content'
-            cand verify 'Re-check local folder blob integrity'
-            cand schedule 'Show or update synchronization schedules'
-            cand subscribe 'Subscribe to a folder with event filters'
-            cand publish 'Publish a folder or blob for public read access'
-            cand unpublish 'Remove a public blob pin'
-            cand collection 'Create and publish versioned content collections'
-            cand package 'Manage locally installed collection packages'
-            cand network 'Network connectivity utilities'
-            cand db 'Database maintenance: check, vacuum, stats, backup'
-            cand indexing 'Manage opt-in indexing, catalogs, and metadata'
-            cand link 'Create and resolve stable syncweb links'
-            cand mirror 'Mirror all blobs from a provider or network'
-            cand provider 'Manage blob provider registrations'
-            cand trust 'Inspect and delegate local trust'
-            cand attest 'Sign content provenance attestations'
-            cand moderation 'Manage local moderation decisions'
-            cand completions 'Generate shell completions'
-            cand manpages 'Generate manpages'
-            cand media 'Serve media blobs via HTTP (standalone media server)'
-            cand help 'Print this message or the help of the given subcommand(s)'
-        }
-        &'syncweb;help;version'= {
-        }
-        &'syncweb;help;start'= {
-        }
-        &'syncweb;help;shutdown'= {
-        }
-        &'syncweb;help;status'= {
-        }
-        &'syncweb;help;reload'= {
-        }
-        &'syncweb;help;daemon-sync'= {
-        }
-        &'syncweb;help;unwatch'= {
-        }
-        &'syncweb;help;create'= {
-        }
-        &'syncweb;help;join'= {
-        }
-        &'syncweb;help;leave'= {
-        }
-        &'syncweb;help;unsubscribe'= {
-        }
-        &'syncweb;help;folders'= {
-        }
-        &'syncweb;help;devices'= {
-        }
-        &'syncweb;help;config'= {
-            cand set 'Set a configuration value'
-            cand show 'Show configuration, optionally limited to a section'
-        }
-        &'syncweb;help;config;set'= {
-        }
-        &'syncweb;help;config;show'= {
-        }
-        &'syncweb;help;ls'= {
-        }
-        &'syncweb;help;find'= {
-        }
-        &'syncweb;help;sort'= {
-        }
-        &'syncweb;help;stat'= {
-        }
-        &'syncweb;help;download'= {
-        }
-        &'syncweb;help;import'= {
-        }
-        &'syncweb;help;snapshot'= {
-            cand create 'Create a content-addressed snapshot'
-            cand restore 'Restore a snapshot to a folder or directory'
-            cand list 'List local snapshots'
-            cand diff 'Compare two snapshots'
-            cand delete 'Delete a snapshot and release its pins'
-        }
-        &'syncweb;help;snapshot;create'= {
-        }
-        &'syncweb;help;snapshot;restore'= {
-        }
-        &'syncweb;help;snapshot;list'= {
-        }
-        &'syncweb;help;snapshot;diff'= {
-        }
-        &'syncweb;help;snapshot;delete'= {
-        }
-        &'syncweb;help;health'= {
-        }
-        &'syncweb;help;transfer'= {
-            cand info 'List durable transfer jobs'
-            cand remaining 'Show configured roots and remaining capacity'
-            cand root 'Add or update a materialization root'
-            cand enqueue 'Enqueue an individually addressable file job'
-            cand allocate 'Allocate queued jobs to configured roots'
-            cand materialize 'Fetch and materialize assigned jobs through the daemon'
-            cand pause 'Pause a transfer job'
-            cand resume 'Resume a paused transfer job'
-            cand cancel 'Cancel a transfer job'
-            cand retry 'Retry a failed transfer job'
-        }
-        &'syncweb;help;transfer;info'= {
-        }
-        &'syncweb;help;transfer;remaining'= {
-        }
-        &'syncweb;help;transfer;root'= {
-        }
-        &'syncweb;help;transfer;enqueue'= {
-        }
-        &'syncweb;help;transfer;allocate'= {
-        }
-        &'syncweb;help;transfer;materialize'= {
-        }
-        &'syncweb;help;transfer;pause'= {
-        }
-        &'syncweb;help;transfer;resume'= {
-        }
-        &'syncweb;help;transfer;cancel'= {
-        }
-        &'syncweb;help;transfer;retry'= {
-        }
-        &'syncweb;help;init'= {
-        }
-        &'syncweb;help;automatic'= {
-        }
-        &'syncweb;help;watch'= {
-        }
-        &'syncweb;help;stats'= {
-        }
-        &'syncweb;help;filestats'= {
-        }
-        &'syncweb;help;verify'= {
-        }
-        &'syncweb;help;schedule'= {
-            cand set 'Update the global schedule'
-            cand folder 'Set schedule overrides for a named folder'
-        }
-        &'syncweb;help;schedule;set'= {
-        }
-        &'syncweb;help;schedule;folder'= {
-        }
-        &'syncweb;help;subscribe'= {
-        }
-        &'syncweb;help;publish'= {
-        }
-        &'syncweb;help;unpublish'= {
-        }
-        &'syncweb;help;collection'= {
-            cand init 'Initialize a directory as a versioned collection'
-            cand add 'Scan files and update the local collection manifest'
-            cand versions 'Create a new collection manifest version'
-            cand publish 'Store a collection manifest and mutable head in a folder'
-        }
-        &'syncweb;help;collection;init'= {
-        }
-        &'syncweb;help;collection;add'= {
-        }
-        &'syncweb;help;collection;versions'= {
-        }
-        &'syncweb;help;collection;publish'= {
-        }
-        &'syncweb;help;package'= {
-            cand export 'Export one or more package directories as compressed CAR archive files'
-            cand import 'Import and install a compressed CAR archive file'
-            cand search 'List locally installed packages, optionally filtering by text'
-            cand info 'Show a collection manifest from a ticket or blob hash'
-            cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version via ticket'
-            cand remove 'Remove a non-current installed collection version'
-            cand verify 'Verify an installed collection version'
-            cand list 'List locally installed collections'
-            cand versions 'List installed versions for a collection'
-            cand switch 'Switch the active installed collection version'
-        }
-        &'syncweb;help;package;export'= {
-        }
-        &'syncweb;help;package;import'= {
-        }
-        &'syncweb;help;package;search'= {
-        }
-        &'syncweb;help;package;info'= {
-        }
-        &'syncweb;help;package;install'= {
-        }
-        &'syncweb;help;package;upgrade'= {
-        }
-        &'syncweb;help;package;remove'= {
-        }
-        &'syncweb;help;package;verify'= {
-        }
-        &'syncweb;help;package;list'= {
-        }
-        &'syncweb;help;package;versions'= {
-        }
-        &'syncweb;help;package;switch'= {
-        }
-        &'syncweb;help;network'= {
-            cand create 'Create a named network'
-            cand ls 'List networks or inspect one'
-            cand join 'Join a network from an invitation'
-            cand leave 'Leave a network'
-            cand invite 'Generate a network invitation'
-            cand kick 'Remove a device from a network'
-            cand events 'Show recent network events'
-            cand health 'Show network connectivity health'
-            cand test-relay 'Test a Syncthing relay TCP connection'
-        }
-        &'syncweb;help;network;create'= {
-        }
-        &'syncweb;help;network;ls'= {
-        }
-        &'syncweb;help;network;join'= {
-        }
-        &'syncweb;help;network;leave'= {
-        }
-        &'syncweb;help;network;invite'= {
-        }
-        &'syncweb;help;network;kick'= {
-        }
-        &'syncweb;help;network;events'= {
-        }
-        &'syncweb;help;network;health'= {
-        }
-        &'syncweb;help;network;test-relay'= {
-        }
-        &'syncweb;help;db'= {
-            cand check 'Run integrity check on all databases'
-            cand vacuum 'Run VACUUM to reclaim space in all databases'
-            cand stats 'Show database sizes and table statistics'
-            cand backup 'Back up all databases to a directory'
-        }
-        &'syncweb;help;db;check'= {
-        }
-        &'syncweb;help;db;vacuum'= {
-        }
-        &'syncweb;help;db;stats'= {
-        }
-        &'syncweb;help;db;backup'= {
-        }
-        &'syncweb;help;indexing'= {
-            cand enable 'Opt a synchronized folder into indexing'
-            cand disable 'Remove a folder from the local index'
-            cand publish 'Publish folder metadata to a catalog'
-            cand search 'Search subscribed catalogs'
-            cand health 'Show verified provider health for a content hash'
-            cand meta 'Manage signed metadata'
-            cand filter 'Manage local and federated denylists'
-        }
-        &'syncweb;help;indexing;enable'= {
-        }
-        &'syncweb;help;indexing;disable'= {
-        }
-        &'syncweb;help;indexing;publish'= {
-        }
-        &'syncweb;help;indexing;search'= {
-        }
-        &'syncweb;help;indexing;health'= {
-        }
-        &'syncweb;help;indexing;meta'= {
-            cand add 'Append signed metadata to a content hash'
-        }
-        &'syncweb;help;indexing;meta;add'= {
-        }
-        &'syncweb;help;indexing;filter'= {
-            cand add 'Add a device, file, or hash denylist rule'
-            cand subscribe 'Import a signed federated filter list'
-        }
-        &'syncweb;help;indexing;filter;add'= {
-        }
-        &'syncweb;help;indexing;filter;subscribe'= {
-        }
-        &'syncweb;help;link'= {
-            cand create 'Create an immutable, private, or mutable link'
-            cand resolve 'Resolve a stable link'
-            cand revoke 'Revoke a private capability link'
-        }
-        &'syncweb;help;link;create'= {
-        }
-        &'syncweb;help;link;resolve'= {
-        }
-        &'syncweb;help;link;revoke'= {
-        }
-        &'syncweb;help;mirror'= {
-        }
-        &'syncweb;help;provider'= {
-            cand add 'Register a blob ticket as an alternate provider'
-        }
-        &'syncweb;help;provider;add'= {
-        }
-        &'syncweb;help;trust'= {
-            cand show 'Show trust and moderation state'
-            cand delegate 'Delegate trust to a publisher identity'
-            cand revoke-delegation 'Revoke a trust delegation'
-            cand provider 'Manage provider trust and bans'
-            cand stream 'Publish or subscribe to provider trust signals'
-        }
-        &'syncweb;help;trust;show'= {
-        }
-        &'syncweb;help;trust;delegate'= {
-        }
-        &'syncweb;help;trust;revoke-delegation'= {
-        }
-        &'syncweb;help;trust;provider'= {
-            cand show 'Show provider reputation, bans, and trust records'
-            cand list 'List providers known to the local index'
-            cand ban 'Ban a provider globally or for one content hash'
-            cand unban 'Remove a provider''s global and scoped bans'
-            cand vouch 'Vouch for a provider'
-            cand distrust 'Distrust a provider'
-        }
-        &'syncweb;help;trust;provider;show'= {
-        }
-        &'syncweb;help;trust;provider;list'= {
-        }
-        &'syncweb;help;trust;provider;ban'= {
-        }
-        &'syncweb;help;trust;provider;unban'= {
-        }
-        &'syncweb;help;trust;provider;vouch'= {
-        }
-        &'syncweb;help;trust;provider;distrust'= {
-        }
-        &'syncweb;help;trust;stream'= {
-            cand subscribe 'Subscribe to a provider trust stream ticket or file'
-            cand publish 'Publish a signed provider trust signal'
-        }
-        &'syncweb;help;trust;stream;subscribe'= {
-        }
-        &'syncweb;help;trust;stream;publish'= {
-        }
-        &'syncweb;help;attest'= {
-            cand create 'Sign and optionally broadcast a content attestation'
-            cand verify 'Verify attestations for content from the network'
-        }
-        &'syncweb;help;attest;create'= {
-        }
-        &'syncweb;help;attest;verify'= {
-        }
-        &'syncweb;help;moderation'= {
-            cand ls 'List local moderation records'
-            cand hide 'Hide a content record locally'
-            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
-        }
-        &'syncweb;help;moderation;ls'= {
-        }
-        &'syncweb;help;moderation;hide'= {
-        }
-        &'syncweb;help;moderation;report'= {
-        }
-        &'syncweb;help;completions'= {
-        }
-        &'syncweb;help;manpages'= {
-        }
-        &'syncweb;help;media'= {
-        }
-        &'syncweb;help;help'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
     ]
     $completions[$command]

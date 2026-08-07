@@ -146,6 +146,11 @@ pub enum Command {
     },
     #[command(about = "Serve media blobs via HTTP (standalone media server)")]
     Media(MediaArgs),
+    #[command(about = "Print this message or the help of the given subcommand(s)")]
+    Help {
+        #[arg(value_name = "COMMAND")]
+        command: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]

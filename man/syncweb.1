@@ -46,9 +46,6 @@ Ask the local daemon to reload configuration
 syncweb\-daemon\-sync(1)
 Ask the local daemon to trigger synchronization
 .TP
-syncweb\-unwatch(1)
-Stop watching a folder for local changes
-.TP
 syncweb\-create(1)
 Create a synchronized folder
 .TP
@@ -56,10 +53,7 @@ syncweb\-join(1)
 Join a folder from an Iroh document ticket
 .TP
 syncweb\-leave(1)
-Leave and remove a synchronized folder
-.TP
-syncweb\-unsubscribe(1)
-Unsubscribe from a folder\*(Aqs live sync loop
+Leave a synchronized folder, optionally deleting its local files
 .TP
 syncweb\-folders(1)
 List managed folders
@@ -117,9 +111,6 @@ Re\-check local folder blob integrity
 .TP
 syncweb\-schedule(1)
 Show or update synchronization schedules
-.TP
-syncweb\-subscribe(1)
-Subscribe to a folder with event filters
 .TP
 syncweb\-publish(1)
 Publish a folder or blob for public read access

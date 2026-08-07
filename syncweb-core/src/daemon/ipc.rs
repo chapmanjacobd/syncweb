@@ -27,6 +27,7 @@ use crate::{
     indexing::{ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
+    storage::config::SubscribeFilters,
     storage::node_db::{NodeDatabase, TransferJobRecord},
     sync::{
         ActiveSession, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams, SyncEngine,
@@ -73,9 +74,6 @@ pub enum IpcCommand {
         namespace: String,
         path: PathBuf,
     },
-    RemoveFolder {
-        namespace: String,
-    },
     TriggerSync {
         namespace: Option<String>,
     },
@@ -111,14 +109,20 @@ pub enum IpcCommand {
         ticket: String,
         path: PathBuf,
         mode: SyncMode,
+        #[serde(default)]
+        subscribe: bool,
+        #[serde(default)]
+        filters: SubscribeFilters,
     },
     Publish {
         namespace: String,
         blob: Option<String>,
     },
-    Subscribe {
+    SetSubscribe {
         namespace: String,
-        params: SubscribeParams,
+        enabled: bool,
+        #[serde(default)]
+        filters: Option<SubscribeFilters>,
     },
     SubscribePublic {
         ticket: String,
@@ -154,6 +158,8 @@ pub enum IpcCommand {
     },
     LeaveFolder {
         namespace: String,
+        #[serde(default)]
+        delete_files: bool,
     },
     Unpublish {
         namespace: String,
@@ -745,7 +751,6 @@ impl IpcServer {
         match request.command {
             C::Status | C::ListFolders | C::ReloadConfig => self.handle_simple_group(request.command).await,
             C::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
-            C::RemoveFolder { namespace } => self.handle_remove_folder(namespace).await,
             C::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
             C::SetLogLevel { level } => Self::handle_set_log_level(&level),
             C::Shutdown { force } => self.handle_shutdown(force),
@@ -760,9 +765,19 @@ impl IpcServer {
             } => self.handle_export_archive_response(namespace, version, output).await,
             C::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
             C::MaterializeTransfers { namespace } => self.handle_materialize_transfers(namespace).await,
-            C::Join { ticket, path, mode } => self.handle_join(ticket, path, mode).await,
+            C::Join {
+                ticket,
+                path,
+                mode,
+                subscribe,
+                filters,
+            } => self.handle_join(ticket, path, mode, subscribe, filters).await,
             C::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
-            C::Subscribe { namespace, params } => self.handle_subscribe(namespace, params).await,
+            C::SetSubscribe {
+                namespace,
+                enabled,
+                filters,
+            } => self.handle_set_subscribe(namespace, enabled, filters).await,
             C::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
             C::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
             C::HealthCheck {
@@ -783,7 +798,10 @@ impl IpcServer {
                     .await
             }
             C::Unsubscribe { namespace } => self.handle_unsubscribe_command(&namespace).await,
-            C::LeaveFolder { namespace } => self.handle_leave_folder(namespace).await,
+            C::LeaveFolder {
+                namespace,
+                delete_files,
+            } => self.handle_leave_folder(namespace, delete_files).await,
             C::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
             C::SnapshotCreate {
                 path,
@@ -838,29 +856,48 @@ impl IpcServer {
         }
     }
 
-    async fn handle_remove_folder(&self, namespace: String) -> IpcResponse {
-        match iroh_docs::NamespaceId::from_str(&namespace) {
-            Ok(namespace_id) => {
+    async fn handle_leave_folder(&self, namespace: String, delete_files: bool) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon leave-folder IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let _ = cancel_session(namespace_id);
+        let manager = FolderManager::new(&context.node);
+        match manager.drop_when_ready(namespace_id).await {
+            Ok(()) => {
+                if let Some(node_db) = self.node_db.clone()
+                    && let Ok(mut config) = node_db.load_app_config()
+                {
+                    config.remove_subscribe(&namespace);
+                    let _ = node_db.save_app_config(&config);
+                }
                 let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
-                if removed.is_some() {
-                    let _ = cancel_session(namespace_id);
-                    if let Some(ref manager) = self.folder_manager
-                        && let Err(error) = manager.drop(namespace_id).await
-                    {
-                        tracing::warn!(%namespace, %error, "failed to drop folder from manager after removal");
-                    }
-                    IpcResponse::Ok {
-                        message: "folder removed".to_owned(),
-                    }
-                } else {
-                    IpcResponse::Error {
-                        message: format!("folder not found: {namespace}"),
-                    }
+                if delete_files
+                    && let Some(entry) = removed.as_ref()
+                    && !entry.path.as_os_str().is_empty()
+                    && let Err(error) = FolderManager::delete_folder_files(&entry.path).await
+                {
+                    return IpcResponse::Error {
+                        message: format!("folder left, but failed to delete its files: {error}"),
+                    };
+                }
+                IpcResponse::Ok {
+                    message: format!("left: {namespace}"),
                 }
             }
-            Err(error) => IpcResponse::Error {
-                message: format!("invalid folder namespace: {error}"),
-            },
+            Err(error) => response_from_error(error),
         }
     }
 
@@ -1255,7 +1292,14 @@ impl IpcServer {
             .await
     }
 
-    async fn handle_join(&self, ticket: String, path: PathBuf, mode: SyncMode) -> IpcResponse {
+    async fn handle_join(
+        &self,
+        ticket: String,
+        path: PathBuf,
+        mode: SyncMode,
+        subscribe: bool,
+        filters: SubscribeFilters,
+    ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -1276,6 +1320,31 @@ impl IpcServer {
         match manager.join(ticket, mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
+                if let Some(ref node_db) = self.node_db {
+                    let mut config = match node_db.load_app_config() {
+                        Ok(config) => config,
+                        Err(error) => return response_from_error(error),
+                    };
+                    config.set_subscribe(&namespace, subscribe, &filters);
+                    if let Err(error) = node_db.save_app_config(&config) {
+                        return response_from_error(error);
+                    }
+                }
+                if subscribe {
+                    let sync = SyncEngine::new(
+                        manager,
+                        context.node.blob_store().clone(),
+                        context.node.docs_engine().clone(),
+                        Some(context.node.topic_tracker().clone()),
+                    );
+                    let params = match SubscribeParams::from_filters(&filters) {
+                        Ok(params) => params,
+                        Err(error) => return response_from_error(error),
+                    };
+                    if let Err(error) = sync.subscribe(folder.namespace_id(), params).await {
+                        return response_from_error(error);
+                    }
+                }
                 IpcResponse::Ok {
                     message: format!("joined: {namespace}"),
                 }
@@ -1332,7 +1401,12 @@ impl IpcServer {
         }
     }
 
-    async fn handle_subscribe(&self, namespace: String, params: SubscribeParams) -> IpcResponse {
+    async fn handle_set_subscribe(
+        &self,
+        namespace: String,
+        enabled: bool,
+        requested_filters: Option<SubscribeFilters>,
+    ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -1349,18 +1423,44 @@ impl IpcServer {
                 };
             }
         };
-        let manager = FolderManager::new(&context.node);
-        let sync = SyncEngine::new(
-            manager,
-            context.node.blob_store().clone(),
-            context.node.docs_engine().clone(),
-            Some(context.node.topic_tracker().clone()),
-        );
-        match sync.subscribe(namespace_id, params).await {
-            Ok(_intent) => IpcResponse::Ok {
-                message: format!("subscribed: {namespace}"),
-            },
-            Err(error) => response_from_error(error),
+        let filters = requested_filters.unwrap_or_default();
+        if let Some(ref node_db) = self.node_db {
+            let mut config = match node_db.load_app_config() {
+                Ok(config) => config,
+                Err(error) => return response_from_error(error),
+            };
+            if enabled {
+                config.set_subscribe(&namespace, true, &filters);
+            } else {
+                config.remove_subscribe(&namespace);
+            }
+            if let Err(error) = node_db.save_app_config(&config) {
+                return response_from_error(error);
+            }
+        }
+        if enabled {
+            let manager = FolderManager::new(&context.node);
+            let sync = SyncEngine::new(
+                manager,
+                context.node.blob_store().clone(),
+                context.node.docs_engine().clone(),
+                Some(context.node.topic_tracker().clone()),
+            );
+            let params = match SubscribeParams::from_filters(&filters) {
+                Ok(params) => params,
+                Err(error) => return response_from_error(error),
+            };
+            match sync.subscribe(namespace_id, params).await {
+                Ok(_intent) => IpcResponse::Ok {
+                    message: format!("subscribed: {namespace}"),
+                },
+                Err(error) => response_from_error(error),
+            }
+        } else {
+            let _ = cancel_session(namespace_id);
+            IpcResponse::Ok {
+                message: format!("unsubscribed: {namespace}"),
+            }
         }
     }
 
@@ -1713,75 +1813,31 @@ impl IpcServer {
     }
 
     async fn handle_unsubscribe_command(&self, namespace: &str) -> IpcResponse {
-        if namespace.starts_with("blob:") {
-            self.daemon_handle
-                .folder_registry
-                .write()
-                .await
-                .remove_subscription(namespace);
-            if let Some(ref manager) = self.folder_manager
-                && let Some(hash_str) = namespace.strip_prefix("blob:")
-                && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
-            {
-                manager.drop_subscription(&hash).await;
-            }
-            if let Some(ref node_db) = self.node_db
-                && let Some(hash_str) = namespace.strip_prefix("blob:")
-                && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
-                && let Err(error) = node_db.remove_subscription(&hash)
-            {
-                tracing::warn!(%hash, %error, "failed to remove subscription from database");
-            }
-            IpcResponse::Ok {
-                message: format!("unsubscribed: {namespace}"),
-            }
-        } else {
-            match iroh_docs::NamespaceId::from_str(namespace) {
-                Ok(namespace_id) => {
-                    if cancel_session(namespace_id) {
-                        IpcResponse::Ok {
-                            message: format!("unsubscribed: {namespace}"),
-                        }
-                    } else {
-                        IpcResponse::Error {
-                            message: format!("no active session for {namespace}"),
-                        }
-                    }
-                }
-                Err(error) => IpcResponse::Error {
-                    message: format!("invalid namespace: {error}"),
-                },
-            }
+        if !namespace.starts_with("blob:") {
+            return IpcResponse::Error {
+                message: "unsubscribe applies only to public blob subscriptions; use `leave` for folders".to_owned(),
+            };
         }
-    }
-
-    async fn handle_leave_folder(&self, namespace: String) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon leave-folder IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
-            Ok(id) => id,
-            Err(error) => {
-                return IpcResponse::Error {
-                    message: format!("invalid namespace: {error}"),
-                };
-            }
-        };
-        let _ = cancel_session(namespace_id);
-        let manager = FolderManager::new(&context.node);
-        match manager.drop(namespace_id).await {
-            Ok(()) => {
-                let _ = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
-                IpcResponse::Ok {
-                    message: format!("left: {namespace}"),
-                }
-            }
-            Err(error) => response_from_error(error),
+        self.daemon_handle
+            .folder_registry
+            .write()
+            .await
+            .remove_subscription(namespace);
+        if let Some(ref manager) = self.folder_manager
+            && let Some(hash_str) = namespace.strip_prefix("blob:")
+            && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
+        {
+            manager.drop_subscription(&hash).await;
+        }
+        if let Some(ref node_db) = self.node_db
+            && let Some(hash_str) = namespace.strip_prefix("blob:")
+            && let Ok(hash) = hash_str.parse::<iroh_blobs::Hash>()
+            && let Err(error) = node_db.remove_subscription(&hash)
+        {
+            tracing::warn!(%hash, %error, "failed to remove subscription from database");
+        }
+        IpcResponse::Ok {
+            message: format!("unsubscribed: {namespace}"),
         }
     }
 
@@ -2611,7 +2667,7 @@ mod tests {
     #[test]
     fn new_commands_round_trip_as_json() {
         let req1 = IpcRequest::new(IpcCommand::Unsubscribe {
-            namespace: "ns".to_owned(),
+            namespace: "blob:baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
         });
         let enc1 = serde_json::to_vec(&req1).expect("serialize");
         let dec1: IpcRequest = serde_json::from_slice(&enc1).expect("deserialize");
@@ -2619,10 +2675,17 @@ mod tests {
 
         let req2 = IpcRequest::new(IpcCommand::LeaveFolder {
             namespace: "ns".to_owned(),
+            delete_files: false,
         });
         let enc2 = serde_json::to_vec(&req2).expect("serialize");
         let dec2: IpcRequest = serde_json::from_slice(&enc2).expect("deserialize");
-        assert!(matches!(dec2.command, IpcCommand::LeaveFolder { .. }));
+        assert!(matches!(
+            dec2.command,
+            IpcCommand::LeaveFolder {
+                delete_files: false,
+                ..
+            }
+        ));
 
         let req3 = IpcRequest::new(IpcCommand::Unpublish {
             namespace: "ns".to_owned(),
@@ -2675,7 +2738,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_unsubscribe_no_active_session() {
+    async fn test_ipc_unsubscribe_rejects_folder_namespaces() {
         let handle = DaemonHandle::new(state());
         let server = IpcServer::new(socket_path(), handle);
         let namespace = iroh_docs::NamespaceSecret::from_bytes(&[7; 32]).id().to_string();
@@ -2686,7 +2749,7 @@ mod tests {
             .await;
         assert!(matches!(
             response,
-            IpcResponse::Error { message } if message.contains("no active session")
+            IpcResponse::Error { message } if message.contains("use `leave` for folders")
         ));
     }
 
@@ -2701,7 +2764,7 @@ mod tests {
             .await;
         assert!(matches!(
             response,
-            IpcResponse::Error { message } if message.contains("invalid namespace")
+            IpcResponse::Error { message } if message.contains("use `leave` for folders")
         ));
     }
 
@@ -2712,6 +2775,7 @@ mod tests {
         let response = server
             .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
                 namespace: "ns".to_owned(),
+                delete_files: false,
             }))
             .await;
         assert!(matches!(
@@ -2894,6 +2958,8 @@ mod tests {
                 ticket: "ticket".to_owned(),
                 path: PathBuf::from("/tmp"),
                 mode: SyncMode::SendReceive,
+                subscribe: false,
+                filters: SubscribeFilters::default(),
             }))
             .await;
         assert!(matches!(
@@ -2923,9 +2989,13 @@ mod tests {
         let handle = DaemonHandle::new(state());
         let server = IpcServer::new(socket_path(), handle);
         let response = server
-            .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+            .handle_request(IpcRequest::new(IpcCommand::SetSubscribe {
                 namespace: "ns".to_owned(),
-                params: SubscribeParams::ingest_only(),
+                enabled: true,
+                filters: Some(SubscribeFilters {
+                    ingest_only: true,
+                    ..Default::default()
+                }),
             }))
             .await;
         assert!(matches!(
@@ -3204,6 +3274,8 @@ mod tests {
                 ticket: "not-a-valid-ticket".to_owned(),
                 path: test_dir.clone(),
                 mode: SyncMode::SendReceive,
+                subscribe: false,
+                filters: SubscribeFilters::default(),
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));
@@ -3292,9 +3364,13 @@ mod tests {
         if let Some(ns) = namespace {
             let response = fixture
                 .server
-                .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+                .handle_request(IpcRequest::new(IpcCommand::SetSubscribe {
                     namespace: ns.clone(),
-                    params: SubscribeParams::ingest_only(),
+                    enabled: true,
+                    filters: Some(SubscribeFilters {
+                        ingest_only: true,
+                        ..Default::default()
+                    }),
                 }))
                 .await;
             assert!(matches!(response, IpcResponse::Ok { .. }));
@@ -3330,15 +3406,16 @@ mod tests {
         };
 
         if let Some(ns) = namespace {
-            let params = SubscribeParams {
+            let filters = SubscribeFilters {
                 ingest_only: true,
-                ..SubscribeParams::default()
+                ..Default::default()
             };
             let response2 = fixture
                 .server
-                .handle_request(IpcRequest::new(IpcCommand::Subscribe {
+                .handle_request(IpcRequest::new(IpcCommand::SetSubscribe {
                     namespace: ns.clone(),
-                    params,
+                    enabled: true,
+                    filters: Some(filters),
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -3376,7 +3453,10 @@ mod tests {
 
             let response2 = fixture
                 .server
-                .handle_request(IpcRequest::new(IpcCommand::LeaveFolder { namespace: ns.clone() }))
+                .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
+                    namespace: ns.clone(),
+                    delete_files: false,
+                }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
 
@@ -3396,6 +3476,7 @@ mod tests {
             .server
             .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
                 namespace: fake_ns.clone(),
+                delete_files: false,
             }))
             .await;
         let registry = fixture.server.daemon_handle.folder_registry.read().await;

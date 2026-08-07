@@ -4,7 +4,7 @@
 .SH NAME
 join \- Join a folder from an Iroh document ticket
 .SH SYNOPSIS
-\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-once\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-subscribe\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Join a folder from an Iroh document ticket
 .SH OPTIONS
@@ -18,14 +18,14 @@ Enable Syncthing relay fallback for this folder
 \fB\-\-network\fR \fI<NETWORK>\fR
 Add the joined folder to a named network
 .TP
-\fB\-\-once\fR
-Exit after joining without entering the sync loop
+\fB\-\-subscribe\fR
+Track + enable live syncing (persisted subscribe\-changes); idempotent on an existing folder
 .TP
 \fB\-\-ingest\-only\fR
-Only deliver entries ingested after subscription
+Only deliver entries ingested after live syncing is enabled
 .TP
 \fB\-\-ignore\-self\fR
-Ignore events emitted by this subscription session
+Ignore events emitted by this device\*(Aqs own writes
 .TP
 \fB\-\-prefix\fR \fI<PREFIX>\fR
 Parent directory prepended to the path argument
@@ -46,7 +46,7 @@ Area prefix filter for subscription entries
 Print help
 .TP
 <\fITICKET\fR>
-
+Iroh document ticket for a new folder, or a folder selector when using \-\-subscribe
 .TP
 [\fIPATH\fR] [default: .]
 

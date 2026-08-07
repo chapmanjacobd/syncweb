@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -30,6 +31,8 @@ pub struct Config {
     pub default_path: Option<PathBuf>,
     #[serde(default = "default_sync_mode")]
     pub default_sync_mode: String,
+    #[serde(default)]
+    pub subscribe: SubscribeConfig,
 }
 
 impl Config {
@@ -120,17 +123,122 @@ impl Config {
                 value.parse::<crate::folder::SyncMode>()?;
                 value.clone_into(&mut self.default_sync_mode);
             }
+            _ if key.ends_with(".subscribe") => {
+                if let Some(namespace) = key.strip_suffix(".subscribe") {
+                    let namespace_id = namespace.parse::<iroh_docs::NamespaceId>().map_err(|error| {
+                        SyncwebError::InvalidConfig(format!("invalid namespace {namespace:?} in {key}: {error}"))
+                    })?;
+                    let enabled = parse_bool(key, value)?;
+                    if enabled {
+                        let entry = self.subscribe.folders.entry(namespace_id.to_string()).or_default();
+                        entry.enabled = true;
+                    } else {
+                        self.subscribe.folders.remove(namespace_id.to_string().as_str());
+                    }
+                }
+            }
             _ => {
                 return Err(SyncwebError::InvalidConfig(format!(
                     "unsupported config key {key:?}; supported keys: \
                      bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback, schedule.active_hours, \
                      bandwidth.max_upload, bandwidth.max_download, parallel.threads, cache.max_cache_size, \
                      advanced.blob_cache_size_gb, discovery.mdns, discovery.beacon, discovery.beacon_base_port, \
-                     discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode"
+                     discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode, \
+                     <namespace>.subscribe"
                 )));
             }
         }
         Ok(())
+    }
+
+    /// Set the live-syncing (`subscribe-changes`) state and filters for a folder.
+    ///
+    /// The folder's entry is created on first use, so a plain `join` writes
+    /// `enabled: false` and a later `join --subscribe` flips it to `true`
+    /// without dropping the persisted filters.
+    pub fn set_subscribe(&mut self, namespace: &str, enabled: bool, filters: &SubscribeFilters) {
+        let entry = self.subscribe.folders.entry(namespace.to_owned()).or_default();
+        entry.enabled = enabled;
+        if !filters.is_default() {
+            entry.filters = filters.clone();
+        }
+    }
+
+    /// Remove the per-folder `subscribe-changes` entry, e.g. when leaving.
+    pub fn remove_subscribe(&mut self, namespace: &str) -> bool {
+        self.subscribe.folders.remove(namespace).is_some()
+    }
+}
+
+/// Per-folder live-sync (`subscribe-changes`) settings.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct SubscribeConfig {
+    /// Map of folder namespace to its live-sync setting.
+    #[serde(default)]
+    pub folders: BTreeMap<String, SubscribeFolderConfig>,
+}
+
+/// The live-sync state and filters for a single folder.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct SubscribeFolderConfig {
+    /// Whether the daemon auto-supervises this folder (default: false, D7).
+    #[serde(default)]
+    pub enabled: bool,
+    /// Subscription filters applied when the daemon supervises the folder.
+    #[serde(default)]
+    pub filters: SubscribeFilters,
+}
+
+/// Persisted subscription filters, mirroring the `join --subscribe` flags.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct SubscribeFilters {
+    /// Only deliver entries ingested after live syncing is enabled.
+    #[serde(default)]
+    pub ingest_only: bool,
+    /// Ignore this device's own writes.
+    #[serde(default)]
+    pub ignore_self: bool,
+    /// Area prefix filter for subscription entries.
+    #[serde(default)]
+    pub sync_prefix: Option<PathBuf>,
+    /// Glob filter for subscription entries.
+    #[serde(default)]
+    pub glob: Option<String>,
+    /// Maximum number of entries to deliver.
+    #[serde(default)]
+    pub max_count: Option<u64>,
+    /// Maximum total bytes to deliver.
+    #[serde(default)]
+    pub max_size: Option<u64>,
+}
+
+impl SubscribeFilters {
+    /// Construct filters from the `join --subscribe` filter flags.
+    #[must_use]
+    pub const fn new(
+        ingest_only: bool,
+        ignore_self: bool,
+        sync_prefix: Option<PathBuf>,
+        glob: Option<String>,
+        max_count: Option<u64>,
+        max_size: Option<u64>,
+    ) -> Self {
+        Self {
+            ingest_only,
+            ignore_self,
+            sync_prefix,
+            glob,
+            max_count,
+            max_size,
+        }
+    }
+
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
     }
 }
 
@@ -142,7 +250,6 @@ pub struct BandwidthConfig {
     #[serde(default)]
     pub max_download: String,
 }
-
 impl Default for BandwidthConfig {
     fn default() -> Self {
         Self {

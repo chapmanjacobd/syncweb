@@ -16,16 +16,12 @@ pub enum Command {
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync,
-    #[command(about = "Stop watching a folder for local changes")]
-    Unwatch(FolderSelector),
     #[command(about = "Create a synchronized folder")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
     Join(FolderJoin),
-    #[command(about = "Leave and remove a synchronized folder")]
-    Leave(FolderSelector),
-    #[command(about = "Unsubscribe from a folder's live sync loop")]
-    Unsubscribe(FolderSelector),
+    #[command(about = "Leave a synchronized folder, optionally deleting its local files")]
+    Leave(LeaveArgs),
     #[command(about = "List managed folders")]
     Folders,
     #[command(about = "Show this device's Iroh and Syncthing identities")]
@@ -59,8 +55,6 @@ pub enum Command {
         #[command(subcommand)]
         command: TransferCommand,
     },
-    #[command(about = "Initialize a folder and print a shareable URL")]
-    Init(InitArgs),
     #[command(about = "Run rules-based automatic synchronization")]
     Automatic(AutomaticArgs),
     #[command(about = "Watch a folder and import filesystem changes")]
@@ -76,8 +70,6 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ScheduleCommand>,
     },
-    #[command(about = "Subscribe to a folder with event filters")]
-    Subscribe(SubscribeArgs),
     #[command(about = "Publish a folder or blob for public read access")]
     Publish(PublishArgs),
     #[command(about = "Remove a public blob pin")]
@@ -286,6 +278,7 @@ pub struct FolderCreate {
 
 #[derive(Debug, Args)]
 pub struct FolderJoin {
+    #[arg(help = "Iroh document ticket for a new folder, or a folder selector when using --subscribe")]
     pub ticket: String,
     #[arg(default_value = ".")]
     pub path: PathBuf,
@@ -295,11 +288,14 @@ pub struct FolderJoin {
     pub relay_fallback: bool,
     #[arg(long, help = "Add the joined folder to a named network")]
     pub network: Option<String>,
-    #[arg(long, help = "Exit after joining without entering the sync loop")]
-    pub once: bool,
-    #[arg(long, help = "Only deliver entries ingested after subscription")]
+    #[arg(
+        long,
+        help = "Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder"
+    )]
+    pub subscribe: bool,
+    #[arg(long, help = "Only deliver entries ingested after live syncing is enabled")]
     pub ingest_only: bool,
-    #[arg(long, help = "Ignore events emitted by this subscription session")]
+    #[arg(long, help = "Ignore events emitted by this device's own writes")]
     pub ignore_self: bool,
     #[arg(long, help = "Parent directory prepended to the path argument")]
     pub prefix: Option<PathBuf>,
@@ -492,9 +488,11 @@ pub struct StatArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct FolderSelector {
+pub struct LeaveArgs {
     #[arg(help = "Namespace ID or path to a managed folder")]
     pub folder: String,
+    #[arg(long, help = "Also delete the folder's local files")]
+    pub delete_files: bool,
 }
 
 #[derive(Debug, Args)]
@@ -733,24 +731,6 @@ pub enum ScheduleCommand {
         #[arg(long)]
         max_download: Option<String>,
     },
-}
-
-#[derive(Debug, Args)]
-pub struct SubscribeArgs {
-    #[arg(help = "Namespace ID or path to a managed folder")]
-    pub folder: String,
-    #[arg(long, help = "Only deliver entries ingested after subscription")]
-    pub ingest_only: bool,
-    #[arg(long, help = "Ignore events emitted by this subscription session")]
-    pub ignore_self: bool,
-    #[arg(long, help = "Area prefix filter for subscription entries", conflicts_with = "glob")]
-    pub sync_prefix: Option<PathBuf>,
-    #[arg(long, conflicts_with = "sync_prefix")]
-    pub glob: Option<String>,
-    #[arg(long)]
-    pub max_count: Option<u64>,
-    #[arg(long)]
-    pub max_size: Option<u64>,
 }
 
 #[derive(Debug, Args)]

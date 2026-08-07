@@ -95,6 +95,45 @@ impl SubscribeParams {
         self
     }
 
+    /// Build subscription parameters from the persisted `join --subscribe` filters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured limits are already exhausted.
+    pub fn from_filters(filters: &crate::storage::config::SubscribeFilters) -> crate::error::Result<Self> {
+        let mut params = if filters.ingest_only {
+            Self::ingest_only()
+        } else {
+            Self::default()
+        };
+        if filters.ignore_self {
+            params.ignore_session = Some(Uuid::new_v4());
+        }
+        let area = filters
+            .sync_prefix
+            .clone()
+            .map(AreaFilter::Prefix)
+            .or_else(|| filters.glob.clone().map(AreaFilter::Glob));
+        if let Some(filter) = area.clone() {
+            params = params.with_area(filter);
+        }
+        if filters.max_size.is_some() || filters.max_count.is_some() {
+            let limit_area = area.unwrap_or(AreaFilter::All);
+            let limits = AreaOfInterest::with_limits(
+                limit_area,
+                filters.max_size.unwrap_or(0),
+                filters.max_count.unwrap_or(0),
+            );
+            if limits.is_limit_reached(0, 0) {
+                return Err(crate::error::SyncwebError::InvalidConfig(
+                    "subscription limits are already exhausted".to_owned(),
+                ));
+            }
+            params = params.with_limits(limits);
+        }
+        Ok(params)
+    }
+
     #[must_use]
     pub fn accepts(&self, path: &Path, hash: &Hash) -> bool {
         let area_matches = self

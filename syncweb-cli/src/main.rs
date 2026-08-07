@@ -18,9 +18,9 @@ use cli::{
     commands::{
         CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MediaArgs,
         MirrorArgs, NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
-        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, SubscribeArgs, TransferAllocateArgs,
-        TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs,
-        TransferRootArgs, VerifyArgs, WatchArgs,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, TransferAllocateArgs, TransferCommand,
+        TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs,
+        WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -52,13 +52,11 @@ use syncweb_core::{
     stat::{StatFormat, StatOutput},
     storage::{
         Config as AppConfig,
+        config::SubscribeFilters,
         node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
         stats_db::StatsDatabase,
     },
-    sync::{
-        ActiveSession, AreaFilter, AreaOfInterest, FetchCandidate, FetchFilter, FetchStrategy, HealthReport,
-        SubscribeParams, SyncEngine, SyncEvent,
-    },
+    sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
     verify::IntegrityChecker,
 };
 
@@ -205,7 +203,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Create(command) => handle_create(&ctx, command).await?,
         Command::Join(command) => handle_join(&ctx, command).await?,
         Command::Leave(command) => handle_leave(&ctx, command).await?,
-        Command::Unsubscribe(command) => handle_unsubscribe(&ctx, command).await?,
         Command::Folders => handle_folders(&ctx).await?,
         Command::Devices => handle_devices(&ctx)?,
         Command::Ls(command) => handle_ls(&ctx, command)?,
@@ -223,7 +220,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Init(command) => handle_init(&ctx, command).await?,
         Command::Automatic(command) => handle_automatic(&ctx, command).await?,
-        Command::Subscribe(command) => handle_subscribe(&ctx, command).await?,
         Command::Publish(command) => handle_publish(&ctx, command).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
         Command::Collection { command } => handle_collection(&ctx, command).await?,
@@ -244,7 +240,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Status
         | Command::Reload
         | Command::DaemonSync
-        | Command::Unwatch(_)
         | Command::Watch(_)
         | Command::Stats(_)
         | Command::Schedule { .. }
@@ -265,7 +260,6 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::Status
             | Command::Reload
             | Command::DaemonSync
-            | Command::Unwatch(_)
             | Command::Watch(_)
             | Command::Stats(_)
             | Command::Schedule { .. }
@@ -324,9 +318,6 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     if matches!(&command, Command::DaemonSync) {
         return handle_daemon_sync(&ctx).await;
     }
-    if let Command::Unwatch(args) = command {
-        return handle_unwatch(&ctx, args).await;
-    }
     if let Command::Watch(watch) = command {
         return handle_watch(&ctx, watch).await;
     }
@@ -337,7 +328,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         return handle_schedule(&ctx, schedule);
     }
     if let Command::Config { command: config } = command {
-        return handle_config(&ctx, config);
+        return handle_config(&ctx, config).await;
     }
     if let Command::Db { command: db_cmd } = command {
         return handle_db(&ctx, db_cmd);
@@ -352,7 +343,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     anyhow::bail!("unsupported auxiliary command")
 }
 
-fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result<()> {
+async fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let node_db = open_node_db(data_dir)?;
@@ -369,15 +360,53 @@ fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result
             "bep" => print_config_section(&config.bep, output_json)?,
             "schedule" => print_config_section(&config.schedule, output_json)?,
             "discovery" => print_config_section(&config.discovery, output_json)?,
-            _ => anyhow::bail!("unsupported config section {section:?}; supported sections: bep, schedule, discovery"),
+            "subscribe" => print_config_section(&config.subscribe, output_json)?,
+            _ => anyhow::bail!(
+                "unsupported config section {section:?}; supported sections: bep, schedule, discovery, subscribe"
+            ),
         },
         Some(ConfigCommand::Set { key, value }) => {
-            config.set(&key, &value)?;
+            let nudge = if let Some(selector) = key.strip_suffix(".subscribe") {
+                let namespace = if let Ok(ns) = selector.parse::<iroh_docs::NamespaceId>() {
+                    ns.to_string()
+                } else if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                    resolve_namespace_via_daemon(&client, selector).await?
+                } else {
+                    anyhow::bail!(
+                        "'{selector}' is not a namespace ID; start the daemon to resolve folder paths, \
+                         or pass the folder's namespace ID"
+                    );
+                };
+                let enabled = parse_config_bool(&key, &value)?;
+                if enabled {
+                    config.set_subscribe(
+                        &namespace,
+                        true,
+                        &config
+                            .subscribe
+                            .folders
+                            .get(&namespace)
+                            .map(|entry| entry.filters.clone())
+                            .unwrap_or_default(),
+                    );
+                } else {
+                    config.remove_subscribe(&namespace);
+                }
+                true
+            } else {
+                config.set(&key, &value)?;
+                false
+            };
             node_db.save_app_config(&config)?;
             // Keep the TOML config file in sync for user inspection/editing.
             let config_path = data_dir.join("config.toml");
             if let Err(error) = config.save(&config_path) {
                 tracing::warn!(%error, "failed to write TOML config file");
+            }
+            if nudge && let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let _ = client
+                    .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
+                    .await;
             }
             if output_json {
                 println!(
@@ -390,6 +419,14 @@ fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> Result
         }
     }
     Ok(())
+}
+
+fn parse_config_bool(key: &str, value: &str) -> Result<bool> {
+    match value {
+        "on" | "true" | "1" => Ok(true),
+        "off" | "false" | "0" => Ok(false),
+        _ => anyhow::bail!("{key} must be 'on' or 'off'"),
+    }
 }
 
 fn print_config_section<T: serde::Serialize>(section: &T, output_json: bool) -> Result<()> {
@@ -659,40 +696,28 @@ async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
 }
 
 #[async_recursion]
-async fn handle_unwatch(ctx: &CliContext<'_>, args: crate::cli::commands::FolderSelector) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let client =
-        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
-    let namespace = if let Ok(ns) = args.folder.parse::<iroh_docs::NamespaceId>() {
-        ns.to_string()
-    } else {
-        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        let IpcResponse::FolderList(folders) = response else {
-            return print_daemon_message(response, output_json);
-        };
-        let path = std::path::Path::new(&args.folder);
-        let matched = if path.exists() {
-            folders.iter().find(|f| f.path == path)
-        } else {
-            folders.iter().find(|f| f.namespace.starts_with(&args.folder))
-        };
-        match matched {
-            Some(f) => f.namespace.clone(),
-            None => match folders.as_slice() {
-                [folder] => folder.namespace.clone(),
-                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-                _ => anyhow::bail!(
-                    "'{}' is not a namespace ID and more than one folder is available",
-                    args.folder
-                ),
-            },
-        }
+async fn resolve_namespace_via_daemon(client: &syncweb_core::daemon::IpcClient, selector: &str) -> Result<String> {
+    if let Ok(ns) = selector.parse::<iroh_docs::NamespaceId>() {
+        return Ok(ns.to_string());
+    }
+    let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+    let IpcResponse::FolderList(folders) = response else {
+        anyhow::bail!("unexpected response from daemon while resolving folder");
     };
-    let response = client
-        .send(IpcRequest::new(IpcCommand::RemoveFolder { namespace }))
-        .await?;
-    print_daemon_message(response, output_json)
+    let path = std::path::Path::new(selector);
+    let matched = if path.exists() {
+        folders.iter().find(|f| f.path == path)
+    } else {
+        folders.iter().find(|f| f.namespace.starts_with(selector))
+    };
+    match matched {
+        Some(f) => Ok(f.namespace.clone()),
+        None => match folders.as_slice() {
+            [folder] => Ok(folder.namespace.clone()),
+            [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
+            _ => anyhow::bail!("'{selector}' is not a namespace ID and more than one folder is available"),
+        },
+    }
 }
 
 fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> {
@@ -2412,21 +2437,31 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    let filters = subscribe_filters_from(&command);
     let effective_path = if let Some(prefix) = &command.prefix {
         prefix.join(&command.path)
     } else {
         command.path.clone()
     };
+
+    // `join <folder> --subscribe` on an already-tracked folder: idempotent enable.
+    if command.ticket.parse::<iroh_docs::DocTicket>().is_err() {
+        if !command.subscribe {
+            anyhow::bail!("folder already tracked — re-enable live syncing with `join <folder> --subscribe`");
+        }
+        return handle_join_existing(ctx, &command.ticket, &filters).await;
+    }
+
     std::fs::create_dir_all(&effective_path)
         .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
-    if command.once
-        && let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await?
-    {
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Join {
                 ticket: command.ticket.clone(),
                 path: effective_path.clone(),
                 mode: SyncMode::from_str(&command.mode)?,
+                subscribe: command.subscribe,
+                filters: filters.clone(),
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -2437,63 +2472,73 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
-    if command.once {
-        if output_json {
-            println!(
-                "{}",
-                serde_json::json!({"status": "joined", "namespace": folder.namespace_id().to_string()})
-            );
-        } else {
-            println!("joined: {}", folder.namespace_id());
-        }
-        node.stop().await?;
-        return Ok(());
-    }
-    let session_id = uuid::Uuid::new_v4();
-    let mut params = if command.ingest_only {
-        SubscribeParams::ingest_only()
+    let namespace = folder.namespace_id().to_string();
+    let node_db = open_node_db(data_dir)?;
+    let mut config = node_db.load_app_config()?;
+    config.set_subscribe(&namespace, command.subscribe, &filters);
+    node_db.save_app_config(&config)?;
+    if output_json {
+        println!("{}", serde_json::json!({"status": "joined", "namespace": namespace}));
     } else {
-        SubscribeParams::default()
-    };
-    if command.ignore_self {
-        params.ignore_session = Some(session_id);
+        println!("joined: {namespace}");
     }
-    let area = command
-        .sync_prefix
-        .map(AreaFilter::Prefix)
-        .or_else(|| command.glob.map(AreaFilter::Glob));
-    if let Some(filter) = area.clone() {
-        params = params.with_area(filter);
-    }
-    if command.max_size.is_some() || command.max_count.is_some() {
-        let limit_area = area.unwrap_or(AreaFilter::All);
-        let limits = AreaOfInterest::with_limits(
-            limit_area,
-            command.max_size.unwrap_or(0),
-            command.max_count.unwrap_or(0),
-        );
-        if limits.is_limit_reached(0, 0) {
-            anyhow::bail!("subscription limits are already exhausted");
+    node.stop().await?;
+    Ok(())
+}
+
+fn subscribe_filters_from(command: &crate::cli::commands::FolderJoin) -> SubscribeFilters {
+    SubscribeFilters::new(
+        command.ingest_only,
+        command.ignore_self,
+        command.sync_prefix.clone(),
+        command.glob.clone(),
+        command.max_count,
+        command.max_size,
+    )
+}
+
+async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &SubscribeFilters) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let namespace = resolve_namespace_via_daemon(&client, selector).await?;
+        let response = client
+            .send(IpcRequest::new(IpcCommand::SetSubscribe {
+                namespace: namespace.clone(),
+                enabled: true,
+                filters: Some(filters.clone()),
+            }))
+            .await?;
+        if let IpcResponse::Ok { message } = response {
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({"status": "subscribed", "namespace": namespace})
+                );
+            } else {
+                println!("{message}");
+            }
+            return Ok(());
         }
-        params = params.with_limits(limits);
+        return print_daemon_message(response, output_json);
     }
-    let sync = SyncEngine::from_node(&node, manager);
-    let intent = sync.subscribe(folder.namespace_id(), params.clone()).await?;
-    let _session = ActiveSession::register(folder.namespace_id(), intent.cancel_sender());
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = resolve_namespace(&manager, selector).await?;
+    let namespace_str = namespace.to_string();
+    let node_db = open_node_db(data_dir)?;
+    let mut config = node_db.load_app_config()?;
+    config.set_subscribe(&namespace_str, true, filters);
+    node_db.save_app_config(&config)?;
     if output_json {
         println!(
             "{}",
-            serde_json::json!({
-                "status": "joined",
-                "namespace": folder.namespace_id().to_string(),
-                "ingest_only": params.ingest_only,
-            })
+            serde_json::json!({"status": "subscribed", "namespace": namespace_str})
         );
     } else {
-        println!("joined: {}", folder.namespace_id());
+        println!("subscribed: {namespace_str}");
     }
-    tokio::signal::ctrl_c().await?;
-    let _result = intent.cancel();
     node.stop().await?;
     Ok(())
 }
@@ -2556,101 +2601,6 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
         },
     )
     .await
-}
-
-#[async_recursion]
-async fn handle_subscribe(ctx: &CliContext<'_>, command: SubscribeArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
-    let session_id = uuid::Uuid::new_v4();
-    let mut params = if command.ingest_only {
-        SubscribeParams::ingest_only()
-    } else {
-        SubscribeParams::default()
-    };
-    if command.ignore_self {
-        params.ignore_session = Some(session_id);
-    }
-    let area = command
-        .sync_prefix
-        .map(AreaFilter::Prefix)
-        .or_else(|| command.glob.map(AreaFilter::Glob));
-    if let Some(filter) = area.clone() {
-        params = params.with_area(filter);
-    }
-    if command.max_size.is_some() || command.max_count.is_some() {
-        let limit_area = area.unwrap_or(AreaFilter::All);
-        let limits = AreaOfInterest::with_limits(
-            limit_area,
-            command.max_size.unwrap_or(0),
-            command.max_count.unwrap_or(0),
-        );
-        if limits.is_limit_reached(0, 0) {
-            anyhow::bail!("subscription limits are already exhausted");
-        }
-        params = params.with_limits(limits);
-    }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let namespace_id = if let Ok(ns) = command.folder.parse::<iroh_docs::NamespaceId>() {
-            ns
-        } else {
-            let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-            let IpcResponse::FolderList(folders) = response else {
-                return print_daemon_message(response, output_json);
-            };
-            let folder_path = std::path::Path::new(&command.folder);
-            match folders.as_slice() {
-                [f] if folder_path.exists() => f.namespace.parse()?,
-                [f] => f.namespace.parse()?,
-                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-                _ => anyhow::bail!(
-                    "folder path is not a namespace ID and more than one synchronized folder is available"
-                ),
-            }
-        };
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Subscribe {
-                namespace: namespace_id.to_string(),
-                params,
-            }))
-            .await?;
-        if let IpcResponse::Ok { message } = response {
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"status": "subscribed", "namespace": namespace_id.to_string()})
-                );
-            } else {
-                println!("{message}");
-            }
-            return Ok(());
-        }
-        return print_daemon_message(response, output_json);
-    }
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &command.folder).await?;
-    let sync = SyncEngine::from_node(&node, manager);
-    let intent = sync.subscribe(namespace, params.clone()).await?;
-    let _session = ActiveSession::register(namespace, intent.cancel_sender());
-    if output_json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "status": "subscribed",
-                "namespace": namespace.to_string(),
-                "ingest_only": params.ingest_only,
-            })
-        );
-    } else {
-        println!("subscribed: {namespace}");
-        println!("ingest_only: {}", params.ingest_only);
-    }
-    tokio::signal::ctrl_c().await?;
-    let _result = intent.cancel();
-    node.stop().await?;
-    Ok(())
 }
 
 #[async_recursion]
@@ -3929,18 +3879,16 @@ fn add_folder_to_network(
 }
 
 #[async_recursion]
-async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::FolderSelector) -> Result<()> {
+async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::LeaveArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    if !confirm_destructive("leave this folder", output_json)? {
-        println!("aborted");
-        return Ok(());
-    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let namespace = resolve_namespace_via_daemon(&client, &command.folder).await?;
         let response = client
             .send(IpcRequest::new(IpcCommand::LeaveFolder {
-                namespace: command.folder.clone(),
+                namespace,
+                delete_files: command.delete_files,
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -3949,7 +3897,13 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Folde
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &command.folder).await?;
     let _ = cancel_session(namespace);
-    manager.drop(namespace).await?;
+    manager.drop_when_ready(namespace).await?;
+    if command.delete_files {
+        let path = std::path::Path::new(&command.folder);
+        if path.exists() {
+            FolderManager::delete_folder_files(path).await?;
+        }
+    }
     if output_json {
         println!(
             "{}",
@@ -3957,42 +3911,6 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Folde
         );
     } else {
         println!("left: {namespace}");
-    }
-    node.stop().await?;
-    Ok(())
-}
-
-#[async_recursion]
-async fn handle_unsubscribe(ctx: &CliContext<'_>, command: crate::cli::commands::FolderSelector) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
-    if !confirm_destructive("unsubscribe from this folder", output_json)? {
-        println!("aborted");
-        return Ok(());
-    }
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Unsubscribe {
-                namespace: command.folder.clone(),
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
-    }
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &command.folder).await?;
-    if cancel_session(namespace) {
-        if output_json {
-            println!(
-                "{}",
-                serde_json::json!({"status": "unsubscribed", "namespace": namespace.to_string()})
-            );
-        } else {
-            println!("unsubscribed: {namespace}");
-        }
-    } else {
-        anyhow::bail!("no active sync session for {namespace}");
     }
     node.stop().await?;
     Ok(())

@@ -413,8 +413,8 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
 
     if let Some(ns) = namespace {
-        let subscribe = syncweb(&["--data-dir", data_dir_arg, "subscribe", ns, "--ingest-only"])?;
-        ensure!(subscribe.status.success(), "subscribe should succeed via daemon");
+        let subscribe = syncweb(&["--data-dir", data_dir_arg, "join", ns, "--subscribe", "--ingest-only"])?;
+        ensure!(subscribe.status.success(), "join --subscribe should succeed via daemon");
     }
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
@@ -502,9 +502,9 @@ fn test_daemon_leave_via_ipc() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_daemon_unsubscribe_via_ipc() -> anyhow::Result<()> {
-    let data_dir = cli_test_dir("daemon-unsubscribe")?;
-    let dir = cli_test_dir("daemon-unsubscribe-folder")?;
+fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("daemon-leave-delete-files")?;
+    let dir = cli_test_dir("daemon-leave-delete-files-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
     let start = daemon_start_bg(data_dir_arg)?;
@@ -524,13 +524,23 @@ fn test_daemon_unsubscribe_via_ipc() -> anyhow::Result<()> {
         .lines()
         .find(|line| line.starts_with("namespace:"))
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+    ensure!(namespace.is_some(), "create should output a namespace");
+    let ns = namespace.unwrap();
 
-    if let Some(ns) = namespace {
-        let unsubscribe = syncweb(&["--data-dir", data_dir_arg, "unsubscribe", ns])?;
-        ensure!(
-            unsubscribe.status.success() || String::from_utf8_lossy(&unsubscribe.stderr).contains("no active session")
-        );
-    }
+    std::fs::write(dir.join("file.txt"), b"content")?;
+    ensure!(dir.exists(), "folder directory should exist before leave");
+
+    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns, "--delete-files"])?;
+    ensure!(
+        leave.status.success(),
+        "leave --delete-files should succeed, got: {}",
+        String::from_utf8_lossy(&leave.stderr)
+    );
+
+    ensure!(
+        !dir.exists(),
+        "folder directory should be deleted after leave --delete-files"
+    );
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
     ensure!(shutdown.status.success());
@@ -682,7 +692,7 @@ fn test_download_help_mentions_daemon_routing() -> anyhow::Result<()> {
 
 #[test]
 fn test_subscribe_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["subscribe", "--help"])?;
+    let output = syncweb(&["join", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -708,15 +718,6 @@ fn test_leave_help_mentions_daemon_routing() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_unsubscribe_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["unsubscribe", "--help"])?;
-    ensure!(output.status.success());
-    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("--no-daemon") || help.contains("daemon"));
-    Ok(())
-}
-
-#[test]
 fn test_import_help_mentions_daemon_routing() -> anyhow::Result<()> {
     let output = syncweb(&["import", "--help"])?;
     ensure!(output.status.success());
@@ -726,9 +727,9 @@ fn test_import_help_mentions_daemon_routing() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_daemon_unwatch_via_ipc() -> anyhow::Result<()> {
-    let data_dir = cli_test_dir("daemon-unwatch")?;
-    let dir = cli_test_dir("daemon-unwatch-folder")?;
+fn test_daemon_leave_untracks_via_ipc() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("daemon-leave-untracks")?;
+    let dir = cli_test_dir("daemon-leave-untracks-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
     let start = daemon_start_bg(data_dir_arg)?;
@@ -754,18 +755,19 @@ fn test_daemon_unwatch_via_ipc() -> anyhow::Result<()> {
     let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync"])?;
     ensure!(sync.status.success(), "triggering daemon-sync should succeed");
 
-    let unwatch = syncweb(&["--data-dir", data_dir_arg, "unwatch", ns])?;
+    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns])?;
     ensure!(
-        unwatch.status.success() || String::from_utf8_lossy(&unwatch.stderr).contains("no active session"),
-        "unwatch via namespace ID should succeed or report no active session"
+        leave.status.success(),
+        "leave via namespace ID should succeed, got: {}",
+        String::from_utf8_lossy(&leave.stderr)
     );
 
     let folders = syncweb(&["--data-dir", data_dir_arg, "folders"])?;
     ensure!(folders.status.success());
     let folder_stdout = String::from_utf8(folders.stdout).context("UTF-8 output")?;
     ensure!(
-        !folder_stdout.contains(ns) || String::from_utf8_lossy(&unwatch.stderr).contains("no active session"),
-        "unwatched namespace should not appear in folder list unless it had no active session"
+        !folder_stdout.contains(ns),
+        "left namespace should not appear in folder list"
     );
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;

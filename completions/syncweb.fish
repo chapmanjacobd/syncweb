@@ -36,11 +36,9 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "shutdown" -d 'Stop 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "status" -d 'Show the local daemon status'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "reload" -d 'Ask the local daemon to reload configuration'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "daemon-sync" -d 'Ask the local daemon to trigger synchronization'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "unwatch" -d 'Stop watching a folder for local changes'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "create" -d 'Create a synchronized folder'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "join" -d 'Join a folder from an Iroh document ticket'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "leave" -d 'Leave and remove a synchronized folder'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "unsubscribe" -d 'Unsubscribe from a folder\'s live sync loop'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "folders" -d 'List managed folders'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "devices" -d 'Show this device\'s Iroh and Syncthing identities'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "config" -d 'Show or update local configuration'
@@ -60,7 +58,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show per
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "filestats" -d 'Show file-level statistics for synced folder content'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "verify" -d 'Re-check local folder blob integrity'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "schedule" -d 'Show or update synchronization schedules'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "subscribe" -d 'Subscribe to a folder with event filters'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "publish" -d 'Publish a folder or blob for public read access'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "unpublish" -d 'Remove a public blob pin'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "collection" -d 'Create and publish versioned content collections'
@@ -119,11 +116,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l verbose 
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand daemon-sync" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unwatch" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l mode -d 'Sync mode: sendreceive, receiveonly, or sendonly' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l network -d 'Add the created folder to a named network' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
@@ -141,23 +133,19 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l max-count -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l max-size -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l once -d 'Exit after joining without entering the sync loop'
-complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ingest-only -d 'Only deliver entries ingested after subscription'
-complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ignore-self -d 'Ignore events emitted by this subscription session'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l subscribe -d 'Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ingest-only -d 'Only deliver entries ingested after live syncing is enabled'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ignore-self -d 'Ignore events emitted by this device\'s own writes'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -l delete-files -d 'Also delete the folder\'s local files'
 complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand leave" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unsubscribe" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand unsubscribe" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unsubscribe" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unsubscribe" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand unsubscribe" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders" -l json -d 'Emit machine-readable JSON where supported'
@@ -492,17 +480,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l sync-prefix -d 'Area prefix filter for subscription entries' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l glob -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l max-count -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l max-size -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l ingest-only -d 'Only deliver entries ingested after subscription'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l ignore-self -d 'Ignore events emitted by this subscription session'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand subscribe" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l blob -d 'Publish this content hash as an unauthenticated blob ticket' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l verbose -d 'Enable verbose structured logging'

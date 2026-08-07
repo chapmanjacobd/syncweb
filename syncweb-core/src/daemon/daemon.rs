@@ -28,7 +28,7 @@ use crate::{
     net::{NetworkLogger, NetworkManager},
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
-    storage::{node_db::NodeDatabase, stats_db::StatsDatabase},
+    storage::{config::SubscribeFilters, node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
 };
 
@@ -538,6 +538,7 @@ impl Daemon {
             tracing::warn!(%error, "folder load cycle failed — continuing");
         }
         self.start_watching().await?;
+        let live_folders = self.enabled_subscribe_filters();
         let statuses = self.handle.folder_registry.read().await.statuses();
         for folder in statuses {
             let namespace = folder
@@ -545,13 +546,19 @@ impl Daemon {
                 .parse::<NamespaceId>()
                 .map_err(|error| SyncwebError::operation("invalid managed folder namespace", error))?;
             let folder_name = (!folder.path.as_os_str().is_empty()).then(|| folder.path.to_string_lossy().into_owned());
+            let Some(filters) = live_folders.get(&namespace) else {
+                if is_active(namespace) && !cancel_session(namespace) {
+                    tracing::warn!(%namespace, "live syncing is disabled; intent did not accept cancellation");
+                }
+                continue;
+            };
             let active = {
                 let schedule_manager = self.schedule_manager.read().await;
                 schedule_manager
                     .as_ref()
                     .is_none_or(|manager| manager.is_active(folder_name.as_deref()))
             };
-            self.start_supervision(namespace).await?;
+            self.start_supervision(namespace, filters).await?;
             if active {
                 self.set_intent_active(namespace, true)?;
             } else {
@@ -568,7 +575,27 @@ impl Daemon {
                 let parsed_namespace = value
                     .parse::<NamespaceId>()
                     .map_err(|error| SyncwebError::operation("invalid sync namespace", error))?;
-                self.start_supervision(parsed_namespace).await?;
+                let tracked = self
+                    .handle
+                    .folder_registry
+                    .read()
+                    .await
+                    .statuses()
+                    .iter()
+                    .any(|status| status.namespace == value);
+                if !tracked {
+                    tracing::warn!(%parsed_namespace, "not a syncweb folder; nothing to synchronize");
+                    return Ok(());
+                }
+                let Some(filters) = self.enabled_subscribe_filters().get(&parsed_namespace).cloned() else {
+                    tracing::warn!(
+                        %parsed_namespace,
+                        "live syncing is disabled for this folder; enable it with `join --subscribe` \
+                         or `config set <folder>.subscribe on`"
+                    );
+                    return Ok(());
+                };
+                self.start_supervision(parsed_namespace, &filters).await?;
                 self.set_intent_active(parsed_namespace, true)?;
                 self.save_status_report().await?;
                 Ok(())
@@ -577,7 +604,21 @@ impl Daemon {
         }
     }
 
-    async fn start_supervision(&self, namespace: NamespaceId) -> Result<()> {
+    /// The `subscribe-changes` folders with live syncing enabled, mapped to their filters.
+    fn enabled_subscribe_filters(&self) -> std::collections::BTreeMap<NamespaceId, SubscribeFilters> {
+        let Ok(config) = self.node_db.load_app_config() else {
+            return std::collections::BTreeMap::new();
+        };
+        config
+            .subscribe
+            .folders
+            .into_iter()
+            .filter(|(_, entry)| entry.enabled)
+            .filter_map(|(namespace, entry)| namespace.parse::<NamespaceId>().ok().map(|id| (id, entry.filters)))
+            .collect()
+    }
+
+    async fn start_supervision(&self, namespace: NamespaceId, filters: &SubscribeFilters) -> Result<()> {
         {
             let mut tasks = self
                 .intent_tasks
@@ -621,9 +662,16 @@ impl Daemon {
             .await
             .as_ref()
             .map(|manager| manager.current_limits(folder_name.as_deref()));
-        let params = bandwidth.map_or_else(SubscribeParams::default, |limits| {
-            SubscribeParams::default().with_bandwidth_limits(limits)
-        });
+        let mut params = match SubscribeParams::from_filters(filters) {
+            Ok(params) => params,
+            Err(error) => {
+                tracing::warn!(%namespace, %error, "invalid subscription filters; supervising without them");
+                SubscribeParams::default()
+            }
+        };
+        if let Some(limits) = bandwidth {
+            params = params.with_bandwidth_limits(limits);
+        }
         let (ready_sender, ready_receiver) = oneshot::channel();
         let task = tokio::spawn(async move {
             let result = supervisor
@@ -802,6 +850,7 @@ impl Daemon {
             .into_iter()
             .map(|status| (status.namespace, status.path))
             .collect();
+        let live_folders = self.enabled_subscribe_filters();
         for (namespace, paths) in ready {
             let Some(root) = roots.get(&namespace) else {
                 continue;
@@ -810,14 +859,22 @@ impl Daemon {
                 .parse::<NamespaceId>()
                 .map_err(|error| SyncwebError::operation("invalid watched folder namespace", error))?;
             for (path, removed) in paths {
-                self.process_watch_event(namespace_id, root, &path, removed).await?;
+                self.process_watch_event(namespace_id, root, &path, removed, live_folders.get(&namespace_id))
+                    .await?;
             }
         }
         self.save_status_report().await?;
         Ok(())
     }
 
-    async fn process_watch_event(&self, namespace: NamespaceId, root: &Path, path: &Path, removed: bool) -> Result<()> {
+    async fn process_watch_event(
+        &self,
+        namespace: NamespaceId,
+        root: &Path,
+        path: &Path,
+        removed: bool,
+        live_filters: Option<&SubscribeFilters>,
+    ) -> Result<()> {
         let relative = path.strip_prefix(root).unwrap_or(path);
         if relative.as_os_str().is_empty() {
             return Ok(());
@@ -859,7 +916,9 @@ impl Daemon {
                     .write()
                     .await
                     .record_import(namespace, entries, current_timestamp());
-                self.start_supervision(namespace).await?;
+                if let Some(filters) = live_filters {
+                    self.start_supervision(namespace, filters).await?;
+                }
             }
             Ok(_) => {}
             Err(error) => {

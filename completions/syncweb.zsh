@@ -109,18 +109,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(unwatch)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':folder -- Namespace ID or path to a managed folder:_default' \
-&& ret=0
-;;
 (create)
 _arguments "${_arguments_options[@]}" : \
 '--mode=[Sync mode\: sendreceive, receiveonly, or sendonly]:MODE:_default' \
@@ -147,34 +135,23 @@ _arguments "${_arguments_options[@]}" : \
 '--max-size=[]:MAX_SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
-'--once[Exit after joining without entering the sync loop]' \
-'--ingest-only[Only deliver entries ingested after subscription]' \
-'--ignore-self[Ignore events emitted by this subscription session]' \
+'--subscribe[Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder]' \
+'--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
+'--ignore-self[Ignore events emitted by this device'\''s own writes]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':ticket:_default' \
+':ticket -- Iroh document ticket for a new folder, or a folder selector when using --subscribe:_default' \
 '::path:_files' \
 && ret=0
 ;;
 (leave)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':folder -- Namespace ID or path to a managed folder:_default' \
-&& ret=0
-;;
-(unsubscribe)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--delete-files[Also delete the folder'\''s local files]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -792,24 +769,6 @@ _arguments "${_arguments_options[@]}" : \
         esac
     ;;
 esac
-;;
-(subscribe)
-_arguments "${_arguments_options[@]}" : \
-'(--glob)--sync-prefix=[Area prefix filter for subscription entries]:SYNC_PREFIX:_files' \
-'(--sync-prefix)--glob=[]:GLOB:_default' \
-'--max-count=[]:MAX_COUNT:_default' \
-'--max-size=[]:MAX_SIZE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--ingest-only[Only deliver entries ingested after subscription]' \
-'--ignore-self[Ignore events emitted by this subscription session]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':folder -- Namespace ID or path to a managed folder:_default' \
-&& ret=0
 ;;
 (publish)
 _arguments "${_arguments_options[@]}" : \
@@ -1973,11 +1932,9 @@ _syncweb_commands() {
 'status:Show the local daemon status' \
 'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'unwatch:Stop watching a folder for local changes' \
 'create:Create a synchronized folder' \
 'join:Join a folder from an Iroh document ticket' \
-'leave:Leave and remove a synchronized folder' \
-'unsubscribe:Unsubscribe from a folder'\''s live sync loop' \
+'leave:Leave a synchronized folder, optionally deleting its local files' \
 'folders:List managed folders' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
@@ -1997,7 +1954,6 @@ _syncweb_commands() {
 'filestats:Show file-level statistics for synced folder content' \
 'verify:Re-check local folder blob integrity' \
 'schedule:Show or update synchronization schedules' \
-'subscribe:Subscribe to a folder with event filters' \
 'publish:Publish a folder or blob for public read access' \
 'unpublish:Remove a public blob pin' \
 'collection:Create and publish versioned content collections' \
@@ -2563,11 +2519,6 @@ _syncweb__subcmd__status_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb status commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb subscribe commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__transfer_commands] )) ||
 _syncweb__subcmd__transfer_commands() {
     local commands; commands=(
@@ -2724,16 +2675,6 @@ _syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
 _syncweb__subcmd__unpublish_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb unpublish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__unsubscribe_commands] )) ||
-_syncweb__subcmd__unsubscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb unsubscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__unwatch_commands] )) ||
-_syncweb__subcmd__unwatch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb unwatch commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

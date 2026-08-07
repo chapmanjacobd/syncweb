@@ -273,6 +273,13 @@ async fn test_daemon_supervisor_creates_intent_and_registers_session() -> Result
         }))
         .await?;
     client
+        .send(IpcRequest::new(IpcCommand::SetSubscribe {
+            namespace: namespace.to_string(),
+            enabled: true,
+            filters: None,
+        }))
+        .await?;
+    client
         .send(IpcRequest::new(IpcCommand::TriggerSync {
             namespace: Some(namespace.to_string()),
         }))

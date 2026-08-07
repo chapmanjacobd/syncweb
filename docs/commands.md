@@ -379,6 +379,11 @@ syncweb config show networks
 syncweb config show bep
 syncweb config show discovery
 syncweb config show filter
+syncweb config show subscribe
+
+# Per-folder live syncing (subscribe-changes)
+syncweb config set <namespace>.subscribe on
+syncweb config set <namespace>.subscribe off
 
 # Discovery keys
 syncweb config set discovery.mdns true
@@ -395,7 +400,7 @@ syncweb config set discovery.interface eth0
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
 | `create` | `create` | Create folder + doc + blob store |
-| `join` | `join` | Import doc via ticket/capability |
+| `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
 | `accept` | `accept` | Grant capability to peer |
 | `drop` | `drop` | Revoke capability, remove peer |
 | `folders` | `folders` | List local docs + status |
@@ -421,7 +426,6 @@ syncweb config set discovery.interface eth0
 | `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |
 | | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
-| | `subscribe` | Join public folder via ticket |
 | | `public list` | List announced public folders |
 | | `collection init` | Initialize folder as data package |
 | | `collection add` | Scan + hash files, update manifest |
@@ -486,11 +490,19 @@ syncweb download --limit 10 /path/to/files
 # Download with size limit
 syncweb download --size 1GB /path/to/files
 
-# Subscribe with filtering (only new files)
-syncweb subscribe --ingest-only /path/to/folder
+# Track a folder without live syncing (subscribe-changes defaults to off)
+syncweb join <ticket> /path/to/folder
 
-# Subscribe ignoring our own writes
-syncweb subscribe --ignore-self /path/to/folder
+# Track + enable live syncing (persisted), then exit
+syncweb join <ticket> --subscribe /path/to/folder
+
+# Live-sync filters: only files ingested after enabling, and ignore our own writes
+syncweb join <ticket> --subscribe --ingest-only --ignore-self /path/to/folder
+
+# Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
+syncweb join <folder> --subscribe
+syncweb config set <namespace>.subscribe on
+syncweb config set <namespace>.subscribe off
 
 # Publish with limits
 syncweb publish --limit 100 --size 10GB /path/to/folder

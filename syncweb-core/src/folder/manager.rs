@@ -164,6 +164,64 @@ impl FolderManager {
         Ok(())
     }
 
+    /// Drop a namespace, retrying briefly while its live session replica is
+    /// still closing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder namespace cannot be dropped.
+    pub async fn drop_when_ready(&self, namespace_id: NamespaceId) -> Result<()> {
+        const MAX_ATTEMPTS: u32 = 50;
+        const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
+        let mut attempts = 0_u32;
+        loop {
+            match self.drop(namespace_id).await {
+                Err(error) if attempts < MAX_ATTEMPTS && error.to_string().contains("replica is not closed") => {
+                    attempts = attempts.saturating_add(1);
+                    tokio::time::sleep(RETRY_DELAY).await;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    /// Delete the local files of a materialized folder at `path`.
+    ///
+    /// Refuses to delete a filesystem root or the current working directory;
+    /// only the folder's registered path may be deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be resolved, is unsafe, or cannot be
+    /// deleted.
+    pub async fn delete_folder_files(path: &std::path::Path) -> Result<()> {
+        let canonical = std::fs::canonicalize(path)
+            .map_err(|error| SyncwebError::operation("failed to resolve folder path for deletion", error))?;
+        let current = std::env::current_dir()
+            .map_err(|error| SyncwebError::operation("failed to resolve current directory", error))?;
+        if canonical.as_os_str().is_empty()
+            || canonical.parent().is_none_or(|parent| parent.as_os_str().is_empty())
+            || canonical == current
+        {
+            return Err(SyncwebError::operation(
+                "refusing to delete files at a filesystem root or the current directory",
+                "unsafe folder path",
+            ));
+        }
+        let metadata = tokio::fs::symlink_metadata(&canonical).await?;
+        if metadata.is_dir() {
+            tokio::fs::remove_dir_all(&canonical).await?;
+        } else if metadata.is_file() {
+            tokio::fs::remove_file(&canonical).await?;
+        } else {
+            return Err(SyncwebError::operation(
+                "refusing to delete a non-file, non-directory path",
+                "unsupported folder path",
+            ));
+        }
+        Ok(())
+    }
+
     /// # Errors
     ///
     /// Returns an error if the folders cannot be listed.

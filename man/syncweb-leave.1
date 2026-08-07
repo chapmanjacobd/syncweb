@@ -2,12 +2,15 @@
 .el .ds Aq '
 .TH leave 1  "leave " 
 .SH NAME
-leave \- Leave and remove a synchronized folder
+leave \- Leave a synchronized folder, optionally deleting its local files
 .SH SYNOPSIS
-\fBleave\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFOLDER\fR> 
+\fBleave\fR [\fB\-\-delete\-files\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFOLDER\fR> 
 .SH DESCRIPTION
-Leave and remove a synchronized folder
+Leave a synchronized folder, optionally deleting its local files
 .SH OPTIONS
+.TP
+\fB\-\-delete\-files\fR
+Also delete the folder\*(Aqs local files
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

@@ -58,9 +58,6 @@ help_categories! {
         Command::Create(_) => "create",
         Command::Join(_) => "join",
         Command::Leave(_) => "leave",
-        Command::Unwatch(_) => "unwatch",
-        Command::Unsubscribe(_) => "unsubscribe",
-        Command::Subscribe(_) => "subscribe",
         Command::Folders => "folders",
     ];
     "Files" => [

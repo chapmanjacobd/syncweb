@@ -237,7 +237,6 @@ fn test_join_command() -> anyhow::Result<()> {
             &data_dir,
             "--no-daemon",
             "join",
-            "--once",
             &ticket,
             join_dir.to_str().context("UTF-8 path")?,
         ])
@@ -649,7 +648,8 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .context("run syncweb help")?;
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("automatic"));
-    ensure!(help.contains("subscribe"));
+    ensure!(help.contains("join"));
+    ensure!(help.contains("leave"));
 
     let network = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["network", "--help"])
@@ -716,14 +716,15 @@ fn automatic_dry_run_uses_filter_engine() -> anyhow::Result<()> {
 #[test]
 fn subscribe_help_lists_options() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["subscribe", "--help"])
+        .args(["join", "--help"])
         .output()
-        .context("run subscribe --help")?;
+        .context("run join --help")?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(help.contains("--subscribe"), "should list --subscribe: {help}");
     ensure!(help.contains("ingest-only"), "should list ingest-only: {help}");
     ensure!(help.contains("ignore-self"), "should list ignore-self: {help}");
-    ensure!(help.contains("prefix"), "should list prefix: {help}");
+    ensure!(help.contains("sync-prefix"), "should list sync-prefix: {help}");
     ensure!(help.contains("glob"), "should list glob: {help}");
     ensure!(help.contains("max-count"), "should list max-count: {help}");
     ensure!(help.contains("max-size"), "should list max-size: {help}");
@@ -973,7 +974,6 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             data_dir,
             "--no-daemon",
             "join",
-            "--once",
             &ticket,
             join_dir.to_str().context("UTF-8 path")?,
             "--network",

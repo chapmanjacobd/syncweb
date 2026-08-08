@@ -223,7 +223,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 |------|--------|-----------------|-------|
 | 1 | Alice: `syncweb publish ./shared-docs` | Creates public blob ticket, outputs URL | Save the ticket |
 | 2 | Alice: `syncweb publish --limit 100 --size 10GB ./shared-docs` | Published with limits | |
-| 3 | Bob: `syncweb subscribe <ticket> ./bob-public` | Subscribes to public folder | `syncweb ls ./bob-public` shows files |
+| 3 | Bob: `syncweb join <ticket> --subscribe ./bob-public` | Tracks folder and enables live syncing (persisted) | `syncweb ls ./bob-public` shows files |
 | 4 | Bob: `syncweb download ./bob-public/` | Downloads content | |
 | 5 | Alice: `syncweb unpublish ./shared-docs` | Removes pin, stops announcing | Bob can no longer see updates |
 

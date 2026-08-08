@@ -64,7 +64,7 @@ Sync engine, automatic daemon, and networks abstraction:
 - `Network` struct and `NetworkManager` for create, join, leave, invite, kick
 - Network gossip topics (`syncweb/net/<id>`)
 - `syncweb automatic` with filter engine
-- `syncweb subscribe` with SubscribeParams
+- `syncweb join --subscribe` with SubscribeParams
 - `syncweb network create`, `syncweb network ls`, `syncweb network join`
 - `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
 - `syncweb create --network <name>`, `syncweb join --network <name>`
@@ -74,7 +74,7 @@ Public sharing and data package versioning:
 - Networks are always private; default daemon (no `--network`) is fully open
 - Blob ticket generation
 - Content pinning (prevent GC for shared blobs)
-- `syncweb publish`, `syncweb unpublish`, `syncweb subscribe`
+- `syncweb publish`, `syncweb unpublish`, `syncweb join --subscribe`
 - `CollectionManifest` struct and iroh-docs storage
 - `CollectionState` local tracking (installed collections, versions)
 - `syncweb collection init` (with package profile) for folder initialization as data package

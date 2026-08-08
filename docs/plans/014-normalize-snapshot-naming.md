@@ -4,9 +4,9 @@
 
 | # | Decision | Options | Recommendation | Chosen |
 |---|----------|---------|----------------|--------|
-| D1 | Add docs-era aliases | `backup` → snapshot create, `restore` → snapshot restore, `snapshots` → snapshot list | yes (aliases, not renames) | |
-| D2 | Keep the `snapshot` group as the canonical name | keep group name `snapshot` / rename group to `backup` | keep `snapshot` | |
-| D3 | Update docs to match real command surface | yes / no | yes | |
+| D1 | Add docs-era aliases | `backup` → snapshot create, `restore` → snapshot restore, `snapshots` → snapshot list | yes (aliases, not renames) | no |
+| D2 | Keep the `snapshot` group as the canonical name | keep group name `snapshot` / rename group to `backup` | keep `snapshot` | keep |
+| D3 | Update docs to match real command surface | yes / no | yes | yes |
 
 ## Context for executing agent
 

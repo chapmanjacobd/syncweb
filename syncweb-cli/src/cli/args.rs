@@ -68,7 +68,6 @@ help_categories! {
         Command::Download(_) => "download",
         Command::Import(_) => "import",
         Command::Verify(_) => "verify",
-        Command::Health(_) => "health",
     ];
     "Automation" => [
         Command::Watch(_) => "watch",
@@ -91,8 +90,7 @@ help_categories! {
         Command::Devices => "devices",
     ];
     "Statistics" => [
-        Command::Stats(_) => "stats",
-        Command::FileStats(_) => "filestats",
+        Command::Stats { .. } => "stats",
     ];
     "Configuration" => [
         Command::Config { .. } => "config",

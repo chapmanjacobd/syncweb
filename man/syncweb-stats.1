@@ -2,24 +2,25 @@
 .el .ds Aq '
 .TH stats 1  "stats " 
 .SH NAME
-stats \- Show persisted bandwidth accounting
+stats \- Show statistics for folders, files, and seeding status
 .SH SYNOPSIS
-\fBstats\fR [\fB\-\-folder\fR] [\fB\-\-peer\fR] [\fB\-\-reset\fR] [\fB\-\-period\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstats\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
-Show persisted bandwidth accounting
+Show statistics for folders, files, and seeding status
 .SH OPTIONS
-.TP
-\fB\-\-folder\fR \fI<FOLDER>\fR
-Limit display to a folder or namespace
-.TP
-\fB\-\-peer\fR \fI<PEER>\fR
-Limit display to a peer node ID
-.TP
-\fB\-\-reset\fR
-Reset persisted counters before displaying them
-.TP
-\fB\-\-period\fR \fI<PERIOD>\fR
-Retained for compatibility; counters are persisted since period start
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
+.SH SUBCOMMANDS
+.TP
+stats\-network(1)
+Show persisted bandwidth accounting
+.TP
+stats\-files(1)
+Show file\-level statistics for synced folder content
+.TP
+stats\-seeding(1)
+Show seeding status per folder blob
+.TP
+stats\-help(1)
+Print this message or the help of the given subcommand(s)

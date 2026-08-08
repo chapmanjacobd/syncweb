@@ -38,7 +38,7 @@ The indexing service acts as an automated fleet manager for replication.
 *   Action: Users configure a folder with a replication budget (e.g., "ensure 3 providers"). The indexing service monitors the network for signed `ProviderLeases`.
 *   Execution: If availability drops below the threshold, the indexing service commands the core engine to fetch and pin the blob. The core engine simply sees a standard "download and pin" request.
 *   Thundering Herd Mitigation: To prevent all peers from fetching simultaneously when availability drops, the system uses consistent hashing (only peers mathematically closest to the blob's hash are responsible), randomized jitter (staggered fetch delays), and gossip short-circuiting (if a peer gossips a new `ProviderLease` during the delay, others cancel their fetch).
-*   Overlap Note: Core `syncweb health` shows basic local observations of peers. `syncweb indexing health` shows cryptographically verified leases and historical uptime.
+*   Overlap Note: Core `syncweb stats seeding` shows basic local observations of peers. `syncweb indexing health` shows cryptographically verified leases and historical uptime.
 
 The Rust API for this layer is `syncweb_core::indexing::ResilienceService`.
 `ProviderLease` values bind a signed provider identity, blob hash, expiry, and

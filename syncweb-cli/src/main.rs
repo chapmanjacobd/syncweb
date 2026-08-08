@@ -16,11 +16,11 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, MirrorArgs, NetworkCommand,
-        PackageCommand, PublishBlobArgs, PublishCollectionArgs, PublishCommand, PublishFolderArgs, ScheduleCommand,
-        ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        CollectionCommand, Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand,
+        PublishBlobArgs, PublishCollectionArgs, PublishCommand, PublishFolderArgs, ScheduleCommand, ShutdownArgs,
+        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
+        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
+        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -214,8 +214,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Snapshot { command } => {
             handle_snapshot(&ctx, command).await?;
         }
-        Command::FileStats(command) => handle_filestats(&ctx, command).await?,
-        Command::Health(command) => handle_health(&ctx, command).await?,
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Publish { command } => handle_publish(&ctx, command).await?,
@@ -223,6 +221,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Collection { command } => handle_collection(&ctx, command).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
+        Command::Stats { command } => handle_stats(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Mirror(command) => handle_mirror(&ctx, command).await?,
@@ -238,7 +237,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Reload
         | Command::DaemonSync(_)
         | Command::Watch(_)
-        | Command::Stats(_)
         | Command::Config { .. }
         | Command::Completions { .. }
         | Command::Manpages { .. }
@@ -257,7 +255,6 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::Reload
             | Command::DaemonSync(_)
             | Command::Watch(_)
-            | Command::Stats(_)
             | Command::Config { .. }
             | Command::Completions { .. }
             | Command::Manpages { .. }
@@ -315,9 +312,6 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     }
     if let Command::Watch(watch) = command {
         return handle_watch(&ctx, watch).await;
-    }
-    if let Command::Stats(stats) = command {
-        return handle_stats(&ctx, stats);
     }
     if let Command::Config { command: config } = command {
         return handle_config(&ctx, config).await;
@@ -1707,14 +1701,14 @@ fn handle_transfer_retry(ctx: &CliContext<'_>, args: &TransferJobArgs) -> Result
 }
 
 #[async_recursion]
-async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> {
+async fn handle_stats_seeding(ctx: &CliContext<'_>, command: StatsSeedingArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::HealthCheck {
-                path: command.path.clone(),
+                path: command.folder.clone(),
                 hash: command.filter.hash.clone(),
                 path_prefix: command.filter.path_prefix.clone(),
                 glob: command.filter.glob.clone(),
@@ -1724,7 +1718,7 @@ async fn handle_health(ctx: &CliContext<'_>, command: HealthArgs) -> Result<()> 
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.path).await?;
+    let folder = resolve_folder(&manager, &command.folder).await?;
 
     let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
         None
@@ -2000,7 +1994,15 @@ fn print_repair_result_text(result: &syncweb_core::verify::RepairResult) {
     }
 }
 
-fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
+async fn handle_stats(ctx: &CliContext<'_>, command: StatsCommand) -> Result<()> {
+    match command {
+        StatsCommand::Network(args) => handle_stats_network(ctx, args),
+        StatsCommand::Files(args) => handle_stats_files(ctx, args).await,
+        StatsCommand::Seeding(args) => handle_stats_seeding(ctx, args).await,
+    }
+}
+
+fn handle_stats_network(ctx: &CliContext<'_>, command: StatsNetworkArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     if let Some(period) = command.period {
@@ -2080,13 +2082,27 @@ fn handle_stats(ctx: &CliContext<'_>, command: StatsArgs) -> Result<()> {
 }
 
 #[async_recursion]
-async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Result<()> {
+async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::StatsFiles {
+                folder: command.folder.clone(),
+            }))
+            .await?;
+        let IpcResponse::FileStats(report) = response else {
+            return print_daemon_message(response, output_json);
+        };
+        print_file_stats_report(&report, &command.by, output_json)?;
+        return Ok(());
+    }
 
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, std::path::Path::new(&command.folder)).await?;
+    let folder = resolve_folder(&manager, &command.folder).await?;
     let entries = node.docs_engine().list_latest(folder.doc()).await?;
 
     let mut collector = syncweb_core::bandwidth_stats::FileStatsCollector::new();
@@ -2098,41 +2114,50 @@ async fn handle_filestats(ctx: &CliContext<'_>, command: FileStatsArgs) -> Resul
     }
     let report = collector.report();
 
-    if output_json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else {
-        println!("total_files: {}", report.total_files);
-        println!("total_size:  {}", format_bytes(report.total_size));
-        println!();
-
-        if !report.by_extension.is_empty() && matches!(command.by.as_str(), "extension" | "all") {
-            let mut table = Table::new();
-            table.set_header(["Extension", "Files", "Size"]);
-            for (ext, group) in &report.by_extension {
-                table.add_row([ext.as_str(), &group.count.to_string(), &format_bytes(group.total_size)]);
-            }
-            println!("{table}");
-        }
-
-        if !report.size_buckets.is_empty() && matches!(command.by.as_str(), "size" | "all") {
-            let mut table = Table::new();
-            table.set_header(["Bucket", "Files"]);
-            for (label, count) in &report.size_buckets {
-                table.add_row([label.as_str(), &count.to_string()]);
-            }
-            println!("{table}");
-        }
-
-        if !report.time_buckets.is_empty() && matches!(command.by.as_str(), "time" | "all") {
-            println!();
-            println!("insertion time distribution:");
-            for (label, count) in &report.time_buckets {
-                println!("  {label:10} {count:>8} files");
-            }
-        }
-    }
+    print_file_stats_report(&report, &command.by, output_json)?;
 
     node.stop().await?;
+    Ok(())
+}
+
+fn print_file_stats_report(
+    report: &syncweb_core::bandwidth_stats::FileStatsReport,
+    by: &str,
+    output_json: bool,
+) -> Result<()> {
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(report)?);
+        return Ok(());
+    }
+    println!("total_files: {}", report.total_files);
+    println!("total_size:  {}", format_bytes(report.total_size));
+    println!();
+
+    if !report.by_extension.is_empty() && matches!(by, "extension" | "all") {
+        let mut table = Table::new();
+        table.set_header(["Extension", "Files", "Size"]);
+        for (ext, group) in &report.by_extension {
+            table.add_row([ext.as_str(), &group.count.to_string(), &format_bytes(group.total_size)]);
+        }
+        println!("{table}");
+    }
+
+    if !report.size_buckets.is_empty() && matches!(by, "size" | "all") {
+        let mut table = Table::new();
+        table.set_header(["Bucket", "Files"]);
+        for (label, count) in &report.size_buckets {
+            table.add_row([label.as_str(), &count.to_string()]);
+        }
+        println!("{table}");
+    }
+
+    if !report.time_buckets.is_empty() && matches!(by, "time" | "all") {
+        println!();
+        println!("insertion time distribution:");
+        for (label, count) in &report.time_buckets {
+            println!("  {label:10} {count:>8} files");
+        }
+    }
     Ok(())
 }
 

@@ -382,7 +382,7 @@ syncweb download --max-peers 2 audio/
 syncweb download --max-peers 0 --max-count 10 audio/
 
 # Check which blobs in a folder are poorly seeded
-syncweb health audio/
+syncweb stats seeding --folder audio/
 # Output:
 # Total blobs: 1,234
 # Well-seeded (>3 peers): 890 (72%)

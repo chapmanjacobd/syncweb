@@ -72,10 +72,8 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "download",
         "import",
         "snapshot",
-        "health",
         "watch",
         "stats",
-        "filestats",
         "verify",
         "publish",
         "unpublish",
@@ -113,7 +111,7 @@ fn json_version_output() -> anyhow::Result<()> {
 #[test]
 fn json_stats_output() -> anyhow::Result<()> {
     let data_dir = test_dir("json-stats");
-    let output = run_with_data(&data_dir, &["--json", "stats"])?;
+    let output = run_with_data(&data_dir, &["--json", "stats", "network"])?;
     let _ = fs::remove_dir_all(&data_dir);
     assert_success(&output, "json stats")?;
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
@@ -310,7 +308,7 @@ fn schedule_and_stats_persist() -> anyhow::Result<()> {
     let sched = run_with_data(&data_dir, &["config", "schedule", "set", "--active", "22:00-06:00"])?;
     assert_success(&sched, "config schedule set")?;
 
-    let stats = run_with_data(&data_dir, &["--json", "stats"])?;
+    let stats = run_with_data(&data_dir, &["--json", "stats", "network"])?;
     assert_success(&stats, "stats")?;
     let value: serde_json::Value = serde_json::from_slice(&stats.stdout)?;
     ensure!(value.get("total_download") == Some(&serde_json::Value::from(0)));

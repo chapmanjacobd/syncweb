@@ -48,8 +48,6 @@ pub enum Command {
         #[command(subcommand)]
         command: SnapshotCommand,
     },
-    #[command(about = "Show seeding status per folder blob")]
-    Health(HealthArgs),
     #[command(about = "Inspect and control durable transfer jobs")]
     Transfer {
         #[command(subcommand)]
@@ -57,10 +55,11 @@ pub enum Command {
     },
     #[command(about = "Watch a folder and import filesystem changes")]
     Watch(WatchArgs),
-    #[command(about = "Show persisted bandwidth accounting")]
-    Stats(StatsArgs),
-    #[command(name = "filestats", about = "Show file-level statistics for synced folder content")]
-    FileStats(FileStatsArgs),
+    #[command(about = "Show statistics for folders, files, and seeding status")]
+    Stats {
+        #[command(subcommand)]
+        command: StatsCommand,
+    },
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
     #[command(about = "Publish a folder, blob, collection, or catalog")]
@@ -572,10 +571,46 @@ pub struct SnapshotRestoreArgs {
     pub snapshot: String,
 }
 
+#[derive(Debug, Subcommand)]
+pub enum StatsCommand {
+    #[command(about = "Show persisted bandwidth accounting")]
+    Network(StatsNetworkArgs),
+    #[command(about = "Show file-level statistics for synced folder content")]
+    Files(StatsFilesArgs),
+    #[command(about = "Show seeding status per folder blob")]
+    Seeding(StatsSeedingArgs),
+}
+
 #[derive(Debug, Args)]
-pub struct HealthArgs {
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
+pub struct StatsNetworkArgs {
+    #[arg(long, help = "Limit display to a folder or namespace")]
+    pub folder: Option<PathBuf>,
+    #[arg(long, help = "Limit display to a peer node ID")]
+    pub peer: Option<String>,
+    #[arg(long, help = "Reset persisted counters before displaying them")]
+    pub reset: bool,
+    #[arg(long, help = "Retained for compatibility; counters are persisted since period start")]
+    pub period: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct StatsFilesArgs {
+    #[arg(long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: PathBuf,
+    #[arg(
+        long,
+        default_value = "extension",
+        value_parser = ["extension", "size", "all", "time"]
+    )]
+    pub by: String,
+    #[arg(long, help = "Top N largest files by size")]
+    pub top_largest: Option<usize>,
+}
+
+#[derive(Debug, Args)]
+pub struct StatsSeedingArgs {
+    #[arg(long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: PathBuf,
     #[command(flatten)]
     pub filter: super::filter::ContentFilter,
 }
@@ -653,32 +688,6 @@ pub struct WatchArgs {
     pub paths: Vec<PathBuf>,
     #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
     pub filters: Option<PathBuf>,
-}
-
-#[derive(Debug, Args)]
-pub struct StatsArgs {
-    #[arg(long, help = "Limit display to a folder or namespace")]
-    pub folder: Option<PathBuf>,
-    #[arg(long, help = "Limit display to a peer node ID")]
-    pub peer: Option<String>,
-    #[arg(long, help = "Reset persisted counters before displaying them")]
-    pub reset: bool,
-    #[arg(long, help = "Retained for compatibility; counters are persisted since period start")]
-    pub period: Option<String>,
-}
-
-#[derive(Debug, Args)]
-pub struct FileStatsArgs {
-    #[arg(help = "Namespace ID or path to a managed folder")]
-    pub folder: String,
-    #[arg(
-        long,
-        default_value = "extension",
-        value_parser = ["extension", "size", "all", "time"]
-    )]
-    pub by: String,
-    #[arg(long, help = "Top N largest files by size")]
-    pub top_largest: Option<usize>,
 }
 
 #[derive(Debug, Args)]

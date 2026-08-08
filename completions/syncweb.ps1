@@ -48,11 +48,9 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('download', 'download', [CompletionResultType]::ParameterValue, 'Download folder content or copy a local file')
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import local files into a synchronized folder')
             [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
-            [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
             [CompletionResult]::new('transfer', 'transfer', [CompletionResultType]::ParameterValue, 'Inspect and control durable transfer jobs')
             [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
-            [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show persisted bandwidth accounting')
-            [CompletionResult]::new('filestats', 'filestats', [CompletionResultType]::ParameterValue, 'Show file-level statistics for synced folder content')
+            [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show statistics for folders, files, and seeding status')
             [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Re-check local folder blob integrity')
             [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a folder, blob, collection, or catalog')
             [CompletionResult]::new('unpublish', 'unpublish', [CompletionResultType]::ParameterValue, 'Remove a public blob pin')
@@ -467,19 +465,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;health' {
-            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
-            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
-            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'Only entries whose path matches this glob pattern')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
         'syncweb;transfer' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
@@ -634,6 +619,19 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;stats' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Show persisted bandwidth accounting')
+            [CompletionResult]::new('files', 'files', [CompletionResultType]::ParameterValue, 'Show file-level statistics for synced folder content')
+            [CompletionResult]::new('seeding', 'seeding', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
+            break
+        }
+        'syncweb;stats;network' {
             [CompletionResult]::new('--folder', '--folder', [CompletionResultType]::ParameterName, 'Limit display to a folder or namespace')
             [CompletionResult]::new('--peer', '--peer', [CompletionResultType]::ParameterName, 'Limit display to a peer node ID')
             [CompletionResult]::new('--period', '--period', [CompletionResultType]::ParameterName, 'Retained for compatibility; counters are persisted since period start')
@@ -647,9 +645,24 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;filestats' {
+        'syncweb;stats;files' {
+            [CompletionResult]::new('--folder', '--folder', [CompletionResultType]::ParameterName, 'Namespace ID or path to a managed folder')
             [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
             [CompletionResult]::new('--top-largest', '--top-largest', [CompletionResultType]::ParameterName, 'Top N largest files by size')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;stats;seeding' {
+            [CompletionResult]::new('--folder', '--folder', [CompletionResultType]::ParameterName, 'Namespace ID or path to a managed folder')
+            [CompletionResult]::new('--hash', '--hash', [CompletionResultType]::ParameterName, 'Content hash(es) to select (can repeat)')
+            [CompletionResult]::new('--path-prefix', '--path-prefix', [CompletionResultType]::ParameterName, 'Only entries whose path starts with this prefix')
+            [CompletionResult]::new('--glob', '--glob', [CompletionResultType]::ParameterName, 'Only entries whose path matches this glob pattern')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')

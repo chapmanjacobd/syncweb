@@ -445,7 +445,10 @@ syncweb config set discovery.interface eth0
 | | `package list` | List locally installed packages |
 | | `package versions` | List installed versions |
 | | `package switch` | Change active version |
-| | `health` | Show seeding status per blob (well/under/unseeded) |
+| | `stats network` | Bandwidth accounting per folder/peer |
+| | `stats files` | File-level statistics for synced folder content |
+| | `stats seeding` | Seeding status per blob (well/under/unseeded) |
+| | `verify` | Integrity verification (re-check local blobs) |
 | | `transfer info` | Inspect durable per-item transfer state, progress, errors, and grouping |
 | | `transfer remaining` | Show root capacity after materialized files and pending reservations |
 | | `transfer root` | Configure a materialization root and minimum-free-space policy |
@@ -462,7 +465,9 @@ syncweb config set discovery.interface eth0
 | | `network leave` | Leave a network |
 | | `network invite` | Invite device to a network |
 | | `network kick` | Remove device from a network |
-| | `stats` | Bandwidth accounting per folder/peer |
+| | `stats network` | Bandwidth accounting per folder/peer |
+| | `stats files` | File-level statistics for synced folder content |
+| | `stats seeding` | Seeding status per blob (well/under/unseeded) |
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `config schedule` | Show/modify sync schedule |
 | | `conflicts` | List/resolve file conflicts |
@@ -480,7 +485,8 @@ syncweb --no-color devices          # Disable color output
 
 syncweb import ./documents
 syncweb watch --once ./documents
-syncweb stats --period 24h
+syncweb stats network --period 24h
+syncweb stats files --folder ./documents
 syncweb verify ./documents
 syncweb config schedule
 syncweb config schedule set --active "22:00-06:00"
@@ -540,7 +546,7 @@ syncweb import /path/to/files
 syncweb export /path/to/output
 
 # Health check (show seeding status)
-syncweb health audio/
+syncweb stats seeding --folder audio/
 
 # Capacity-aware transfer placement
 syncweb transfer root media /srv/media --min-free 10GB

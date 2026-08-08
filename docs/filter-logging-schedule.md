@@ -377,10 +377,10 @@ struct PeerStats {
 ### CLI
 
 ```bash
-syncweb stats                          # Show all stats
-syncweb stats --period 24h             # Last 24 hours
-syncweb stats --folder ./documents     # Per-folder breakdown
-syncweb stats --peer <node-id>         # Per-peer breakdown
+syncweb stats network                    # Show all stats
+syncweb stats network --period 24h       # Last 24 hours
+syncweb stats network --folder ./documents  # Per-folder breakdown
+syncweb stats network --peer <node-id>   # Per-peer breakdown
 ```
 
 ---

@@ -45,11 +45,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand download 'Download folder content or copy a local file'
             cand import 'Import local files into a synchronized folder'
             cand snapshot 'Manage content-addressed snapshots'
-            cand health 'Show seeding status per folder blob'
             cand transfer 'Inspect and control durable transfer jobs'
             cand watch 'Watch a folder and import filesystem changes'
-            cand stats 'Show persisted bandwidth accounting'
-            cand filestats 'Show file-level statistics for synced folder content'
+            cand stats 'Show statistics for folders, files, and seeding status'
             cand verify 'Re-check local folder blob integrity'
             cand publish 'Publish a folder, blob, collection, or catalog'
             cand unpublish 'Remove a public blob pin'
@@ -434,18 +432,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;health'= {
-            cand --hash 'Content hash(es) to select (can repeat)'
-            cand --path-prefix 'Only entries whose path starts with this prefix'
-            cand --glob 'Only entries whose path matches this glob pattern'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'syncweb;transfer'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -588,6 +574,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;stats'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand network 'Show persisted bandwidth accounting'
+            cand files 'Show file-level statistics for synced folder content'
+            cand seeding 'Show seeding status per folder blob'
+        }
+        &'syncweb;stats;network'= {
             cand --folder 'Limit display to a folder or namespace'
             cand --peer 'Limit display to a peer node ID'
             cand --period 'Retained for compatibility; counters are persisted since period start'
@@ -600,9 +598,23 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;filestats'= {
+        &'syncweb;stats;files'= {
+            cand --folder 'Namespace ID or path to a managed folder'
             cand --by 'by'
             cand --top-largest 'Top N largest files by size'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;stats;seeding'= {
+            cand --folder 'Namespace ID or path to a managed folder'
+            cand --hash 'Content hash(es) to select (can repeat)'
+            cand --path-prefix 'Only entries whose path starts with this prefix'
+            cand --glob 'Only entries whose path matches this glob pattern'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

@@ -508,21 +508,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
-'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
-'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path:_files' \
-&& ret=0
-;;
 (transfer)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -700,6 +685,25 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (stats)
 _arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__stats_commands" \
+"*::: :->stats" \
+&& ret=0
+
+    case $state in
+    (stats)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-stats-command-$line[1]:"
+        case $line[1] in
+            (network)
+_arguments "${_arguments_options[@]}" : \
 '--folder=[Limit display to a folder or namespace]:FOLDER:_files' \
 '--peer=[Limit display to a peer node ID]:PEER:_default' \
 '--period=[Retained for compatibility; counters are persisted since period start]:PERIOD:_default' \
@@ -713,8 +717,9 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(filestats)
+(files)
 _arguments "${_arguments_options[@]}" : \
+'--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
 '--by=[]:BY:(extension size all time)' \
 '--top-largest=[Top N largest files by size]:TOP_LARGEST:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -724,8 +729,26 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':folder -- Namespace ID or path to a managed folder:_default' \
 && ret=0
+;;
+(seeding)
+_arguments "${_arguments_options[@]}" : \
+'--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
+'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
@@ -1947,11 +1970,9 @@ _syncweb_commands() {
 'download:Download folder content or copy a local file' \
 'import:Import local files into a synchronized folder' \
 'snapshot:Manage content-addressed snapshots' \
-'health:Show seeding status per folder blob' \
 'transfer:Inspect and control durable transfer jobs' \
 'watch:Watch a folder and import filesystem changes' \
-'stats:Show persisted bandwidth accounting' \
-'filestats:Show file-level statistics for synced folder content' \
+'stats:Show statistics for folders, files, and seeding status' \
 'verify:Re-check local folder blob integrity' \
 'publish:Publish a folder, blob, collection, or catalog' \
 'unpublish:Remove a public blob pin' \
@@ -2106,11 +2127,6 @@ _syncweb__subcmd__download_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb download commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__filestats_commands] )) ||
-_syncweb__subcmd__filestats_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb filestats commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__find_commands] )) ||
 _syncweb__subcmd__find_commands() {
     local commands; commands=()
@@ -2120,11 +2136,6 @@ _syncweb__subcmd__find_commands() {
 _syncweb__subcmd__folders_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb folders commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__health_commands] )) ||
-_syncweb__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help_commands] )) ||
 _syncweb__subcmd__help_commands() {
@@ -2508,8 +2519,27 @@ _syncweb__subcmd__stat_commands() {
 }
 (( $+functions[_syncweb__subcmd__stats_commands] )) ||
 _syncweb__subcmd__stats_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'network:Show persisted bandwidth accounting' \
+'files:Show file-level statistics for synced folder content' \
+'seeding:Show seeding status per folder blob' \
+    )
     _describe -t commands 'syncweb stats commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stats__subcmd__files_commands] )) ||
+_syncweb__subcmd__stats__subcmd__files_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stats files commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stats__subcmd__network_commands] )) ||
+_syncweb__subcmd__stats__subcmd__network_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stats network commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stats__subcmd__seeding_commands] )) ||
+_syncweb__subcmd__stats__subcmd__seeding_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stats seeding commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__status_commands] )) ||
 _syncweb__subcmd__status_commands() {

@@ -101,7 +101,7 @@ Content-addressed snapshots and robustness fetch:
 - `FetchStrategy::Filter` with `min_peers`/`max_peers` for fetch by seeder count
 - `FetchStrategy::Filter` with `min_count`/`max_count` for fetch by file count
 - `syncweb download --max-peers N` for improving folder network health
-- `syncweb health` for showing seeding status per blob
+- `syncweb stats seeding` for showing seeding status per blob
 
 ### Polish and Integrations
 Full CLI parity, UX, and advanced features:
@@ -112,7 +112,7 @@ Full CLI parity, UX, and advanced features:
 - Integration tests
 - Documentation
 - `syncweb watch` for file watcher real-time sync
-- `syncweb stats` for bandwidth accounting per folder/peer
+- `syncweb stats network` for bandwidth accounting per folder/peer
 - `syncweb verify` for integrity verification (re-check all local blobs)
 - Sync schedules (global and per-folder overrides)
 - Platform settings files for laptop/server/phone configurations

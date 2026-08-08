@@ -314,9 +314,9 @@ fn schedule_and_stats_commands_persist_state() -> anyhow::Result<()> {
     );
 
     let stats = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--json", "stats"])
+        .args(["--data-dir", &data_dir, "--json", "stats", "network"])
         .output()
-        .context("run stats")?;
+        .context("run stats network")?;
     ensure!(stats.status.success());
     let value: serde_json::Value = serde_json::from_slice(&stats.stdout)?;
     ensure!(value.get("total_download") == Some(&serde_json::Value::from(0)));

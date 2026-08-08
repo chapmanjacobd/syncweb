@@ -312,8 +312,16 @@ fn test_daemon_health_via_ipc() -> anyhow::Result<()> {
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
 
     if let Some(ns) = namespace {
-        let health = syncweb(&["--data-dir", data_dir_arg, "health", ns])?;
-        ensure!(health.status.success(), "health should succeed via daemon");
+        let health = syncweb(&["--data-dir", data_dir_arg, "stats", "seeding", "--folder", ns])?;
+        ensure!(health.status.success(), "stats seeding should succeed via daemon");
+
+        let files = syncweb(&["--data-dir", data_dir_arg, "stats", "files", "--folder", ns])?;
+        ensure!(files.status.success(), "stats files should succeed via daemon");
+        let output = String::from_utf8(files.stdout).context("UTF-8 output")?;
+        ensure!(
+            output.contains("total_files:"),
+            "stats files output should include total_files"
+        );
     }
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
@@ -669,8 +677,8 @@ fn test_folders_help_mentions_daemon_routing() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_health_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["health", "--help"])?;
+fn test_stats_seeding_help_mentions_daemon_routing() -> anyhow::Result<()> {
+    let output = syncweb(&["stats", "seeding", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));

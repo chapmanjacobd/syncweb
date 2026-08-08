@@ -49,11 +49,9 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stat" -d 'Show deta
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "download" -d 'Download folder content or copy a local file'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "import" -d 'Import local files into a synchronized folder'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "snapshot" -d 'Manage content-addressed snapshots'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "health" -d 'Show seeding status per folder blob'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "transfer" -d 'Inspect and control durable transfer jobs'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "watch" -d 'Watch a folder and import filesystem changes'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show persisted bandwidth accounting'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "filestats" -d 'Show file-level statistics for synced folder content'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show statistics for folders, files, and seeding status'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "verify" -d 'Re-check local folder blob integrity'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "publish" -d 'Publish a folder, blob, collection, or catalog'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "unpublish" -d 'Remove a public blob pin'
@@ -313,14 +311,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from delete" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from delete" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand snapshot; and __fish_seen_subcommand_from delete" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l hash -d 'Content hash(es) to select (can repeat)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l glob -d 'Only entries whose path matches this glob pattern' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand health" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and not __fish_seen_subcommand_from info remaining root enqueue allocate materialize pause resume cancel retry" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and not __fish_seen_subcommand_from info remaining root enqueue allocate materialize pause resume cancel retry" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and not __fish_seen_subcommand_from info remaining root enqueue allocate materialize pause resume cancel retry" -l json -d 'Emit machine-readable JSON where supported'
@@ -420,25 +410,43 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l verbose -d 'En
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l folder -d 'Limit display to a folder or namespace' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l peer -d 'Limit display to a peer node ID' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l period -d 'Retained for compatibility; counters are persisted since period start' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l reset -d 'Reset persisted counters before displaying them'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l by -r -f -a "extension\t''
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -f -a "network" -d 'Show persisted bandwidth accounting'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -f -a "files" -d 'Show file-level statistics for synced folder content'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and not __fish_seen_subcommand_from network files seeding" -f -a "seeding" -d 'Show seeding status per folder blob'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l folder -d 'Limit display to a folder or namespace' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l peer -d 'Limit display to a peer node ID' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l period -d 'Retained for compatibility; counters are persisted since period start' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l reset -d 'Reset persisted counters before displaying them'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l folder -d 'Namespace ID or path to a managed folder' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l by -r -f -a "extension\t''
 size\t''
 all\t''
 time\t''"
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l top-largest -d 'Top N largest files by size' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand filestats" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l top-largest -d 'Top N largest files by size' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l folder -d 'Namespace ID or path to a managed folder' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l hash -d 'Content hash(es) to select (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to select (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob -d 'Only entries whose path matches this glob pattern' -r

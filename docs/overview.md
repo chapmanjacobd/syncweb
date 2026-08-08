@@ -51,7 +51,7 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 +------------------------------------------------------------------------------+
 |  Commands: create, join, accept, drop, ls, find, download, sort, stat,       |
 |            devices, folders, watch, version, repl, publish,                  |
-|            backup, snapshot, restore, config, network, health               |
+|            backup, snapshot, restore, config, network, stats               |
 +------------------------------------------------------------------------------+
                                       |
                                       v
@@ -250,7 +250,7 @@ Decision: Filter-based fetch with peer count and file count constraints
 - Use `--min-count` / `--max-count` to limit how many blobs are fetched
 - `FetchFilter` unifies paths, sizes, peer counts, and file counts in one struct
 - `syncweb download --max-peers 2 audio/` fetches blobs with ≤2 seeders
-- `syncweb health` shows seeding status per blob (well/under/unseeded)
+- `syncweb stats seeding` shows seeding status per blob (well/under/unseeded)
 - Each node independently decides what to seed (no central coordination)
 - Improves resilience: rare content becomes more available over time
 

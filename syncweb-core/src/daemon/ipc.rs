@@ -15,6 +15,7 @@ use tokio::sync::{RwLock, broadcast, mpsc};
 
 use crate::{
     allocation::{AllocationCandidate, StorageRoot, materialization_path},
+    bandwidth_stats::{FileStatsCollector, FileStatsReport},
     daemon::state::FolderStatusReport,
     error::{Result, SyncwebError},
     filter::{FilterConfig, FilterEngine},
@@ -140,6 +141,9 @@ pub enum IpcCommand {
         #[serde(default)]
         glob: Option<String>,
     },
+    StatsFiles {
+        folder: PathBuf,
+    },
     VerifyIntegrity {
         path: PathBuf,
         #[serde(default)]
@@ -224,6 +228,7 @@ pub enum IpcResponse {
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
     EnrichData(HashMap<String, usize>),
+    FileStats(Box<FileStatsReport>),
     Error { message: String },
 }
 
@@ -786,6 +791,7 @@ impl IpcServer {
                 path_prefix,
                 glob,
             } => self.handle_health_check(path, filter_hashes, path_prefix, glob).await,
+            C::StatsFiles { folder } => self.handle_stats_files(folder).await,
             C::VerifyIntegrity {
                 path,
                 hash,
@@ -1633,6 +1639,34 @@ impl IpcServer {
                 report.total, report.well_seeded, report.under_seeded, report.unseeded,
             ),
         }
+    }
+
+    async fn handle_stats_files(&self, folder_path: PathBuf) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon stats-files IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match resolve_folder_for_daemon(&manager, &folder_path).await {
+            Ok(f) => f,
+            Err(error) => return error,
+        };
+        let entries = match context.node.docs_engine().list_latest(folder.doc()).await {
+            Ok(e) => e,
+            Err(error) => return response_from_error(error),
+        };
+        let mut collector = FileStatsCollector::new();
+        for entry in entries {
+            if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            collector.add_entry_bytes_with_time(entry.key(), entry.content_len(), Some(entry.timestamp()));
+        }
+        IpcResponse::FileStats(Box::new(collector.report()))
     }
 
     async fn handle_enrich_sort(&self, path: PathBuf) -> IpcResponse {
@@ -2483,6 +2517,7 @@ impl IpcClient {
                 | IpcResponse::ImportComplete(_)
                 | IpcResponse::ExportComplete(_)
                 | IpcResponse::EnrichData(_)
+                | IpcResponse::FileStats(_)
                 | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
@@ -2908,6 +2943,21 @@ mod tests {
                 hash: Vec::new(),
                 path_prefix: None,
                 glob: None,
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_stats_files_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::StatsFiles {
+                folder: PathBuf::from("."),
             }))
             .await;
         assert!(matches!(

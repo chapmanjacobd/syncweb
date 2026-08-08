@@ -207,8 +207,8 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb health ./shared-docs` | Shows per-blob seeding: well/under/unseeded with counts | |
-| 2 | `syncweb health --json ./shared-docs` | JSON output | |
+| 1 | `syncweb stats seeding --folder ./shared-docs` | Shows per-blob seeding: well/under/unseeded with counts | |
+| 2 | `syncweb stats seeding --json --folder ./shared-docs` | JSON output | |
 | 3 | `syncweb verify ./shared-docs` | Checks all local blobs against doc entries | Reports any corrupted/missing |
 | 4 | Manually corrupt a blob file in blob store, then `syncweb verify` | Reports corruption | Check blob store path: `ls ~/.local/share/syncweb/blobs/` |
 | 5 | `syncweb verify --fix ./shared-docs` | Re-downloads corrupted blobs | |
@@ -381,11 +381,11 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Sync large files while monitoring `syncweb stats` | Bandwidth is capped at configured limit | `sqlite3 ~/.local/share/syncweb/stats.db "SELECT SUM(bytes) FROM bandwidth_events WHERE direction='download';"` |
+| 1 | Sync large files while monitoring `syncweb stats network` | Bandwidth is capped at configured limit | `sqlite3 ~/.local/share/syncweb/stats.db "SELECT SUM(bytes) FROM bandwidth_events WHERE direction='download';"` |
 | 2 | Wait for inactive window, trigger sync | Sync does not start (or is delayed) | |
-| 3 | `syncweb stats` | Shows totals, per-folder, per-peer | |
-| 4 | `syncweb stats --period 24h` | Last 24 hours | |
-| 5 | `syncweb stats --folder <namespace>` | Per-folder breakdown | |
+| 3 | `syncweb stats network` | Shows totals, per-folder, per-peer | |
+| 4 | `syncweb stats network --period 24h` | Last 24 hours | |
+| 5 | `syncweb stats network --folder <namespace>` | Per-folder breakdown | |
 
 ---
 
@@ -547,8 +547,8 @@ match = { name = "*.tmp" }
 | 1 | Time `syncweb start` (cold start) | < 500ms | `time syncweb start --foreground` |
 | 2 | Create 10000 files, time `syncweb import` | < 3s (default parallel) | Compare with `--threads 1` |
 | 3 | Time `syncweb ls` on 10000 entries | < 500ms | |
-| 4 | Sync a 10GB folder over LAN | > 500 MB/s throughput | Monitor: `syncweb stats` |
-| 5 | `syncweb health` on folder with 1000+ entries | < 1s | |
+| 4 | Sync a 10GB folder over LAN | > 500 MB/s throughput | Monitor: `syncweb stats network` |
+| 5 | `syncweb stats seeding --folder .` on folder with 1000+ entries | < 1s | |
 
 ---
 

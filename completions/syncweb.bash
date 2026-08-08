@@ -43,17 +43,11 @@ _syncweb() {
             syncweb,download)
                 cmd="syncweb__subcmd__download"
                 ;;
-            syncweb,filestats)
-                cmd="syncweb__subcmd__filestats"
-                ;;
             syncweb,find)
                 cmd="syncweb__subcmd__find"
                 ;;
             syncweb,folders)
                 cmd="syncweb__subcmd__folders"
-                ;;
-            syncweb,health)
-                cmd="syncweb__subcmd__health"
                 ;;
             syncweb,help)
                 cmd="syncweb__subcmd__help"
@@ -316,6 +310,15 @@ _syncweb() {
             syncweb__subcmd__snapshot,restore)
                 cmd="syncweb__subcmd__snapshot__subcmd__restore"
                 ;;
+            syncweb__subcmd__stats,files)
+                cmd="syncweb__subcmd__stats__subcmd__files"
+                ;;
+            syncweb__subcmd__stats,network)
+                cmd="syncweb__subcmd__stats__subcmd__network"
+                ;;
+            syncweb__subcmd__stats,seeding)
+                cmd="syncweb__subcmd__stats__subcmd__seeding"
+                ;;
             syncweb__subcmd__transfer,allocate)
                 cmd="syncweb__subcmd__transfer__subcmd__allocate"
                 ;;
@@ -392,7 +395,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer watch stats filestats verify publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot transfer watch stats verify publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -943,32 +946,6 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        syncweb__subcmd__filestats)
-            opts="-h --by --top-largest --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --by)
-                    COMPREPLY=($(compgen -W "extension size all time" -- "${cur}"))
-                    return 0
-                    ;;
-                --top-largest)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         syncweb__subcmd__find)
             opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --depth --min-depth --max-depth --sizes --modified-within --modified-before --time-modified --extension --type --threads --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -1042,36 +1019,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__health)
-            opts="-h --hash --path-prefix --glob --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --hash)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --path-prefix)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --glob)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -2506,8 +2453,56 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__stats)
-            opts="-h --folder --peer --reset --period --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help network files seeding"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__stats__subcmd__files)
+            opts="-h --folder --by --top-largest --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --folder)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --by)
+                    COMPREPLY=($(compgen -W "extension size all time" -- "${cur}"))
+                    return 0
+                    ;;
+                --top-largest)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__stats__subcmd__network)
+            opts="-h --folder --peer --reset --period --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -2521,6 +2516,40 @@ _syncweb() {
                     return 0
                     ;;
                 --period)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__stats__subcmd__seeding)
+            opts="-h --folder --hash --path-prefix --glob --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --folder)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --hash)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

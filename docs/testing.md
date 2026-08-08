@@ -105,7 +105,7 @@
 
 ## Success Criteria
 
-1. Functional parity: All syncweb-py commands work (create, join, accept, drop, ls, find, sort, stat, download, devices, folders, automatic, start, shutdown, version, repl)
+1. Functional parity: All syncweb-py commands work (create, join, accept, drop, ls, find, sort, stat, download, devices, folders, watch, start, shutdown, version, repl)
 2. Performance: Faster sync, lower resource usage than Syncthing
 3. Public folders: `publish`/`subscribe` work end-to-end
 4. Data versioning: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)

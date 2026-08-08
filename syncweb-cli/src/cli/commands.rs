@@ -55,8 +55,6 @@ pub enum Command {
         #[command(subcommand)]
         command: TransferCommand,
     },
-    #[command(about = "Run rules-based automatic synchronization")]
-    Automatic(AutomaticArgs),
     #[command(about = "Watch a folder and import filesystem changes")]
     Watch(WatchArgs),
     #[command(about = "Show persisted bandwidth accounting")]
@@ -601,18 +599,6 @@ pub enum SnapshotCommand {
 }
 
 #[derive(Debug, Args)]
-pub struct AutomaticArgs {
-    #[arg(long, help = "Print the active filter configuration and exit")]
-    pub show_filters: bool,
-    #[arg(long, help = "Evaluate paths without starting the daemon")]
-    pub dry_run: bool,
-    #[arg(long, num_args = 1.., help = "Paths evaluated by --dry-run")]
-    pub paths: Vec<PathBuf>,
-    #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
-    pub filters: Option<PathBuf>,
-}
-
-#[derive(Debug, Args)]
 pub struct StartArgs {
     #[arg(long, alias = "background", help = "Run in the background (daemon mode)")]
     pub bg: bool,
@@ -656,6 +642,14 @@ pub struct WatchArgs {
     pub exclude: Vec<String>,
     #[arg(long, help = "Process one event and exit")]
     pub once: bool,
+    #[arg(long, help = "Print the active filter configuration and exit")]
+    pub show_filters: bool,
+    #[arg(long, help = "Evaluate paths against the filter rules without importing")]
+    pub dry_run: bool,
+    #[arg(long, num_args = 1.., help = "Paths evaluated by --dry-run")]
+    pub paths: Vec<PathBuf>,
+    #[arg(long, help = "Filter configuration (defaults to DATA_DIR/filters.toml)")]
+    pub filters: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

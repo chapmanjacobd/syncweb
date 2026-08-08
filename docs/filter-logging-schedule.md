@@ -4,7 +4,7 @@
 
 ### Design
 
-The `automatic` daemon uses a Rust-native filter engine:
+The `watch` command uses a Rust-native filter engine:
 
 ```toml
 # ~/.config/syncweb/filters.toml
@@ -80,17 +80,17 @@ impl FilterEngine {
 ### CLI Commands
 
 ```bash
-# Run automatic daemon with filters
-syncweb automatic
+# Watch a folder, honoring filter rules
+syncweb watch ./folder
+
+# Watch with a custom filter configuration
+syncweb watch --filters filters.toml ./folder
 
 # Show active filters
-syncweb automatic --show-filters
+syncweb watch --show-filters
 
 # Test filter against specific files
-syncweb automatic --dry-run --paths /path/to/files
-
-# Reload filters
-syncweb automatic --reload
+syncweb watch --dry-run --paths /path/to/files
 ```
 
 ---

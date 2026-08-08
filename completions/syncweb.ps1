@@ -50,7 +50,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('snapshot', 'snapshot', [CompletionResultType]::ParameterValue, 'Manage content-addressed snapshots')
             [CompletionResult]::new('health', 'health', [CompletionResultType]::ParameterValue, 'Show seeding status per folder blob')
             [CompletionResult]::new('transfer', 'transfer', [CompletionResultType]::ParameterValue, 'Inspect and control durable transfer jobs')
-            [CompletionResult]::new('automatic', 'automatic', [CompletionResultType]::ParameterValue, 'Run rules-based automatic synchronization')
             [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show persisted bandwidth accounting')
             [CompletionResult]::new('filestats', 'filestats', [CompletionResultType]::ParameterValue, 'Show file-level statistics for synced folder content')
@@ -617,25 +616,15 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;automatic' {
-            [CompletionResult]::new('--paths', '--paths', [CompletionResultType]::ParameterName, 'Paths evaluated by --dry-run')
-            [CompletionResult]::new('--filters', '--filters', [CompletionResultType]::ParameterName, 'Filter configuration (defaults to DATA_DIR/filters.toml)')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--show-filters', '--show-filters', [CompletionResultType]::ParameterName, 'Print the active filter configuration and exit')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Evaluate paths without starting the daemon')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
         'syncweb;watch' {
             [CompletionResult]::new('--debounce-ms', '--debounce-ms', [CompletionResultType]::ParameterName, 'Debounce changes in milliseconds')
             [CompletionResult]::new('--exclude', '--exclude', [CompletionResultType]::ParameterName, 'Ignore a path glob; may be repeated')
+            [CompletionResult]::new('--paths', '--paths', [CompletionResultType]::ParameterName, 'Paths evaluated by --dry-run')
+            [CompletionResult]::new('--filters', '--filters', [CompletionResultType]::ParameterName, 'Filter configuration (defaults to DATA_DIR/filters.toml)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'Process one event and exit')
+            [CompletionResult]::new('--show-filters', '--show-filters', [CompletionResultType]::ParameterName, 'Print the active filter configuration and exit')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Evaluate paths against the filter rules without importing')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

@@ -4,7 +4,7 @@
 .SH NAME
 watch \- Watch a folder and import filesystem changes
 .SH SYNOPSIS
-\fBwatch\fR [\fB\-\-debounce\-ms\fR] [\fB\-\-exclude\fR] [\fB\-\-once\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBwatch\fR [\fB\-\-debounce\-ms\fR] [\fB\-\-exclude\fR] [\fB\-\-once\fR] [\fB\-\-show\-filters\fR] [\fB\-\-dry\-run\fR] [\fB\-\-paths\fR] [\fB\-\-filters\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Watch a folder and import filesystem changes
 .SH OPTIONS
@@ -17,6 +17,18 @@ Ignore a path glob; may be repeated
 .TP
 \fB\-\-once\fR
 Process one event and exit
+.TP
+\fB\-\-show\-filters\fR
+Print the active filter configuration and exit
+.TP
+\fB\-\-dry\-run\fR
+Evaluate paths against the filter rules without importing
+.TP
+\fB\-\-paths\fR \fI<PATHS>...\fR
+Paths evaluated by \-\-dry\-run
+.TP
+\fB\-\-filters\fR \fI<FILTERS>\fR
+Filter configuration (defaults to DATA_DIR/filters.toml)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

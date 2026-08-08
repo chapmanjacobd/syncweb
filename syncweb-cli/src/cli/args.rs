@@ -72,7 +72,6 @@ help_categories! {
     ];
     "Automation" => [
         Command::Watch(_) => "watch",
-        Command::Automatic(_) => "automatic",
     ];
     "Sharing & Publishing" => [
         Command::Publish(_) => "publish",

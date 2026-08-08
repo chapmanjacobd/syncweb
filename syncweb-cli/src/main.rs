@@ -217,7 +217,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Health(command) => handle_health(&ctx, command).await?,
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
-        Command::Automatic(command) => handle_automatic(&ctx, command).await?,
         Command::Publish(command) => handle_publish(&ctx, command).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
         Command::Collection { command } => handle_collection(&ctx, command).await?,
@@ -2218,6 +2217,18 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    let filter_path = command.filters.clone().unwrap_or_else(|| data_dir.join("filters.toml"));
+    let engine = if filter_path.exists() {
+        FilterEngine::load(&filter_path)?
+    } else {
+        FilterEngine::new(FilterConfig::default())?
+    };
+    if command.show_filters {
+        return print_filter_config(&engine, output_json);
+    }
+    if command.dry_run {
+        return dry_run_filters(&engine, command.paths, output_json);
+    }
     if !command.once && !no_daemon {
         let client = daemon_client_or_start(data_dir, no_daemon, ctx.network)
             .await?
@@ -2268,6 +2279,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     .with_root(&root)
     .with_ignore_patterns(command.exclude);
     let watcher = FsWatcher::new(&root)?;
+    let filter_folder = folder.namespace_id().to_string();
     loop {
         let Some(event) = watcher.try_recv()? else {
             tokio::time::sleep(Duration::from_millis(command.debounce_ms.max(1))).await;
@@ -2278,10 +2290,28 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
             let relative = changed_path.strip_prefix(&root).unwrap_or(changed_path);
             if removed {
                 folder.delete_entry(relative.as_os_str().as_encoded_bytes()).await?;
-            } else if changed_path.is_file() {
-                importer.import_path(changed_path).await?;
-            } else {
+            } else if !changed_path.is_file() {
                 continue;
+            } else {
+                let size = std::fs::metadata(changed_path).map_or(0, |metadata| metadata.len());
+                let accepted = engine
+                    .evaluate_for_folder(&filter_folder, &FilterEntry::new(relative.to_path_buf(), size))
+                    != FilterAction::Reject;
+                if !accepted {
+                    if output_json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "path": changed_path,
+                                "action": "rejected",
+                            })
+                        );
+                    } else {
+                        println!("rejected\t{}", changed_path.display());
+                    }
+                    continue;
+                }
+                importer.import_path(changed_path).await?;
             }
             if output_json {
                 println!(
@@ -2304,6 +2334,39 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
         }
     }
     node.stop().await?;
+    Ok(())
+}
+
+fn print_filter_config(engine: &FilterEngine, output_json: bool) -> Result<()> {
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&engine.config())?);
+    } else {
+        print!("{}", toml::to_string_pretty(&engine.config())?);
+    }
+    Ok(())
+}
+
+fn dry_run_filters(engine: &FilterEngine, paths: Vec<PathBuf>, output_json: bool) -> Result<()> {
+    let mut results = Vec::new();
+    for path in paths {
+        for entry in ParallelScanner::new(&path, Vec::<String>::new(), 0).scan()? {
+            let filter_entry = FilterEntry::from_file(&entry);
+            let action = engine.evaluate(&filter_entry);
+            let label = match action {
+                FilterAction::Accept => "accept",
+                FilterAction::Reject => "reject",
+                _ => "unknown",
+            };
+            if output_json {
+                results.push(serde_json::json!({"action": label, "path": entry.path}));
+            } else {
+                println!("{label}\t{}", entry.path.display());
+            }
+        }
+    }
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    }
     Ok(())
 }
 
@@ -2508,67 +2571,6 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     }
     node.stop().await?;
     Ok(())
-}
-
-#[async_recursion]
-async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::AutomaticArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let filter_path = command.filters.unwrap_or_else(|| data_dir.join("filters.toml"));
-    let engine = if filter_path.exists() {
-        FilterEngine::load(&filter_path)?
-    } else {
-        FilterEngine::new(FilterConfig::default())?
-    };
-    if command.show_filters {
-        if output_json {
-            println!("{}", serde_json::to_string_pretty(&engine.config())?);
-        } else {
-            print!("{}", toml::to_string_pretty(&engine.config())?);
-        }
-        return Ok(());
-    }
-    if command.dry_run {
-        let mut results = Vec::new();
-        for path in command.paths {
-            for entry in ParallelScanner::new(&path, Vec::<String>::new(), 0).scan()? {
-                let filter_entry = FilterEntry::from_file(&entry);
-                let action = engine.evaluate(&filter_entry);
-                let label = match action {
-                    FilterAction::Accept => "accept",
-                    FilterAction::Reject => "reject",
-                    _ => "unknown",
-                };
-                if output_json {
-                    results.push(serde_json::json!({"action": label, "path": entry.path}));
-                } else {
-                    println!("{label}\t{}", entry.path.display());
-                }
-            }
-        }
-        if output_json {
-            println!("{}", serde_json::to_string_pretty(&results)?);
-        }
-        return Ok(());
-    }
-    handle_start(
-        ctx,
-        StartArgs {
-            bg: true,
-            media_only: false,
-            data_dir: None,
-            log_file: None,
-            max_threads: None,
-            sync_interval: None,
-            no_relay: false,
-            no_mdns: false,
-            no_beacon: false,
-            beacon_port: None,
-            discovery_interface: None,
-            media_listen: None,
-        },
-    )
-    .await
 }
 
 #[async_recursion]

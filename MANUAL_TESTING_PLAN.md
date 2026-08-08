@@ -389,16 +389,15 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 ---
 
-## 15. Filter Engine / Automatic Mode
+## 15. Filter Engine / Watch Mode
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Create `~/.config/syncweb/filters.toml` with rules | | See example below |
-| 2 | `syncweb automatic --show-filters` | Shows loaded filter rules | |
-| 3 | `syncweb automatic --dry-run` | Shows what would be matched without downloading | |
-| 4 | `syncweb automatic` | Runs rules-based auto-sync daemon | |
-| 5 | Edit filters.toml, then `syncweb automatic --reload` | Reloads filters without restart | |
-| 6 | `syncweb config set filter.config_path /path/to/filters.toml` | Custom filter config path | |
+| 2 | `syncweb watch --show-filters` | Shows loaded filter rules | |
+| 3 | `syncweb watch --dry-run --paths <folder>` | Shows what would be accepted/rejected | |
+| 4 | `syncweb watch --once <folder>` | Imports files matching the rules, rejects the rest | |
+| 5 | `syncweb watch --filters /path/to/filters.toml <folder>` | Uses a custom filter config path | |
 
 Example `filters.toml`:
 ```toml

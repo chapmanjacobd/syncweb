@@ -73,7 +73,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "import",
         "snapshot",
         "health",
-        "automatic",
         "watch",
         "stats",
         "filestats",

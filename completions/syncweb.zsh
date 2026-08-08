@@ -679,27 +679,16 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(automatic)
-_arguments "${_arguments_options[@]}" : \
-'*--paths=[Paths evaluated by --dry-run]:PATHS:_files' \
-'--filters=[Filter configuration (defaults to DATA_DIR/filters.toml)]:FILTERS:_files' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--show-filters[Print the active filter configuration and exit]' \
-'--dry-run[Evaluate paths without starting the daemon]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
 (watch)
 _arguments "${_arguments_options[@]}" : \
 '--debounce-ms=[Debounce changes in milliseconds]:DEBOUNCE_MS:_default' \
 '*--exclude=[Ignore a path glob; may be repeated]:GLOB:_default' \
+'*--paths=[Paths evaluated by --dry-run]:PATHS:_files' \
+'--filters=[Filter configuration (defaults to DATA_DIR/filters.toml)]:FILTERS:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--once[Process one event and exit]' \
+'--show-filters[Print the active filter configuration and exit]' \
+'--dry-run[Evaluate paths against the filter rules without importing]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1924,7 +1913,6 @@ _syncweb_commands() {
 'snapshot:Manage content-addressed snapshots' \
 'health:Show seeding status per folder blob' \
 'transfer:Inspect and control durable transfer jobs' \
-'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
 'stats:Show persisted bandwidth accounting' \
 'filestats:Show file-level statistics for synced folder content' \
@@ -1965,11 +1953,6 @@ _syncweb__subcmd__attest__subcmd__create_commands() {
 _syncweb__subcmd__attest__subcmd__verify_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb attest verify commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__automatic_commands] )) ||
-_syncweb__subcmd__automatic_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb automatic commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__collection_commands] )) ||
 _syncweb__subcmd__collection_commands() {

@@ -51,19 +51,19 @@ Commands for ls, find, sort, stat, download, selective sync, create/config:
 - Streaming output with optional collected sorting
 
 ### Advanced Sync and Networks
-Sync engine, automatic daemon, and networks abstraction:
+Sync engine, rules-based watch, and networks abstraction:
 - `SyncEngine` for orchestration
 - Progress tracking and transfer stats
 - `PeerTracker` with cached peer availability from natural iroh flow
 - `PeerTracker` with age-based cache eviction
 - `EfficientPeerCache` with memory-efficient bitmask cache
-- `FilterEngine` for rules-based automatic daemon
+- `FilterEngine` for rules-based watch/import filtering
 - `SubscribeParams` for subscription filtering
 - `DeletedTracker` for tracking deleted-but-previously-seen files
 - `AreaOfInterest` with limits (max_size, max_count)
 - `Network` struct and `NetworkManager` for create, join, leave, invite, kick
 - Network gossip topics (`syncweb/net/<id>`)
-- `syncweb automatic` with filter engine
+- `syncweb watch` with filter engine (`--filters`, `--dry-run`, `--show-filters`)
 - `syncweb join --subscribe` with SubscribeParams
 - `syncweb network create`, `syncweb network ls`, `syncweb network join`
 - `syncweb network leave`, `syncweb network invite`, `syncweb network kick`

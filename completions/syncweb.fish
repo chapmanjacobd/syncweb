@@ -51,7 +51,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "import" -d 'Import 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "snapshot" -d 'Manage content-addressed snapshots'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "health" -d 'Show seeding status per folder blob'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "transfer" -d 'Inspect and control durable transfer jobs'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "automatic" -d 'Run rules-based automatic synchronization'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "watch" -d 'Watch a folder and import filesystem changes'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show persisted bandwidth accounting'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "filestats" -d 'Show file-level statistics for synced folder content'
@@ -409,19 +408,14 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l paths -d 'Paths evaluated by --dry-run' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l filters -d 'Filter configuration (defaults to DATA_DIR/filters.toml)' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l show-filters -d 'Print the active filter configuration and exit'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l dry-run -d 'Evaluate paths without starting the daemon'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l debounce-ms -d 'Debounce changes in milliseconds' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l exclude -d 'Ignore a path glob; may be repeated' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l paths -d 'Paths evaluated by --dry-run' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l filters -d 'Filter configuration (defaults to DATA_DIR/filters.toml)' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l once -d 'Process one event and exit'
+complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l show-filters -d 'Print the active filter configuration and exit'
+complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l dry-run -d 'Evaluate paths against the filter rules without importing'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand watch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

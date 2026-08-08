@@ -411,7 +411,6 @@ syncweb config set discovery.interface eth0
 | `download` | `download` | Trigger lazy fetch for paths |
 | `sort` | `sort` | Sort results (uses peer tracker) |
 | `stat` | `stat` | File metadata from doc + blob store |
-| `automatic` | `automatic` | Auto-accept/join with filter engine |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
 | | `daemon` | Start the single-writer daemon (`--foreground` keeps it attached) |
 | | `status` | Show daemon status |
@@ -463,7 +462,7 @@ syncweb config set discovery.interface eth0
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `config schedule` | Show/modify sync schedule |
 | | `conflicts` | List/resolve file conflicts |
-| | `watch` | File watcher for real-time sync |
+| | `watch` | Watch a folder, importing filesystem changes and honoring filter rules (`--filters`, `--dry-run`, `--show-filters`) |
 | | `network test-relay` | Test Syncthing relay connectivity |
 
 ### CLI Options

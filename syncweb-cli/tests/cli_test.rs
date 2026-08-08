@@ -655,7 +655,7 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .output()
         .context("run syncweb help")?;
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("automatic"));
+    ensure!(help.contains("watch"));
     ensure!(help.contains("join"));
     ensure!(help.contains("leave"));
 
@@ -694,19 +694,19 @@ fn network_create_and_list_persist() -> anyhow::Result<()> {
 }
 
 #[test]
-fn automatic_dry_run_uses_filter_engine() -> anyhow::Result<()> {
-    let directory = cli_test_dir("automatic");
+fn watch_dry_run_uses_filter_engine() -> anyhow::Result<()> {
+    let directory = cli_test_dir("watch");
     std::fs::create_dir_all(&directory).context("create directory")?;
     std::fs::write(directory.join("file.txt"), b"data").context("write file")?;
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
-            "automatic",
+            "watch",
             "--dry-run",
             "--paths",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run automatic dry-run")?;
+        .context("run watch dry-run")?;
     std::fs::remove_dir_all(directory).context("cleanup")?;
     ensure!(output.status.success());
     ensure!(
@@ -740,11 +740,11 @@ fn subscribe_help_lists_options() -> anyhow::Result<()> {
 }
 
 #[test]
-fn automatic_help_lists_filters_and_dry_run() -> anyhow::Result<()> {
+fn watch_help_lists_filters_and_dry_run() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["automatic", "--help"])
+        .args(["watch", "--help"])
         .output()
-        .context("run automatic --help")?;
+        .context("run watch --help")?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("show-filters"), "should list show-filters: {help}");
@@ -1023,19 +1023,19 @@ fn network_duplicate_name_rejected() -> anyhow::Result<()> {
 }
 
 #[test]
-fn automatic_show_filters_empty_config() -> anyhow::Result<()> {
+fn watch_show_filters_empty_config() -> anyhow::Result<()> {
     let directory = cli_test_dir("auto-show");
     std::fs::create_dir_all(&directory).context("create directory")?;
 
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
-            "automatic",
+            "watch",
             "--show-filters",
             "--filters",
             directory.join("nonexistent.toml").to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run automatic --show-filters")?;
+        .context("run watch --show-filters")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
 
     ensure!(

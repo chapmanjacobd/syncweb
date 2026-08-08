@@ -19,9 +19,6 @@ _syncweb() {
             syncweb,attest)
                 cmd="syncweb__subcmd__attest"
                 ;;
-            syncweb,automatic)
-                cmd="syncweb__subcmd__automatic"
-                ;;
             syncweb,collection)
                 cmd="syncweb__subcmd__collection"
                 ;;
@@ -389,7 +386,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer automatic watch stats filestats verify publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer watch stats filestats verify publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -470,32 +467,6 @@ _syncweb() {
             fi
             case "${prev}" in
                 --timeout)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__automatic)
-            opts="-h --show-filters --dry-run --paths --filters --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --paths)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --filters)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -3201,7 +3172,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__watch)
-            opts="-h --debounce-ms --exclude --once --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --debounce-ms --exclude --once --show-filters --dry-run --paths --filters --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3212,6 +3183,14 @@ _syncweb() {
                     return 0
                     ;;
                 --exclude)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --paths)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --filters)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

@@ -6,13 +6,13 @@ use clap::{Args, Subcommand};
 pub enum Command {
     #[command(about = "Show syncweb version information")]
     Version,
-    #[command(about = "Start the local syncweb daemon", alias = "daemon")]
+    #[command(about = "Start the local syncweb daemon")]
     Start(StartArgs),
-    #[command(about = "Stop the local syncweb node", alias = "daemon-shutdown")]
+    #[command(about = "Stop the local syncweb node")]
     Shutdown(ShutdownArgs),
     #[command(about = "Show the local daemon status")]
     Status,
-    #[command(about = "Ask the local daemon to reload configuration", alias = "daemon-reload")]
+    #[command(about = "Ask the local daemon to reload configuration")]
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync(DaemonSyncArgs),

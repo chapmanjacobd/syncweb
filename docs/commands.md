@@ -412,13 +412,8 @@ syncweb config set discovery.interface eth0
 | `sort` | `sort` | Sort results (uses peer tracker) |
 | `stat` | `stat` | File metadata from doc + blob store |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
-| | `daemon` | Start the single-writer daemon (`--foreground` keeps it attached) |
 | | `status` | Show daemon status |
-| | `daemon-shutdown` | Ask the daemon to stop |
-| | `daemon-reload` | Ask the daemon to reload configuration |
 | | `daemon-sync` | Ask the daemon to trigger synchronization |
-| | `daemon-add` | Add a folder to the running daemon |
-| | `daemon-remove` | Remove a folder from the running daemon |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |

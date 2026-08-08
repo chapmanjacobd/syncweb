@@ -68,8 +68,8 @@
 | 1 | Daemon running, change config.toml, then `syncweb reload` | Daemon reloads config, no restart needed | Check logs for "config reloaded" |
 | 2 | `syncweb daemon-sync` | Triggers sync for all folders | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM sync_checkpoints ORDER BY last_updated_at DESC LIMIT 5;"` |
 | 3 | `syncweb daemon-sync <ns>` | Triggers sync for a specific folder; warns and does nothing if it is not live | |
-| 4 | `syncweb daemon-add ./new-folder` | Adds folder to running daemon | `syncweb folders` shows new folder |
-| 5 | `syncweb daemon-remove <namespace-id>` | Removes folder from daemon | `syncweb folders` no longer shows it |
+| 4 | `syncweb create ./new-folder` | Creates folder and adds it to the running daemon | `syncweb folders` shows new folder |
+| 5 | `syncweb leave <namespace-id>` | Removes folder from daemon | `syncweb folders` no longer shows it |
 
 ---
 

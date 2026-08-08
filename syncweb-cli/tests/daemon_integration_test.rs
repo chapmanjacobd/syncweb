@@ -157,16 +157,16 @@ fn test_create_routes_through_daemon() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_daemon_shutdown_alias() -> anyhow::Result<()> {
-    let data_dir = cli_test_dir("daemon-shutdown-alias")?;
+fn test_daemon_shutdown() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("daemon-shutdown")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
     let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "daemon-shutdown"])?;
-    ensure!(shutdown.status.success(), "daemon-shutdown should succeed");
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown"])?;
+    ensure!(shutdown.status.success(), "shutdown should succeed");
 
     let mut stopped = false;
     for _ in 0..10 {
@@ -177,7 +177,7 @@ fn test_daemon_shutdown_alias() -> anyhow::Result<()> {
             break;
         }
     }
-    ensure!(stopped, "daemon should be stopped after daemon-shutdown");
+    ensure!(stopped, "daemon should be stopped after shutdown");
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
 }
@@ -210,8 +210,8 @@ fn test_daemon_reload_via_ipc() -> anyhow::Result<()> {
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let reload = syncweb(&["--data-dir", data_dir_arg, "daemon-reload"])?;
-    ensure!(reload.status.success(), "daemon-reload should succeed");
+    let reload = syncweb(&["--data-dir", data_dir_arg, "reload"])?;
+    ensure!(reload.status.success(), "reload should succeed");
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
     ensure!(shutdown.status.success());
@@ -356,7 +356,7 @@ fn test_daemon_multiple_ipc_commands() -> anyhow::Result<()> {
     let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
     ensure!(status.status.success());
 
-    let reload = syncweb(&["--data-dir", data_dir_arg, "daemon-reload"])?;
+    let reload = syncweb(&["--data-dir", data_dir_arg, "reload"])?;
     ensure!(reload.status.success());
 
     let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync"])?;

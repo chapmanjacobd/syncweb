@@ -106,9 +106,6 @@ _syncweb() {
             syncweb,reload)
                 cmd="syncweb__subcmd__reload"
                 ;;
-            syncweb,schedule)
-                cmd="syncweb__subcmd__schedule"
-                ;;
             syncweb,shutdown)
                 cmd="syncweb__subcmd__shutdown"
                 ;;
@@ -166,11 +163,20 @@ _syncweb() {
             syncweb__subcmd__collection,versions)
                 cmd="syncweb__subcmd__collection__subcmd__versions"
                 ;;
+            syncweb__subcmd__config,schedule)
+                cmd="syncweb__subcmd__config__subcmd__schedule"
+                ;;
             syncweb__subcmd__config,set)
                 cmd="syncweb__subcmd__config__subcmd__set"
                 ;;
             syncweb__subcmd__config,show)
                 cmd="syncweb__subcmd__config__subcmd__show"
+                ;;
+            syncweb__subcmd__config__subcmd__schedule,folder)
+                cmd="syncweb__subcmd__config__subcmd__schedule__subcmd__folder"
+                ;;
+            syncweb__subcmd__config__subcmd__schedule,set)
+                cmd="syncweb__subcmd__config__subcmd__schedule__subcmd__set"
                 ;;
             syncweb__subcmd__db,backup)
                 cmd="syncweb__subcmd__db__subcmd__backup"
@@ -295,12 +301,6 @@ _syncweb() {
             syncweb__subcmd__provider,add)
                 cmd="syncweb__subcmd__provider__subcmd__add"
                 ;;
-            syncweb__subcmd__schedule,folder)
-                cmd="syncweb__subcmd__schedule__subcmd__folder"
-                ;;
-            syncweb__subcmd__schedule,set)
-                cmd="syncweb__subcmd__schedule__subcmd__set"
-                ;;
             syncweb__subcmd__snapshot,create)
                 cmd="syncweb__subcmd__snapshot__subcmd__create"
                 ;;
@@ -392,7 +392,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer automatic watch stats filestats verify schedule publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages media help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer automatic watch stats filestats verify publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages media help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -650,12 +650,90 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__config)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help set show"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help set show schedule"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__config__subcmd__schedule)
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help set folder"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__config__subcmd__schedule__subcmd__folder)
+            opts="-h --active --max-upload --max-download --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --active)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-upload)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-download)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__config__subcmd__schedule__subcmd__set)
+            opts="-h --active --bandwidth --period --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --active)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --bandwidth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --period)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -2168,84 +2246,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__schedule)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help set folder"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__schedule__subcmd__folder)
-            opts="-h --active --max-upload --max-download --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --active)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --max-upload)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --max-download)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__schedule__subcmd__set)
-            opts="-h --active --bandwidth --period --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --active)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --bandwidth)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --period)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

@@ -56,7 +56,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "watch" -d 'Watch a 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show persisted bandwidth accounting'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "filestats" -d 'Show file-level statistics for synced folder content'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "verify" -d 'Re-check local folder blob integrity'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "schedule" -d 'Show or update synchronization schedules'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "publish" -d 'Publish a folder or blob for public read access'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "unpublish" -d 'Remove a public blob pin'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "collection" -d 'Create and publish versioned content collections'
@@ -155,13 +154,14 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l verbose -d '
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -f -a "set" -d 'Set a configuration value'
-complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show" -f -a "show" -d 'Show configuration, optionally limited to a section'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -f -a "set" -d 'Set a configuration value'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -f -a "show" -d 'Show configuration, optionally limited to a section'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and not __fish_seen_subcommand_from set show schedule" -f -a "schedule" -d 'Show or update synchronization schedules'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from set" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from set" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from set" -l json -d 'Emit machine-readable JSON where supported'
@@ -172,6 +172,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from show" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from show" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -f -a "set" -d 'Update the global schedule'
+complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -f -a "folder" -d 'Set schedule overrides for a named folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l sort -d 'Collect and sort output instead of streaming it' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
@@ -450,29 +457,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l verbose -d 'E
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -f -a "set" -d 'Update the global schedule'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and not __fish_seen_subcommand_from set folder" -f -a "folder" -d 'Set schedule overrides for a named folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l active -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l bandwidth -d 'Bandwidth rate (e.g. \'500K\', \'2M\')' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l period -d 'Time window for the bandwidth limit (e.g. \'08:00-18:00\')' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from set" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l active -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l max-upload -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l max-download -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand schedule; and __fish_seen_subcommand_from folder" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l blob -d 'Publish this content hash as an unauthenticated blob ticket' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish" -l verbose -d 'Enable verbose structured logging'

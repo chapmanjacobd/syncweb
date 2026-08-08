@@ -98,7 +98,6 @@ help_categories! {
     ];
     "Configuration" => [
         Command::Config { .. } => "config",
-        Command::Schedule { .. } => "schedule",
     ];
     "Maintenance" => [
         Command::Db { .. } => "db",

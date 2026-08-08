@@ -461,7 +461,7 @@ syncweb config set discovery.interface eth0
 | | `network kick` | Remove device from a network |
 | | `stats` | Bandwidth accounting per folder/peer |
 | | `verify` | Integrity verification (re-check local blobs) |
-| | `schedule` | Show/modify sync schedule |
+| | `config schedule` | Show/modify sync schedule |
 | | `conflicts` | List/resolve file conflicts |
 | | `watch` | File watcher for real-time sync |
 | | `network test-relay` | Test Syncthing relay connectivity |
@@ -479,10 +479,10 @@ syncweb import ./documents
 syncweb watch --once ./documents
 syncweb stats --period 24h
 syncweb verify ./documents
-syncweb schedule
-syncweb schedule set --active "22:00-06:00"
-syncweb schedule set --bandwidth "5MB/s" --period "08:00-18:00"
-syncweb schedule folder media --active "01:00-05:00"
+syncweb config schedule
+syncweb config schedule set --active "22:00-06:00"
+syncweb config schedule set --bandwidth "5MB/s" --period "08:00-18:00"
+syncweb config schedule folder media --active "01:00-05:00"
 
 # Download with limits (max entries)
 syncweb download --limit 10 /path/to/files

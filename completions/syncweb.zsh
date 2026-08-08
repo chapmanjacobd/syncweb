@@ -227,6 +227,58 @@ _arguments "${_arguments_options[@]}" : \
 '::section:_default' \
 && ret=0
 ;;
+(schedule)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__config__subcmd__schedule_commands" \
+"*::: :->schedule" \
+&& ret=0
+
+    case $state in
+    (schedule)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-config-schedule-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+'--active=[]:ACTIVE:_default' \
+'--bandwidth=[Bandwidth rate (e.g. '\''500K'\'', '\''2M'\'')]:BANDWIDTH:_default' \
+'--period=[Time window for the bandwidth limit (e.g. '\''08\:00-18\:00'\'')]:PERIOD:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(folder)
+_arguments "${_arguments_options[@]}" : \
+'--active=[]:ACTIVE:_default' \
+'--max-upload=[]:MAX_UPLOAD:_default' \
+'--max-download=[]:MAX_DOWNLOAD:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':name:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
         esac
     ;;
 esac
@@ -704,58 +756,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 '::path:_files' \
 && ret=0
-;;
-(schedule)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__schedule_commands" \
-"*::: :->schedule" \
-&& ret=0
-
-    case $state in
-    (schedule)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-schedule-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-'--active=[]:ACTIVE:_default' \
-'--bandwidth=[Bandwidth rate (e.g. '\''500K'\'', '\''2M'\'')]:BANDWIDTH:_default' \
-'--period=[Time window for the bandwidth limit (e.g. '\''08\:00-18\:00'\'')]:PERIOD:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(folder)
-_arguments "${_arguments_options[@]}" : \
-'--active=[]:ACTIVE:_default' \
-'--max-upload=[]:MAX_UPLOAD:_default' \
-'--max-download=[]:MAX_DOWNLOAD:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':name:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
 (publish)
 _arguments "${_arguments_options[@]}" : \
@@ -1939,7 +1939,6 @@ _syncweb_commands() {
 'stats:Show persisted bandwidth accounting' \
 'filestats:Show file-level statistics for synced folder content' \
 'verify:Re-check local folder blob integrity' \
-'schedule:Show or update synchronization schedules' \
 'publish:Publish a folder or blob for public read access' \
 'unpublish:Remove a public blob pin' \
 'collection:Create and publish versioned content collections' \
@@ -2023,8 +2022,27 @@ _syncweb__subcmd__config_commands() {
     local commands; commands=(
 'set:Set a configuration value' \
 'show:Show configuration, optionally limited to a section' \
+'schedule:Show or update synchronization schedules' \
     )
     _describe -t commands 'syncweb config commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__config__subcmd__schedule_commands] )) ||
+_syncweb__subcmd__config__subcmd__schedule_commands() {
+    local commands; commands=(
+'set:Update the global schedule' \
+'folder:Set schedule overrides for a named folder' \
+    )
+    _describe -t commands 'syncweb config schedule commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__config__subcmd__schedule__subcmd__folder_commands] )) ||
+_syncweb__subcmd__config__subcmd__schedule__subcmd__folder_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb config schedule folder commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__config__subcmd__schedule__subcmd__set_commands] )) ||
+_syncweb__subcmd__config__subcmd__schedule__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb config schedule set commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__config__subcmd__set_commands] )) ||
 _syncweb__subcmd__config__subcmd__set_commands() {
@@ -2415,24 +2433,6 @@ _syncweb__subcmd__publish_commands() {
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule_commands] )) ||
-_syncweb__subcmd__schedule_commands() {
-    local commands; commands=(
-'set:Update the global schedule' \
-'folder:Set schedule overrides for a named folder' \
-    )
-    _describe -t commands 'syncweb schedule commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__folder_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__folder_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb schedule folder commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__schedule__subcmd__set_commands] )) ||
-_syncweb__subcmd__schedule__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb schedule set commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__shutdown_commands] )) ||
 _syncweb__subcmd__shutdown_commands() {

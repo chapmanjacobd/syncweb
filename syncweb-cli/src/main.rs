@@ -241,7 +241,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::DaemonSync
         | Command::Watch(_)
         | Command::Stats(_)
-        | Command::Schedule { .. }
         | Command::Config { .. }
         | Command::Completions { .. }
         | Command::Manpages { .. }
@@ -261,7 +260,6 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::DaemonSync
             | Command::Watch(_)
             | Command::Stats(_)
-            | Command::Schedule { .. }
             | Command::Config { .. }
             | Command::Completions { .. }
             | Command::Manpages { .. }
@@ -322,9 +320,6 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     }
     if let Command::Stats(stats) = command {
         return handle_stats(&ctx, stats);
-    }
-    if let Command::Schedule { command: schedule } = command {
-        return handle_schedule(&ctx, schedule);
     }
     if let Command::Config { command: config } = command {
         return handle_config(&ctx, config).await;
@@ -416,6 +411,7 @@ async fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> 
                 println!("{key} updated");
             }
         }
+        Some(ConfigCommand::Schedule { command: schedule }) => return handle_schedule(ctx, schedule),
     }
     Ok(())
 }

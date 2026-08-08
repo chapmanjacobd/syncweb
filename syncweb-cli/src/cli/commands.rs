@@ -65,11 +65,6 @@ pub enum Command {
     FileStats(FileStatsArgs),
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
-    #[command(about = "Show or update synchronization schedules")]
-    Schedule {
-        #[command(subcommand)]
-        command: Option<ScheduleCommand>,
-    },
     #[command(about = "Publish a folder or blob for public read access")]
     Publish(PublishArgs),
     #[command(about = "Remove a public blob pin")]
@@ -159,6 +154,11 @@ pub enum ConfigCommand {
     Set { key: String, value: String },
     #[command(about = "Show configuration, optionally limited to a section")]
     Show { section: Option<String> },
+    #[command(about = "Show or update synchronization schedules")]
+    Schedule {
+        #[command(subcommand)]
+        command: Option<ScheduleCommand>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

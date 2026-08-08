@@ -266,7 +266,7 @@ fn commands_and_json_version_are_available() -> anyhow::Result<()> {
     ensure!(help_text.contains("watch"));
     ensure!(help_text.contains("stats"));
     ensure!(help_text.contains("verify"));
-    ensure!(help_text.contains("schedule"));
+    ensure!(help_text.contains("config"));
 
     let version = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--json", "version"])
@@ -284,12 +284,20 @@ fn schedule_and_stats_commands_persist_state() -> anyhow::Result<()> {
     let directory = cli_test_dir("schedule-state");
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
     let schedule = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "schedule", "set", "--active", "22:00-06:00"])
+        .args([
+            "--data-dir",
+            &data_dir,
+            "config",
+            "schedule",
+            "set",
+            "--active",
+            "22:00-06:00",
+        ])
         .output()
-        .context("run schedule set")?;
+        .context("run config schedule set")?;
     ensure!(
         schedule.status.success(),
-        "schedule set failed: {}",
+        "config schedule set failed: {}",
         String::from_utf8_lossy(&schedule.stderr)
     );
 

@@ -55,7 +55,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show persisted bandwidth accounting')
             [CompletionResult]::new('filestats', 'filestats', [CompletionResultType]::ParameterValue, 'Show file-level statistics for synced folder content')
             [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Re-check local folder blob integrity')
-            [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Show or update synchronization schedules')
             [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a folder or blob for public read access')
             [CompletionResult]::new('unpublish', 'unpublish', [CompletionResultType]::ParameterValue, 'Remove a public blob pin')
             [CompletionResult]::new('collection', 'collection', [CompletionResultType]::ParameterValue, 'Create and publish versioned content collections')
@@ -221,6 +220,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Set a configuration value')
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show configuration, optionally limited to a section')
+            [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Show or update synchronization schedules')
             break
         }
         'syncweb;config;set' {
@@ -234,6 +234,44 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;config;show' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;config;schedule' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Update the global schedule')
+            [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Set schedule overrides for a named folder')
+            break
+        }
+        'syncweb;config;schedule;set' {
+            [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
+            [CompletionResult]::new('--bandwidth', '--bandwidth', [CompletionResultType]::ParameterName, 'Bandwidth rate (e.g. ''500K'', ''2M'')')
+            [CompletionResult]::new('--period', '--period', [CompletionResultType]::ParameterName, 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;config;schedule;folder' {
+            [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
+            [CompletionResult]::new('--max-upload', '--max-upload', [CompletionResultType]::ParameterName, 'max-upload')
+            [CompletionResult]::new('--max-download', '--max-download', [CompletionResultType]::ParameterName, 'max-download')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
@@ -643,44 +681,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--fix', '--fix', [CompletionResultType]::ParameterName, 'Attempt to repair corrupted blobs by re-downloading from peers')
             [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
             [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;schedule' {
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('set', 'set', [CompletionResultType]::ParameterValue, 'Update the global schedule')
-            [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Set schedule overrides for a named folder')
-            break
-        }
-        'syncweb;schedule;set' {
-            [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
-            [CompletionResult]::new('--bandwidth', '--bandwidth', [CompletionResultType]::ParameterName, 'Bandwidth rate (e.g. ''500K'', ''2M'')')
-            [CompletionResult]::new('--period', '--period', [CompletionResultType]::ParameterName, 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;schedule;folder' {
-            [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
-            [CompletionResult]::new('--max-upload', '--max-upload', [CompletionResultType]::ParameterName, 'max-upload')
-            [CompletionResult]::new('--max-download', '--max-download', [CompletionResultType]::ParameterName, 'max-download')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

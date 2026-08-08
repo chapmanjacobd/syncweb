@@ -52,7 +52,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand stats 'Show persisted bandwidth accounting'
             cand filestats 'Show file-level statistics for synced folder content'
             cand verify 'Re-check local folder blob integrity'
-            cand schedule 'Show or update synchronization schedules'
             cand publish 'Publish a folder or blob for public read access'
             cand unpublish 'Remove a public blob pin'
             cand collection 'Create and publish versioned content collections'
@@ -206,6 +205,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand set 'Set a configuration value'
             cand show 'Show configuration, optionally limited to a section'
+            cand schedule 'Show or update synchronization schedules'
         }
         &'syncweb;config;set'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -217,6 +217,41 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;config;show'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;config;schedule'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand set 'Update the global schedule'
+            cand folder 'Set schedule overrides for a named folder'
+        }
+        &'syncweb;config;schedule;set'= {
+            cand --active 'active'
+            cand --bandwidth 'Bandwidth rate (e.g. ''500K'', ''2M'')'
+            cand --period 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;config;schedule;folder'= {
+            cand --active 'active'
+            cand --max-upload 'max-upload'
+            cand --max-download 'max-download'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -597,41 +632,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --fix 'Attempt to repair corrupted blobs by re-downloading from peers'
             cand --no-sharing 'Do not share or seed downloaded content'
             cand --no-seeding 'Do not share or seed downloaded content'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;schedule'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-            cand set 'Update the global schedule'
-            cand folder 'Set schedule overrides for a named folder'
-        }
-        &'syncweb;schedule;set'= {
-            cand --active 'active'
-            cand --bandwidth 'Bandwidth rate (e.g. ''500K'', ''2M'')'
-            cand --period 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;schedule;folder'= {
-            cand --active 'active'
-            cand --max-upload 'max-upload'
-            cand --max-download 'max-download'
-            cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

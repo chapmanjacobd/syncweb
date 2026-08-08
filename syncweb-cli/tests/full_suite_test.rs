@@ -78,7 +78,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "stats",
         "filestats",
         "verify",
-        "schedule",
         "publish",
         "unpublish",
         "collection",
@@ -309,8 +308,8 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
 #[test]
 fn schedule_and_stats_persist() -> anyhow::Result<()> {
     let data_dir = test_dir("sched-stats");
-    let sched = run_with_data(&data_dir, &["schedule", "set", "--active", "22:00-06:00"])?;
-    assert_success(&sched, "schedule set")?;
+    let sched = run_with_data(&data_dir, &["config", "schedule", "set", "--active", "22:00-06:00"])?;
+    assert_success(&sched, "config schedule set")?;
 
     let stats = run_with_data(&data_dir, &["--json", "stats"])?;
     assert_success(&stats, "stats")?;

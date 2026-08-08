@@ -259,18 +259,23 @@ fn test_daemon_folders_via_ipc() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_daemon_init_via_ipc() -> anyhow::Result<()> {
-    let data_dir = cli_test_dir("daemon-init")?;
-    let dir = cli_test_dir("daemon-init-folder")?;
+fn test_daemon_create_via_ipc() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("daemon-create")?;
+    let dir = cli_test_dir("daemon-create-folder")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
     let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let init = syncweb(&["--data-dir", data_dir_arg, "init", dir.to_str().context("UTF-8 path")?])?;
-    ensure!(init.status.success(), "init should succeed via daemon");
-    let stdout = String::from_utf8(init.stdout).context("UTF-8 output")?;
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "create",
+        dir.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "create should succeed via daemon");
+    let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("namespace:"));
     ensure!(stdout.contains("ticket:"));
 
@@ -651,15 +656,6 @@ fn test_verify_help_lists_selector_arg() -> anyhow::Result<()> {
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("PATH") || help.contains("path") || help.contains("folder"));
-    Ok(())
-}
-
-#[test]
-fn test_init_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["init", "--help"])?;
-    ensure!(output.status.success());
-    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("--no-daemon") || help.contains("daemon"));
     Ok(())
 }
 

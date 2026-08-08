@@ -609,27 +609,27 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_init_outputs_url() -> anyhow::Result<()> {
-    let directory = cli_test_dir("init-test");
-    let data_dir = cli_test_dir("init-data");
+fn test_create_outputs_url() -> anyhow::Result<()> {
+    let directory = cli_test_dir("create-test");
+    let data_dir = cli_test_dir("create-data");
 
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "init",
+            "create",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb init")?;
+        .context("run syncweb create")?;
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
 
     ensure!(
         output.status.success(),
-        "init should succeed: {:?}",
+        "create should succeed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;

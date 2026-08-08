@@ -16,7 +16,7 @@ pub enum Command {
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync,
-    #[command(about = "Create a synchronized folder")]
+    #[command(about = "Create a synchronized folder and print a shareable URL")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
     Join(FolderJoin),
@@ -602,14 +602,6 @@ pub enum SnapshotCommand {
     },
     #[command(about = "Delete a snapshot and release its pins")]
     Delete { path: PathBuf, snapshot: String },
-}
-
-#[derive(Debug, Args)]
-pub struct InitArgs {
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
-    #[arg(long, default_value = "sendreceive")]
-    pub mode: String,
 }
 
 #[derive(Debug, Args)]

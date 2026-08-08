@@ -32,7 +32,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand status 'Show the local daemon status'
             cand reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
-            cand create 'Create a synchronized folder'
+            cand create 'Create a synchronized folder and print a shareable URL'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave a synchronized folder, optionally deleting its local files'
             cand folders 'List managed folders'
@@ -47,7 +47,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand snapshot 'Manage content-addressed snapshots'
             cand health 'Show seeding status per folder blob'
             cand transfer 'Inspect and control durable transfer jobs'
-            cand init 'Initialize a folder and print a shareable URL'
             cand automatic 'Run rules-based automatic synchronization'
             cand watch 'Watch a folder and import filesystem changes'
             cand stats 'Show persisted bandwidth accounting'
@@ -530,16 +529,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;transfer;retry'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;init'= {
-            cand --mode 'mode'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

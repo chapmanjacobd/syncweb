@@ -17,14 +17,14 @@
 
 ## 1. Initialization & Configuration
 
-### 1.1 First Run / Init
+### 1.1 First Run / Create
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Run `syncweb init ./test-folder` | Creates `./test-folder/`, outputs `sync://<node-id>/<namespace-id>` URL | Check dir exists: `ls -la test-folder/` |
-| 2 | Run `syncweb init --sync-mode sendonly ./test-sendonly` | Creates folder with SendOnly mode | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM folder_configs;"` |
-| 3 | Run `syncweb init --label "My Docs" --network home ./test-network` | Creates folder linked to network "home" | Verify with `syncweb config show networks` |
-| 4 | Run `syncweb init --sync-mode receiveencrypted ./test-encrypted` | Creates ReceiveEncrypted folder | Check folder list: `syncweb folders` |
+| 1 | Run `syncweb create ./test-folder` | Creates `./test-folder/`, prints path, namespace, ticket, and `syncweb://` share URL | Check dir exists: `ls -la test-folder/` |
+| 2 | Run `syncweb create --mode sendonly ./test-sendonly` | Creates folder with SendOnly mode | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM folder_configs;"` |
+| 3 | Run `syncweb create --network home ./test-network` | Creates folder linked to network "home" | Verify with `syncweb config show networks` |
+| 4 | Run `syncweb create --mode receiveencrypted ./test-encrypted` | Creates ReceiveEncrypted folder | Check folder list: `syncweb folders` |
 
 ### 1.2 Config Management
 
@@ -81,7 +81,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb init --sync-mode sendreceive ./shared-docs` | Creates folder, prints URL | Save the URL |
+| 1 | Alice: `syncweb create --mode sendreceive ./shared-docs` | Creates folder, prints URL | Save the URL |
 | 2 | Alice: `echo "hello world" > shared-docs/test.txt` | File created | |
 | 3 | Alice: `syncweb import ./shared-docs` | Imports file into blob store | `syncweb ls ./shared-docs` shows test.txt |
 | 4 | Bob: `syncweb join <alice-url> ./bob-shared` | Joins folder, starts syncing | Wait for discovery (~5-30s) |
@@ -94,12 +94,12 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb init --sync-mode sendonly ./sendonly` | SendOnly folder | |
+| 1 | Alice: `syncweb create --mode sendonly ./sendonly` | SendOnly folder | |
 | 2 | Alice: create file, `syncweb import` | File available remotely | |
 | 3 | Bob: `join` the folder | Can read but writes are rejected | Bob tries: `echo "x" > sendonly/x.txt && syncweb import` → error |
-| 4 | Alice: `syncweb init --sync-mode receiveonly ./recvonly` | ReceiveOnly folder | |
+| 4 | Alice: `syncweb create --mode receiveonly ./recvonly` | ReceiveOnly folder | |
 | 5 | Bob: `join` the folder | Can write but Alice ignores Bob's writes | |
-| 6 | Alice: `syncweb init --sync-mode receiveencrypted ./enc` | ReceiveEncrypted folder | |
+| 6 | Alice: `syncweb create --mode receiveencrypted ./enc` | ReceiveEncrypted folder | |
 | 7 | Bob: `join` the folder | Can write, but blobs are encrypted at rest | |
 
 ### 3.3 Leave / Drop
@@ -315,7 +315,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb init --network home ./nw-docs` | Creates folder in "home" network | `syncweb network ls home` shows the folder |
+| 1 | Alice: `syncweb create --network home ./nw-docs` | Creates folder in "home" network | `syncweb network ls home` shows the folder |
 | 2 | Alice imports files, Bob joins the folder | Bob gets auto-discovery via network gossip | |
 | 3 | Alice: `syncweb network kick home <bob-device-id>` | Removes Bob from network | Bob disconnects |
 
@@ -660,7 +660,7 @@ For testing on a single machine:
 ```bash
 # Terminal 1: Alice
 mkdir -p /tmp/alice-data /tmp/alice-files
-syncweb --data-dir /tmp/alice-data init /tmp/alice-files/shared
+syncweb --data-dir /tmp/alice-data create /tmp/alice-files/shared
 # Copy the URL
 
 # Terminal 2: Bob

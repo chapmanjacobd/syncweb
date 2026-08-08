@@ -317,12 +317,13 @@ syncweb sort --sort niche music/ | syncweb download -
 
 ---
 
-## `init`/`config` Command Design
+## `create`/`config` Command Design
 
-The `init` command creates a folder and outputs a shareable URL. The `config` command
-manages local configuration (data dir, default paths, sync modes, filters).
+The `create` command creates a folder and outputs a shareable URL (namespace, ticket,
+and `syncweb://` share URL). The `config` command manages local configuration (data dir,
+default paths, sync modes, filters).
 
-### Init Command
+### Create Command
 
 ```rust
 struct InitResult {
@@ -333,25 +334,25 @@ struct InitResult {
 }
 
 impl IrohNode {
-    /// Initialize a folder: create dir, set up namespace, output URL
-    async fn init_folder(&self, path: &Path, opts: InitOptions) -> Result<InitResult>;
+    /// Create a folder: create dir, set up namespace, output URL
+    async fn create_folder(&self, path: &Path, opts: CreateOptions) -> Result<InitResult>;
 }
 ```
 
 CLI:
 ```bash
 # Create folder + output URL
-syncweb init ./documents
-# Output: sync://documents#<device-id>
+syncweb create ./documents
+# Output: syncweb://<namespace>?ticket=<ticket>
 
-# Init with sync mode
-syncweb init --sync-mode sendreceive ./documents
+# Create with sync mode
+syncweb create --mode sendreceive ./documents
 
-# Init with network membership
-syncweb init --network work ./documents
+# Create with network membership
+syncweb create --network work ./documents
 
-# Init with description
-syncweb init --label "Work Documents" ./documents
+# Create with relay fallback
+syncweb create --relay-fallback ./documents
 ```
 
 ### Config Command
@@ -399,7 +400,7 @@ syncweb config set discovery.interface eth0
 
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
-| `create` | `create` | Create folder + doc + blob store |
+| `create` | `create` | Create folder + doc + blob store + shareable URL |
 | `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
 | `accept` | `accept` | Grant capability to peer |
 | `drop` | `drop` | Revoke capability, remove peer |
@@ -419,7 +420,6 @@ syncweb config set discovery.interface eth0
 | | `daemon-sync` | Ask the daemon to trigger synchronization |
 | | `daemon-add` | Add a folder to the running daemon |
 | | `daemon-remove` | Remove a folder from the running daemon |
-| `init` | `init` | Create folder + output shareable sync:// URL |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |
@@ -574,9 +574,9 @@ syncweb sort --sort niche music/
 syncweb sort --sort peers --sort time music/
 syncweb sort --limit-size 10GB --min-seeders 2 music/
 
-# Init/config
-syncweb init ./documents
-syncweb init --network work ./documents
+# Create/Config
+syncweb create ./documents
+syncweb create --network work ./documents
 syncweb config set default_path ~/Syncweb
 
 # Start/daemon with discovery options

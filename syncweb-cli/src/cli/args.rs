@@ -75,7 +75,6 @@ help_categories! {
         Command::Automatic(_) => "automatic",
     ];
     "Sharing & Publishing" => [
-        Command::Init(_) => "init",
         Command::Publish(_) => "publish",
         Command::Unpublish(_) => "unpublish",
         Command::Mirror(_) => "mirror",

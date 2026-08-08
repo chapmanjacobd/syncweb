@@ -10,7 +10,7 @@ Focused documentation for the syncweb design and implementation.
 | [offline-conflict.md](offline-conflict.md) | Offline queue, conflict resolution, cache eviction |
 | [relay.md](relay.md) | Syncthing relay piggyback, transport fallback |
 | [filter-logging-schedule.md](filter-logging-schedule.md) | Filter engine, schedules, bandwidth accounting |
-| [commands.md](commands.md) | find, stat, sort, init/config command designs |
+| [commands.md](commands.md) | find, stat, sort, create/config command designs |
 | [module-structure.md](module-structure.md) | Module tree, parallel scanning/import/export |
 | [packages.md](packages.md) | Living folders, collection/package manifests, lifecycle |
 | [phases.md](phases.md) | Implementation phases (1-7) |

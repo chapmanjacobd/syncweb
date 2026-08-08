@@ -73,7 +73,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "import",
         "snapshot",
         "health",
-        "init",
         "automatic",
         "watch",
         "stats",
@@ -323,22 +322,22 @@ fn schedule_and_stats_persist() -> anyhow::Result<()> {
 }
 
 #[test]
-fn init_outputs_all_fields() -> anyhow::Result<()> {
-    let folder_dir = test_dir("init-folder");
-    let data_dir = test_dir("init-data");
+fn create_outputs_all_fields() -> anyhow::Result<()> {
+    let folder_dir = test_dir("create-folder");
+    let data_dir = test_dir("create-data");
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "init",
+            "create",
             folder_dir.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .with_context(|| "run syncweb init --no-daemon")?;
+        .with_context(|| "run syncweb create --no-daemon")?;
     let _ = fs::remove_dir_all(&folder_dir);
     let _ = fs::remove_dir_all(&data_dir);
-    assert_success(&output, "init")?;
+    assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("path:"), "should print path: {stdout}");
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");

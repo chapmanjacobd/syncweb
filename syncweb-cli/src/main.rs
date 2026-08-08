@@ -16,8 +16,8 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, InitArgs, MediaArgs,
-        MirrorArgs, NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
+        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, MediaArgs, MirrorArgs,
+        NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
         SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, TransferAllocateArgs, TransferCommand,
         TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs,
         WatchArgs,
@@ -218,7 +218,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Health(command) => handle_health(&ctx, command).await?,
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
-        Command::Init(command) => handle_init(&ctx, command).await?,
         Command::Automatic(command) => handle_automatic(&ctx, command).await?,
         Command::Publish(command) => handle_publish(&ctx, command).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
@@ -2376,49 +2375,14 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
     let ticket = folder.ticket(node.endpoint().addr(), true).await?;
-    if output_json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "namespace": folder.namespace_id().to_string(),
-                "ticket": ticket.to_string(),
-            })
-        );
-    } else {
-        println!("namespace: {}", folder.namespace_id());
-        println!("ticket: {ticket}");
-    }
-    node.stop().await?;
-    Ok(())
-}
-
-#[async_recursion]
-async fn handle_init(ctx: &CliContext<'_>, command: InitArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
-    std::fs::create_dir_all(&command.path)?;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::CreateFolder {
-                path: command.path.clone(),
-                mode: command.mode.clone(),
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
-    }
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
-    let ticket = folder.ticket(node.endpoint().addr(), true).await?;
     let result = InitResult::new(&command.path, folder.namespace_id(), ticket);
     if output_json {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
-                "path": result.path,
-                "namespace": result.namespace,
-                "ticket": result.ticket,
+                "path": command.path,
+                "namespace": folder.namespace_id().to_string(),
+                "ticket": result.ticket.to_string(),
                 "share_url": result.share_url,
             }))?
         );

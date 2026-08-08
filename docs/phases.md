@@ -30,7 +30,7 @@ Folder creation, joining, basic sync, and Syncthing relay fallback for CGNAT tra
 - Config: `[bep]` section for relay URLs, timeout, auto_fallback
 
 ### File Operations and Search/Sort/Stat
-Commands for ls, find, sort, stat, download, selective sync, init/config:
+Commands for ls, find, sort, stat, download, selective sync, create/config:
 - `FsWatcher` via notify-rs
 - `Scanner` for directory walking and BLAKE3 hashing
 - `ParallelScanner` for parallel directory scanning
@@ -47,7 +47,7 @@ Commands for ls, find, sort, stat, download, selective sync, init/config:
 - `StatOutput` with detailed file metadata and availability
 - `InitResult` for folder creation and shareable URL output
 - `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
-- `syncweb init`, `syncweb config`
+- `syncweb create`, `syncweb config`
 - Streaming output with optional collected sorting
 
 ### Advanced Sync and Networks

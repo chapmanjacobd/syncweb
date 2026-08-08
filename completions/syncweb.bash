@@ -67,9 +67,6 @@ _syncweb() {
             syncweb,indexing)
                 cmd="syncweb__subcmd__indexing"
                 ;;
-            syncweb,init)
-                cmd="syncweb__subcmd__init"
-                ;;
             syncweb,join)
                 cmd="syncweb__subcmd__join"
                 ;;
@@ -395,7 +392,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer init automatic watch stats filestats verify schedule publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages media help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot health transfer automatic watch stats filestats verify schedule publish unpublish collection package network db indexing link mirror provider trust attest moderation completions manpages media help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1308,28 +1305,6 @@ _syncweb() {
             fi
             case "${prev}" in
                 --limit)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__init)
-            opts="-h --mode --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --mode)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

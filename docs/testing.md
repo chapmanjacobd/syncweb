@@ -126,7 +126,7 @@
 
 
 ```console
-$ syncweb init --network home ~/Documents
+$ syncweb create --network home ~/Documents
 Created folder documents
 Local files: 1,284; imported: 1,284; verified: 1,284
 Private by default.

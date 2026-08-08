@@ -36,7 +36,7 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "shutdown" -d 'Stop 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "status" -d 'Show the local daemon status'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "reload" -d 'Ask the local daemon to reload configuration'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "daemon-sync" -d 'Ask the local daemon to trigger synchronization'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "create" -d 'Create a synchronized folder'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "create" -d 'Create a synchronized folder and print a shareable URL'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "join" -d 'Join a folder from an Iroh document ticket'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "folders" -d 'List managed folders'
@@ -51,7 +51,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "import" -d 'Import 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "snapshot" -d 'Manage content-addressed snapshots'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "health" -d 'Show seeding status per folder blob'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "transfer" -d 'Inspect and control durable transfer jobs'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "init" -d 'Initialize a folder and print a shareable URL'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "automatic" -d 'Run rules-based automatic synchronization'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "watch" -d 'Watch a folder and import filesystem changes'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show persisted bandwidth accounting'
@@ -403,12 +402,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_seen_subcommand_from retry" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l mode -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand init" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l paths -d 'Paths evaluated by --dry-run' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l filters -d 'Filter configuration (defaults to DATA_DIR/filters.toml)' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand automatic" -l data-dir -d 'Directory used for persistent node identity and data' -r -F

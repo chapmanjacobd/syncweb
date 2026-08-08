@@ -625,19 +625,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(init)
-_arguments "${_arguments_options[@]}" : \
-'--mode=[]:MODE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path:_files' \
-&& ret=0
-;;
 (automatic)
 _arguments "${_arguments_options[@]}" : \
 '*--paths=[Paths evaluated by --dry-run]:PATHS:_files' \
@@ -1932,7 +1919,7 @@ _syncweb_commands() {
 'status:Show the local daemon status' \
 'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'create:Create a synchronized folder' \
+'create:Create a synchronized folder and print a shareable URL' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave a synchronized folder, optionally deleting its local files' \
 'folders:List managed folders' \
@@ -1947,7 +1934,6 @@ _syncweb_commands() {
 'snapshot:Manage content-addressed snapshots' \
 'health:Show seeding status per folder blob' \
 'transfer:Inspect and control durable transfer jobs' \
-'init:Initialize a folder and print a shareable URL' \
 'automatic:Run rules-based automatic synchronization' \
 'watch:Watch a folder and import filesystem changes' \
 'stats:Show persisted bandwidth accounting' \
@@ -2197,11 +2183,6 @@ _syncweb__subcmd__indexing__subcmd__publish_commands() {
 _syncweb__subcmd__indexing__subcmd__search_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing search commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__init_commands] )) ||
-_syncweb__subcmd__init_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb init commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__join_commands] )) ||
 _syncweb__subcmd__join_commands() {

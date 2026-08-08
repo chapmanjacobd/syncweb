@@ -236,7 +236,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Shutdown(_)
         | Command::Status
         | Command::Reload
-        | Command::DaemonSync
+        | Command::DaemonSync(_)
         | Command::Watch(_)
         | Command::Stats(_)
         | Command::Config { .. }
@@ -255,7 +255,7 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::Shutdown(_)
             | Command::Status
             | Command::Reload
-            | Command::DaemonSync
+            | Command::DaemonSync(_)
             | Command::Watch(_)
             | Command::Stats(_)
             | Command::Config { .. }
@@ -310,8 +310,8 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     if matches!(&command, Command::Reload) {
         return handle_reload(&ctx).await;
     }
-    if matches!(&command, Command::DaemonSync) {
-        return handle_daemon_sync(&ctx).await;
+    if let Command::DaemonSync(args) = command {
+        return handle_daemon_sync(&ctx, args.namespace).await;
     }
     if let Command::Watch(watch) = command {
         return handle_watch(&ctx, watch).await;
@@ -686,13 +686,13 @@ async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
 }
 
 #[async_recursion]
-async fn handle_daemon_sync(ctx: &CliContext<'_>) -> Result<()> {
+async fn handle_daemon_sync(ctx: &CliContext<'_>, namespace: Option<String>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let client =
         syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
     let response = client
-        .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
+        .send(IpcRequest::new(IpcCommand::TriggerSync { namespace }))
         .await?;
     print_daemon_message(response, output_json)
 }

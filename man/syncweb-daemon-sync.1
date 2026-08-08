@@ -4,10 +4,13 @@
 .SH NAME
 daemon\-sync \- Ask the local daemon to trigger synchronization
 .SH SYNOPSIS
-\fBdaemon\-sync\fR [\fB\-h\fR|\fB\-\-help\fR] 
+\fBdaemon\-sync\fR [\fB\-h\fR|\fB\-\-help\fR] [\fINAMESPACE\fR] 
 .SH DESCRIPTION
 Ask the local daemon to trigger synchronization
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
+.TP
+[\fINAMESPACE\fR]
+Namespace of a live folder to sync now; omit it to sync every enabled folder

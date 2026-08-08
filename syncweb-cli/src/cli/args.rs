@@ -52,7 +52,7 @@ help_categories! {
         Command::Shutdown(_) => "shutdown",
         Command::Status => "status",
         Command::Reload => "reload",
-        Command::DaemonSync => "daemon-sync",
+        Command::DaemonSync(_) => "daemon-sync",
     ];
     "Folders" => [
         Command::Create(_) => "create",

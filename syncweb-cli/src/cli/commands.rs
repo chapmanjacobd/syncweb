@@ -15,7 +15,7 @@ pub enum Command {
     #[command(about = "Ask the local daemon to reload configuration", alias = "daemon-reload")]
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
-    DaemonSync,
+    DaemonSync(DaemonSyncArgs),
     #[command(about = "Create a synchronized folder and print a shareable URL")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
@@ -136,6 +136,12 @@ pub enum Command {
         #[arg(value_name = "COMMAND")]
         command: Option<String>,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct DaemonSyncArgs {
+    #[arg(help = "Namespace of a live folder to sync now; omit it to sync every enabled folder")]
+    pub namespace: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

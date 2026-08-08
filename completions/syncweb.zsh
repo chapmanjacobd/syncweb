@@ -108,6 +108,7 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
+'::namespace -- Namespace of a live folder to sync now; omit it to sync every enabled folder:_default' \
 && ret=0
 ;;
 (create)

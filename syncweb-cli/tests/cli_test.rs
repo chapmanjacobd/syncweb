@@ -54,6 +54,18 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
 }
 
 #[test]
+fn publish_aliases_are_not_available() -> anyhow::Result<()> {
+    for args in [["collection", "publish", "--help"], ["indexing", "publish", "--help"]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(args)
+            .output()
+            .with_context(|| format!("run syncweb {args:?}"))?;
+        ensure!(!output.status.success(), "removed alias should fail: {args:?}");
+    }
+    Ok(())
+}
+
+#[test]
 fn config_command_persists_bep_settings() -> anyhow::Result<()> {
     let directory = std::env::temp_dir().join(format!("syncweb-config-{}", uuid::Uuid::new_v4()));
     let set = Command::new(env!("CARGO_BIN_EXE_syncweb"))

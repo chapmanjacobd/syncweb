@@ -17,9 +17,10 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, MirrorArgs, NetworkCommand,
-        PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
-        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        PackageCommand, PublishBlobArgs, PublishCollectionArgs, PublishCommand, PublishFolderArgs, ScheduleCommand,
+        ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs,
+        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
+        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -217,7 +218,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Health(command) => handle_health(&ctx, command).await?,
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
-        Command::Publish(command) => handle_publish(&ctx, command).await?,
+        Command::Publish { command } => handle_publish(&ctx, command).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
         Command::Collection { command } => handle_collection(&ctx, command).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
@@ -2573,41 +2574,73 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     Ok(())
 }
 
-#[async_recursion]
-async fn handle_publish(ctx: &CliContext<'_>, command: PublishArgs) -> Result<()> {
+async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result<()> {
+    match command {
+        PublishCommand::Folder(args) => handle_publish_folder(ctx, args).await,
+        PublishCommand::Blob(args) => handle_publish_blob(ctx, args).await,
+        PublishCommand::Collection(args) => handle_publish_collection(ctx, args).await,
+        PublishCommand::Catalog(args) => cli::indexing::handle_catalog_publish(ctx, args).await,
+    }
+}
+
+async fn handle_publish_folder(ctx: &CliContext<'_>, args: PublishFolderArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    let selector = args
+        .namespace
+        .unwrap_or_else(|| args.path.to_string_lossy().to_string());
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Publish { namespace, blob: None }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = resolve_namespace(&manager, &selector).await?;
+    let folder = manager.get(namespace).await?;
+    let ticket = folder.ticket(node.endpoint().addr(), false).await?;
+    if output_json {
+        println!("{}", serde_json::json!({"ticket": ticket.to_string()}));
+    } else {
+        println!("ticket: {ticket}");
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_publish_blob(ctx: &CliContext<'_>, args: PublishBlobArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::Publish {
-                namespace: command.namespace.clone(),
-                blob: command.blob.clone(),
+                namespace: args.namespace.clone(),
+                blob: Some(args.hash.clone()),
             }))
             .await?;
         return print_daemon_message(response, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = manager.get(command.namespace.parse()?).await?;
-    if let Some(blob) = command.blob {
-        let hash = blob.parse()?;
-        let ticket = folder.publish_blob(node.endpoint().addr(), hash).await?;
-        if output_json {
-            println!("{}", serde_json::json!({"blob_ticket": ticket.to_string()}));
-        } else {
-            println!("blob_ticket: {ticket}");
-        }
+    let folder = manager.get(args.namespace.parse()?).await?;
+    let hash = args.hash.parse()?;
+    let ticket = folder.publish_blob(node.endpoint().addr(), hash).await?;
+    if output_json {
+        println!("{}", serde_json::json!({"blob_ticket": ticket.to_string()}));
     } else {
-        let ticket = folder.ticket(node.endpoint().addr(), false).await?;
-        if output_json {
-            println!("{}", serde_json::json!({"ticket": ticket.to_string()}));
-        } else {
-            println!("ticket: {ticket}");
-        }
+        println!("blob_ticket: {ticket}");
     }
     node.stop().await?;
     Ok(())
+}
+
+async fn handle_publish_collection(ctx: &CliContext<'_>, args: PublishCollectionArgs) -> Result<()> {
+    let node_db = open_node_db(ctx.data_dir)?;
+    handle_collection_publish(ctx, &node_db, args.path, args.namespace, args.sequence, args.bootstrap).await
 }
 
 #[async_recursion]
@@ -2706,12 +2739,6 @@ async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> 
                 println!("version: {}", manifest.version);
             }
         }
-        CollectionCommand::Publish {
-            path,
-            namespace,
-            sequence,
-            bootstrap,
-        } => handle_collection_publish(ctx, &node_db, path, namespace, sequence, bootstrap).await?,
     }
     Ok(())
 }

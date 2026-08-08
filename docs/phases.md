@@ -80,7 +80,7 @@ Public sharing and data package versioning:
 - `syncweb collection init` (with package profile) for folder initialization as data package
 - `syncweb collection add` for scanning, hashing files, and updating manifest
 - `syncweb collection versions` for creating new version with changelog
-- `syncweb collection publish` for blob ticket and gossip announcement
+- `syncweb publish collection` for blob ticket and gossip announcement
 - `syncweb package search` for discovering packages via gossip
 - `syncweb package info` for detailed package metadata
 - `syncweb package install` for fetch, verify, stage, and atomic swap

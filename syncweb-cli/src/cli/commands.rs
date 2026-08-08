@@ -63,8 +63,11 @@ pub enum Command {
     FileStats(FileStatsArgs),
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
-    #[command(about = "Publish a folder or blob for public read access")]
-    Publish(PublishArgs),
+    #[command(about = "Publish a folder, blob, collection, or catalog")]
+    Publish {
+        #[command(subcommand)]
+        command: PublishCommand,
+    },
     #[command(about = "Remove a public blob pin")]
     Unpublish(UnpublishArgs),
     #[command(about = "Create and publish versioned content collections")]
@@ -717,12 +720,53 @@ pub enum ScheduleCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum PublishCommand {
+    #[command(about = "Publish a folder ticket for public read access")]
+    Folder(PublishFolderArgs),
+    #[command(about = "Publish a content hash as an unauthenticated blob ticket")]
+    Blob(PublishBlobArgs),
+    #[command(about = "Store a collection manifest and mutable head in a folder")]
+    Collection(PublishCollectionArgs),
+    #[command(about = "Publish folder metadata to a catalog")]
+    Catalog(PublishCatalogArgs),
+}
+
 #[derive(Debug, Args)]
-pub struct PublishArgs {
+pub struct PublishFolderArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long, help = "Namespace ID or managed folder path")]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PublishBlobArgs {
     #[arg(help = "Namespace ID or managed folder path")]
     pub namespace: String,
-    #[arg(long, help = "Publish this content hash as an unauthenticated blob ticket")]
-    pub blob: Option<String>,
+    #[arg(help = "Content hash to publish as an unauthenticated blob ticket")]
+    pub hash: String,
+}
+
+#[derive(Debug, Args)]
+pub struct PublishCollectionArgs {
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+    #[arg(long)]
+    pub namespace: String,
+    #[arg(long, default_value_t = 1)]
+    pub sequence: u64,
+    #[arg(long, value_name = "NODE_ID")]
+    pub bootstrap: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PublishCatalogArgs {
+    pub folder: PathBuf,
+    #[arg(long)]
+    pub catalog: String,
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -757,17 +801,6 @@ pub enum CollectionCommand {
         version: String,
         #[arg(long)]
         changelog: Option<String>,
-    },
-    #[command(about = "Store a collection manifest and mutable head in a folder")]
-    Publish {
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        #[arg(long)]
-        namespace: String,
-        #[arg(long, default_value_t = 1)]
-        sequence: u64,
-        #[arg(long, value_name = "NODE_ID")]
-        bootstrap: Vec<String>,
     },
 }
 
@@ -881,14 +914,6 @@ pub enum IndexingCommand {
     Enable { folder: PathBuf },
     #[command(about = "Remove a folder from the local index")]
     Disable { folder: PathBuf },
-    #[command(about = "Publish folder metadata to a catalog")]
-    Publish {
-        folder: PathBuf,
-        #[arg(long)]
-        catalog: String,
-        #[arg(long = "tag")]
-        tags: Vec<String>,
-    },
     #[command(about = "Search subscribed catalogs")]
     Search {
         query: String,

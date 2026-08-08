@@ -455,7 +455,7 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
 
     if let Some(ns) = namespace {
-        let publish = syncweb(&["--data-dir", data_dir_arg, "publish", ns])?;
+        let publish = syncweb(&["--data-dir", data_dir_arg, "publish", "folder", "--namespace", ns])?;
         ensure!(publish.status.success(), "publish should succeed via daemon");
         let pub_stdout = String::from_utf8(publish.stdout).context("UTF-8 output")?;
         ensure!(pub_stdout.contains("ticket:"));

@@ -426,10 +426,14 @@ syncweb config set discovery.interface eth0
 | (implicit) | `import` | Import local files to blob store + doc entries |
 | | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
 | | `public list` | List announced public folders |
+| | `publish folder` | Publish a folder ticket for public read access |
+| | `publish blob` | Publish a content hash as an unauthenticated blob ticket |
+| | `publish collection` | Store a collection manifest, pin content, and announce a blob ticket |
+| | `publish catalog` | Publish folder metadata to a catalog |
+| | `unpublish` | Remove a public blob pin |
 | | `collection init` | Initialize folder as data package |
 | | `collection add` | Scan + hash files, update manifest |
 | | `collection versions` | Create new version with changelog |
-| | `collection publish` | Store manifest, pin content, and announce a blob ticket |
 | | `package search` | Discover packages via gossip |
 | | `package info` | Detailed package metadata |
 | | `package export` | Export package versions as compressed `.car.zst` drops |
@@ -503,8 +507,18 @@ syncweb join <folder> --subscribe
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
-# Publish with limits
-syncweb publish --limit 100 --size 10GB /path/to/folder
+# Publish a folder, a blob, a collection, or folder metadata to a catalog
+syncweb publish folder /path/to/folder
+syncweb publish folder . --namespace <namespace-id>
+syncweb publish blob <namespace-id> <hash>
+syncweb publish collection /path/to/collection --namespace <namespace-id>
+syncweb publish catalog /path/to/folder --catalog <name> --tag music
+
+# Unpublish a public blob pin
+syncweb unpublish <namespace-id> --blob <hash>
+
+# Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
+# (size/limit filters live on `syncweb download`, not `publish`)
 
 # Show deleted files
 syncweb deleted /path/to/folder

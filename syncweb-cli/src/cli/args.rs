@@ -74,7 +74,7 @@ help_categories! {
         Command::Watch(_) => "watch",
     ];
     "Sharing & Publishing" => [
-        Command::Publish(_) => "publish",
+        Command::Publish { .. } => "publish",
         Command::Unpublish(_) => "unpublish",
         Command::Mirror(_) => "mirror",
         Command::Provider { .. } => "provider",

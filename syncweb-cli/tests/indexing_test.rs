@@ -141,9 +141,9 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
 
     let published = run(
         &data_dir,
-        &["indexing", "publish", &namespace, "--catalog", "test-catalog"],
+        &["publish", "catalog", &namespace, "--catalog", "test-catalog"],
     )?;
-    assert_success(&published, "indexing publish")?;
+    assert_success(&published, "publish catalog")?;
     let stdout = String::from_utf8_lossy(&published.stdout).to_string();
     ensure!(
         stdout.contains("published:"),

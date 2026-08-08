@@ -750,7 +750,38 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (publish)
 _arguments "${_arguments_options[@]}" : \
-'--blob=[Publish this content hash as an unauthenticated blob ticket]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__publish_commands" \
+"*::: :->publish" \
+&& ret=0
+
+    case $state in
+    (publish)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-publish-command-$line[1]:"
+        case $line[1] in
+            (folder)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(blob)
+_arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -759,7 +790,41 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':namespace -- Namespace ID or managed folder path:_default' \
+':hash -- Content hash to publish as an unauthenticated blob ticket:_default' \
 && ret=0
+;;
+(collection)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[]:NAMESPACE:_default' \
+'--sequence=[]:SEQUENCE:_default' \
+'*--bootstrap=[]:NODE_ID:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path:_files' \
+&& ret=0
+;;
+(catalog)
+_arguments "${_arguments_options[@]}" : \
+'--catalog=[]:CATALOG:_default' \
+'*--tag=[]:TAGS:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':folder:_files' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (unpublish)
 _arguments "${_arguments_options[@]}" : \
@@ -823,21 +888,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '--changelog=[]:CHANGELOG:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path:_files' \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-'--namespace=[]:NAMESPACE:_default' \
-'--sequence=[]:SEQUENCE:_default' \
-'*--bootstrap=[]:NODE_ID:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1255,20 +1305,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (disable)
 _arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':folder:_files' \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-'--catalog=[]:CATALOG:_default' \
-'*--tag=[]:TAGS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1917,7 +1953,7 @@ _syncweb_commands() {
 'stats:Show persisted bandwidth accounting' \
 'filestats:Show file-level statistics for synced folder content' \
 'verify:Re-check local folder blob integrity' \
-'publish:Publish a folder or blob for public read access' \
+'publish:Publish a folder, blob, collection, or catalog' \
 'unpublish:Remove a public blob pin' \
 'collection:Create and publish versioned content collections' \
 'package:Manage locally installed collection packages' \
@@ -1960,7 +1996,6 @@ _syncweb__subcmd__collection_commands() {
 'init:Initialize a directory as a versioned collection' \
 'add:Scan files and update the local collection manifest' \
 'versions:Create a new collection manifest version' \
-'publish:Store a collection manifest and mutable head in a folder' \
     )
     _describe -t commands 'syncweb collection commands' commands "$@"
 }
@@ -1973,11 +2008,6 @@ _syncweb__subcmd__collection__subcmd__add_commands() {
 _syncweb__subcmd__collection__subcmd__init_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb collection init commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__collection__subcmd__publish_commands] )) ||
-_syncweb__subcmd__collection__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb collection publish commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__collection__subcmd__versions_commands] )) ||
 _syncweb__subcmd__collection__subcmd__versions_commands() {
@@ -2111,7 +2141,6 @@ _syncweb__subcmd__indexing_commands() {
     local commands; commands=(
 'enable:Opt a synchronized folder into indexing' \
 'disable:Remove a folder from the local index' \
-'publish:Publish folder metadata to a catalog' \
 'search:Search subscribed catalogs' \
 'health:Show verified provider health for a content hash' \
 'meta:Manage signed metadata' \
@@ -2163,11 +2192,6 @@ _syncweb__subcmd__indexing__subcmd__meta_commands() {
 _syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing meta add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__publish_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing publish commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__indexing__subcmd__search_commands] )) ||
 _syncweb__subcmd__indexing__subcmd__search_commands() {
@@ -2393,8 +2417,33 @@ _syncweb__subcmd__provider__subcmd__add_commands() {
 }
 (( $+functions[_syncweb__subcmd__publish_commands] )) ||
 _syncweb__subcmd__publish_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'folder:Publish a folder ticket for public read access' \
+'blob:Publish a content hash as an unauthenticated blob ticket' \
+'collection:Store a collection manifest and mutable head in a folder' \
+'catalog:Publish folder metadata to a catalog' \
+    )
     _describe -t commands 'syncweb publish commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__publish__subcmd__blob_commands] )) ||
+_syncweb__subcmd__publish__subcmd__blob_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb publish blob commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__publish__subcmd__catalog_commands] )) ||
+_syncweb__subcmd__publish__subcmd__catalog_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb publish catalog commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__publish__subcmd__collection_commands] )) ||
+_syncweb__subcmd__publish__subcmd__collection_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb publish collection commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__publish__subcmd__folder_commands] )) ||
+_syncweb__subcmd__publish__subcmd__folder_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb publish folder commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__reload_commands] )) ||
 _syncweb__subcmd__reload_commands() {

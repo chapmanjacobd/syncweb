@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::args::CliContext;
 use super::commands::{
     AttestCommand, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
-    ProviderTrustCommand, TrustCommand, TrustStreamCommand,
+    ProviderTrustCommand, PublishCatalogArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
     folder::{FolderManager, SyncwebFolder},
@@ -150,50 +150,6 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             )?;
             node.stop().await?;
         }
-        IndexingCommand::Publish { folder, catalog, tags } => {
-            let node = open_node(data_dir).await?;
-            let manager = FolderManager::new(&node);
-            let selected = resolve_folder(&manager, &folder).await?;
-            let indexing = open_indexing(data_dir)?;
-            let catalog_service = indexing.catalog_service(
-                node.docs_engine(),
-                node.blob_store(),
-                node.docs_engine().author().await?,
-            );
-            let (_, mut state) = open_indexing_state(data_dir)?;
-            let catalog_handle =
-                if let Some(existing) = state.catalogs.iter().find(|item| item.name == catalog).cloned() {
-                    catalog_service.subscribe_namespace(existing.namespace).await?
-                } else {
-                    let created = catalog_service.create_catalog(&catalog).await?;
-                    state.catalogs.push(CatalogState {
-                        name: catalog.clone(),
-                        namespace: created.namespace_id(),
-                    });
-                    created
-                };
-            let published = catalog_service
-                .publish_folder_with_metadata(&catalog_handle, &selected, selected.namespace_id().to_string(), &tags)
-                .await?;
-            let ticket = catalog_service
-                .ticket(&catalog_handle, node.endpoint().addr(), false)
-                .await?;
-            print_status(
-                output_json,
-                serde_json::json!({
-                    "status": "published",
-                    "catalog": catalog,
-                    "catalog_namespace": catalog_handle.namespace_id().to_string(),
-                    "records": published,
-                    "ticket": ticket.to_string(),
-                }),
-                format!(
-                    "published: {published}\ncatalog: {catalog}\nnamespace: {}\nticket: {ticket}",
-                    catalog_handle.namespace_id()
-                ),
-            )?;
-            node.stop().await?;
-        }
         IndexingCommand::Search { query, limit } => {
             let results = open_indexing(data_dir)?.search(&query, limit)?;
             if results.is_empty() {
@@ -234,6 +190,54 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             command: filter_command,
         } => handle_filter(ctx, filter_command)?,
     }
+    Ok(())
+}
+
+pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let PublishCatalogArgs { folder, catalog, tags } = args;
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let selected = resolve_folder(&manager, &folder).await?;
+    let indexing = open_indexing(data_dir)?;
+    let catalog_service = indexing.catalog_service(
+        node.docs_engine(),
+        node.blob_store(),
+        node.docs_engine().author().await?,
+    );
+    let (_, mut state) = open_indexing_state(data_dir)?;
+    let catalog_handle = if let Some(existing) = state.catalogs.iter().find(|item| item.name == catalog).cloned() {
+        catalog_service.subscribe_namespace(existing.namespace).await?
+    } else {
+        let created = catalog_service.create_catalog(&catalog).await?;
+        state.catalogs.push(CatalogState {
+            name: catalog.clone(),
+            namespace: created.namespace_id(),
+        });
+        created
+    };
+    let published = catalog_service
+        .publish_folder_with_metadata(&catalog_handle, &selected, selected.namespace_id().to_string(), &tags)
+        .await?;
+    let ticket = catalog_service
+        .ticket(&catalog_handle, node.endpoint().addr(), false)
+        .await?;
+    print_status(
+        output_json,
+        serde_json::json!({
+            "status": "published",
+            "catalog": catalog,
+            "catalog_namespace": catalog_handle.namespace_id().to_string(),
+            "records": published,
+            "ticket": ticket.to_string(),
+        }),
+        format!(
+            "published: {published}\ncatalog: {catalog}\nnamespace: {}\nticket: {ticket}",
+            catalog_handle.namespace_id()
+        ),
+    )?;
+    node.stop().await?;
     Ok(())
 }
 

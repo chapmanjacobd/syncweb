@@ -2,18 +2,28 @@
 .el .ds Aq '
 .TH publish 1  "publish " 
 .SH NAME
-publish \- Publish a folder or blob for public read access
+publish \- Publish a folder, blob, collection, or catalog
 .SH SYNOPSIS
-\fBpublish\fR [\fB\-\-blob\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fINAMESPACE\fR> 
+\fBpublish\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
-Publish a folder or blob for public read access
+Publish a folder, blob, collection, or catalog
 .SH OPTIONS
-.TP
-\fB\-\-blob\fR \fI<BLOB>\fR
-Publish this content hash as an unauthenticated blob ticket
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
+.SH SUBCOMMANDS
 .TP
-<\fINAMESPACE\fR>
-Namespace ID or managed folder path
+publish\-folder(1)
+Publish a folder ticket for public read access
+.TP
+publish\-blob(1)
+Publish a content hash as an unauthenticated blob ticket
+.TP
+publish\-collection(1)
+Store a collection manifest and mutable head in a folder
+.TP
+publish\-catalog(1)
+Publish folder metadata to a catalog
+.TP
+publish\-help(1)
+Print this message or the help of the given subcommand(s)

@@ -122,7 +122,7 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 
 ### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`, `syncweb report`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
-*   `syncweb indexing publish <folder> --catalog <name>` - Publish to a catalog.
+*   `syncweb publish catalog <folder> --catalog <name>` - Publish to a catalog.
 *   `syncweb indexing search "query"` - Search across known catalogs (FTS).
 *   `syncweb indexing health <hash>` - Check verified leases and availability.
 *   `syncweb indexing meta add <hash> <key> <value>` - Append WoT metadata to an entry.

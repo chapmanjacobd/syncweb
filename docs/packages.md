@@ -290,7 +290,7 @@ syncweb collection add col_climate ./data/observations.csv
 # syncweb collection add col_reading-list syncweb://content/b3:8e7a... --as data/hourly.csv
 
 # 3. Publish (creates immutable version + updates mutable head)
-syncweb collection publish col_climate
+syncweb publish collection ./climate --namespace <namespace-id>
 # Output: Published climate-hourly@1.0.0 (manifest b3:19ac...)
 
 # 4. Diff versions

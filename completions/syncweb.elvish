@@ -51,7 +51,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand stats 'Show persisted bandwidth accounting'
             cand filestats 'Show file-level statistics for synced folder content'
             cand verify 'Re-check local folder blob integrity'
-            cand publish 'Publish a folder or blob for public read access'
+            cand publish 'Publish a folder, blob, collection, or catalog'
             cand unpublish 'Remove a public blob pin'
             cand collection 'Create and publish versioned content collections'
             cand package 'Manage locally installed collection packages'
@@ -630,7 +630,52 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;publish'= {
-            cand --blob 'Publish this content hash as an unauthenticated blob ticket'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand folder 'Publish a folder ticket for public read access'
+            cand blob 'Publish a content hash as an unauthenticated blob ticket'
+            cand collection 'Store a collection manifest and mutable head in a folder'
+            cand catalog 'Publish folder metadata to a catalog'
+        }
+        &'syncweb;publish;folder'= {
+            cand --namespace 'Namespace ID or managed folder path'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;publish;blob'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;publish;collection'= {
+            cand --namespace 'namespace'
+            cand --sequence 'sequence'
+            cand --bootstrap 'bootstrap'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;publish;catalog'= {
+            cand --catalog 'catalog'
+            cand --tag 'tag'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -660,7 +705,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand init 'Initialize a directory as a versioned collection'
             cand add 'Scan files and update the local collection manifest'
             cand versions 'Create a new collection manifest version'
-            cand publish 'Store a collection manifest and mutable head in a folder'
         }
         &'syncweb;collection;init'= {
             cand --version 'version'
@@ -685,18 +729,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;collection;versions'= {
             cand --version 'version'
             cand --changelog 'changelog'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;collection;publish'= {
-            cand --namespace 'namespace'
-            cand --sequence 'sequence'
-            cand --bootstrap 'bootstrap'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -998,7 +1030,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand enable 'Opt a synchronized folder into indexing'
             cand disable 'Remove a folder from the local index'
-            cand publish 'Publish folder metadata to a catalog'
             cand search 'Search subscribed catalogs'
             cand health 'Show verified provider health for a content hash'
             cand meta 'Manage signed metadata'
@@ -1014,17 +1045,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;indexing;disable'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;indexing;publish'= {
-            cand --catalog 'catalog'
-            cand --tag 'tag'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

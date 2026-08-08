@@ -273,7 +273,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 1 | `syncweb collection init ./pkg-dir` | Initializes collection, creates manifest | `ls ./pkg-dir/` shows manifest |
 | 2 | Add files to `./pkg-dir/`, then `syncweb collection add ./pkg-dir` | Scans + hashes, updates manifest | |
 | 3 | `syncweb collection versions ./pkg-dir --changelog "v1 initial"` | Creates new manifest version | |
-| 4 | `syncweb collection publish ./pkg-dir` | Stores manifest, pins content, announces blob ticket | Outputs ticket URL |
+| 4 | `syncweb publish collection ./pkg-dir --namespace <namespace-id>` | Stores manifest, pins content, announces blob ticket | Outputs ticket URL |
 
 ### 9.2 Package Install / Upgrade / Remove
 
@@ -336,7 +336,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 1 | `syncweb indexing enable ./shared-docs` | Enables FTS5 index for folder | Check indexing db exists: `ls ~/.local/share/syncweb/indexing.sqlite` |
 | 2 | `syncweb indexing search "test" --in ./shared-docs` | Full-text search results | |
 | 3 | `syncweb indexing health ./shared-docs` | Lease/health status | |
-| 4 | `syncweb indexing publish --catalog ./shared-docs` | Publishes to catalog namespace | |
+| 4 | `syncweb publish catalog ./shared-docs --catalog <name>` | Publishes to catalog namespace | |
 | 5 | `syncweb indexing meta add ./shared-docs --key "description" --value "My docs"` | Adds signed metadata | |
 | 6 | `syncweb indexing disable ./shared-docs` | Disables indexing | |
 

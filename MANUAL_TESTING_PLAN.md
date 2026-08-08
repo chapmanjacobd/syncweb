@@ -254,14 +254,6 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 3 | `syncweb snapshot restore ./shared-docs <id1>` | Restores to snapshot state | Verify: `syncweb ls ./shared-docs` matches original |
 | 4 | `syncweb snapshot delete ./shared-docs <id2>` | Deletes snapshot | `syncweb snapshot list` no longer shows it |
 
-### 8.3 Alias Commands
-
-| Step | Action | Expected Result | Debug |
-|------|--------|-----------------|-------|
-| 1 | `syncweb backup ./shared-docs --description "test backup"` | Same as snapshot create | |
-| 2 | `syncweb restore ./shared-docs <id>` | Same as snapshot restore | |
-| 3 | `syncweb snapshots ./shared-docs` | Same as snapshot list | |
-
 ---
 
 ## 9. Collections & Packages

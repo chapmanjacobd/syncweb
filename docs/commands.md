@@ -451,9 +451,9 @@ syncweb config set discovery.interface eth0
 | | `transfer allocate` | Dry-run or persist capacity-aware placement decisions |
 | | `transfer materialize` | Fetch and verify assigned jobs through the daemon |
 | | `transfer pause/resume/cancel/retry` | Control an individual durable transfer job |
-| | `backup` | Create content-addressed snapshot of folder |
-| | `restore` | Restore folder from snapshot |
-| | `snapshots` | List available snapshots |
+| | `snapshot create` | Create content-addressed snapshot of folder |
+| | `snapshot restore` | Restore folder from snapshot |
+| | `snapshot list` | List available snapshots |
 | | `network create` | Create named network group |
 | | `network ls` | List networks or network details |
 | | `network join` | Join a network via ticket |
@@ -561,11 +561,11 @@ syncweb download --threads 1 /path/to/source /path/to/destination
 syncweb folders --limit-upload 1MB/s --limit-download 5MB/s
 syncweb devices --peer-limit NODE-ID --upload 500KB/s --download 2MB/s
 
-# Backup/snapshot commands
-syncweb backup documents/ --description "before edit"
-syncweb snapshots documents/
-syncweb restore documents/ a1b2c3d4
-syncweb snapshots diff documents/ a1b2c3d4 e5f6g7h8
+# Snapshot commands
+syncweb snapshot create documents/ --description "before edit"
+syncweb snapshot list documents/
+syncweb snapshot restore documents/ a1b2c3d4
+syncweb snapshot diff documents/ a1b2c3d4 e5f6g7h8
 
 # Network commands
 syncweb network create work

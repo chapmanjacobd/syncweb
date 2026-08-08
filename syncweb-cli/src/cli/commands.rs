@@ -43,7 +43,7 @@ pub enum Command {
     Download(DownloadArgs),
     #[command(about = "Import local files into a synchronized folder")]
     Import(ImportArgs),
-    #[command(about = "Manage content-addressed snapshots")]
+    #[command(about = "Manage content-addressed snapshots", alias = "snapshots")]
     Snapshot {
         #[command(subcommand)]
         command: SnapshotCommand,

@@ -257,10 +257,10 @@ struct SnapshotDiff {
 CLI:
 ```bash
 # Create a snapshot
-syncweb backup documents/ --description "before major edit"
+syncweb snapshot create documents/ --description "before major edit"
 
 # List snapshots
-syncweb snapshots documents/
+syncweb snapshot list documents/
 
 # Output:
 # ID         Date                Size      Files  Description
@@ -269,13 +269,13 @@ syncweb snapshots documents/
 # e5f6g7h8   2024-01-14 09:15    44.8 GiB  1,230  weekly backup
 
 # Restore from snapshot
-syncweb restore documents/ a1b2c3d4
+syncweb snapshot restore documents/ a1b2c3d4
 
 # Diff between snapshots
-syncweb snapshots diff documents/ a1b2c3d4 e5f6g7h8
+syncweb snapshot diff documents/ a1b2c3d4 e5f6g7h8
 
 # Delete old snapshot
-syncweb snapshots delete documents/ e5f6g7h8
+syncweb snapshot delete documents/ e5f6g7h8
 ```
 
 Benefits:

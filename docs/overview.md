@@ -51,7 +51,7 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 +------------------------------------------------------------------------------+
 |  Commands: create, join, accept, drop, ls, find, download, sort, stat,       |
 |            devices, folders, watch, version, repl, publish,                  |
-|            backup, snapshot, restore, config, network, stats               |
+|            snapshot, config, network, stats                               |
 +------------------------------------------------------------------------------+
                                       |
                                       v

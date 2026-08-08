@@ -95,9 +95,9 @@ Public sharing and data package versioning:
 
 ### Backup/Snapshot and Partial Fetch
 Content-addressed snapshots and robustness fetch:
-- `syncweb backup` for creating content-addressed snapshots
-- `syncweb restore` for restoring from snapshot
-- `syncweb snapshots` for listing available snapshots
+- `syncweb snapshot create` for creating content-addressed snapshots
+- `syncweb snapshot restore` for restoring from snapshot
+- `syncweb snapshot list` for listing available snapshots
 - `FetchStrategy::Filter` with `min_peers`/`max_peers` for fetch by seeder count
 - `FetchStrategy::Filter` with `min_count`/`max_count` for fetch by file count
 - `syncweb download --max-peers N` for improving folder network health

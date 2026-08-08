@@ -71,7 +71,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "attest" -d 'Sign co
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "moderation" -d 'Manage local moderation decisions'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "completions" -d 'Generate shell completions'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "manpages" -d 'Generate manpages'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "media" -d 'Serve media blobs via HTTP (standalone media server)'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand version" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand version" -l verbose -d 'Enable verbose structured logging'
@@ -86,6 +85,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l beacon-port -d
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l discovery-interface -d 'Restrict the beacon to a single network interface by name' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l media-listen -d 'Media HTTP server listen address (e.g. 127.0.0.1:9193)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l bg -d 'Run in the background (daemon mode)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l media-only -d 'Run only the media HTTP server (standalone) and exit'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-relay -d 'Disable Iroh relay mode (no relay server connections)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-mdns -d 'Disable mDNS local peer discovery'
 complete -c syncweb -n "__fish_syncweb_using_subcommand start" -l no-beacon -d 'Disable the UDP beacon local peer discovery'
@@ -891,12 +891,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -l verbose -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand manpages" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -l listen -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -l data-dir -d 'Override the global persistent data directory' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand media" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand help" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand help" -l json -d 'Emit machine-readable JSON where supported'

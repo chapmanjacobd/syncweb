@@ -460,7 +460,7 @@ match = { name = "*.tmp" }
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb media` (daemon must be running) | Starts HTTP server on 127.0.0.1:9193 | |
+| 1 | `syncweb start --media-only` | Starts HTTP server on 127.0.0.1:9193 | |
 | 2 | `curl http://127.0.0.1:9193/media/<blob-hash>` | Serves blob content | Compare with `syncweb stat` output for hash |
 | 3 | `curl -H "Range: bytes=0-100" http://127.0.0.1:9193/media/<hash>` | Partial content (206) with first 100 bytes | Check Content-Range header |
 | 4 | `curl http://127.0.0.1:9193/` | 404 or list | |

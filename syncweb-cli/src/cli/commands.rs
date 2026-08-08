@@ -131,21 +131,11 @@ pub enum Command {
         #[arg(default_value = "man")]
         dir: PathBuf,
     },
-    #[command(about = "Serve media blobs via HTTP (standalone media server)")]
-    Media(MediaArgs),
     #[command(about = "Print this message or the help of the given subcommand(s)")]
     Help {
         #[arg(value_name = "COMMAND")]
         command: Option<String>,
     },
-}
-
-#[derive(Debug, Args)]
-pub struct MediaArgs {
-    #[arg(long, default_value = "127.0.0.1:9193")]
-    pub listen: std::net::SocketAddr,
-    #[arg(long, help = "Override the global persistent data directory")]
-    pub data_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -620,6 +610,8 @@ pub struct AutomaticArgs {
 pub struct StartArgs {
     #[arg(long, alias = "background", help = "Run in the background (daemon mode)")]
     pub bg: bool,
+    #[arg(long, help = "Run only the media HTTP server (standalone) and exit")]
+    pub media_only: bool,
     #[arg(long, help = "Override the global persistent data directory")]
     pub data_dir: Option<PathBuf>,
     #[arg(long, help = "Write daemon logs to this file")]

@@ -70,7 +70,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('moderation', 'moderation', [CompletionResultType]::ParameterValue, 'Manage local moderation decisions')
             [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Generate shell completions')
             [CompletionResult]::new('manpages', 'manpages', [CompletionResultType]::ParameterValue, 'Generate manpages')
-            [CompletionResult]::new('media', 'media', [CompletionResultType]::ParameterValue, 'Serve media blobs via HTTP (standalone media server)')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -93,6 +92,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--discovery-interface', '--discovery-interface', [CompletionResultType]::ParameterName, 'Restrict the beacon to a single network interface by name')
             [CompletionResult]::new('--media-listen', '--media-listen', [CompletionResultType]::ParameterName, 'Media HTTP server listen address (e.g. 127.0.0.1:9193)')
             [CompletionResult]::new('--bg', '--bg', [CompletionResultType]::ParameterName, 'Run in the background (daemon mode)')
+            [CompletionResult]::new('--media-only', '--media-only', [CompletionResultType]::ParameterName, 'Run only the media HTTP server (standalone) and exit')
             [CompletionResult]::new('--no-relay', '--no-relay', [CompletionResultType]::ParameterName, 'Disable Iroh relay mode (no relay server connections)')
             [CompletionResult]::new('--no-mdns', '--no-mdns', [CompletionResultType]::ParameterName, 'Disable mDNS local peer discovery')
             [CompletionResult]::new('--no-beacon', '--no-beacon', [CompletionResultType]::ParameterName, 'Disable the UDP beacon local peer discovery')
@@ -1562,17 +1562,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;manpages' {
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;media' {
-            [CompletionResult]::new('--listen', '--listen', [CompletionResultType]::ParameterName, 'listen')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Override the global persistent data directory')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

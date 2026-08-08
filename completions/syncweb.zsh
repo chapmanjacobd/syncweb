@@ -53,6 +53,7 @@ _arguments "${_arguments_options[@]}" : \
 '--discovery-interface=[Restrict the beacon to a single network interface by name]:DISCOVERY_INTERFACE:_default' \
 '--media-listen=[Media HTTP server listen address (e.g. 127.0.0.1\:9193)]:MEDIA_LISTEN:_default' \
 '--bg[Run in the background (daemon mode)]' \
+'--media-only[Run only the media HTTP server (standalone) and exit]' \
 '--no-relay[Disable Iroh relay mode (no relay server connections)]' \
 '--no-mdns[Disable mDNS local peer discovery]' \
 '--no-beacon[Disable the UDP beacon local peer discovery]' \
@@ -1881,18 +1882,6 @@ _arguments "${_arguments_options[@]}" : \
 '::dir:_files' \
 && ret=0
 ;;
-(media)
-_arguments "${_arguments_options[@]}" : \
-'--listen=[]:LISTEN:_default' \
-'--data-dir=[Override the global persistent data directory]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1954,7 +1943,6 @@ _syncweb_commands() {
 'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
-'media:Serve media blobs via HTTP (standalone media server)' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb commands' commands "$@"
@@ -2245,11 +2233,6 @@ _syncweb__subcmd__ls_commands() {
 _syncweb__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb manpages commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__media_commands] )) ||
-_syncweb__subcmd__media_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb media commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__mirror_commands] )) ||
 _syncweb__subcmd__mirror_commands() {

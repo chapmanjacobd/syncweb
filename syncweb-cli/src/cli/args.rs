@@ -89,7 +89,6 @@ help_categories! {
     ];
     "Network" => [
         Command::Network { .. } => "network",
-        Command::Media(_) => "media",
         Command::Devices => "devices",
     ];
     "Statistics" => [

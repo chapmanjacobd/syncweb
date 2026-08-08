@@ -16,11 +16,10 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, MediaArgs, MirrorArgs,
-        NetworkCommand, PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand,
-        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsArgs, TransferAllocateArgs, TransferCommand,
-        TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs,
-        WatchArgs,
+        CollectionCommand, Command, ConfigCommand, FileStatsArgs, HealthArgs, ImportArgs, MirrorArgs, NetworkCommand,
+        PackageCommand, PublishArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
+        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -63,15 +62,15 @@ use syncweb_core::{
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
 const ERR_UNEXPECTED_RESPONSE: &str = "daemon returned an unexpected response";
+const DEFAULT_MEDIA_LISTEN: &str = "127.0.0.1:9193";
 
-async fn handle_media(args: MediaArgs) -> Result<()> {
-    let data_dir = effective_data_dir(&args.data_dir.unwrap_or_default(), None);
-    std::fs::create_dir_all(&data_dir)?;
-    let node = syncweb_core::init::open_node(&data_dir).await?;
-    let server = syncweb_core::media::MediaServer::new(args.listen, node.blob_store().clone());
+async fn run_media_server(listen: std::net::SocketAddr, data_dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(data_dir)?;
+    let node = syncweb_core::init::open_node(data_dir).await?;
+    let server = syncweb_core::media::MediaServer::new(listen, node.blob_store().clone());
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
 
-    println!("media server listening on {}", args.listen);
+    println!("media server listening on {listen}");
 
     tokio::select! {
         result = server.run(shutdown_tx) => {
@@ -227,7 +226,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Mirror(command) => handle_mirror(&ctx, command).await?,
-        Command::Media(command) => handle_media(command).await?,
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
@@ -292,7 +290,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
             no_daemon,
             network: network.as_deref(),
         };
-        if args.bg {
+        if args.bg && !args.media_only {
             let child = spawn_daemon_process(base, &args, network.as_deref())?;
             if output_json {
                 println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
@@ -462,6 +460,14 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
 
+    if args.media_only {
+        let listen = match args.media_listen {
+            Some(addr) => addr,
+            None => DEFAULT_MEDIA_LISTEN.parse()?,
+        };
+        return run_media_server(listen, data_dir).await;
+    }
+
     let app_config = open_node_db(data_dir)?.load_app_config()?;
     let mut daemon_config = DaemonConfig::new(data_dir);
     daemon_config.network = ctx.network.map(String::from);
@@ -568,6 +574,7 @@ async fn daemon_client_or_start(
             base,
             &StartArgs {
                 bg: true,
+                media_only: false,
                 data_dir: None,
                 log_file: None,
                 max_threads: None,
@@ -2548,6 +2555,7 @@ async fn handle_automatic(ctx: &CliContext<'_>, command: crate::cli::commands::A
         ctx,
         StartArgs {
             bg: true,
+            media_only: false,
             data_dir: None,
             log_file: None,
             max_threads: None,

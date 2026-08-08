@@ -4,13 +4,16 @@
 .SH NAME
 start \- Start the local syncweb daemon
 .SH SYNOPSIS
-\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-no\-mdns\fR] [\fB\-\-no\-beacon\fR] [\fB\-\-beacon\-port\fR] [\fB\-\-discovery\-interface\fR] [\fB\-\-media\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBstart\fR [\fB\-\-bg\fR] [\fB\-\-media\-only\fR] [\fB\-\-data\-dir\fR] [\fB\-\-log\-file\fR] [\fB\-\-max\-threads\fR] [\fB\-\-sync\-interval\fR] [\fB\-\-no\-relay\fR] [\fB\-\-no\-mdns\fR] [\fB\-\-no\-beacon\fR] [\fB\-\-beacon\-port\fR] [\fB\-\-discovery\-interface\fR] [\fB\-\-media\-listen\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Start the local syncweb daemon
 .SH OPTIONS
 .TP
 \fB\-\-bg\fR
 Run in the background (daemon mode)
+.TP
+\fB\-\-media\-only\fR
+Run only the media HTTP server (standalone) and exit
 .TP
 \fB\-\-data\-dir\fR \fI<DATA_DIR>\fR
 Override the global persistent data directory

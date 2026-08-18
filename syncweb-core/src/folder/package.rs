@@ -7,12 +7,12 @@ use std::{
 use iroh::Endpoint;
 use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
 use semver::Version;
-
 use uuid::Uuid;
 
 use crate::{
     error::{Result, SyncwebError},
-    folder::{CollectionManifest, CollectionState},
+    folder::{CollectionEntry, CollectionManifest, CollectionState},
+    node::blob_store::BlobStore,
     storage::node_db::NodeDatabase,
 };
 
@@ -198,6 +198,95 @@ impl PackageManager {
             SyncwebError::InvalidConfig(format!("collection version {} is not installed", manifest.version))
         })?;
         verify_directory(manifest, path)
+    }
+
+    /// Import existing files into the blob store via reference links.
+    ///
+    /// For each `(source_path, logical_path)` pair the file is hashed with
+    /// BLAKE3, added to the blob store with a reference (hardlink where
+    /// possible, avoiding duplication), and recorded in a new
+    /// [`CollectionManifest`].
+    ///
+    /// The manifest is unsigned; the caller must sign it before publishing.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` – List of `(source_path, logical_path)` pairs.
+    /// * `blobs` – The node's blob store.
+    /// * `collection_name` – Human-readable name for the collection manifest.
+    /// * `collection_id` – UUID for the new collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a file cannot be read or added to the blob store.
+    pub async fn import_from_paths(
+        &self,
+        files: &[(PathBuf, PathBuf)],
+        blobs: &BlobStore,
+        collection_name: &str,
+        collection_id: Uuid,
+    ) -> Result<CollectionManifest> {
+        let mut entries = Vec::new();
+        for (source, logical_path) in files {
+            let content_id = blobs
+                .add_file_ref(source)
+                .await
+                .map_err(|error| SyncwebError::operation("failed to import file into blob store", error))?;
+            let metadata =
+                fs::metadata(source).map_err(|error| SyncwebError::operation("failed to stat source file", error))?;
+            entries.push(CollectionEntry::new(
+                content_id,
+                logical_path.as_path(),
+                metadata.len(),
+            )?);
+        }
+        let mut manifest = CollectionManifest::new(collection_id, "1.0.0");
+        manifest.entries = entries;
+        manifest.package = Some(crate::folder::PackageProfile::new(collection_name));
+        Ok(manifest)
+    }
+
+    /// Make existing files seedable via syncweb.
+    ///
+    /// For each file:
+    /// 1. Import into the blob store via reference (no copy)
+    /// 2. Pin all blobs to prevent garbage collection
+    /// 3. Return manifest and blob ticket for sharing
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if import, pinning, or ticket creation fails.
+    pub async fn make_seedable(
+        &self,
+        files: &[(PathBuf, PathBuf)],
+        blobs: &BlobStore,
+        endpoint: &Endpoint,
+        collection_name: &str,
+    ) -> Result<(CollectionManifest, BlobTicket)> {
+        let collection_id = Uuid::new_v4();
+        let manifest = self
+            .import_from_paths(files, blobs, collection_name, collection_id)
+            .await?;
+
+        // Pin content blobs
+        for entry in &manifest.entries {
+            blobs
+                .pin(
+                    format!("syncweb/package/{}/{}", collection_id, entry.content_id),
+                    entry.content_id,
+                )
+                .await?;
+        }
+
+        // Pin and ticket the manifest itself
+        let manifest_bytes = manifest.to_bytes()?;
+        let manifest_hash = blobs.add_bytes(&manifest_bytes).await?;
+        blobs
+            .pin(format!("syncweb/package/{collection_id}/manifest"), manifest_hash)
+            .await?;
+        let ticket = blobs.ticket(endpoint, manifest_hash);
+
+        Ok((manifest, ticket))
     }
 
     fn set_current(&self, collection_id: Uuid, version: &str) -> Result<()> {

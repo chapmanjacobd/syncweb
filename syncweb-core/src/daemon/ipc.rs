@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
+    fs,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
@@ -12,6 +13,7 @@ use std::{
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
+use uuid::Uuid;
 
 use crate::{
     allocation::{AllocationCandidate, StorageRoot, materialization_path},
@@ -212,6 +214,45 @@ pub enum IpcCommand {
     NetworkJoin {
         ticket: String,
     },
+
+    /// Search for packages on a gossip channel.
+    PackageSearch {
+        /// Optional search query (name substring).
+        #[serde(default)]
+        query: Option<String>,
+        /// Optional channel name (defaults to the public catalog).
+        #[serde(default)]
+        channel: Option<String>,
+        /// Timeout in seconds for gossip collection.
+        #[serde(default = "default_search_timeout")]
+        timeout_secs: u64,
+    },
+    /// Install a package from a manifest blob ticket.
+    PackageInstall {
+        /// Blob ticket for the package manifest.
+        ticket: String,
+        /// Target directory for installed files.
+        target_dir: PathBuf,
+        /// Optional symlink name under `target_dir`.
+        #[serde(default)]
+        symlink_name: Option<String>,
+    },
+    /// Upgrade an installed package to its latest announced version.
+    PackageUpgrade {
+        /// Collection UUID of the package to upgrade.
+        collection_id: String,
+    },
+    /// Remove an installed package.
+    PackageRemove {
+        /// Collection UUID of the package to remove.
+        collection_id: String,
+    },
+    /// List locally installed packages.
+    PackageList,
+    /// Get detailed info about an installed package.
+    PackageInfo {
+        collection_id: String,
+    },
 }
 
 /// A response returned by the daemon control channel.
@@ -219,17 +260,61 @@ pub enum IpcCommand {
 #[serde(tag = "response", content = "data", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum IpcResponse {
-    Ok { message: String },
+    Ok {
+        message: String,
+    },
     Status(DaemonStatus),
     FolderList(Vec<FolderStatus>),
-    DownloadComplete { bytes_transferred: u64 },
-    TransferJobsProcessed { completed: u64, failed: u64 },
-    ImportFilesComplete { entries: u64 },
+    DownloadComplete {
+        bytes_transferred: u64,
+    },
+    TransferJobsProcessed {
+        completed: u64,
+        failed: u64,
+    },
+    ImportFilesComplete {
+        entries: u64,
+    },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
     EnrichData(HashMap<String, usize>),
     FileStats(Box<FileStatsReport>),
-    Error { message: String },
+    Error {
+        message: String,
+    },
+    PackageSearchResult {
+        packages: Vec<PackageAnnouncement>,
+    },
+    PackageInstalled {
+        collection_id: String,
+        name: String,
+        version: String,
+        installed_path: PathBuf,
+        manifest_hash: String,
+    },
+    PackageRemoved {
+        collection_id: String,
+    },
+    PackageListResult {
+        packages: Vec<InstalledPackageInfo>,
+    },
+    PackageInfoResult {
+        info: InstalledPackageInfo,
+    },
+}
+
+/// Summary of a locally installed package.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct InstalledPackageInfo {
+    pub collection_id: String,
+    pub name: String,
+    pub version: String,
+    pub installed_path: PathBuf,
+    pub manifest_hash: String,
+    pub installed_at: String,
+    pub file_count: usize,
+    pub total_size: u64,
 }
 
 /// A managed folder summary returned by the daemon.
@@ -750,6 +835,40 @@ impl IpcServer {
         }
     }
 
+    async fn handle_package_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if let IpcCommand::PackageSearch {
+            query,
+            channel,
+            timeout_secs,
+        } = cmd
+        {
+            return self.handle_package_search(query, channel, timeout_secs).await;
+        }
+        if let IpcCommand::PackageInstall {
+            ticket,
+            target_dir,
+            symlink_name,
+        } = cmd
+        {
+            return self.handle_package_install(ticket, target_dir, symlink_name).await;
+        }
+        if let IpcCommand::PackageUpgrade { collection_id } = cmd {
+            return self.handle_package_upgrade(collection_id).await;
+        }
+        if let IpcCommand::PackageRemove { collection_id } = cmd {
+            return self.handle_package_remove(collection_id);
+        }
+        if matches!(cmd, IpcCommand::PackageList) {
+            return self.handle_package_list();
+        }
+        if let IpcCommand::PackageInfo { collection_id } = cmd {
+            return self.handle_package_info(collection_id);
+        }
+        IpcResponse::Error {
+            message: format!("unhandled package command: {cmd:?}"),
+        }
+    }
+
     /// Handle one decoded request without requiring a socket.
     pub async fn handle_request(&self, request: IpcRequest) -> IpcResponse {
         use IpcCommand as C;
@@ -827,6 +946,12 @@ impl IpcServer {
                     .await
             }
             C::EnrichSort { path } => self.handle_enrich_sort(path).await,
+            C::PackageSearch { .. }
+            | C::PackageInstall { .. }
+            | C::PackageUpgrade { .. }
+            | C::PackageRemove { .. }
+            | C::PackageList
+            | C::PackageInfo { .. } => self.handle_package_group(request.command).await,
             C::NetworkInvite { .. }
             | C::NetworkKick { .. }
             | C::NetworkLeave { .. }
@@ -2224,6 +2349,278 @@ impl IpcServer {
         }
     }
 
+    async fn handle_package_search(
+        &self,
+        query: Option<String>,
+        channel: Option<String>,
+        timeout_secs: u64,
+    ) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon package-search IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
+        let timeout = Duration::from_secs(timeout_secs);
+        let bootstrap: Vec<iroh::PublicKey> = Vec::new();
+
+        let result = if let Some(channel_name) = &channel {
+            let channel_obj = crate::editorial::Channel::new(channel_name.as_str(), None::<String>);
+            let mut topic = match catalog.subscribe_channel_and_join(&channel_obj, bootstrap).await {
+                Ok(t) => t,
+                Err(error) => return response_from_error(error),
+            };
+            catalog
+                .search_channel(&mut topic, &channel_obj, query.as_deref(), timeout)
+                .await
+        } else {
+            let mut topic = match catalog.subscribe_and_join(bootstrap).await {
+                Ok(t) => t,
+                Err(error) => return response_from_error(error),
+            };
+            catalog.search(&mut topic, query.as_deref(), timeout).await
+        };
+
+        match result {
+            Ok(packages) => IpcResponse::PackageSearchResult { packages },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_package_install(
+        &self,
+        ticket: String,
+        target_dir: PathBuf,
+        symlink_name: Option<String>,
+    ) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon package-install IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manifest_ticket = match ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
+            Ok(t) => t,
+            Err(error) => return response_from_error(error),
+        };
+        let pkg_root = target_dir.join(".syncweb-packages");
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package-install IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
+        match pkg_manager
+            .install_from_ticket(&manifest_ticket, context.node.endpoint(), context.node.blob_store())
+            .await
+        {
+            Ok(manifest) => {
+                let installed_path = pkg_root
+                    .join(manifest.collection_id.to_string())
+                    .join(&manifest.version);
+                if let Some(name) = symlink_name {
+                    let link_path = target_dir.join(&name);
+                    let _ = fs::remove_file(&link_path);
+                    #[cfg(unix)]
+                    {
+                        let _ = std::os::unix::fs::symlink(&installed_path, &link_path);
+                    }
+                }
+                let manifest_hash = manifest.blob_id().map_or_else(|_| String::new(), |h| h.to_string());
+                IpcResponse::PackageInstalled {
+                    collection_id: manifest.collection_id.to_string(),
+                    name: manifest
+                        .package
+                        .as_ref()
+                        .map_or_else(|| manifest.collection_id.to_string(), |p| p.name.clone()),
+                    version: manifest.version,
+                    installed_path,
+                    manifest_hash,
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_package_upgrade(&self, collection_id: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon package-upgrade IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
+        let bootstrap: Vec<iroh::PublicKey> = Vec::new();
+        let mut topic = match catalog.subscribe_and_join(bootstrap).await {
+            Ok(t) => t,
+            Err(error) => return response_from_error(error),
+        };
+        let announcements = match catalog
+            .search(&mut topic, Some(&collection_id.clone()), Duration::from_secs(10))
+            .await
+        {
+            Ok(a) => a,
+            Err(error) => return response_from_error(error),
+        };
+        let latest = announcements.iter().max_by(|a, b| a.version.cmp(&b.version));
+        let Some(announcement) = latest else {
+            return IpcResponse::Error {
+                message: format!("no announcement found for collection {collection_id}"),
+            };
+        };
+        let manifest_ticket = match announcement.ticket() {
+            Ok(t) => t,
+            Err(error) => return response_from_error(error),
+        };
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package-upgrade IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        let pkg_root = std::env::temp_dir().join("syncweb-packages");
+        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
+        match pkg_manager
+            .install_from_ticket(&manifest_ticket, context.node.endpoint(), context.node.blob_store())
+            .await
+        {
+            Ok(manifest) => {
+                let manifest_hash = manifest.blob_id().map_or_else(|_| String::new(), |h| h.to_string());
+                let version = manifest.version;
+                let installed_path = pkg_root.join(manifest.collection_id.to_string()).join(&version);
+                IpcResponse::PackageInstalled {
+                    collection_id: manifest.collection_id.to_string(),
+                    name: manifest
+                        .package
+                        .as_ref()
+                        .map_or_else(|| manifest.collection_id.to_string(), |p| p.name.clone()),
+                    version,
+                    installed_path,
+                    manifest_hash,
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    fn handle_package_remove(&self, collection_id: String) -> IpcResponse {
+        let collection_uuid = match collection_id.parse::<Uuid>() {
+            Ok(id) => id,
+            Err(error) => return response_from_error(error),
+        };
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package-remove IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        let pkg_root = std::env::temp_dir().join("syncweb-packages");
+        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
+        let state = match pkg_manager.state() {
+            Ok(s) => s,
+            Err(error) => return response_from_error(error),
+        };
+        let installed = match state.installed.get(&collection_uuid) {
+            Some(i) => i.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: format!("package {collection_id} is not installed"),
+                };
+            }
+        };
+        // Remove all versions except the current one by switching first
+        let versions: Vec<String> = installed.versions.keys().cloned().collect();
+        for version in &versions {
+            if *version != installed.current
+                && let Err(error) = pkg_manager.remove(collection_uuid, version)
+            {
+                return response_from_error(error);
+            }
+        }
+        // For the current version, we still remove the directory directly
+        if let Some(path) = installed.versions.get(&installed.current)
+            && let Err(error) = fs::remove_dir_all(path)
+        {
+            return response_from_error(error);
+        }
+        IpcResponse::PackageRemoved { collection_id }
+    }
+
+    fn handle_package_list(&self) -> IpcResponse {
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package-list IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        let pkg_root = std::env::temp_dir().join("syncweb-packages");
+        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
+        let state = match pkg_manager.state() {
+            Ok(s) => s,
+            Err(error) => return response_from_error(error),
+        };
+        let mut packages = Vec::new();
+        for (collection_id, installed) in &state.installed {
+            let path = installed.versions.get(&installed.current);
+            let (file_count, total_size) = path.map_or((0, 0), |p| count_dir_files(p));
+            packages.push(InstalledPackageInfo {
+                collection_id: collection_id.to_string(),
+                name: collection_id.to_string(),
+                version: installed.current.clone(),
+                installed_path: path.cloned().unwrap_or_default(),
+                manifest_hash: installed.manifest.to_string(),
+                installed_at: String::new(),
+                file_count,
+                total_size,
+            });
+        }
+        IpcResponse::PackageListResult { packages }
+    }
+
+    fn handle_package_info(&self, collection_id: String) -> IpcResponse {
+        let collection_uuid = match collection_id.parse::<Uuid>() {
+            Ok(id) => id,
+            Err(error) => return response_from_error(error),
+        };
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package-info IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        let pkg_root = std::env::temp_dir().join("syncweb-packages");
+        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
+        let state = match pkg_manager.state() {
+            Ok(s) => s,
+            Err(error) => return response_from_error(error),
+        };
+        let installed = match state.installed.get(&collection_uuid) {
+            Some(i) => i.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: format!("package {collection_id} is not installed"),
+                };
+            }
+        };
+        let path = installed.versions.get(&installed.current);
+        let (file_count, total_size) = path.map_or((0, 0), |p| count_dir_files(p));
+        IpcResponse::PackageInfoResult {
+            info: InstalledPackageInfo {
+                collection_id: collection_id.clone(),
+                name: collection_id,
+                version: installed.current.clone(),
+                installed_path: path.cloned().unwrap_or_default(),
+                manifest_hash: installed.manifest.to_string(),
+                installed_at: String::new(),
+                file_count,
+                total_size,
+            },
+        }
+    }
+
     #[cfg(unix)]
     async fn handle_connection(&self, stream: tokio::net::UnixStream) -> Result<()> {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -2347,6 +2744,26 @@ fn complete_transfer_job(node_db: &NodeDatabase, job: &TransferJobRecord, size: 
             TransferJobOutcome::Failed
         }
     }
+}
+
+const fn default_search_timeout() -> u64 {
+    10
+}
+
+fn count_dir_files(dir: &Path) -> (usize, u64) {
+    let mut count = 0_usize;
+    let mut total = 0_u64;
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata()
+                && meta.is_file()
+            {
+                count = count.saturating_add(1);
+                total = total.saturating_add(meta.len());
+            }
+        }
+    }
+    (count, total)
 }
 
 fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
@@ -2518,7 +2935,12 @@ impl IpcClient {
                 | IpcResponse::ExportComplete(_)
                 | IpcResponse::EnrichData(_)
                 | IpcResponse::FileStats(_)
-                | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
+                | IpcResponse::TransferJobsProcessed { .. }
+                | IpcResponse::PackageSearchResult { .. }
+                | IpcResponse::PackageInstalled { .. }
+                | IpcResponse::PackageRemoved { .. }
+                | IpcResponse::PackageListResult { .. }
+                | IpcResponse::PackageInfoResult { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),

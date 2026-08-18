@@ -18,6 +18,12 @@ pub struct Channel {
     /// Optional human-readable description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// If non-empty, only announcements from these publishers are accepted.
+    ///
+    /// Each entry is a hex-encoded Ed25519 public key (with or without the
+    /// `ed25519:` prefix).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_publishers: Vec<String>,
 }
 
 impl Channel {
@@ -27,6 +33,21 @@ impl Channel {
         Self {
             name: name.into(),
             description: description.map(Into::into),
+            allowed_publishers: Vec::new(),
+        }
+    }
+
+    /// Create a channel with an explicit publisher allowlist.
+    #[must_use]
+    pub fn with_publishers(
+        name: impl Into<String>,
+        description: Option<impl Into<String>>,
+        allowed_publishers: Vec<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.map(Into::into),
+            allowed_publishers,
         }
     }
 

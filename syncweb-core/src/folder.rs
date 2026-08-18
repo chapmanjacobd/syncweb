@@ -16,7 +16,7 @@ pub use archive_verify::{DropVerificationResult, DropVerifier, DropVerifyResult,
 pub use catalog::{PackageAnnouncement, PackageCatalog, catalog_topic};
 pub use collection::{
     CollectionEntry, CollectionHead, CollectionManifest, CollectionState, CollectionStore, InstalledCollection,
-    PackageDependency, PackageProfile,
+    PackageDependency, PackageMetadata, PackageProfile,
 };
 pub use manager::FolderManager;
 pub use package::PackageManager;

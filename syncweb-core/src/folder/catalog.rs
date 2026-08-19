@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use ed25519_dalek::SigningKey;
 use iroh::{Endpoint, PublicKey, address_lookup::memory::MemoryLookup};
@@ -155,6 +155,9 @@ impl PackageAnnouncement {
 pub struct PackageCatalog {
     gossip: GossipService,
     signing_key: SigningKey,
+    /// Optional publisher allowlist. If non-empty, only announcements
+    /// from publishers in this set are returned by `search()`.
+    allowed_publishers: HashSet<PublicKey>,
 }
 
 impl PackageCatalog {
@@ -163,6 +166,17 @@ impl PackageCatalog {
         Self {
             gossip: gossip.clone(),
             signing_key: SigningKey::from_bytes(&endpoint.secret_key().to_bytes()),
+            allowed_publishers: HashSet::new(),
+        }
+    }
+
+    /// Create a catalog with an explicit publisher allowlist.
+    #[must_use]
+    pub fn with_publishers(gossip: &GossipService, endpoint: &Endpoint, allowed_publishers: Vec<PublicKey>) -> Self {
+        Self {
+            gossip: gossip.clone(),
+            signing_key: SigningKey::from_bytes(&endpoint.secret_key().to_bytes()),
+            allowed_publishers: allowed_publishers.into_iter().collect(),
         }
     }
 
@@ -234,6 +248,9 @@ impl PackageCatalog {
     /// A timeout is a normal end condition because gossip has no finite
     /// response boundary.
     ///
+    /// When `allowed_publishers` is non-empty, only announcements from
+    /// publishers in that set are returned.
+    ///
     /// # Errors
     ///
     /// Returns an error if a received announcement fails signature verification.
@@ -242,6 +259,32 @@ impl PackageCatalog {
         topic: &mut GossipTopic,
         query: Option<&str>,
         timeout: Duration,
+    ) -> Result<Vec<PackageAnnouncement>> {
+        self.search_inner(topic, query, timeout, &self.allowed_publishers).await
+    }
+
+    /// Collect matching announcements on a channel topic.
+    ///
+    /// Uses the catalog's global allowlist for publisher filtering.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a received announcement fails signature verification.
+    pub async fn search_channel(
+        &self,
+        topic: &mut GossipTopic,
+        query: Option<&str>,
+        timeout: Duration,
+    ) -> Result<Vec<PackageAnnouncement>> {
+        self.search_inner(topic, query, timeout, &self.allowed_publishers).await
+    }
+
+    async fn search_inner(
+        &self,
+        topic: &mut GossipTopic,
+        query: Option<&str>,
+        timeout: Duration,
+        allowed: &HashSet<PublicKey>,
     ) -> Result<Vec<PackageAnnouncement>> {
         let mut announcements = Vec::new();
         let receive = async {
@@ -269,6 +312,15 @@ impl PackageCatalog {
                             "package catalog publisher mismatch",
                             format!("claimed {claimed_publisher}, signed by {actual_publisher}"),
                         ));
+                    }
+
+                    // Filter by publisher allowlist
+                    if !allowed.is_empty() && !allowed.contains(&actual_publisher) {
+                        tracing::debug!(
+                            "skipping announcement from {} (not in publisher allowlist)",
+                            actual_publisher
+                        );
+                        continue;
                     }
 
                     if announcement.matches(query)

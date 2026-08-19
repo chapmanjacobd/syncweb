@@ -7,7 +7,6 @@ use std::{
 use iroh::Endpoint;
 use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
 use semver::Version;
-
 use uuid::Uuid;
 
 use crate::{
@@ -112,6 +111,16 @@ impl PackageManager {
             return Err(SyncwebError::InvalidTicket(
                 "manifest ticket hash does not match manifest content".to_owned(),
             ));
+        }
+
+        // Transaction test: verify no file collisions before any writes
+        let collection_dir = self.root.join(manifest.collection_id.to_string());
+        let version_dir = collection_dir.join(&manifest.version);
+        if version_dir.exists() {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "collection version {} is already installed",
+                manifest.version
+            )));
         }
 
         let source = self.root.join(format!(".source-{}", Uuid::new_v4()));

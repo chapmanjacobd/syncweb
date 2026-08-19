@@ -19,6 +19,26 @@ use crate::{
 
 const SCHEMA_VERSION: u32 = 1;
 
+/// Optional application-specific metadata attached to a collection manifest.
+///
+/// Describes how content should be installed or routed by a consuming
+/// application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PackageMetadata {
+    /// Content type label (e.g. `"zim"`, `"oer2go"`, `"map"`, `"html"`, `"generic"`).
+    pub intended_use: String,
+    /// Language code (ISO 639-1 or ISO 639-3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+    /// Human-readable description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Searchable tags.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
 /// A content-addressed file included in a collection.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -188,6 +208,9 @@ pub struct CollectionManifest {
     /// public catalog topic.
     #[serde(default)]
     pub channels: Vec<Channel>,
+    /// Application-specific metadata (optional).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<PackageMetadata>,
 }
 
 impl CollectionManifest {
@@ -206,6 +229,7 @@ impl CollectionManifest {
             content_type: None,
             editorial_state: None,
             channels: Vec::new(),
+            metadata: None,
         }
     }
 

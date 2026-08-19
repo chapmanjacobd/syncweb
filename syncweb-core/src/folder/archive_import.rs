@@ -120,7 +120,11 @@ impl DropImporter {
             .await
             .map_err(|error| SyncwebError::operation("failed to open drop archive", error))?;
         let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
-        let staging = parent.join(format!(".syncweb-drop-import-{}", Uuid::new_v4()));
+        let staging = parent.join(format!(
+            "{}{}",
+            crate::constants::DROP_IMPORT_STAGING_PREFIX,
+            Uuid::new_v4()
+        ));
         fs::create_dir(&staging)
             .await
             .map_err(|error| SyncwebError::operation("failed to create drop import staging directory", error))?;
@@ -166,7 +170,11 @@ impl DropImporter {
         }
         let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent).await?;
-        let staging = parent.join(format!(".syncweb-materialize-{}", Uuid::new_v4()));
+        let staging = parent.join(format!(
+            "{}{}",
+            crate::constants::MATERIALIZATION_STAGING_PREFIX,
+            Uuid::new_v4()
+        ));
         fs::create_dir(&staging)
             .await
             .map_err(|error| SyncwebError::operation("failed to create materialization staging directory", error))?;

@@ -11,6 +11,7 @@ use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    constants::SNAPSHOT_PIN_PREFIX,
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
     fs::{ExportEntry, Exporter, ParallelScanner},
@@ -18,7 +19,6 @@ use crate::{
 };
 
 const SCHEMA_VERSION: u32 = 1;
-const SNAPSHOT_PIN_PREFIX: &str = "syncweb/snapshot/";
 
 /// The content-addressed identifier of a snapshot.
 pub type SnapshotId = Hash;

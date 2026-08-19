@@ -838,6 +838,10 @@ pub enum PackageCommand {
         bootstrap: Vec<String>,
         #[arg(long, default_value_t = 250)]
         timeout_ms: u64,
+        /// Search an editorial channel (uses catalog-backed persistence
+        /// when the channel is configured in config.toml).
+        #[arg(long)]
+        channel: Option<String>,
     },
     #[command(about = "Show a collection manifest from a ticket or blob hash")]
     Info {

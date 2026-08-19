@@ -793,6 +793,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;package;search'= {
             cand --bootstrap 'bootstrap'
             cand --timeout-ms 'timeout-ms'
+            cand --channel 'Search an editorial channel (uses catalog-backed persistence when the channel is configured in config.toml)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

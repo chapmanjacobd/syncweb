@@ -14,8 +14,8 @@ pub use catalog::{Catalog, CatalogMetadata, CatalogRecord, CatalogService};
 pub use denylist::{Denied, DenyReason, Denylist, DenylistRule, DenylistService, FilterContext, FilterList};
 pub use links::{
     CapabilityLink, ContentLink, ImmutableLink, Link, LinkResolution, LinkResolver, Mirror, MutableLink,
-    MutablePointer, NameLink, PrivateLink, ProviderFetch, REVOCATION_GOSSIP_TOPIC, ResolveOptions, ResolvedLink,
-    SignedMutablePointer, SyncwebLink, current_epoch_seconds, fetch_from_mirrors, revocation_topic_id,
+    MutablePointer, NameLink, PrivateLink, ProviderFetch, ResolveOptions, ResolvedLink, SignedMutablePointer,
+    current_epoch_seconds, fetch_from_mirrors, revocation_topic_id,
 };
 pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use reputation::{
@@ -847,6 +847,82 @@ impl IndexingDatabase {
                 .commit()
                 .map_err(|error| database_error("failed to commit catalog removal", error))?;
             Ok(())
+        })
+    }
+
+    /// Persist the mapping from a channel name to its catalog namespace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mapping cannot be stored.
+    pub fn set_channel_namespace(&self, channel_name: &str, namespace_id: NamespaceId) -> Result<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT INTO channel_namespaces(channel_name, catalog_namespace_id, created_at)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(channel_name) DO UPDATE SET catalog_namespace_id = excluded.catalog_namespace_id",
+                    params![channel_name, namespace_id.to_string(), now_seconds()],
+                )
+                .map_err(|error| database_error("failed to store channel namespace", error))?;
+            Ok(())
+        })
+    }
+
+    /// Look up the catalog namespace for a channel name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be queried.
+    pub fn get_channel_namespace(&self, channel_name: &str) -> Result<Option<NamespaceId>> {
+        use std::str::FromStr;
+        self.with_connection(|connection| {
+            let result = connection
+                .query_row(
+                    "SELECT catalog_namespace_id FROM channel_namespaces WHERE channel_name = ?1",
+                    [channel_name],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|error| database_error("failed to look up channel namespace", error))?;
+            match result {
+                Some(ns) => {
+                    let namespace_id = NamespaceId::from_str(&ns)
+                        .map_err(|error| database_error("channel namespace is invalid", error))?;
+                    Ok(Some(namespace_id))
+                }
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// Return all channel-to-namespace mappings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be queried.
+    pub fn load_channel_namespaces(&self) -> Result<Vec<(String, NamespaceId)>> {
+        use std::str::FromStr;
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare("SELECT channel_name, catalog_namespace_id FROM channel_namespaces")
+                .map_err(|error| database_error("failed to prepare channel listing", error))?;
+            let rows = statement
+                .query_map([], |row| {
+                    let name: String = row.get(0)?;
+                    let namespace: String = row.get(1)?;
+                    Ok((name, namespace))
+                })
+                .map_err(|error| database_error("failed to read channel namespaces", error))?;
+            let mut channels = Vec::new();
+            for row in rows {
+                let (name, namespace) =
+                    row.map_err(|error| database_error("failed to read channel namespace row", error))?;
+                let namespace_id = NamespaceId::from_str(&namespace)
+                    .map_err(|error| database_error("channel namespace is invalid", error))?;
+                channels.push((name, namespace_id));
+            }
+            Ok(channels)
         })
     }
 
@@ -2894,6 +2970,11 @@ const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
      CREATE TABLE IF NOT EXISTS trust_streams (
          namespace TEXT PRIMARY KEY,
          subscribed_at INTEGER NOT NULL
+     );
+     CREATE TABLE IF NOT EXISTS channel_namespaces (
+         channel_name TEXT PRIMARY KEY NOT NULL,
+         catalog_namespace_id TEXT NOT NULL,
+         created_at INTEGER NOT NULL
      );";
 
 fn initialize_connection(connection: &Connection) -> Result<()> {
@@ -2937,9 +3018,6 @@ fn database_error(context: &'static str, error: impl std::fmt::Display) -> Syncw
 fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
     let _ = events.send(event);
 }
-
-/// Deterministic gossip topic for broadcasting signed moderation reports.
-pub const REPORT_GOSSIP_TOPIC: &[u8] = b"syncweb/reports/v1";
 
 /// A signed content report stored in the indexing database.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

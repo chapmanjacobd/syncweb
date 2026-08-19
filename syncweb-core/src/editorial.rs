@@ -14,7 +14,7 @@
 //! };
 //!
 //! let curated = Channel::new("curated", Some("Editor-approved content"));
-//! assert_eq!(curated.topic_seed(), "syncweb/editorial/curated/v1");
+//! assert_eq!(curated.topic_seed(), "syncweb/catalog/curated/v1");
 //!
 //! assert!(assert_transition(
 //!     Some(EditorialState::Draft),

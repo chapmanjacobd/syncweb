@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    constants::{CATALOG_TOPIC, CHANNEL_TOPIC_PREFIX},
     editorial::Channel,
     error::{Result, SyncwebError},
+    gossip::gossip_topic_id,
     node::gossip_service::GossipService,
     node::signed_message::SignedMessage,
 };
 
-const CATALOG_TOPIC_SEED: &[u8] = b"syncweb/public-package-catalog/v1";
-
 /// The public gossip topic used for package announcements.
 #[must_use]
 pub fn catalog_topic() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(CATALOG_TOPIC_SEED).as_bytes())
+    gossip_topic_id(CATALOG_TOPIC)
 }
 
 /// Derive a gossip topic ID from an editorial channel name.
@@ -33,8 +33,8 @@ pub fn catalog_topic() -> TopicId {
 /// can subscribe only to the curated views they trust.
 #[must_use]
 pub fn channel_topic_id(name: impl AsRef<str>) -> TopicId {
-    let seed = format!("syncweb/editorial/{}/v1", name.as_ref());
-    TopicId::from_bytes(*blake3::hash(seed.as_bytes()).as_bytes())
+    let seed = format!("{CHANNEL_TOPIC_PREFIX}/{name}/v1", name = name.as_ref());
+    gossip_topic_id(seed.as_bytes())
 }
 
 /// Shorthand for [`channel_topic_id`] that accepts a [`Channel`].

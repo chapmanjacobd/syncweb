@@ -5,7 +5,8 @@ use ed25519_dalek::SigningKey;
 use iroh::SecretKey;
 use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
-use syncweb_core::gossip::TopicChannel;
+use syncweb_core::constants::TRUST_STREAM_TOPIC;
+use syncweb_core::gossip::{TopicChannel, gossip_topic_id};
 use syncweb_core::indexing::{
     ProviderReputationStore, ProviderTrustAction, ProviderTrustRecord, ProviderTrustSignal, TrustSignalKind,
     trust_stream_topic,
@@ -162,7 +163,7 @@ async fn test_vouch_signal_published_via_gossip_reaches_subscriber() -> anyhow::
 
     let channel = TopicChannel::<ProviderTrustSignal>::new(
         std::sync::Arc::new(alice.gossip_service().inner().clone()),
-        b"syncweb/provider-trust-stream/v1",
+        gossip_topic_id(TRUST_STREAM_TOPIC),
         alice_sender,
     );
 
@@ -247,7 +248,7 @@ async fn test_incoming_trust_signal_applied_to_wot() -> anyhow::Result<()> {
 
     let channel = TopicChannel::<ProviderTrustSignal>::new(
         std::sync::Arc::new(alice.gossip_service().inner().clone()),
-        b"syncweb/provider-trust-stream/v1",
+        gossip_topic_id(TRUST_STREAM_TOPIC),
         alice_sender,
     );
 

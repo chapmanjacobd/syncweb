@@ -3,6 +3,7 @@ use std::{fs, path::Path};
 use anyhow::Result;
 use iroh_blobs::Hash;
 use syncweb_core::{
+    constants::SNAPSHOT_PIN_PREFIX,
     folder::{FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
@@ -89,7 +90,7 @@ async fn snapshot_path_restore_pins_and_removes_stale_files() -> Result<()> {
     anyhow::ensure!(store.list().await?.iter().any(|item| item.id == snapshot.id));
     anyhow::ensure!(
         node.blob_store()
-            .list_pins("syncweb/snapshot/")
+            .list_pins(SNAPSHOT_PIN_PREFIX)
             .await?
             .iter()
             .any(|(name, _)| name.contains("/blob/"))
@@ -210,7 +211,7 @@ async fn test_snapshot_pin_gc() -> Result<()> {
 
     let has_blob_pins = node
         .blob_store()
-        .list_pins("syncweb/snapshot/")
+        .list_pins(SNAPSHOT_PIN_PREFIX)
         .await?
         .into_iter()
         .any(|(name, _)| name.contains("/blob/"));
@@ -223,7 +224,7 @@ async fn test_snapshot_pin_gc() -> Result<()> {
     store.delete(snapshot.id).await?;
     let pins_after = node
         .blob_store()
-        .list_pins(&format!("syncweb/snapshot/{}/blob/", snapshot.id))
+        .list_pins(&format!("{SNAPSHOT_PIN_PREFIX}{}/blob/", snapshot.id))
         .await?;
     anyhow::ensure!(
         pins_after.is_empty(),
@@ -232,7 +233,7 @@ async fn test_snapshot_pin_gc() -> Result<()> {
 
     let manifest_pins = node
         .blob_store()
-        .list_pins(&format!("syncweb/snapshot/{}/manifest", snapshot.id))
+        .list_pins(&format!("{SNAPSHOT_PIN_PREFIX}{}/manifest", snapshot.id))
         .await?;
     anyhow::ensure!(
         manifest_pins.is_empty(),

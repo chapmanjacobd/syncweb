@@ -26,13 +26,12 @@ pub struct TopicChannel<T: SignedGossipMessage + Send + Sync> {
 }
 
 impl<T: SignedGossipMessage + Send + Sync> TopicChannel<T> {
-    /// Create a deterministic topic ID from a byte-string topic name, and
-    /// store a sender for publishing.
+    /// Create a typed gossip channel from a pre-computed [`TopicId`] and a sender.
     #[must_use]
-    pub fn new(gossip: Arc<Gossip>, topic_name: &[u8], sender: GossipSender) -> Self {
+    pub const fn new(gossip: Arc<Gossip>, topic_id: TopicId, sender: GossipSender) -> Self {
         Self {
             gossip,
-            topic_id: TopicId::from_bytes(*blake3::hash(topic_name).as_bytes()),
+            topic_id,
             sender,
             _phantom: PhantomData,
         }

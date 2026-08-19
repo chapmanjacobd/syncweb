@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Context;
 use iroh_blobs::Hash;
 use syncweb_core::{
+    constants::REPLICATION_PIN_PREFIX,
     folder::{FolderManager, SyncMode},
     indexing::{
         IndexingDatabase, IndexingEvent, IndexingService, ProviderLease, ReplicationBudget, ResilienceConfig,
@@ -291,7 +292,7 @@ async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyh
     anyhow::ensure!(
         subscriber
             .blob_store()
-            .list_pins(b"syncweb/replication/")
+            .list_pins(REPLICATION_PIN_PREFIX)
             .await?
             .iter()
             .any(|(_, pinned_hash)| *pinned_hash == hash)

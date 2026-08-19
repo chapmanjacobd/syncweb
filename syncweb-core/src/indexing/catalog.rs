@@ -20,13 +20,12 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
+    constants::CATALOG_METADATA_KEY,
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
     indexing::{IndexingDatabase, IndexingService},
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
-
-const CATALOG_METADATA_KEY: &[u8] = b"sys/syncweb/catalog/metadata";
 const CATALOG_RECORD_PREFIX: &[u8] = b"record/";
 const RETRY_COUNT: usize = 20;
 const MAX_CONSECUTIVE_STREAM_ERRORS: usize = 5;
@@ -164,6 +163,29 @@ impl CatalogRecord {
             .map_err(|error| SyncwebError::operation("failed to deserialize catalog record", error))?;
         record.validate()?;
         Ok(record)
+    }
+
+    /// Convert this catalog record into a gossip-compatible package
+    /// announcement.
+    ///
+    /// The `manifest_ticket` field is left empty because catalog records
+    /// do not carry blob tickets.  Callers that need to resolve the
+    /// manifest should use the `folder_namespace_id` directly.
+    #[must_use]
+    pub fn to_package_announcement(&self) -> crate::folder::catalog::PackageAnnouncement {
+        let hash = blake3::hash(self.folder_namespace_id.as_bytes());
+        let mut uuid_bytes = [0_u8; 16];
+        uuid_bytes.copy_from_slice(&hash.as_bytes()[..16]);
+        let collection_id = uuid::Uuid::from_bytes(uuid_bytes);
+        crate::folder::catalog::PackageAnnouncement {
+            collection_id,
+            name: self.title.clone(),
+            version: String::from("0.0.0"),
+            sequence: 1,
+            manifest: self.hash,
+            manifest_ticket: String::new(),
+            publisher: self.publisher.clone(),
+        }
     }
 }
 

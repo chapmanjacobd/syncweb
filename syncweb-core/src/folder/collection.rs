@@ -624,9 +624,9 @@ fn head_key(collection_id: Uuid) -> String {
 }
 
 fn manifest_pin_name(hash: Hash) -> String {
-    format!("syncweb/collection-manifest/{hash}")
+    format!("{}{hash}", crate::constants::COLLECTION_MANIFEST_PIN_PREFIX)
 }
 
 fn content_pin_name(collection_id: Uuid, hash: Hash) -> String {
-    format!("syncweb/collection/{collection_id}/{hash}")
+    format!("{}{collection_id}/{hash}", crate::constants::COLLECTION_PIN_PREFIX)
 }

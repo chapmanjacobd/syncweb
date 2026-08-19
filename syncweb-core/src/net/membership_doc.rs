@@ -2,10 +2,10 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, SyncwebError};
-
-/// Domain separation context for membership list signatures.
-const MEMBER_LIST_SIGNATURE_CONTEXT: &[u8] = b"syncweb/network-membership/v1\0";
+use crate::{
+    Result, SyncwebError,
+    constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_DOC_NAMESPACE_CONTEXT},
+};
 
 /// The canonical, owner-signed list of network members.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -113,7 +113,7 @@ impl SignedMemberList {
 #[must_use]
 pub fn network_doc_namespace(network_id: &[u8; 32], shared_secret: &[u8; 32]) -> NamespaceId {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"syncweb/network-doc/v1\0");
+    hasher.update(NETWORK_DOC_NAMESPACE_CONTEXT);
     hasher.update(network_id);
     hasher.update(shared_secret);
     NamespaceId::from(hasher.finalize().as_bytes())

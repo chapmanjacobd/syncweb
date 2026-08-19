@@ -710,7 +710,7 @@ fn bench_ipc_create_folder(c: &mut Criterion) {
             (node, handle, pool)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-create-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory)
     };
 
@@ -766,6 +766,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
                 handle.clone(),
                 node.clone(),
                 pool.clone(),
+                None,
             );
             let test_dir = directory.join("health-bench-folder");
             let response = server
@@ -785,7 +786,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
             (node, handle, pool, namespace)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-health-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory, namespace)
     };
 
@@ -843,6 +844,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
                 handle.clone(),
                 node.clone(),
                 pool.clone(),
+                None,
             );
             let test_dir = directory.join("verify-bench-folder");
             let response = server
@@ -862,7 +864,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
             (node, handle, pool, namespace)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-verify-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool);
+        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory, namespace)
     };
 

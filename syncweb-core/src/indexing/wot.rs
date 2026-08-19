@@ -18,17 +18,14 @@ use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    constants::{
+        ATTESTATION_CONTEXT, DELEGATION_CONTEXT, METADATA_CONTEXT, MODERATION_CONTEXT, PROVIDER_TRUST_CONTEXT,
+        REVOCATION_CONTEXT,
+    },
     error::{Result, SyncwebError},
     gossip::SignedGossipMessage,
     indexing::{IndexingDatabase, IndexingService},
 };
-
-const METADATA_CONTEXT: &[u8] = b"syncweb/wot/metadata/v1\0";
-const DELEGATION_CONTEXT: &[u8] = b"syncweb/wot/delegation/v1\0";
-const REVOCATION_CONTEXT: &[u8] = b"syncweb/wot/revocation/v1\0";
-const MODERATION_CONTEXT: &[u8] = b"syncweb/wot/moderation/v1\0";
-const ATTESTATION_CONTEXT: &[u8] = b"syncweb/wot/attestation/v1\0";
-const PROVIDER_TRUST_CONTEXT: &[u8] = b"syncweb/wot/provider-trust/v1\0";
 
 /// Signed metadata appended to a content hash.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1901,9 +1898,6 @@ impl SignedGossipMessage for Attestation {
         self.verify_signature()
     }
 }
-
-/// Deterministic gossip topic for broadcasting attestations.
-pub const ATTESTATION_GOSSIP_TOPIC: &[u8] = b"syncweb/attestations/v1";
 
 fn current_epoch_seconds() -> u64 {
     SystemTime::now()

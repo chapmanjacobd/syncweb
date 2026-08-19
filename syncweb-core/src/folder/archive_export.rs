@@ -166,7 +166,11 @@ impl DropExporter {
         let output_path = output.as_ref().to_path_buf();
         let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent).await?;
-        let staging = parent.join(format!(".syncweb-drop-{}", Uuid::new_v4()));
+        let staging = parent.join(format!(
+            "{}{}",
+            crate::constants::DROP_EXPORT_STAGING_PREFIX,
+            Uuid::new_v4()
+        ));
         let write_result = self
             .write_archive(&staging, &manifest_bytes, manifest_hash, &entries, pool)
             .await;
@@ -322,7 +326,11 @@ async fn write_blob_section(
     temporary_dir: &Path,
     pool: Option<&ManagedPool>,
 ) -> Result<()> {
-    let temporary_path = temporary_dir.join(format!(".syncweb-drop-blob-{}", Uuid::new_v4()));
+    let temporary_path = temporary_dir.join(format!(
+        "{}{}",
+        crate::constants::DROP_EXPORT_BLOB_STAGING_PREFIX,
+        Uuid::new_v4()
+    ));
     let result = stream_blob(blob_store, encoder, entry, &temporary_path, pool).await;
     let cleanup = remove_if_present(&temporary_path).await;
     match (result, cleanup) {

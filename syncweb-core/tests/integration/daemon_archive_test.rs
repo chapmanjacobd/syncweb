@@ -57,7 +57,8 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
         DaemonStatus::Running,
     ));
     let pool = Arc::new(ManagedPool::new("daemon-archive-test", 1)?);
-    let server = IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool);
+    let server =
+        IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
     let archive = directory.path().join("export.car.zst");
     let export_response = server
         .handle_request(IpcRequest::new(IpcCommand::ExportArchive {

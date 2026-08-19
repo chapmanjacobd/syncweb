@@ -10,13 +10,12 @@ use iroh_docs::{DocTicket, NamespaceId, api::Doc};
 use n0_future::StreamExt;
 use tokio::sync::RwLock;
 
+use crate::constants::MODE_KEY;
 use crate::error::{Result, SyncwebError};
 use crate::node::discovery::TopicTracker;
 use crate::node::iroh_node::IrohNode;
 
 use super::{Capability, SyncMode, SyncwebFolder};
-
-const MODE_KEY: &[u8] = b"sys/syncweb/mode";
 
 #[derive(Clone)]
 pub struct FolderManager {

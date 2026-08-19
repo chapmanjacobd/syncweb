@@ -1919,7 +1919,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__package__subcmd__search)
-            opts="-h --bootstrap --timeout-ms --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --bootstrap --timeout-ms --channel --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1930,6 +1930,10 @@ _syncweb() {
                     return 0
                     ;;
                 --timeout-ms)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --channel)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

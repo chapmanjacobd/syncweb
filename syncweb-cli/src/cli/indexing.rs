@@ -18,7 +18,9 @@ use super::commands::{
     ProviderTrustCommand, PublishCatalogArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
+    constants::{ATTESTATION_TOPIC, DOWNLOAD_PIN_PREFIX, REPORT_TOPIC, REVOCATION_TOPIC},
     folder::{FolderManager, SyncwebFolder},
+    gossip::gossip_topic_id,
     indexing::{
         Attestation, AttestationKind, BanRecord, CatalogRecord, ContentLink, DenylistRule, FilterList,
         IndexingDatabase, IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext,
@@ -40,11 +42,9 @@ use iroh_blobs::{
     ticket::BlobTicket,
 };
 use iroh_docs::NamespaceId;
-use iroh_gossip::{TopicId, api::Event};
+use iroh_gossip::api::Event;
 use n0_future::StreamExt;
-use syncweb_core::{
-    gossip::TopicChannel, indexing::REPORT_GOSSIP_TOPIC, init::open_node, node::gossip_service::GossipService,
-};
+use syncweb_core::{gossip::TopicChannel, init::open_node, node::gossip_service::GossipService};
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
 const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
@@ -318,14 +318,11 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
 
             if broadcast {
                 let node = open_node(data_dir).await?;
-                let topic_id = revocation_topic_id();
+                let topic_id = gossip_topic_id(REVOCATION_TOPIC);
                 let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
                 let (sender, _receiver) = GossipService::split(topic);
-                let topic_channel = TopicChannel::<PrivateLink>::new(
-                    Arc::new(node.gossip_service().inner().clone()),
-                    syncweb_core::indexing::REVOCATION_GOSSIP_TOPIC,
-                    sender,
-                );
+                let topic_channel =
+                    TopicChannel::<PrivateLink>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
                 topic_channel.publish(&parsed).await?;
                 tracing::info!(manifest = %parsed.manifest, "revocation broadcast via gossip");
                 node.stop().await?;
@@ -521,7 +518,7 @@ pub async fn download_blob(
                 .fetch(node.endpoint(), first_ticket)
                 .await
                 .context("failed to fetch blob")?;
-            let pin_name = format!("syncweb/download/{content_hash}");
+            let pin_name = format!("{DOWNLOAD_PIN_PREFIX}{content_hash}");
             node.blob_store().pin(&pin_name, content_hash).await?;
             node.stop().await?;
         }
@@ -1406,16 +1403,11 @@ fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, br
         let owned_dir = data_dir.to_path_buf();
         rt.block_on(async {
             let node = open_node(&owned_dir).await?;
-            let topic = node
-                .gossip_service()
-                .subscribe_and_join(report_topic_id(), Vec::new())
-                .await?;
+            let topic_id = gossip_topic_id(REPORT_TOPIC);
+            let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
             let (sender, _receiver) = GossipService::split(topic);
-            let topic_channel = TopicChannel::<ReportRecord>::new(
-                Arc::new(node.gossip_service().inner().clone()),
-                REPORT_GOSSIP_TOPIC,
-                sender,
-            );
+            let topic_channel =
+                TopicChannel::<ReportRecord>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
             topic_channel.publish(&report).await?;
             node.stop().await?;
             Ok::<_, anyhow::Error>(())
@@ -1919,28 +1911,14 @@ const fn moderation_label(action: &ModerationAction) -> &'static str {
     }
 }
 
-fn attestation_topic_id() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC).as_bytes())
-}
-
-fn report_topic_id() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
-}
-
-fn revocation_topic_id() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(syncweb_core::indexing::REVOCATION_GOSSIP_TOPIC).as_bytes())
-}
-
 async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {
     let node = open_node(data_dir).await?;
-    let topic = node
-        .gossip_service()
-        .subscribe_and_join(attestation_topic_id(), Vec::new())
-        .await?;
+    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
+    let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
     let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
     let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
         Arc::new(node.gossip_service().inner().clone()),
-        syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC,
+        topic_id,
         sender,
     );
     topic_channel.publish(attestation).await?;
@@ -1954,14 +1932,12 @@ async fn collect_attestations(
     timeout_duration: Duration,
 ) -> Result<Vec<Attestation>> {
     let node = open_node(data_dir).await?;
-    let topic = node
-        .gossip_service()
-        .subscribe_and_join(attestation_topic_id(), Vec::new())
-        .await?;
+    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
+    let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
     let (sender, receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
     let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
         Arc::new(node.gossip_service().inner().clone()),
-        syncweb_core::indexing::wot::ATTESTATION_GOSSIP_TOPIC,
+        topic_id,
         sender,
     );
     let result = topic_channel

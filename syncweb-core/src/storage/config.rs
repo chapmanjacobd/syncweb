@@ -33,6 +33,9 @@ pub struct Config {
     pub default_sync_mode: String,
     #[serde(default)]
     pub subscribe: SubscribeConfig,
+    /// Named editorial channels backed by iroh-docs catalogs.
+    #[serde(default)]
+    pub channels: BTreeMap<String, ChannelConfig>,
 }
 
 impl Config {
@@ -137,6 +140,23 @@ impl Config {
                     }
                 }
             }
+            _ if key.starts_with("channels.") => {
+                let rest = &key["channels.".len()..];
+                if let Some(field) = rest.strip_suffix(".ticket") {
+                    let channel_name = field.to_owned();
+                    value.clone_into(
+                        &mut self
+                            .channels
+                            .entry(channel_name)
+                            .or_insert_with(|| ChannelConfig { ticket: String::new() })
+                            .ticket,
+                    );
+                } else {
+                    return Err(SyncwebError::InvalidConfig(format!(
+                        "unsupported channels key {key:?}; supported: channels.<name>.ticket"
+                    )));
+                }
+            }
             _ => {
                 return Err(SyncwebError::InvalidConfig(format!(
                     "unsupported config key {key:?}; supported keys: \
@@ -144,7 +164,7 @@ impl Config {
                      bandwidth.max_upload, bandwidth.max_download, parallel.threads, cache.max_cache_size, \
                      advanced.blob_cache_size_gb, discovery.mdns, discovery.beacon, discovery.beacon_base_port, \
                      discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode, \
-                     <namespace>.subscribe"
+                     <namespace>.subscribe, channels.<name>.ticket"
                 )));
             }
         }
@@ -240,6 +260,14 @@ impl SubscribeFilters {
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// Configuration for an iroh-docs-backed editorial channel.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ChannelConfig {
+    /// The iroh-docs doc ticket for subscribing to the channel catalog.
+    pub ticket: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -8,12 +8,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::constants::RUNTIME_SOCKET_FILE_PREFIX;
 use crate::error::{Result, SyncwebError};
 use crate::storage::node_db::NodeDatabase;
 
 const LOCK_FILE_NAME: &str = "daemon.lock";
 const SOCKET_FILE_NAME: &str = "daemon.sock";
-const RUNTIME_SOCKET_FILE_PREFIX: &str = "syncweb-";
 
 /// The lifecycle state persisted by a running daemon.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

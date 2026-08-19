@@ -23,6 +23,7 @@
 //!
 pub mod allocation;
 pub mod bandwidth_stats;
+pub mod constants;
 pub mod daemon;
 pub mod editorial;
 pub mod error;

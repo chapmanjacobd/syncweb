@@ -11,10 +11,7 @@ use n0_future::StreamExt;
 use syncweb_core::{
     folder::{FolderManager, SyncMode},
     gossip::TopicChannel,
-    indexing::{
-        ContentLink, Link, LinkResolution, LinkResolver, MutablePointer, PrivateLink, REVOCATION_GOSSIP_TOPIC,
-        revocation_topic_id,
-    },
+    indexing::{ContentLink, Link, LinkResolution, LinkResolver, MutablePointer, PrivateLink, revocation_topic_id},
     node::{
         gossip_service::GossipService,
         identity::IdentityManager,
@@ -229,11 +226,8 @@ async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
     // Alice subscribes to the revocation topic
     let alice_topic = alice.gossip_service().subscribe(topic_id, Vec::new()).await?;
     let (alice_sender, _alice_receiver) = GossipService::split(alice_topic);
-    let alice_channel = TopicChannel::<PrivateLink>::new(
-        Arc::new(alice.gossip_service().inner().clone()),
-        REVOCATION_GOSSIP_TOPIC,
-        alice_sender,
-    );
+    let alice_channel =
+        TopicChannel::<PrivateLink>::new(Arc::new(alice.gossip_service().inner().clone()), topic_id, alice_sender);
 
     // Bob subscribes to receive revocations, bootstrapping to Alice
     let mut bob_topic = bob
@@ -245,11 +239,8 @@ async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
         .context("Bob's gossip join timed out")?
         .context("Bob's gossip join failed")?;
     let (bob_sender, bob_receiver) = GossipService::split(bob_topic);
-    let bob_channel = TopicChannel::<PrivateLink>::new(
-        Arc::new(bob.gossip_service().inner().clone()),
-        REVOCATION_GOSSIP_TOPIC,
-        bob_sender,
-    );
+    let bob_channel =
+        TopicChannel::<PrivateLink>::new(Arc::new(bob.gossip_service().inner().clone()), topic_id, bob_sender);
     let mut bob_stream = bob_channel.receive_from(bob_receiver);
 
     // Alice publishes the revocation

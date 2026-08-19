@@ -9,7 +9,7 @@ use iroh_docs::NamespaceId;
 use iroh_gossip::TopicId;
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, SyncwebError};
+use crate::{Result, SyncwebError, gossip::gossip_topic_id};
 
 /// Stable identifier derived from a network name.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -253,8 +253,8 @@ impl TryFrom<TicketWire> for NetworkTicket {
 }
 
 pub(crate) fn network_topic(id: NetworkId) -> TopicId {
-    let digest = blake3::hash(format!("syncweb/net/{id}").as_bytes());
-    TopicId::from_bytes(*digest.as_bytes())
+    let seed = format!("{}/{}", crate::constants::NETWORK_TOPIC_PREFIX, id);
+    gossip_topic_id(seed.as_bytes())
 }
 
 pub(crate) fn parse_public_key(value: &str) -> Result<PublicKey> {

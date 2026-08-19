@@ -340,5 +340,5 @@ impl FolderLike for SyncwebFolder {
 }
 
 fn public_pin_name(namespace_id: NamespaceId, hash: Hash) -> String {
-    format!("syncweb/public/{namespace_id}/{hash}")
+    format!("{}{namespace_id}/{hash}", crate::constants::PUBLIC_PIN_PREFIX)
 }

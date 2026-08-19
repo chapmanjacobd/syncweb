@@ -2864,7 +2864,8 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             query,
             bootstrap: bootstrap_values,
             timeout_ms,
-        } => handle_package_search(ctx, query, bootstrap_values, timeout_ms, &packages).await?,
+            channel,
+        } => handle_package_search(ctx, query, bootstrap_values, timeout_ms, &packages, channel).await?,
         PackageCommand::Export { paths, version, filter } => {
             handle_package_archive_export(ctx, paths, version, filter).await?;
         }
@@ -3103,7 +3104,11 @@ async fn handle_package_archive_import(
         anyhow::bail!("collection version {collection} {version} is already installed");
     }
 
-    let source = data_dir.join(format!(".syncweb-drop-source-{}", uuid::Uuid::new_v4()));
+    let source = data_dir.join(format!(
+        "{}{}",
+        syncweb_core::constants::DROP_SOURCE_STAGING_PREFIX,
+        uuid::Uuid::new_v4()
+    ));
     let materialize_result = importer.materialize(&result, &source).await;
     if let Err(error) = materialize_result {
         node.stop().await?;
@@ -3356,6 +3361,7 @@ async fn handle_package_search(
     bootstrap_values: Vec<String>,
     timeout_ms: u64,
     packages: &PackageManager,
+    channel: Option<String>,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -3371,6 +3377,61 @@ async fn handle_package_search(
             }));
         }
     }
+
+    // If a channel is specified, try the catalog-backed path first.
+    if let Some(ref channel_name) = channel {
+        let config_path = data_dir.join("config.toml");
+        if let Ok(app_config) = syncweb_core::storage::config::Config::load(&config_path)
+            && app_config.channels.contains_key(channel_name)
+        {
+            let indexing = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite"))?;
+            let node = open_node(data_dir).await?;
+            let author = node.docs_engine().author().await?;
+            let catalog_service = indexing.catalog_service(node.docs_engine(), node.blob_store(), author);
+            let query_str = query.as_deref().unwrap_or("");
+            let limit = 100;
+            match catalog_service.search(query_str, limit) {
+                Ok(records) => {
+                    if let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name) {
+                        for record in records.into_iter().filter(|r| r.catalog_namespace_id == namespace_id) {
+                            let announcement = record.to_package_announcement();
+                            all_results.push(serde_json::json!({
+                                "name": announcement.name,
+                                "version": announcement.version,
+                                "collection": announcement.collection_id.to_string(),
+                                "manifest": announcement.manifest,
+                            }));
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("catalog search failed: {error}");
+                }
+            }
+            node.stop().await?;
+            // Skip the gossip path — catalog results are authoritative.
+            if output_json {
+                println!("{}", serde_json::to_string_pretty(&all_results)?);
+                return Ok(());
+            }
+            if !all_results.is_empty() {
+                let mut table = Table::new();
+                table.set_header(["Name", "Version", "Collection", "Manifest"]);
+                for r in &all_results {
+                    table.add_row([
+                        r["name"].as_str().unwrap_or_default(),
+                        r["version"].as_str().unwrap_or_default(),
+                        r["collection"].as_str().unwrap_or_default(),
+                        r["manifest"].as_str().unwrap_or_default(),
+                    ]);
+                }
+                println!("{table}");
+            }
+            return Ok(());
+        }
+    }
+
+    // Fall back to gossip-based search.
     let bootstrap = parse_bootstrap(bootstrap_values)?;
     let node = open_node(data_dir).await?;
     let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());

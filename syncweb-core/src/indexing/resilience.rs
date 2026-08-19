@@ -26,7 +26,9 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::{sync::watch, task::JoinHandle};
 
 use crate::{
+    constants::{PROVIDER_LEASE_SIGNATURE_CONTEXT, REPLICATION_PIN_PREFIX, RESILIENCE_TOPIC},
     error::{Result, SyncwebError},
+    gossip::gossip_topic_id,
     indexing::{
         IndexingDatabase,
         reputation::{ProviderReputationStore, ReputationConfig},
@@ -34,9 +36,6 @@ use crate::{
     },
     node::{blob_store::BlobStore, gossip_service::GossipService},
 };
-
-const RESILIENCE_TOPIC_SEED: &[u8] = b"syncweb/provider-leases/v1";
-const PROVIDER_LEASE_SIGNATURE_CONTEXT: &[u8] = b"syncweb/provider-lease/v1\0";
 const DEFAULT_OBSERVATION_TTL: Duration = Duration::from_mins(5);
 const DEFAULT_MAX_JITTER: Duration = Duration::from_secs(30);
 const DEFAULT_RESPONSIBLE_PEERS: usize = 1;
@@ -45,8 +44,6 @@ const DEFAULT_FAILURE_TTL: Duration = Duration::from_hours(24);
 const AUTOMATED_BAN_DURATION: Duration = Duration::from_hours(1);
 const DEFINITIVE_FAILURE_THRESHOLD: u32 = 3;
 const STREAM_VALIDATION_CHUNK_SIZE: usize = 64 * 1024;
-const REPLICATION_PIN_PREFIX: &str = "syncweb/replication/";
-
 /// The broad cause of a failed provider fetch.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -2100,7 +2097,7 @@ impl ResilienceService {
 /// The deterministic gossip topic used for provider leases.
 #[must_use]
 pub fn resilience_topic() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(RESILIENCE_TOPIC_SEED).as_bytes())
+    gossip_topic_id(RESILIENCE_TOPIC)
 }
 
 /// Select the `count` providers closest to a blob's hash.

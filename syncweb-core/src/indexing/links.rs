@@ -23,13 +23,11 @@ use serde::{Deserialize, Serialize};
 
 use super::IndexingDatabase;
 use crate::{
+    constants::{LINK_SCHEME, LINK_SIGNATURE_CONTEXT, REVOCATION_TOPIC},
     error::{Result, SyncwebError},
-    gossip::SignedGossipMessage,
+    gossip::{SignedGossipMessage, gossip_topic_id},
     indexing::ProviderLease,
 };
-
-const LINK_SIGNATURE_CONTEXT: &[u8] = b"syncweb/name-pointer/v1\0";
-const LINK_SCHEME: &str = "syncweb://";
 
 /// Return the current Unix epoch in seconds.
 #[must_use]
@@ -722,9 +720,6 @@ pub enum Link {
     Private(PrivateLink),
 }
 
-/// Alias for the public link enum.
-pub type SyncwebLink = Link;
-
 impl Link {
     /// Parse a stable link.
     ///
@@ -1338,13 +1333,10 @@ impl SignedGossipMessage for PrivateLink {
     }
 }
 
-/// Deterministic gossip topic for broadcasting link revocations.
-pub const REVOCATION_GOSSIP_TOPIC: &[u8] = b"syncweb/link-revocations/v1";
-
 /// Deterministic gossip topic ID for link revocations.
 #[must_use]
 pub fn revocation_topic_id() -> iroh_gossip::TopicId {
-    iroh_gossip::TopicId::from_bytes(*blake3::hash(REVOCATION_GOSSIP_TOPIC).as_bytes())
+    gossip_topic_id(REVOCATION_TOPIC)
 }
 
 #[cfg(test)]

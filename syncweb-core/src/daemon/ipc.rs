@@ -27,7 +27,7 @@ use crate::{
         PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
-    indexing::{ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
+    indexing::{IndexingService, ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
     storage::config::SubscribeFilters,
@@ -621,6 +621,7 @@ pub struct IpcServer {
 struct ArchiveContext {
     node: Arc<IrohNode>,
     pool: Arc<ManagedPool>,
+    indexing: Option<IndexingService>,
 }
 
 #[derive(Clone, Copy)]
@@ -657,11 +658,12 @@ impl IpcServer {
         daemon_handle: DaemonHandle,
         node: Arc<IrohNode>,
         pool: Arc<ManagedPool>,
+        indexing: Option<IndexingService>,
     ) -> Self {
         Self {
             listener: IpcListener::new(socket_path),
             daemon_handle,
-            archive_context: Some(Arc::new(ArchiveContext { node, pool })),
+            archive_context: Some(Arc::new(ArchiveContext { node, pool, indexing })),
             folder_manager: None,
             node_db: None,
             resilience: None,
@@ -2355,6 +2357,34 @@ impl IpcServer {
                 };
             }
         };
+
+        // If a channel is specified, check for a catalog-backed namespace first.
+        if let Some(ref channel_name) = channel
+            && let Some(ref indexing) = context.indexing
+            && let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name)
+        {
+            let author = match context.node.docs_engine().author().await {
+                Ok(a) => a,
+                Err(error) => return response_from_error(error),
+            };
+            let catalog_service =
+                indexing.catalog_service(context.node.docs_engine(), context.node.blob_store(), author);
+            let query_str = query.as_deref().unwrap_or("");
+            let limit = 100;
+            return match catalog_service.search(query_str, limit) {
+                Ok(records) => {
+                    let packages: Vec<_> = records
+                        .into_iter()
+                        .filter(|r| r.catalog_namespace_id == namespace_id)
+                        .map(|r| r.to_package_announcement())
+                        .collect();
+                    IpcResponse::PackageSearchResult { packages }
+                }
+                Err(error) => response_from_error(error),
+            };
+        }
+
+        // Fall back to gossip-based search.
         let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
         let timeout = Duration::from_secs(timeout_secs);
         let bootstrap: Vec<iroh::PublicKey> = Vec::new();
@@ -2393,7 +2423,7 @@ impl IpcServer {
             Ok(t) => t,
             Err(error) => return response_from_error(error),
         };
-        let pkg_root = target_dir.join(".syncweb-packages");
+        let pkg_root = target_dir.join(crate::constants::PACKAGES_DIR_NAME);
         let Some(node_db) = self.node_db.clone() else {
             return IpcResponse::Error {
                 message: "daemon package-install IPC is unavailable: no node database".to_owned(),
@@ -3488,7 +3518,7 @@ mod tests {
             DaemonStatus::Running,
         );
         let handle = DaemonHandle::new(daemon_state);
-        let server = IpcServer::with_archive_context(socket_path(), handle, node.clone(), pool);
+        let server = IpcServer::with_archive_context(socket_path(), handle, node.clone(), pool, None);
 
         IpcTestFixture {
             server,

@@ -14,16 +14,17 @@ use tokio::{
 };
 
 use crate::{
+    constants::{ATTESTATION_TOPIC, REPORT_TOPIC, REVOCATION_TOPIC},
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
-    gossip::TopicChannel,
+    gossip::{TopicChannel, gossip_topic_id},
     indexing::{
-        IndexingDatabase, IndexingService, REPORT_GOSSIP_TOPIC, ReportRecord,
-        links::{MutablePointer, PrivateLink, REVOCATION_GOSSIP_TOPIC},
+        IndexingDatabase, IndexingService, ReportRecord,
+        links::{MutablePointer, PrivateLink},
         resilience::{ReplicationBudget, ResilienceConfig},
-        wot::{ATTESTATION_GOSSIP_TOPIC, Attestation},
+        wot::Attestation,
     },
     net::{NetworkLogger, NetworkManager},
     node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
@@ -119,6 +120,7 @@ pub struct Daemon {
     report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     revocation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     maintenance_task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    indexing: Option<IndexingService>,
 }
 
 struct PendingWatch {
@@ -288,13 +290,16 @@ impl Daemon {
             sync_sender,
             initial_handle.reload_requested.clone(),
         );
-        let resilience = match IndexingService::new(config.data_dir.join("indexing.sqlite")) {
-            Ok(indexing) => Some(indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default()))),
+        let indexing = match IndexingService::new(config.data_dir.join("indexing.sqlite")) {
+            Ok(indexing) => Some(indexing),
             Err(error) => {
-                tracing::warn!(%error, "failed to open indexing database; resilience disabled");
+                tracing::warn!(%error, "failed to open indexing database; resilience and catalog channels disabled");
                 None
             }
         };
+        let resilience = indexing
+            .as_ref()
+            .map(|idx| idx.resilience_service(ResilienceConfig::new(ReplicationBudget::default())));
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
         let network_logger = NetworkLogger::new(stats_db.clone());
         let local_node_id = node.endpoint().id();
@@ -307,7 +312,15 @@ impl Daemon {
                 NetworkManager::new(node_db.clone(), local_node_id, member_keys)?
             }
         };
-        let mut ipc_server = Self::build_ipc_server(&config, &handle, &node, &archive_pool, &folder_manager, &node_db);
+        let mut ipc_server = Self::build_ipc_server(
+            &config,
+            &handle,
+            &node,
+            &archive_pool,
+            &folder_manager,
+            &node_db,
+            indexing.clone(),
+        );
         ipc_server = match resilience {
             Some(service) => ipc_server.with_resilience(service),
             None => ipc_server,
@@ -339,6 +352,7 @@ impl Daemon {
             report_listener: tokio::sync::Mutex::new(None),
             revocation_listener: tokio::sync::Mutex::new(None),
             maintenance_task: tokio::sync::Mutex::new(None),
+            indexing,
         })
     }
 
@@ -358,12 +372,14 @@ impl Daemon {
         archive_pool: &Arc<ManagedPool>,
         folder_manager: &FolderManager,
         node_db: &NodeDatabase,
+        indexing: Option<IndexingService>,
     ) -> IpcServer {
         IpcServer::with_archive_context(
             daemon_socket_path(&config.data_dir),
             handle.clone(),
             node.clone(),
             archive_pool.clone(),
+            indexing,
         )
         .with_folder_manager(folder_manager.clone())
         .with_node_db(node_db.clone())
@@ -432,6 +448,7 @@ impl Daemon {
         self.start_watching().await?;
         self.subscribe_network_gossip().await;
         self.spawn_membership_listeners().await;
+        self.subscribe_channels().await;
         Ok(())
     }
 
@@ -1250,6 +1267,69 @@ impl Daemon {
         }
     }
 
+    async fn subscribe_channels(&self) {
+        let Some(ref indexing) = self.indexing else {
+            tracing::debug!("indexing unavailable; skipping catalog channel subscription");
+            return;
+        };
+        let Some(app_config) = self.load_channel_config() else {
+            return;
+        };
+        let author = match self.node.docs_engine().author().await {
+            Ok(a) => a,
+            Err(error) => {
+                tracing::warn!(%error, "failed to get author for channel subscription");
+                return;
+            }
+        };
+        let catalog_service = indexing.catalog_service(self.node.docs_engine(), self.node.blob_store(), author);
+        for (channel_name, channel_config) in &app_config.channels {
+            self.subscribe_one_channel(indexing, &catalog_service, channel_name, channel_config)
+                .await;
+        }
+    }
+
+    fn load_channel_config(&self) -> Option<crate::storage::config::Config> {
+        let config_path = self.config.data_dir.join("config.toml");
+        match crate::storage::config::Config::load(&config_path) {
+            Ok(c) if !c.channels.is_empty() => Some(c),
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(%error, "failed to load config for channel subscription");
+                None
+            }
+        }
+    }
+
+    async fn subscribe_one_channel(
+        &self,
+        indexing: &IndexingService,
+        catalog_service: &crate::indexing::CatalogService,
+        channel_name: &str,
+        channel_config: &crate::storage::config::ChannelConfig,
+    ) {
+        let Ok(ticket) = channel_config.ticket.parse::<iroh_docs::DocTicket>() else {
+            tracing::warn!(%channel_name, "invalid channel doc ticket; skipping");
+            return;
+        };
+        let catalog = match catalog_service.subscribe(ticket).await {
+            Ok(c) => c,
+            Err(error) => {
+                tracing::warn!(%channel_name, %error, "failed to subscribe to catalog channel");
+                return;
+            }
+        };
+        Self::record_channel_namespace(indexing, channel_name, &catalog);
+    }
+
+    fn record_channel_namespace(indexing: &IndexingService, channel_name: &str, catalog: &crate::indexing::Catalog) {
+        let namespace_id = catalog.namespace_id();
+        if let Err(error) = indexing.database().set_channel_namespace(channel_name, namespace_id) {
+            tracing::warn!(%channel_name, %error, "failed to persist channel namespace");
+        }
+        tracing::info!(%channel_name, %namespace_id, "subscribed to catalog channel");
+    }
+
     async fn spawn_membership_listeners(&self) {
         let networks: Vec<_> = {
             let guard = self.network_manager.read().await;
@@ -1379,10 +1459,6 @@ fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
     message.contains("file changed during import") || message.contains("input path does not exist")
 }
 
-fn attestation_topic_id() -> iroh_gossip::TopicId {
-    iroh_gossip::TopicId::from_bytes(*blake3::hash(ATTESTATION_GOSSIP_TOPIC).as_bytes())
-}
-
 fn persist_incoming_attestation(att: &Attestation, db: &IndexingDatabase, existing: &mut Vec<Attestation>) {
     if existing.contains(att) {
         return;
@@ -1404,15 +1480,10 @@ async fn listen_for_attestations(
     data_dir: PathBuf,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<()> {
-    let topic = gossip_service
-        .subscribe_and_join(attestation_topic_id(), Vec::new())
-        .await?;
+    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
+    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
     let (sender, receiver) = GossipService::split(topic);
-    let topic_channel = TopicChannel::<Attestation>::new(
-        Arc::new(gossip_service.inner().clone()),
-        ATTESTATION_GOSSIP_TOPIC,
-        sender,
-    );
+    let topic_channel = TopicChannel::<Attestation>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
     let mut stream = topic_channel.receive_from(receiver);
     let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
     let mut existing = db.load_attestations()?;
@@ -1433,28 +1504,15 @@ async fn listen_for_attestations(
     }
 }
 
-fn report_topic_id() -> iroh_gossip::TopicId {
-    iroh_gossip::TopicId::from_bytes(*blake3::hash(REPORT_GOSSIP_TOPIC).as_bytes())
-}
-
-fn revocation_topic_id() -> iroh_gossip::TopicId {
-    iroh_gossip::TopicId::from_bytes(*blake3::hash(REVOCATION_GOSSIP_TOPIC).as_bytes())
-}
-
 async fn listen_for_revocations(
     gossip_service: GossipService,
     data_dir: PathBuf,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<()> {
-    let topic = gossip_service
-        .subscribe_and_join(revocation_topic_id(), Vec::new())
-        .await?;
+    let topic_id = gossip_topic_id(REVOCATION_TOPIC);
+    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
     let (sender, receiver) = GossipService::split(topic);
-    let topic_channel = TopicChannel::<PrivateLink>::new(
-        Arc::new(gossip_service.inner().clone()),
-        REVOCATION_GOSSIP_TOPIC,
-        sender,
-    );
+    let topic_channel = TopicChannel::<PrivateLink>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
     let mut stream = topic_channel.receive_from(receiver);
     let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
     let (pointers, mirrors, mut revoked) = db.load_links()?;
@@ -1499,10 +1557,10 @@ async fn listen_for_reports(
     data_dir: PathBuf,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<()> {
-    let topic = gossip_service.subscribe_and_join(report_topic_id(), Vec::new()).await?;
+    let topic_id = gossip_topic_id(REPORT_TOPIC);
+    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
     let (sender, receiver) = GossipService::split(topic);
-    let topic_channel =
-        TopicChannel::<ReportRecord>::new(Arc::new(gossip_service.inner().clone()), REPORT_GOSSIP_TOPIC, sender);
+    let topic_channel = TopicChannel::<ReportRecord>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
     let mut stream = topic_channel.receive_from(receiver);
     let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
     let mut existing = db.load_content_reports()?;

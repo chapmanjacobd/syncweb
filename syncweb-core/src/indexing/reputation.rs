@@ -24,13 +24,11 @@ use super::{
     wot::{ProviderTrustAction, ProviderTrustRecord, TrustPolicy},
 };
 use crate::{
+    constants::{REPUTATION_SIGNAL_CONTEXT, TRUST_STREAM_TOPIC},
     error::{Result, SyncwebError},
-    gossip::SignedGossipMessage,
+    gossip::{SignedGossipMessage, gossip_topic_id},
     node::gossip_service::GossipService,
 };
-
-const REPUTATION_SIGNAL_CONTEXT: &[u8] = b"syncweb/provider-trust/v1\0";
-const TRUST_STREAM_TOPIC_SEED: &[u8] = b"syncweb/provider-trust-stream/v1";
 const DEFAULT_DECAY_HALF_LIFE: Duration = Duration::from_hours(24);
 const DEFAULT_TEMPORARY_BAN: Duration = Duration::from_hours(1);
 const DEFAULT_BACKOFF_FACTOR: f64 = 2.0;
@@ -755,7 +753,7 @@ impl ProviderTrustSignal {
 
 #[must_use]
 pub fn trust_stream_topic() -> TopicId {
-    TopicId::from_bytes(*blake3::hash(TRUST_STREAM_TOPIC_SEED).as_bytes())
+    gossip_topic_id(TRUST_STREAM_TOPIC)
 }
 
 fn xor_distance(hash: Hash, provider: PublicKey) -> [u8; 32] {

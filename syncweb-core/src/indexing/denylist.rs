@@ -16,11 +16,10 @@ use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    constants::FILTER_LIST_CONTEXT,
     error::{Result, SyncwebError},
     indexing::{CatalogRecord, IndexingDatabase},
 };
-
-const FILTER_LIST_CONTEXT: &[u8] = b"syncweb/filter-list/v1\0";
 
 /// The scope of a denylist rule.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]

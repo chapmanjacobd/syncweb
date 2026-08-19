@@ -975,6 +975,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '*--bootstrap=[]:NODE_ID:_default' \
 '--timeout-ms=[]:TIMEOUT_MS:_default' \
+'--channel=[Search an editorial channel (uses catalog-backed persistence when the channel is configured in config.toml)]:CHANNEL:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \

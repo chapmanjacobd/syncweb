@@ -303,6 +303,354 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
 }
 
 #[test]
+fn collection_versions_bump() -> anyhow::Result<()> {
+    let data_dir = test_dir("collection-versions");
+    let package_dir = test_dir("collection-versions-pkg");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(package_dir.join("a.txt"), b"a")?;
+    let package_path = package_dir.to_str().context("UTF-8 package path")?;
+
+    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "collection init")?;
+
+    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
+    assert_success(&add, "collection add")?;
+
+    let bump = run_with_data(
+        &data_dir,
+        &["collection", "versions", package_path, "--version", "2.0.0", "--changelog", "second release"],
+    )?;
+    assert_success(&bump, "collection versions")?;
+    let bump_out = stdout_string(&bump)?;
+    ensure!(bump_out.contains("version: 2.0.0"), "bump output: {bump_out}");
+
+    let db = syncweb_core::storage::node_db::NodeDatabase::open(data_dir.join("default").join("node.db"))?;
+    let manifest_bytes = db
+        .load_workspace_manifest(package_path)?
+        .context("workspace manifest should exist")?;
+    let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
+    ensure!(manifest.version == "2.0.0", "manifest version: {}", manifest.version);
+    ensure!(
+        manifest.changelog.as_deref() == Some("second release"),
+        "changelog should be recorded: {:?}",
+        manifest.changelog
+    );
+    let parent = manifest.parent.context("bumped manifest should record a parent")?;
+    ensure!(!parent.to_string().is_empty(), "parent hash should be present");
+
+    let bump_json = run_with_data(
+        &data_dir,
+        &["--json", "collection", "versions", package_path, "--version", "3.0.0"],
+    )?;
+    assert_success(&bump_json, "collection versions json")?;
+    let value: serde_json::Value = serde_json::from_slice(&bump_json.stdout)?;
+    ensure!(value.get("version") == Some(&serde_json::Value::from("3.0.0")), "{value}");
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(package_dir)?;
+    Ok(())
+}
+
+fn publish_manifest_ticket(
+    data_dir: &std::path::Path,
+    namespace: &str,
+    package_path: &str,
+    sequence: &str,
+) -> anyhow::Result<String> {
+    let publish = run_with_data(
+        data_dir,
+        &[
+            "--json",
+            "--no-daemon",
+            "publish",
+            "collection",
+            package_path,
+            "--namespace",
+            namespace,
+            "--sequence",
+            sequence,
+        ],
+    )?;
+    assert_success(&publish, "publish collection")?;
+    let value: serde_json::Value = serde_json::from_slice(&publish.stdout)?;
+    Ok(value
+        .get("manifest_ticket")
+        .and_then(serde_json::Value::as_str)
+        .context("publish missing manifest_ticket")?
+        .to_owned())
+}
+
+fn install_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<String> {
+    let install = run_with_data(data_dir, &["--json", "package", "install", ticket])?;
+    assert_success(&install, "package install")?;
+    let value: serde_json::Value = serde_json::from_slice(&install.stdout)?;
+    ensure!(value.get("status") == Some(&serde_json::Value::from("installed")), "{value}");
+    ensure!(value.get("version") == Some(&serde_json::Value::from("1.0.0")), "{value}");
+    Ok(value
+        .get("collection")
+        .and_then(serde_json::Value::as_str)
+        .context("install output missing collection")?
+        .to_owned())
+}
+
+fn upgrade_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<()> {
+    let upgrade = run_with_data(data_dir, &["--json", "package", "upgrade", ticket])?;
+    assert_success(&upgrade, "package upgrade")?;
+    let value: serde_json::Value = serde_json::from_slice(&upgrade.stdout)?;
+    ensure!(value.get("status") == Some(&serde_json::Value::from("installed")), "{value}");
+    ensure!(value.get("version") == Some(&serde_json::Value::from("2.0.0")), "{value}");
+    Ok(())
+}
+
+#[test]
+fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
+    let data_dir = test_dir("package-lifecycle");
+    let folder_dir = test_dir("package-folder");
+    let package_dir = test_dir("package-src");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(package_dir.join("lib.txt"), b"lib content")?;
+    fs::write(package_dir.join("readme.md"), b"readme")?;
+    let package_path = package_dir.to_str().context("UTF-8 package path")?;
+
+    let created = run_with_data(
+        &data_dir,
+        &["--json", "--no-daemon", "create", folder_dir.to_str().context("UTF-8 folder path")?],
+    )?;
+    assert_success(&created, "create")?;
+    let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
+    let namespace = created_json
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .context("create output missing namespace")?;
+
+    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "collection init")?;
+    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
+    assert_success(&add, "collection add")?;
+
+    let ticket1 = publish_manifest_ticket(&data_dir, namespace, package_path, "1")?;
+    let collection = install_package(&data_dir, &ticket1)?;
+
+    let bump = run_with_data(
+        &data_dir,
+        &["collection", "versions", package_path, "--version", "2.0.0", "--changelog", "second release"],
+    )?;
+    assert_success(&bump, "collection versions")?;
+
+    let ticket2 = publish_manifest_ticket(&data_dir, namespace, package_path, "2")?;
+    upgrade_package(&data_dir, &ticket2)?;
+
+    let list = run_with_data(&data_dir, &["--json", "package", "list"])?;
+    assert_success(&list, "package list")?;
+    let list_json: serde_json::Value = serde_json::from_slice(&list.stdout)?;
+    let installed = list_json.as_array().context("package list should be an array")?;
+    ensure!(installed.len() == 1, "one collection installed: {list_json}");
+    let installed_collection = installed.first().context("package list is empty")?;
+    ensure!(installed_collection.get("collection") == Some(&serde_json::Value::from(collection.as_str())));
+    ensure!(installed_collection.get("current") == Some(&serde_json::Value::from("2.0.0")));
+
+    let search = run_with_data(&data_dir, &["--json", "package", "search", &collection])?;
+    assert_success(&search, "package search")?;
+    let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
+    let results = search_json.as_array().context("package search should be an array")?;
+    ensure!(
+        results.iter().any(|item| item.get("collection") == Some(&serde_json::Value::from(collection.as_str()))),
+        "search should find the collection: {search_json}"
+    );
+
+    let versions = run_with_data(&data_dir, &["--json", "package", "versions", &collection])?;
+    assert_success(&versions, "package versions")?;
+    let versions_json: serde_json::Value = serde_json::from_slice(&versions.stdout)?;
+    let version_list = versions_json.as_array().context("package versions should be an array")?;
+    ensure!(
+        version_list.iter().any(|v| v == &serde_json::Value::from("1.0.0")),
+        "versions should include 1.0.0: {versions_json}"
+    );
+    ensure!(
+        version_list.iter().any(|v| v == &serde_json::Value::from("2.0.0")),
+        "versions should include 2.0.0: {versions_json}"
+    );
+
+    let switch = run_with_data(&data_dir, &["--json", "package", "switch", &collection, "1.0.0"])?;
+    assert_success(&switch, "package switch")?;
+    let switch_json: serde_json::Value = serde_json::from_slice(&switch.stdout)?;
+    ensure!(switch_json.get("version") == Some(&serde_json::Value::from("1.0.0")), "{switch_json}");
+
+    let remove = run_with_data(&data_dir, &["--json", "package", "remove", &collection, "2.0.0"])?;
+    assert_success(&remove, "package remove")?;
+    let remove_json: serde_json::Value = serde_json::from_slice(&remove.stdout)?;
+    ensure!(remove_json.get("status") == Some(&serde_json::Value::from("removed")), "{remove_json}");
+
+    let verify = run_with_data(&data_dir, &["--json", "package", "verify", &collection])?;
+    assert_success(&verify, "package verify")?;
+    let verify_json: serde_json::Value = serde_json::from_slice(&verify.stdout)?;
+    ensure!(verify_json.get("status") == Some(&serde_json::Value::from("verified")), "{verify_json}");
+
+    let export_v3 = test_dir("package-v3.car.zst");
+    let export = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "package",
+            "export",
+            "--version",
+            "3.0.0",
+            package_path,
+            export_v3.to_str().context("UTF-8 output path")?,
+        ],
+    )?;
+    assert_success(&export, "package export --version")?;
+    let export_json: serde_json::Value = serde_json::from_slice(&export.stdout)?;
+    let export_entry = export_json
+        .as_array()
+        .and_then(|array| array.first())
+        .context("package export should be a non-empty array")?;
+    ensure!(
+        export_entry.get("version") == Some(&serde_json::Value::from("3.0.0")),
+        "export should use the requested version: {export_json}"
+    );
+
+    let import = run_with_data(&data_dir, &["--json", "package", "import", export_v3.to_str().context("UTF-8 archive path")?])?;
+    assert_success(&import, "package import")?;
+    let import_json: serde_json::Value = serde_json::from_slice(&import.stdout)?;
+    ensure!(import_json.get("status") == Some(&serde_json::Value::from("imported")), "{import_json}");
+    ensure!(import_json.get("version") == Some(&serde_json::Value::from("3.0.0")), "{import_json}");
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(folder_dir)?;
+    fs::remove_dir_all(package_dir)?;
+    Ok(())
+}
+
+#[test]
+fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
+    let data_dir = test_dir("package-info");
+    let folder_dir = test_dir("package-info-folder");
+    let package_dir = test_dir("package-info-src");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(package_dir.join("lib.txt"), b"lib content")?;
+    let package_path = package_dir.to_str().context("UTF-8 package path")?;
+
+    let created = run_with_data(
+        &data_dir,
+        &["--json", "--no-daemon", "create", folder_dir.to_str().context("UTF-8 folder path")?],
+    )?;
+    assert_success(&created, "create")?;
+    let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
+    let namespace = created_json
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .context("create output missing namespace")?;
+
+    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "collection init")?;
+    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
+    assert_success(&add, "collection add")?;
+
+    let publish = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "--no-daemon",
+            "publish",
+            "collection",
+            package_path,
+            "--namespace",
+            namespace,
+            "--sequence",
+            "1",
+        ],
+    )?;
+    assert_success(&publish, "publish collection")?;
+    let publish_json: serde_json::Value = serde_json::from_slice(&publish.stdout)?;
+    let ticket = publish_json
+        .get("manifest_ticket")
+        .and_then(serde_json::Value::as_str)
+        .context("publish missing manifest_ticket")?;
+    let manifest_hash = publish_json
+        .get("manifest")
+        .and_then(serde_json::Value::as_str)
+        .context("publish missing manifest")?;
+
+    let info = run_with_data(&data_dir, &["--json", "package", "info", ticket])?;
+    assert_success(&info, "package info ticket")?;
+    let info_json: serde_json::Value = serde_json::from_slice(&info.stdout)?;
+    ensure!(info_json.get("collection_id").is_some(), "info should include collection_id: {info_json}");
+    ensure!(info_json.get("version") == Some(&serde_json::Value::from("1.0.0")), "{info_json}");
+
+    let devices = run_with_data(&data_dir, &["devices"])?;
+    assert_success(&devices, "devices")?;
+    let node_id = String::from_utf8(devices.stdout)?
+        .lines()
+        .find_map(|line| line.strip_prefix("iroh: "))
+        .map(str::trim)
+        .map(String::from)
+        .context("devices output missing iroh id")?;
+
+    let info_hash = run_with_data(
+        &data_dir,
+        &["--json", "package", "info", "--hash", manifest_hash, "--node-id", &node_id],
+    )?;
+    assert_success(&info_hash, "package info --hash --node-id")?;
+    let info_hash_json: serde_json::Value = serde_json::from_slice(&info_hash.stdout)?;
+    ensure!(
+        info_hash_json.get("collection_id") == info_json.get("collection_id"),
+        "hash and ticket paths should describe the same collection"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(folder_dir)?;
+    fs::remove_dir_all(package_dir)?;
+    Ok(())
+}
+
+#[test]
+fn package_search_channel_and_bootstrap() -> anyhow::Result<()> {
+    let data_dir = test_dir("package-search-opts");
+
+    // An unconfigured channel falls back to a local gossip search that
+    // completes quickly with no results.
+    let search = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "package",
+            "search",
+            "example",
+            "--channel",
+            "unconfigured",
+            "--timeout-ms",
+            "100",
+        ],
+    )?;
+    assert_success(&search, "package search --channel --timeout-ms")?;
+    let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
+    ensure!(
+        search_json.is_array(),
+        "search should produce an array: {search_json}"
+    );
+
+    // --bootstrap is accepted; a malformed node id fails fast with a parse
+    // error instead of hanging on a connection attempt.
+    let invalid = run_with_data(
+        &data_dir,
+        &["--json", "package", "search", "example", "--bootstrap", "not-a-valid-node"],
+    )?;
+    ensure!(
+        !invalid.status.success(),
+        "--bootstrap with an invalid node id should fail"
+    );
+    let stderr = String::from_utf8_lossy(&invalid.stderr);
+    ensure!(
+        stderr.contains("invalid") || stderr.contains("public key"),
+        "expected a key parse error, got: {stderr}"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
 fn schedule_and_stats_persist() -> anyhow::Result<()> {
     let data_dir = test_dir("sched-stats");
     let sched = run_with_data(&data_dir, &["config", "schedule", "set", "--active", "22:00-06:00"])?;

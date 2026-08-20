@@ -214,8 +214,68 @@ impl Device {
         ])
     }
 
+    pub fn snapshot_create_described(&self, path: &Path, description: &str, threads: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&[
+            "--no-daemon",
+            "snapshot",
+            "create",
+            path.to_str().context("UTF-8 path")?,
+            "--description",
+            description,
+            "--threads",
+            threads,
+        ])
+    }
+
+    pub fn snapshot_create_id(&self, path: &Path) -> anyhow::Result<String> {
+        let output = self.snapshot_create(path)?;
+        output
+            .stdout()
+            .lines()
+            .find_map(|line| line.strip_prefix("snapshot: "))
+            .map(str::trim)
+            .map(String::from)
+            .context("snapshot id missing from create output")
+    }
+
+    pub fn snapshot_restore(&self, destination: &Path, snapshot_id: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&[
+            "--no-daemon",
+            "snapshot",
+            "restore",
+            destination.to_str().context("UTF-8 path")?,
+            snapshot_id,
+        ])
+    }
+
+    pub fn snapshot_diff(&self, path: &Path, first: &str, second: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&[
+            "--no-daemon",
+            "snapshot",
+            "diff",
+            path.to_str().context("UTF-8 path")?,
+            first,
+            second,
+        ])
+    }
+
+    pub fn snapshot_delete(&self, path: &Path, snapshot_id: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&[
+            "--no-daemon",
+            "snapshot",
+            "delete",
+            path.to_str().context("UTF-8 path")?,
+            snapshot_id,
+        ])
+    }
+
     pub fn snapshot_list(&self) -> anyhow::Result<CmdOutput> {
         self.run_ok(&["--no-daemon", "snapshot", "list"])
+    }
+
+    pub fn snapshot_list_json(&self) -> anyhow::Result<serde_json::Value> {
+        let output = self.run_ok(&["--json", "--no-daemon", "snapshot", "list"])?;
+        serde_json::from_str(&output.stdout()).context("parse snapshot list JSON")
     }
 
     pub fn stats_network(&self) -> anyhow::Result<CmdOutput> {

@@ -1,4 +1,5 @@
 use anyhow::{Context, ensure};
+use std::fs;
 
 use super::*;
 
@@ -182,6 +183,86 @@ fn snapshot_create_and_list() -> anyhow::Result<()> {
 
     let list = alice.snapshot_list()?;
     ensure!(!list.stdout().is_empty(), "snapshot list should have output");
+
+    Ok(())
+}
+
+#[test]
+fn snapshot_restore_diff_delete_round_trip() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("snap-roundtrip");
+    alice.create(&folder_dir)?;
+    let doc = folder_dir.join("doc.txt");
+    alice.write_file(&doc, b"v1 content")?;
+    let v1 = alice.snapshot_create_id(&folder_dir)?;
+
+    alice.write_file(&doc, b"v2 content")?;
+    let v2 = alice.snapshot_create_id(&folder_dir)?;
+
+    ensure!(v1 != v2, "snapshots should differ");
+
+    let diff = alice.snapshot_diff(&folder_dir, &v1, &v2)?;
+    ensure!(
+        diff.stdout().contains("modified"),
+        "diff should report modified: {}",
+        diff.stdout()
+    );
+
+    let restore_dir = world.root().join("snap-restored");
+    let restore = alice.snapshot_restore(&restore_dir, &v1)?;
+    ensure!(
+        restore.stdout().contains("restored"),
+        "restore output: {}",
+        restore.stdout()
+    );
+    ensure!(
+        fs::read(restore_dir.join("doc.txt"))? == b"v1 content",
+        "restored content should match v1"
+    );
+
+    let delete = alice.snapshot_delete(&folder_dir, &v1)?;
+    ensure!(delete.stdout().contains("deleted"), "delete output: {}", delete.stdout());
+
+    let list = alice.snapshot_list_json()?;
+    let ids = list.as_array().context("snapshot list should be an array")?;
+    ensure!(ids.len() == 1, "only v2 should remain after delete: {list}");
+    let remaining = ids
+        .first()
+        .context("snapshot list should not be empty")?
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .context("snapshot id")?;
+    ensure!(remaining == v2, "remaining snapshot should be v2, got {remaining}");
+
+    Ok(())
+}
+
+#[test]
+fn snapshot_create_with_description() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("snap-described");
+    alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("note.txt"), b"note")?;
+
+    let snap = alice.snapshot_create_described(&folder_dir, "release-tag", "1")?;
+    ensure!(
+        snap.stdout().contains("snapshot:"),
+        "should print snapshot: {}",
+        snap.stdout()
+    );
+
+    let list = alice.snapshot_list_json()?;
+    let array = list.as_array().context("snapshot list should be an array")?;
+    ensure!(array.len() == 1, "should list one snapshot: {list}");
+    let entry = array.first().context("snapshot list is empty")?;
+    ensure!(
+        entry.get("description") == Some(&serde_json::Value::from("release-tag")),
+        "description should be recorded: {list}"
+    );
 
     Ok(())
 }

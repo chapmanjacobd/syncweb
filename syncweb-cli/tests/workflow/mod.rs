@@ -214,7 +214,12 @@ impl Device {
         ])
     }
 
-    pub fn snapshot_create_described(&self, path: &Path, description: &str, threads: &str) -> anyhow::Result<CmdOutput> {
+    pub fn snapshot_create_described(
+        &self,
+        path: &Path,
+        description: &str,
+        threads: &str,
+    ) -> anyhow::Result<CmdOutput> {
         self.run_ok(&[
             "--no-daemon",
             "snapshot",

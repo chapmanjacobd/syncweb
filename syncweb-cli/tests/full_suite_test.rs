@@ -318,7 +318,15 @@ fn collection_versions_bump() -> anyhow::Result<()> {
 
     let bump = run_with_data(
         &data_dir,
-        &["collection", "versions", package_path, "--version", "2.0.0", "--changelog", "second release"],
+        &[
+            "collection",
+            "versions",
+            package_path,
+            "--version",
+            "2.0.0",
+            "--changelog",
+            "second release",
+        ],
     )?;
     assert_success(&bump, "collection versions")?;
     let bump_out = stdout_string(&bump)?;
@@ -344,7 +352,10 @@ fn collection_versions_bump() -> anyhow::Result<()> {
     )?;
     assert_success(&bump_json, "collection versions json")?;
     let value: serde_json::Value = serde_json::from_slice(&bump_json.stdout)?;
-    ensure!(value.get("version") == Some(&serde_json::Value::from("3.0.0")), "{value}");
+    ensure!(
+        value.get("version") == Some(&serde_json::Value::from("3.0.0")),
+        "{value}"
+    );
 
     fs::remove_dir_all(data_dir)?;
     fs::remove_dir_all(package_dir)?;
@@ -384,8 +395,14 @@ fn install_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<S
     let install = run_with_data(data_dir, &["--json", "package", "install", ticket])?;
     assert_success(&install, "package install")?;
     let value: serde_json::Value = serde_json::from_slice(&install.stdout)?;
-    ensure!(value.get("status") == Some(&serde_json::Value::from("installed")), "{value}");
-    ensure!(value.get("version") == Some(&serde_json::Value::from("1.0.0")), "{value}");
+    ensure!(
+        value.get("status") == Some(&serde_json::Value::from("installed")),
+        "{value}"
+    );
+    ensure!(
+        value.get("version") == Some(&serde_json::Value::from("1.0.0")),
+        "{value}"
+    );
     Ok(value
         .get("collection")
         .and_then(serde_json::Value::as_str)
@@ -397,8 +414,14 @@ fn upgrade_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<(
     let upgrade = run_with_data(data_dir, &["--json", "package", "upgrade", ticket])?;
     assert_success(&upgrade, "package upgrade")?;
     let value: serde_json::Value = serde_json::from_slice(&upgrade.stdout)?;
-    ensure!(value.get("status") == Some(&serde_json::Value::from("installed")), "{value}");
-    ensure!(value.get("version") == Some(&serde_json::Value::from("2.0.0")), "{value}");
+    ensure!(
+        value.get("status") == Some(&serde_json::Value::from("installed")),
+        "{value}"
+    );
+    ensure!(
+        value.get("version") == Some(&serde_json::Value::from("2.0.0")),
+        "{value}"
+    );
     Ok(())
 }
 
@@ -414,7 +437,12 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
 
     let created = run_with_data(
         &data_dir,
-        &["--json", "--no-daemon", "create", folder_dir.to_str().context("UTF-8 folder path")?],
+        &[
+            "--json",
+            "--no-daemon",
+            "create",
+            folder_dir.to_str().context("UTF-8 folder path")?,
+        ],
     )?;
     assert_success(&created, "create")?;
     let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
@@ -433,7 +461,15 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
 
     let bump = run_with_data(
         &data_dir,
-        &["collection", "versions", package_path, "--version", "2.0.0", "--changelog", "second release"],
+        &[
+            "collection",
+            "versions",
+            package_path,
+            "--version",
+            "2.0.0",
+            "--changelog",
+            "second release",
+        ],
     )?;
     assert_success(&bump, "collection versions")?;
 
@@ -454,14 +490,18 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
     let results = search_json.as_array().context("package search should be an array")?;
     ensure!(
-        results.iter().any(|item| item.get("collection") == Some(&serde_json::Value::from(collection.as_str()))),
+        results
+            .iter()
+            .any(|item| item.get("collection") == Some(&serde_json::Value::from(collection.as_str()))),
         "search should find the collection: {search_json}"
     );
 
     let versions = run_with_data(&data_dir, &["--json", "package", "versions", &collection])?;
     assert_success(&versions, "package versions")?;
     let versions_json: serde_json::Value = serde_json::from_slice(&versions.stdout)?;
-    let version_list = versions_json.as_array().context("package versions should be an array")?;
+    let version_list = versions_json
+        .as_array()
+        .context("package versions should be an array")?;
     ensure!(
         version_list.iter().any(|v| v == &serde_json::Value::from("1.0.0")),
         "versions should include 1.0.0: {versions_json}"
@@ -474,17 +514,26 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     let switch = run_with_data(&data_dir, &["--json", "package", "switch", &collection, "1.0.0"])?;
     assert_success(&switch, "package switch")?;
     let switch_json: serde_json::Value = serde_json::from_slice(&switch.stdout)?;
-    ensure!(switch_json.get("version") == Some(&serde_json::Value::from("1.0.0")), "{switch_json}");
+    ensure!(
+        switch_json.get("version") == Some(&serde_json::Value::from("1.0.0")),
+        "{switch_json}"
+    );
 
     let remove = run_with_data(&data_dir, &["--json", "package", "remove", &collection, "2.0.0"])?;
     assert_success(&remove, "package remove")?;
     let remove_json: serde_json::Value = serde_json::from_slice(&remove.stdout)?;
-    ensure!(remove_json.get("status") == Some(&serde_json::Value::from("removed")), "{remove_json}");
+    ensure!(
+        remove_json.get("status") == Some(&serde_json::Value::from("removed")),
+        "{remove_json}"
+    );
 
     let verify = run_with_data(&data_dir, &["--json", "package", "verify", &collection])?;
     assert_success(&verify, "package verify")?;
     let verify_json: serde_json::Value = serde_json::from_slice(&verify.stdout)?;
-    ensure!(verify_json.get("status") == Some(&serde_json::Value::from("verified")), "{verify_json}");
+    ensure!(
+        verify_json.get("status") == Some(&serde_json::Value::from("verified")),
+        "{verify_json}"
+    );
 
     let export_v3 = test_dir("package-v3.car.zst");
     let export = run_with_data(
@@ -510,11 +559,25 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         "export should use the requested version: {export_json}"
     );
 
-    let import = run_with_data(&data_dir, &["--json", "package", "import", export_v3.to_str().context("UTF-8 archive path")?])?;
+    let import = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "package",
+            "import",
+            export_v3.to_str().context("UTF-8 archive path")?,
+        ],
+    )?;
     assert_success(&import, "package import")?;
     let import_json: serde_json::Value = serde_json::from_slice(&import.stdout)?;
-    ensure!(import_json.get("status") == Some(&serde_json::Value::from("imported")), "{import_json}");
-    ensure!(import_json.get("version") == Some(&serde_json::Value::from("3.0.0")), "{import_json}");
+    ensure!(
+        import_json.get("status") == Some(&serde_json::Value::from("imported")),
+        "{import_json}"
+    );
+    ensure!(
+        import_json.get("version") == Some(&serde_json::Value::from("3.0.0")),
+        "{import_json}"
+    );
 
     fs::remove_dir_all(data_dir)?;
     fs::remove_dir_all(folder_dir)?;
@@ -533,7 +596,12 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
 
     let created = run_with_data(
         &data_dir,
-        &["--json", "--no-daemon", "create", folder_dir.to_str().context("UTF-8 folder path")?],
+        &[
+            "--json",
+            "--no-daemon",
+            "create",
+            folder_dir.to_str().context("UTF-8 folder path")?,
+        ],
     )?;
     assert_success(&created, "create")?;
     let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
@@ -575,8 +643,14 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
     let info = run_with_data(&data_dir, &["--json", "package", "info", ticket])?;
     assert_success(&info, "package info ticket")?;
     let info_json: serde_json::Value = serde_json::from_slice(&info.stdout)?;
-    ensure!(info_json.get("collection_id").is_some(), "info should include collection_id: {info_json}");
-    ensure!(info_json.get("version") == Some(&serde_json::Value::from("1.0.0")), "{info_json}");
+    ensure!(
+        info_json.get("collection_id").is_some(),
+        "info should include collection_id: {info_json}"
+    );
+    ensure!(
+        info_json.get("version") == Some(&serde_json::Value::from("1.0.0")),
+        "{info_json}"
+    );
 
     let devices = run_with_data(&data_dir, &["devices"])?;
     assert_success(&devices, "devices")?;
@@ -589,7 +663,15 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
 
     let info_hash = run_with_data(
         &data_dir,
-        &["--json", "package", "info", "--hash", manifest_hash, "--node-id", &node_id],
+        &[
+            "--json",
+            "package",
+            "info",
+            "--hash",
+            manifest_hash,
+            "--node-id",
+            &node_id,
+        ],
     )?;
     assert_success(&info_hash, "package info --hash --node-id")?;
     let info_hash_json: serde_json::Value = serde_json::from_slice(&info_hash.stdout)?;
@@ -625,16 +707,20 @@ fn package_search_channel_and_bootstrap() -> anyhow::Result<()> {
     )?;
     assert_success(&search, "package search --channel --timeout-ms")?;
     let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
-    ensure!(
-        search_json.is_array(),
-        "search should produce an array: {search_json}"
-    );
+    ensure!(search_json.is_array(), "search should produce an array: {search_json}");
 
     // --bootstrap is accepted; a malformed node id fails fast with a parse
     // error instead of hanging on a connection attempt.
     let invalid = run_with_data(
         &data_dir,
-        &["--json", "package", "search", "example", "--bootstrap", "not-a-valid-node"],
+        &[
+            "--json",
+            "package",
+            "search",
+            "example",
+            "--bootstrap",
+            "not-a-valid-node",
+        ],
     )?;
     ensure!(
         !invalid.status.success(),

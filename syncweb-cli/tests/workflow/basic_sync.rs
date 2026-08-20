@@ -223,7 +223,11 @@ fn snapshot_restore_diff_delete_round_trip() -> anyhow::Result<()> {
     );
 
     let delete = alice.snapshot_delete(&folder_dir, &v1)?;
-    ensure!(delete.stdout().contains("deleted"), "delete output: {}", delete.stdout());
+    ensure!(
+        delete.stdout().contains("deleted"),
+        "delete output: {}",
+        delete.stdout()
+    );
 
     let list = alice.snapshot_list_json()?;
     let ids = list.as_array().context("snapshot list should be an array")?;

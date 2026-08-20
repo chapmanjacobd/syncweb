@@ -23,7 +23,10 @@ fn init_test_tracing() {
     ONCE.get_or_init(|| {
         let filter = tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("syncweb=warn,iroh=warn"));
-        let _ = tracing_subscriber::fmt().with_env_filter(filter).with_test_writer().try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_test_writer()
+            .try_init();
     });
 }
 
@@ -200,9 +203,7 @@ impl Device {
                     ?present,
                     "timed out waiting for entry"
                 );
-                anyhow::bail!(
-                    "timed out waiting for entry {path:?} on {namespace}; doc contains entries: {present:?}"
-                );
+                anyhow::bail!("timed out waiting for entry {path:?} on {namespace}; doc contains entries: {present:?}");
             }
         }
     }

@@ -160,6 +160,105 @@ fn all_shell_completions_produce_output() -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// 7.5 – Manpages and help subcommand
+// ---------------------------------------------------------------------------
+
+#[test]
+fn manpages_generate_dot_one_files() -> anyhow::Result<()> {
+    let out_dir = test_dir("manpages");
+    let output = run(&["manpages", out_dir.to_str().context("UTF-8 path")?])?;
+    assert_success(&output, "manpages")?;
+    let stdout = stdout_string(&output)?;
+    ensure!(
+        stdout.contains("manpages generated"),
+        "should report generation: {stdout}"
+    );
+
+    let mut names = Vec::new();
+    for entry in fs::read_dir(&out_dir).context("read manpage dir")? {
+        names.push(
+            entry
+                .context("manpage entry")?
+                .file_name()
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    fs::remove_dir_all(&out_dir)?;
+
+    ensure!(
+        names.contains(&"syncweb.1".to_string()),
+        "should contain syncweb.1: {names:?}"
+    );
+    ensure!(
+        names.contains(&"syncweb-create.1".to_string()),
+        "should contain per-command manpages: {names:?}"
+    );
+    ensure!(
+        !names.contains(&"syncweb-help.1".to_string()),
+        "help subcommand should be skipped: {names:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn manpages_default_directory_writes_man() -> anyhow::Result<()> {
+    let cwd = test_dir("manpages-default");
+    fs::create_dir_all(&cwd).context("create cwd")?;
+    let output = cli()
+        .arg("manpages")
+        .current_dir(&cwd)
+        .output()
+        .context("run syncweb manpages in default dir")?;
+    assert_success(&output, "manpages default dir")?;
+    let stdout = stdout_string(&output)?;
+    ensure!(
+        stdout.contains("manpages generated in man"),
+        "should report the default man dir: {stdout}"
+    );
+    ensure!(
+        cwd.join("man").join("syncweb.1").exists(),
+        "should write syncweb.1 into ./man"
+    );
+    fs::remove_dir_all(&cwd)?;
+    Ok(())
+}
+
+#[test]
+fn help_subcommand_reports_specific_and_grouped_help() -> anyhow::Result<()> {
+    let version = run(&["help", "version"])?;
+    assert_success(&version, "help version")?;
+    let version_out = stdout_string(&version)?;
+    ensure!(
+        version_out.contains("Usage: syncweb version"),
+        "help version should print version usage: {version_out}"
+    );
+
+    let direct = run(&["version", "--help"])?;
+    assert_success(&direct, "version --help")?;
+    ensure!(
+        stdout_string(&direct)? == version_out,
+        "help version should match version --help"
+    );
+
+    let bare = run(&["help"])?;
+    assert_success(&bare, "bare help")?;
+    let bare_out = stdout_string(&bare)?;
+    ensure!(
+        bare_out.contains("Daemon:"),
+        "bare help should print grouped help: {bare_out}"
+    );
+
+    let top = run(&["--help"])?;
+    assert_success(&top, "--help")?;
+    ensure!(
+        stdout_string(&top)? == bare_out,
+        "bare help subcommand should match --help"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Full workflow: create → folders → ls → find → sort → stat → config → schedule → stats → verify
 // ---------------------------------------------------------------------------
 

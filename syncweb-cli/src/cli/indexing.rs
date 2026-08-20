@@ -636,13 +636,14 @@ async fn direct_fetch_to_path(data_dir: &Path, ticket: &BlobTicket, hash: Hash, 
     Ok(())
 }
 
-fn handle_trust_show(data_dir: &Path, output_json: bool, subject: &str) -> Result<()> {
+fn handle_trust_show(data_dir: &Path, output_json: bool, subject: &str, as_content: bool) -> Result<()> {
     let (_, state) = open_indexing_state(data_dir)?;
     let indexing = open_indexing(data_dir)?;
     let wot = load_wot(&indexing, &state)?;
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let own_author = author_id(&signing_key(&identity).verifying_key());
-    let (trust, content, moderation, metadata, attestations) = if let Ok(hash) = subject.parse::<Hash>() {
+    let (trust, content, moderation, metadata, attestations) = if as_content {
+        let hash = parse_hash(subject)?;
         let metadata = wot
             .search("", 10_000)?
             .into_iter()
@@ -788,7 +789,7 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
-        TrustCommand::Show { subject } => handle_trust_show(data_dir, output_json, &subject)?,
+        TrustCommand::Show { subject, content } => handle_trust_show(data_dir, output_json, &subject, content)?,
         TrustCommand::Delegate {
             publisher,
             expires,
@@ -1540,13 +1541,15 @@ fn load_wot(indexing: &IndexingService, state: &IndexingState) -> Result<WotServ
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let signing = signing_key(&identity);
     let wot = indexing.wot_service(TrustPolicy::with_root(&signing));
+    let now = epoch_seconds();
     for delegation in &state.delegations {
-        wot.add_delegation(delegation.clone())?;
+        if delegation.revoked_at.is_none_or(|revoked_at| revoked_at > now) && delegation.expires_at > now {
+            wot.add_delegation(delegation.clone())?;
+        }
     }
     for moderation in &state.moderation {
         wot.apply_moderation(moderation.clone())?;
     }
-    let now = epoch_seconds();
     for record in &state.provider_trust {
         if record.expires_at.is_none_or(|expires_at| expires_at > now) {
             wot.apply_provider_trust(record.clone())?;

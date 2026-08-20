@@ -1596,6 +1596,7 @@ _arguments "${_arguments_options[@]}" : \
             (show)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--content[Treat the subject as a content hash rather than a publisher identity]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

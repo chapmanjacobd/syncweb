@@ -5,8 +5,11 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use ed25519_dalek::SigningKey;
 use iroh_blobs::Hash;
+use iroh_docs::NamespaceId;
 use serde_json::Value;
+use syncweb_core::indexing::denylist::{DenylistRule, FilterList};
 
 const CONTENT_HASH: &str = "26209f835986cd30d5925b3bdbd30358d6d7ae1ea0f863ab69b9c40c2b91b18a";
 
@@ -106,7 +109,7 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
     assert_success(&listed, "moderation ls")?;
     ensure!(json_output(&listed)?.as_array().is_some_and(|items| items.len() == 1));
 
-    let trust_output = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH])?;
+    let trust_output = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     assert_success(&trust_output, "trust show")?;
     let trust = json_output(&trust_output)?;
     ensure!(trust.get("moderation") == Some(&Value::from("hide")));
@@ -233,7 +236,7 @@ fn trust_delegate_and_show() -> Result<()> {
     let trust = json_output(&shown)?;
     let trust_value = trust.get("trust").and_then(Value::as_str);
     ensure!(
-        trust_value == Some("trusted-delegation") || trust_value == Some("trusted-root"),
+        trust_value == Some("trusted-delegation"),
         "delegated publisher should be trusted, got {trust_value:?}"
     );
 
@@ -258,7 +261,7 @@ fn indexing_meta_add_persists_metadata() -> Result<()> {
     )?;
     assert_success(&added_second, "indexing meta add second")?;
 
-    let shown = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH])?;
+    let shown = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     assert_success(&shown, "trust show after meta add")?;
     let trust = json_output(&shown)?;
     ensure!(
@@ -739,6 +742,502 @@ fn link_revoke_with_broadcast() -> Result<()> {
     assert_success(&revoked, "link revoke --broadcast")?;
     let stdout = String::from_utf8_lossy(&revoked.stdout).to_string();
     ensure!(stdout.contains("revoked:"), "revoke output should confirm revocation");
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Plan 007 — Indexing, trust & attest, moderation coverage
+// ---------------------------------------------------------------------------
+
+#[test]
+fn indexing_search_with_limit() -> Result<()> {
+    let data_dir = data_dir("search-limit");
+    let folder = data_dir.join("content");
+    fs::create_dir_all(&folder)?;
+    fs::write(folder.join("test-file.txt"), b"searchable content")?;
+    let folder_path = folder.to_str().context("folder path is not UTF-8")?;
+
+    let created = run(&data_dir, &["--json", "create", folder_path])?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let imported = run(
+        &data_dir,
+        &[
+            "import",
+            folder.join("test-file.txt").to_str().context("file is not UTF-8")?,
+            "--folder",
+            &namespace,
+        ],
+    )?;
+    assert_success(&imported, "import")?;
+
+    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
+    assert_success(&enabled, "indexing enable")?;
+
+    let published = run(&data_dir, &["publish", "catalog", &namespace, "--catalog", "library"])?;
+    assert_success(&published, "publish catalog")?;
+
+    let searched = run(&data_dir, &["--json", "indexing", "search", "test", "--limit", "5"])?;
+    assert_success(&searched, "indexing search --limit")?;
+    let search_json = json_output(&searched)?;
+    let results = search_json.as_array().context("search should emit a JSON array")?;
+    ensure!(!results.is_empty(), "search should find the imported record");
+    ensure!(results.len() <= 5, "search limit should cap results to 5");
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn indexing_meta_add_with_sequence() -> Result<()> {
+    let data_dir = data_dir("meta-add-sequence");
+    let added = run(
+        &data_dir,
+        &[
+            "--json",
+            "indexing",
+            "meta",
+            "add",
+            CONTENT_HASH,
+            "category",
+            "test",
+            "--sequence",
+            "7",
+        ],
+    )?;
+    assert_success(&added, "indexing meta add --sequence")?;
+    let meta = json_output(&added)?;
+    ensure!(meta.get("status") == Some(&Value::from("added")));
+    ensure!(
+        meta.get("sequence") == Some(&Value::from(7)),
+        "meta add should record the requested sequence"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn indexing_filter_add_device_and_subscribe() -> Result<()> {
+    let data_dir = data_dir("filter-device-subscribe");
+
+    let added = run(&data_dir, &["indexing", "filter", "add", "device", "device-123"])?;
+    assert_success(&added, "indexing filter add device")?;
+    ensure!(
+        String::from_utf8_lossy(&added.stdout).contains("added:"),
+        "filter add should confirm the device rule"
+    );
+
+    let signing = SigningKey::from_bytes(&[9; 32]);
+    let list = FilterList::new(
+        NamespaceId::from([7; 32]),
+        1,
+        vec![DenylistRule::file(b"blocked.txt")],
+        &signing,
+    )?;
+    let filter_path = data_dir.join("filter-list.json");
+    fs::write(&filter_path, list.to_bytes()?)?;
+
+    let subscribed = run(
+        &data_dir,
+        &[
+            "--json",
+            "indexing",
+            "filter",
+            "subscribe",
+            filter_path.to_str().context("filter path is not UTF-8")?,
+        ],
+    )?;
+    assert_success(&subscribed, "indexing filter subscribe")?;
+    let status = json_output(&subscribed)?;
+    ensure!(status.get("status") == Some(&Value::from("subscribed")));
+    ensure!(status.get("sequence") == Some(&Value::from(1)));
+    ensure!(status.get("entries") == Some(&Value::from(1)));
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
+    let data_dir = data_dir("trust-delegate-options");
+    let publisher = iroh::SecretKey::generate().public().to_string();
+    let expires = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+        .saturating_add(3600);
+
+    let delegated = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "delegate",
+            &publisher,
+            "--scope",
+            CONTENT_HASH,
+            "--expires",
+            &expires.to_string(),
+            "--sequence",
+            "2",
+            "--max-depth",
+            "2",
+        ],
+    )?;
+    assert_success(&delegated, "trust delegate with options")?;
+    let delegation = json_output(&delegated)?;
+    ensure!(delegation.get("status") == Some(&Value::from("delegated")));
+    ensure!(
+        delegation.get("expires_at") == Some(&Value::from(expires)),
+        "delegate should honor the requested expiration"
+    );
+    ensure!(delegation.get("scope") == Some(&Value::from(CONTENT_HASH)));
+    ensure!(delegation.get("max_depth") == Some(&Value::from(2)));
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_revoke_delegation() -> Result<()> {
+    let data_dir = data_dir("trust-revoke-delegation");
+    let publisher = iroh::SecretKey::generate().public().to_string();
+
+    let delegated = run(&data_dir, &["trust", "delegate", &publisher])?;
+    assert_success(&delegated, "trust delegate")?;
+    let shown = run(&data_dir, &["--json", "trust", "show", &publisher])?;
+    assert_success(&shown, "trust show before revoke")?;
+    ensure!(
+        json_output(&shown)?.get("trust") == Some(&Value::from("trusted-delegation")),
+        "delegate should be trusted before revocation"
+    );
+
+    let revoked = run(&data_dir, &["--json", "trust", "revoke-delegation", &publisher])?;
+    assert_success(&revoked, "trust revoke-delegation")?;
+    ensure!(json_output(&revoked)?.get("status") == Some(&Value::from("revoked")));
+
+    let shown_after = run(&data_dir, &["--json", "trust", "show", &publisher])?;
+    assert_success(&shown_after, "trust show after revoke")?;
+    ensure!(
+        json_output(&shown_after)?.get("trust") == Some(&Value::from("untrusted")),
+        "revoked delegation should no longer be trusted"
+    );
+
+    let scoped_publisher = iroh::SecretKey::generate().public().to_string();
+    let scoped_delegated = run(
+        &data_dir,
+        &["trust", "delegate", &scoped_publisher, "--scope", CONTENT_HASH],
+    )?;
+    assert_success(&scoped_delegated, "trust delegate scoped")?;
+    let scoped_revoked = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "revoke-delegation",
+            &scoped_publisher,
+            "--scope",
+            CONTENT_HASH,
+        ],
+    )?;
+    assert_success(&scoped_revoked, "trust revoke-delegation --scope")?;
+    let scoped = json_output(&scoped_revoked)?;
+    ensure!(scoped.get("status") == Some(&Value::from("revoked")));
+    ensure!(scoped.get("scope") == Some(&Value::from(CONTENT_HASH)));
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_provider_ban_scoped_and_durable() -> Result<()> {
+    let data_dir = data_dir("provider-ban-scoped");
+    let provider = iroh::SecretKey::generate().public().to_string();
+    let duration = 120_u64;
+    let before = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+
+    let banned = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "provider",
+            "ban",
+            &provider,
+            "--hash",
+            CONTENT_HASH,
+            "--duration",
+            &duration.to_string(),
+            "--reason",
+            "scoped abuse",
+        ],
+    )?;
+    assert_success(&banned, "trust provider ban")?;
+    let result = json_output(&banned)?;
+    ensure!(result.get("status") == Some(&Value::from("banned")));
+    let ban = result.get("ban").context("ban output missing ban")?;
+    ensure!(ban.get("hash") == Some(&Value::from(CONTENT_HASH)));
+    ensure!(ban.get("reason") == Some(&Value::from("scoped abuse")));
+    let expires_at = ban
+        .get("expires_at")
+        .and_then(Value::as_u64)
+        .context("ban should expire")?;
+    ensure!(
+        expires_at.saturating_sub(before) >= duration,
+        "ban duration should be honored"
+    );
+
+    let shown = run(
+        &data_dir,
+        &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
+    )?;
+    assert_success(&shown, "trust provider show")?;
+    let report = json_output(&shown)?;
+    ensure!(
+        report
+            .get("bans")
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.len() == 1),
+        "scoped ban should be visible for the content hash"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
+    let data_dir = data_dir("provider-vouch-scope");
+    let provider = iroh::SecretKey::generate().public().to_string();
+
+    let vouched = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "provider",
+            "vouch",
+            &provider,
+            "--scope",
+            CONTENT_HASH,
+        ],
+    )?;
+    assert_success(&vouched, "trust provider vouch --scope")?;
+    let vouch = json_output(&vouched)?;
+    ensure!(vouch.get("status") == Some(&Value::from("updated")));
+    ensure!(vouch.get("action") == Some(&Value::from("vouch")));
+    ensure!(vouch.get("scope") == Some(&Value::from(CONTENT_HASH)));
+    ensure!(vouch.get("sequence") == Some(&Value::from(1)));
+
+    let distrusted = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "provider",
+            "distrust",
+            &provider,
+            "--scope",
+            CONTENT_HASH,
+        ],
+    )?;
+    assert_success(&distrusted, "trust provider distrust --scope")?;
+    let distrust = json_output(&distrusted)?;
+    ensure!(distrust.get("action") == Some(&Value::from("distrust")));
+    ensure!(distrust.get("sequence") == Some(&Value::from(2)));
+
+    let shown = run(
+        &data_dir,
+        &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
+    )?;
+    assert_success(&shown, "trust provider show")?;
+    let report = json_output(&shown)?;
+    ensure!(
+        report.get("trust") == Some(&Value::from("distrusted")),
+        "the most recent scoped record should win"
+    );
+    ensure!(
+        report
+            .get("records")
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.len() == 2)
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn trust_stream_publish_with_hash_and_sequence() -> Result<()> {
+    let data_dir = data_dir("trust-stream-hash");
+    let provider = iroh::SecretKey::generate().public().to_string();
+
+    let published = run(
+        &data_dir,
+        &[
+            "--json",
+            "trust",
+            "stream",
+            "publish",
+            "--provider",
+            &provider,
+            "--signal",
+            "failure",
+            "--hash",
+            CONTENT_HASH,
+            "--sequence",
+            "5",
+        ],
+    )?;
+    assert_success(&published, "trust stream publish")?;
+    let result = json_output(&published)?;
+    ensure!(result.get("status") == Some(&Value::from("published")));
+    ensure!(result.get("provider") == Some(&Value::from(provider)));
+    ensure!(result.get("sequence") == Some(&Value::from(5)));
+    let ticket = result
+        .get("ticket")
+        .and_then(Value::as_str)
+        .context("trust stream ticket missing")?;
+    ensure!(
+        Path::new(ticket.strip_prefix("file://").unwrap_or(ticket)).exists(),
+        "trust stream ticket file should be written"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn attest_provenance_derivative_and_broadcast() -> Result<()> {
+    let data_dir = data_dir("attest-provenance");
+
+    let provenance = run(
+        &data_dir,
+        &[
+            "--json",
+            "attest",
+            "create",
+            CONTENT_HASH,
+            "--provenance",
+            "archive",
+            "--sequence",
+            "3",
+        ],
+    )?;
+    assert_success(&provenance, "attest create provenance")?;
+    let provenance_json = json_output(&provenance)?;
+    ensure!(provenance_json.get("status") == Some(&Value::from("attested")));
+    ensure!(provenance_json.get("value") == Some(&Value::from("archive")));
+
+    let derivative = run(
+        &data_dir,
+        &["--json", "attest", "create", CONTENT_HASH, "--derivative", "remix"],
+    )?;
+    assert_success(&derivative, "attest create derivative")?;
+    ensure!(json_output(&derivative)?.get("status") == Some(&Value::from("attested")));
+
+    let license = run(
+        &data_dir,
+        &[
+            "--json",
+            "attest",
+            "create",
+            CONTENT_HASH,
+            "--license",
+            "MIT",
+            "--broadcast",
+        ],
+    )?;
+    assert_success(&license, "attest create license broadcast")?;
+    ensure!(json_output(&license)?.get("status") == Some(&Value::from("attested")));
+
+    let shown = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    assert_success(&shown, "trust show after attestations")?;
+    let trust = json_output(&shown)?;
+    let attestations = trust
+        .get("attestations")
+        .and_then(Value::as_array)
+        .context("attestations missing")?;
+    ensure!(attestations.len() == 3, "all three attestations should persist");
+    ensure!(
+        attestations.iter().any(|att| {
+            att.get("value") == Some(&Value::from("archive")) && att.get("sequence") == Some(&Value::from(3))
+        }),
+        "provenance attestation should record its sequence"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn attest_verify_with_timeout() -> Result<()> {
+    let data_dir = data_dir("attest-verify");
+    let created = run(&data_dir, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
+    assert_success(&created, "attest create")?;
+
+    let verified = run(
+        &data_dir,
+        &["--json", "attest", "verify", CONTENT_HASH, "--timeout", "1"],
+    )?;
+    assert_success(&verified, "attest verify --timeout")?;
+    let results = json_output(&verified)?;
+    ensure!(results.is_array(), "attest verify should emit a JSON array");
+    ensure!(
+        results.as_array().is_some_and(Vec::is_empty),
+        "no peers should broadcast attestations for the hash"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
+    let data_dir = data_dir("moderation-options");
+
+    let hidden = run(
+        &data_dir,
+        &["--json", "moderation", "hide", CONTENT_HASH, "--reason", "private data"],
+    )?;
+    assert_success(&hidden, "moderation hide --reason")?;
+    let hide = json_output(&hidden)?;
+    ensure!(hide.get("status") == Some(&Value::from("hidden")));
+    ensure!(hide.get("sequence") == Some(&Value::from(1)));
+
+    let reported = run(
+        &data_dir,
+        &[
+            "--json",
+            "moderation",
+            "report",
+            CONTENT_HASH,
+            "--reason",
+            "abuse",
+            "--broadcast",
+        ],
+    )?;
+    assert_success(&reported, "moderation report --broadcast")?;
+    let report = json_output(&reported)?;
+    ensure!(report.get("status") == Some(&Value::from("reported")));
+    ensure!(report.get("reason") == Some(&Value::from("abuse")));
+
+    let trust_output = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    assert_success(&trust_output, "trust show after moderation")?;
+    ensure!(
+        json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
+        "hidden record should stay hidden after a report"
+    );
 
     fs::remove_dir_all(data_dir)?;
     Ok(())

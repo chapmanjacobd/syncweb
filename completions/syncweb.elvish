@@ -1230,6 +1230,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;trust;show'= {
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --content 'Treat the subject as a content hash rather than a publisher identity'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

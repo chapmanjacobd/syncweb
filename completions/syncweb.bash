@@ -3077,7 +3077,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__trust__subcmd__show)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --content --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

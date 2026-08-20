@@ -1012,7 +1012,11 @@ pub enum ProviderCommand {
 #[derive(Debug, Subcommand)]
 pub enum TrustCommand {
     #[command(about = "Show trust and moderation state")]
-    Show { subject: String },
+    Show {
+        subject: String,
+        #[arg(long, help = "Treat the subject as a content hash rather than a publisher identity")]
+        content: bool,
+    },
     #[command(about = "Delegate trust to a publisher identity")]
     Delegate {
         publisher: String,

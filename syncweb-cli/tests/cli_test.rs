@@ -2180,3 +2180,127 @@ fn verify_fix_and_filters() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&src_dir).context("cleanup src")?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Plan 008 — Tooling coverage (manpages / help / completions / version)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn manpages_generate_markdown() -> anyhow::Result<()> {
+    let directory = cli_test_dir("manpages");
+    let output = syncweb(&["manpages", directory.to_str().context("UTF-8 path")?])?;
+    ensure!(
+        output.status.success(),
+        "manpages should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("manpages generated"),
+        "should report generation: {stdout}"
+    );
+
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&directory).context("read manpage dir")? {
+        names.push(
+            entry
+                .context("manpage entry")?
+                .file_name()
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    std::fs::remove_dir_all(&directory).context("cleanup")?;
+
+    ensure!(
+        names.contains(&"syncweb.1".to_string()),
+        "should contain syncweb.1: {names:?}"
+    );
+    ensure!(
+        names.contains(&"syncweb-create.1".to_string()),
+        "should contain per-command manpages: {names:?}"
+    );
+    ensure!(
+        !names.contains(&"syncweb-completions.1".to_string()),
+        "completions should be skipped: {names:?}"
+    );
+    ensure!(
+        !names.contains(&"syncweb-manpages.1".to_string()),
+        "manpages should be skipped: {names:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn manpages_default_directory() -> anyhow::Result<()> {
+    let cwd = cli_test_dir("manpages-default");
+    std::fs::create_dir_all(&cwd).context("create cwd")?;
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .arg("manpages")
+        .current_dir(&cwd)
+        .output()
+        .context("run syncweb manpages in default dir")?;
+    ensure!(
+        output.status.success(),
+        "manpages with default dir should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(
+        stdout.contains("manpages generated in man"),
+        "should report the default man dir: {stdout}"
+    );
+    ensure!(
+        cwd.join("man").join("syncweb.1").exists(),
+        "should write syncweb.1 into ./man"
+    );
+    std::fs::remove_dir_all(&cwd).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn help_subcommand_behavior() -> anyhow::Result<()> {
+    let version = syncweb(&["help", "version"])?;
+    ensure!(
+        version.status.success(),
+        "help version should succeed: {}",
+        String::from_utf8_lossy(&version.stderr)
+    );
+    let version_out = String::from_utf8(version.stdout).context("UTF-8 output")?;
+    ensure!(
+        version_out.contains("Usage: syncweb version"),
+        "help version should print version usage: {version_out}"
+    );
+
+    let direct = syncweb(&["version", "--help"])?;
+    ensure!(direct.status.success());
+    let direct_out = String::from_utf8(direct.stdout).context("UTF-8 output")?;
+    ensure!(version_out == direct_out, "help version should match version --help");
+
+    let bare = syncweb(&["help"])?;
+    ensure!(bare.status.success());
+    let bare_out = String::from_utf8(bare.stdout).context("UTF-8 output")?;
+    let top = syncweb(&["--help"])?;
+    ensure!(top.status.success());
+    let top_out = String::from_utf8(top.stdout).context("UTF-8 output")?;
+    ensure!(bare_out == top_out, "bare help subcommand should match --help");
+    Ok(())
+}
+
+#[test]
+fn completions_reference_subcommands() -> anyhow::Result<()> {
+    for shell in ["bash", "zsh", "fish", "powershell"] {
+        let output = syncweb(&["completions", shell])?;
+        ensure!(
+            output.status.success(),
+            "completions {shell} should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+        ensure!(
+            stdout.contains("create"),
+            "{shell} completions should reference the create subcommand"
+        );
+    }
+    Ok(())
+}

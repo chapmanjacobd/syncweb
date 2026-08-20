@@ -328,6 +328,13 @@ fn cli_test_dir(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("syncweb-cli-{name}-{}", uuid::Uuid::new_v4()))
 }
 
+fn syncweb(args: &[&str]) -> anyhow::Result<std::process::Output> {
+    Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(args)
+        .output()
+        .with_context(|| format!("run syncweb {args:?}"))
+}
+
 #[test]
 fn test_ls_streaming() -> anyhow::Result<()> {
     let source = cli_test_dir("ls-streaming");
@@ -1461,5 +1468,466 @@ fn mirror_without_args_fails_gracefully() -> anyhow::Result<()> {
         .output()
         .context("run syncweb mirror without args")?;
     ensure!(!output.status.success(), "mirror without args should fail");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Plan 003 — Files coverage (ls / find / sort / stat / download / import / verify)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
+    let source = cli_test_dir("find-case");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("Report.TXT"), b"r").context("write Report")?;
+    std::fs::write(source.join("data.txt"), b"d").context("write data")?;
+    std::fs::write(source.join("fix*.txt"), b"f").context("write literal asterisk name")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let ci = syncweb(&["find", "REPORT", src, "--kind", "exact", "-i"])?;
+    ensure!(
+        ci.status.success(),
+        "find -i should succeed: {}",
+        String::from_utf8_lossy(&ci.stderr)
+    );
+    let out_insensitive = String::from_utf8(ci.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_insensitive.contains("Report.TXT"),
+        "-i should match case-insensitively: {out_insensitive}"
+    );
+
+    let cs = syncweb(&["find", "report", src, "--kind", "exact", "-s"])?;
+    ensure!(cs.status.success());
+    let out_sensitive = String::from_utf8(cs.stdout).context("UTF-8 output")?;
+    ensure!(
+        !out_sensitive.contains("Report.TXT"),
+        "-s should only match exact case: {out_sensitive}"
+    );
+
+    let fixed = syncweb(&["find", "*.txt", src, "-F", "--kind", "exact"])?;
+    ensure!(fixed.status.success());
+    let out_fixed = String::from_utf8(fixed.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_fixed.contains("fix*.txt"),
+        "-F should match the literal name: {out_fixed}"
+    );
+    ensure!(
+        !out_fixed.contains("data.txt"),
+        "-F should not glob-match: {out_fixed}"
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
+    let source = cli_test_dir("find-path");
+    std::fs::create_dir_all(source.join("project-2024/sub")).context("create dirs")?;
+    std::fs::write(source.join("project-2024/sub/file.md"), b"m").context("write")?;
+    std::fs::write(source.join(".hidden.txt"), b"h").context("write hidden")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let full = syncweb(&["find", "2024", src, "-p", "--kind", "exact"])?;
+    ensure!(full.status.success());
+    let out_full = String::from_utf8(full.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_full.contains("file.md"),
+        "-p should match the full relative path: {out_full}"
+    );
+
+    let hidden = syncweb(&["find", "*", src, "-H"])?;
+    ensure!(hidden.status.success());
+    let out_hidden = String::from_utf8(hidden.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_hidden.contains(".hidden.txt"),
+        "-H should include hidden files: {out_hidden}"
+    );
+
+    let default = syncweb(&["find", "*", src])?;
+    ensure!(default.status.success());
+    let out_default = String::from_utf8(default.stdout).context("UTF-8 output")?;
+    ensure!(
+        !out_default.contains(".hidden.txt"),
+        "default find should exclude hidden files: {out_default}"
+    );
+
+    let abs = syncweb(&["find", "file.md", src, "-a"])?;
+    ensure!(abs.status.success());
+    let out_abs = String::from_utf8(abs.stdout).context("UTF-8 output")?;
+    let absolute = source.join("project-2024/sub/file.md");
+    ensure!(
+        out_abs.contains(&absolute.to_string_lossy().into_owned()),
+        "-a should print absolute paths: {out_abs}"
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn find_depth_and_size_constraints() -> anyhow::Result<()> {
+    let source = cli_test_dir("find-depth");
+    std::fs::create_dir_all(source.join("sub/deep")).context("create dirs")?;
+    std::fs::write(source.join("a.txt"), b"a").context("write a")?;
+    std::fs::write(source.join("sub/b.txt"), [0_u8; 100]).context("write b")?;
+    std::fs::write(source.join("sub/deep/c.txt"), [0_u8; 1000]).context("write c")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let depth = syncweb(&["find", "*", src, "--depth=-1"])?;
+    ensure!(depth.status.success());
+    let out_depth = String::from_utf8(depth.stdout).context("UTF-8 output")?;
+    ensure!(out_depth.contains("a.txt"), "--depth=-1 should include a.txt: {out_depth}");
+    ensure!(
+        !out_depth.contains("b.txt"),
+        "--depth=-1 should exclude sub/b.txt: {out_depth}"
+    );
+
+    let min = syncweb(&["find", "*", src, "--min-depth", "2"])?;
+    ensure!(min.status.success());
+    let out_min = String::from_utf8(min.stdout).context("UTF-8 output")?;
+    ensure!(out_min.contains("b.txt"), "--min-depth 2 should include b.txt: {out_min}");
+    ensure!(
+        !out_min.contains("a.txt"),
+        "--min-depth 2 should exclude a.txt: {out_min}"
+    );
+
+    let min_size = syncweb(&["find", "*", src, "--sizes", "+50"])?;
+    ensure!(min_size.status.success());
+    let out_min_size = String::from_utf8(min_size.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_min_size.contains("b.txt") && out_min_size.contains("c.txt"),
+        "--sizes +50 should include b and c: {out_min_size}"
+    );
+    ensure!(
+        !out_min_size.contains("a.txt"),
+        "--sizes +50 should exclude a.txt: {out_min_size}"
+    );
+
+    let max_size = syncweb(&["find", "*", src, "--sizes=-500"])?;
+    ensure!(max_size.status.success());
+    let out_max_size = String::from_utf8(max_size.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_max_size.contains("a.txt") && out_max_size.contains("b.txt"),
+        "--sizes=-500 should include a and b: {out_max_size}"
+    );
+    ensure!(
+        !out_max_size.contains("c.txt"),
+        "--sizes=-500 should exclude c.txt: {out_max_size}"
+    );
+
+    let pct = syncweb(&["find", "*", src, "--sizes", "100%10"])?;
+    ensure!(pct.status.success());
+    let out_pct = String::from_utf8(pct.stdout).context("UTF-8 output")?;
+    ensure!(out_pct.contains("b.txt"), "percentage size should match b.txt: {out_pct}");
+    ensure!(
+        !out_pct.contains("a.txt"),
+        "percentage size should exclude a.txt: {out_pct}"
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn find_extension_and_type() -> anyhow::Result<()> {
+    let source = cli_test_dir("find-ext");
+    std::fs::create_dir_all(source.join("sub")).context("create dir")?;
+    std::fs::write(source.join("a.txt"), b"a").context("write a")?;
+    std::fs::write(source.join("b.md"), b"b").context("write b")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let txt = syncweb(&["find", "*", src, "-e", "txt"])?;
+    ensure!(txt.status.success());
+    let out_txt = String::from_utf8(txt.stdout).context("UTF-8 output")?;
+    ensure!(out_txt.contains("a.txt"), "-e txt should include a.txt: {out_txt}");
+    ensure!(!out_txt.contains("b.md"), "-e txt should exclude b.md: {out_txt}");
+
+    let both = syncweb(&["find", "*", src, "-e", "txt", "-e", "md"])?;
+    ensure!(both.status.success());
+    let out_both = String::from_utf8(both.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_both.contains("a.txt") && out_both.contains("b.md"),
+        "-e txt -e md should include both: {out_both}"
+    );
+
+    let dirs = syncweb(&["find", "*", src, "--type", "d"])?;
+    ensure!(dirs.status.success());
+    let out_dirs = String::from_utf8(dirs.stdout).context("UTF-8 output")?;
+    ensure!(out_dirs.contains("sub"), "--type d should list dirs: {out_dirs}");
+    ensure!(!out_dirs.contains("a.txt"), "--type d should not list files: {out_dirs}");
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn find_follow_links_and_downloadable() -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+    let source = cli_test_dir("find-links");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("target.txt"), b"t").context("write target")?;
+    symlink(source.join("target.txt"), source.join("link.txt")).context("create symlink")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let syms = syncweb(&["find", "*", src, "--type", "l"])?;
+    ensure!(syms.status.success());
+    let out_syms = String::from_utf8(syms.stdout).context("UTF-8 output")?;
+    ensure!(
+        out_syms.contains("link.txt"),
+        "--type l should list symlinks: {out_syms}"
+    );
+
+    for extra in [&["-L"][..], &["-d"][..], &["-L", "-d", "--threads", "2"][..]] {
+        let mut args = vec!["find", "*", src];
+        args.extend_from_slice(extra);
+        let output = syncweb(&args)?;
+        ensure!(
+            output.status.success(),
+            "find {extra:?} should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn sort_additional_algorithms() -> anyhow::Result<()> {
+    let source = cli_test_dir("sort-more");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("a.txt"), b"a").context("write")?;
+    std::fs::write(source.join("b.txt"), b"b").context("write")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    for algorithm in [
+        "time", "date", "week", "month", "year", "size", "folder-size",
+        "folder-avg-size", "folder-date", "folder-time", "count",
+    ] {
+        let output = syncweb(&["sort", src, "--by", algorithm])?;
+        ensure!(
+            output.status.success(),
+            "sort --by {algorithm} should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+        anyhow::ensure!(
+            stdout.lines().count() == 2,
+            "sort {algorithm} should list 2 files: {stdout}"
+        );
+    }
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn sort_filters_and_scoring_tuning() -> anyhow::Result<()> {
+    let source = cli_test_dir("sort-tuning");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("a.txt"), b"a").context("write")?;
+    std::fs::write(source.join("b.txt"), b"b").context("write")?;
+    let src = source.to_str().context("UTF-8 path")?;
+
+    let output = syncweb(&[
+        "sort", src, "--by", "size", "--min-seeders", "0", "--max-seeders", "10",
+        "--niche", "5", "--frecency-weight", "7", "--limit-size", "1GB",
+        "--depth=-2", "--threads", "1",
+    ])?;
+    ensure!(
+        output.status.success(),
+        "sort with filters should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    anyhow::ensure!(stdout.lines().count() == 2, "should list 2 files: {stdout}");
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn stat_format_template() -> anyhow::Result<()> {
+    let source = cli_test_dir("stat-format");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("file.txt"), b"hello world").context("write")?;
+    let file_path = source.join("file.txt");
+    let path_str = file_path.to_str().context("UTF-8 path")?;
+
+    let output = syncweb(&["stat", path_str, "--format", "%s"])?;
+    ensure!(
+        output.status.success(),
+        "stat --format should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(stdout.trim() == "11", "format %s should print the size: {stdout}");
+
+    let conflict = syncweb(&["stat", path_str, "--format", "%s", "--terse"])?;
+    ensure!(
+        !conflict.status.success(),
+        "--format and --terse should conflict"
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup")?;
+    Ok(())
+}
+
+#[test]
+fn download_filter_and_provider_options() -> anyhow::Result<()> {
+    let source = cli_test_dir("download-src2");
+    let dest = cli_test_dir("download-dest2");
+    std::fs::create_dir_all(&source).context("create dir")?;
+    std::fs::write(source.join("keep.txt"), b"keep").context("write")?;
+    let src_file = source.join("keep.txt");
+    let src_str = src_file.to_str().context("UTF-8 path")?;
+    let dst_file = dest.join("copied.txt");
+    let dst_str = dst_file.to_str().context("UTF-8 path")?;
+
+    let output = syncweb(&[
+        "download", src_str, dst_str, "--threads", "1", "--min-providers", "3", "--no-sharing",
+    ])?;
+    ensure!(
+        output.status.success(),
+        "download with provider options should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    anyhow::ensure!(std::fs::read(dest.join("copied.txt")).context("read")? == b"keep");
+
+    let hash = syncweb(&[
+        "download", src_str, "--hash",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ])?;
+    ensure!(!hash.status.success(), "--hash without --from should fail");
+
+    let filters = syncweb(&["download", src_str, dst_str, "--max-count", "1"])?;
+    ensure!(
+        !filters.status.success(),
+        "fetch filters with a destination should fail"
+    );
+
+    std::fs::remove_dir_all(&source).context("cleanup source")?;
+    std::fs::remove_dir_all(&dest).context("cleanup dest")?;
+    Ok(())
+}
+
+#[test]
+fn import_folder_threads_enrich() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("import-data");
+    let managed = cli_test_dir("import-managed");
+    std::fs::create_dir_all(&managed).context("create managed dir")?;
+    let src_dir = cli_test_dir("import-src");
+    std::fs::create_dir_all(&src_dir).context("create src dir")?;
+    std::fs::write(src_dir.join("new.txt"), b"content").context("write")?;
+    let data_dir_s = data_dir.to_str().context("UTF-8 path")?;
+
+    let create = syncweb(&[
+        "--data-dir", data_dir_s, "--no-daemon", "create",
+        managed.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "create failed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = create_out
+        .lines()
+        .find(|line| line.starts_with("namespace:"))
+        .context("namespace line")?
+        .trim_start_matches("namespace:")
+        .trim()
+        .to_owned();
+
+    let import = syncweb(&[
+        "--data-dir", data_dir_s, "--no-daemon", "import",
+        src_dir.join("new.txt").to_str().context("UTF-8 path")?,
+        "--folder", &namespace, "--threads", "1", "--enrich",
+    ])?;
+    ensure!(
+        import.status.success(),
+        "import with options should succeed: {}",
+        String::from_utf8_lossy(&import.stderr)
+    );
+    let import_out = String::from_utf8(import.stdout).context("UTF-8 output")?;
+    ensure!(import_out.contains("new.txt"), "import should list the file: {import_out}");
+
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    std::fs::remove_dir_all(&managed).context("cleanup managed")?;
+    std::fs::remove_dir_all(&src_dir).context("cleanup src")?;
+    Ok(())
+}
+
+#[test]
+fn verify_fix_and_filters() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("verify-data");
+    let managed = cli_test_dir("verify-managed");
+    std::fs::create_dir_all(&managed).context("create managed dir")?;
+    let src_dir = cli_test_dir("verify-src");
+    std::fs::create_dir_all(&src_dir).context("create src dir")?;
+    std::fs::write(src_dir.join("file.txt"), b"content").context("write")?;
+    let data_dir_s = data_dir.to_str().context("UTF-8 path")?;
+    let managed_s = managed.to_str().context("UTF-8 path")?;
+
+    let create = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "create", managed_s])?;
+    ensure!(
+        create.status.success(),
+        "create failed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = create_out
+        .lines()
+        .find(|line| line.starts_with("namespace:"))
+        .context("namespace line")?
+        .trim_start_matches("namespace:")
+        .trim()
+        .to_owned();
+
+    let import = syncweb(&[
+        "--data-dir", data_dir_s, "--no-daemon", "import",
+        src_dir.join("file.txt").to_str().context("UTF-8 path")?,
+        "--folder", &namespace, "--threads", "1",
+    ])?;
+    ensure!(
+        import.status.success(),
+        "import failed: {}",
+        String::from_utf8_lossy(&import.stderr)
+    );
+
+    let verify = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "verify", managed_s])?;
+    ensure!(
+        verify.status.success(),
+        "verify failed: {}",
+        String::from_utf8_lossy(&verify.stderr)
+    );
+    let out = String::from_utf8(verify.stdout).context("UTF-8 output")?;
+    ensure!(out.contains("verified: 1"), "should verify the file: {out}");
+
+    let fix = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "verify", managed_s, "--fix"])?;
+    ensure!(
+        fix.status.success(),
+        "verify --fix failed: {}",
+        String::from_utf8_lossy(&fix.stderr)
+    );
+    let out_fix = String::from_utf8(fix.stdout).context("UTF-8 output")?;
+    ensure!(out_fix.contains("repair:"), "should print repair section: {out_fix}");
+
+    let filtered = syncweb(&[
+        "--data-dir", data_dir_s, "--no-daemon", "verify", managed_s,
+        "--path-prefix", "file.txt", "--glob", "*.txt",
+        "--from", "fake", "--min-providers", "2", "--no-sharing",
+    ])?;
+    ensure!(
+        filtered.status.success(),
+        "verify with filters should succeed: {}",
+        String::from_utf8_lossy(&filtered.stderr)
+    );
+
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    std::fs::remove_dir_all(&managed).context("cleanup managed")?;
+    std::fs::remove_dir_all(&src_dir).context("cleanup src")?;
     Ok(())
 }

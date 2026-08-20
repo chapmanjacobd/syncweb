@@ -5,11 +5,11 @@
 Three independent code paths create an iroh-docs namespace and share a ticket, for three
 concepts that may be one concept wearing three hats:
 
-1. **Folder** — `FolderManager::create` → `docs_engine.create_namespace()` (`folder/manager.rs:52`);
+1. Folder — `FolderManager::create` → `docs_engine.create_namespace()` (`folder/manager.rs:52`);
    stores file entries keyed by path, sync mode, subscribe filters.
-2. **Catalog** — `CatalogService::create_catalog` → `docs.create_namespace()` (`indexing/catalog.rs:284`);
+2. Catalog — `CatalogService::create_catalog` → `docs.create_namespace()` (`indexing/catalog.rs:284`);
    stores `CatalogRecord` metadata entries with FTS indexing.
-3. **Network membership** — `network_doc_namespace()` derived namespace (`net/membership_doc.rs:114`);
+3. Network membership — `network_doc_namespace()` derived namespace (`net/membership_doc.rs:114`);
    stores a signed member list.
 
 ## Goal
@@ -20,7 +20,7 @@ helper used by all three.
 
 ## Current state
 
-- `publish catalog <folder> --catalog <name>` already takes a **folder** and publishes its
+- `publish catalog <folder> --catalog <name>` already takes a folder and publishes its
   metadata into a catalog — evidence the catalog is a view of a folder, not a first-class doc.
 - `indexing enable <folder>` opts a folder into indexing (`workflow/indexing.rs`:
   `indexing_enable_disable_uses_persistent_folder_namespace`).

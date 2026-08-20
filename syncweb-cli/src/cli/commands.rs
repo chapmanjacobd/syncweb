@@ -62,19 +62,14 @@ pub enum Command {
     },
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
-    #[command(about = "Publish a folder, blob, collection, or catalog")]
+    #[command(about = "Publish a folder, blob, or catalog")]
     Publish {
         #[command(subcommand)]
         command: PublishCommand,
     },
     #[command(about = "Remove a public blob pin")]
     Unpublish(UnpublishArgs),
-    #[command(about = "Create and publish versioned content collections")]
-    Collection {
-        #[command(subcommand)]
-        command: CollectionCommand,
-    },
-    #[command(about = "Manage locally installed collection packages")]
+    #[command(about = "Create, version, publish, and manage collection packages")]
     Package {
         #[command(subcommand)]
         command: PackageCommand,
@@ -735,8 +730,6 @@ pub enum PublishCommand {
     Folder(PublishFolderArgs),
     #[command(about = "Publish a content hash as an unauthenticated blob ticket")]
     Blob(PublishBlobArgs),
-    #[command(about = "Store a collection manifest and mutable head in a folder")]
-    Collection(PublishCollectionArgs),
     #[command(about = "Publish folder metadata to a catalog")]
     Catalog(PublishCatalogArgs),
 }
@@ -758,18 +751,6 @@ pub struct PublishBlobArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct PublishCollectionArgs {
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
-    #[arg(long)]
-    pub namespace: String,
-    #[arg(long, default_value_t = 1)]
-    pub sequence: u64,
-    #[arg(long, value_name = "NODE_ID")]
-    pub bootstrap: Vec<String>,
-}
-
-#[derive(Debug, Args)]
 pub struct PublishCatalogArgs {
     pub folder: PathBuf,
     #[arg(long)]
@@ -787,23 +768,35 @@ pub struct UnpublishArgs {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum CollectionCommand {
-    #[command(about = "Initialize a directory as a versioned collection")]
+pub enum PackageCommand {
+    #[command(about = "Initialize one or more paths as a versioned package, scanning them in one shot")]
     Init {
-        #[arg(default_value = ".")]
-        path: PathBuf,
+        #[arg(required = true, num_args = 1.., value_name = "PATH", default_value = ".")]
+        paths: Vec<PathBuf>,
         #[arg(long, default_value = "1.0.0")]
         version: String,
         #[arg(long)]
         name: Option<String>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Override the common root for logical path rebasing"
+        )]
+        root: Option<PathBuf>,
     },
-    #[command(about = "Scan files and update the local collection manifest")]
+    #[command(about = "Re-scan paths and update the local package manifest")]
     Add {
-        #[arg(default_value = ".")]
-        path: PathBuf,
+        #[arg(required = true, num_args = 1.., value_name = "PATH", default_value = ".")]
+        paths: Vec<PathBuf>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Override the common root for logical path rebasing"
+        )]
+        root: Option<PathBuf>,
     },
-    #[command(about = "Create a new collection manifest version")]
-    Versions {
+    #[command(about = "Create a new package manifest version")]
+    Bump {
         #[arg(default_value = ".")]
         path: PathBuf,
         #[arg(long)]
@@ -811,10 +804,23 @@ pub enum CollectionCommand {
         #[arg(long)]
         changelog: Option<String>,
     },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum PackageCommand {
+    #[command(about = "Publish a package manifest ticket and announce it to the catalog")]
+    Publish {
+        #[arg(required = true, num_args = 1.., value_name = "PATH")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        namespace: String,
+        #[arg(long, default_value_t = 1)]
+        sequence: u64,
+        #[arg(long, value_name = "NODE_ID")]
+        bootstrap: Vec<String>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Override the common root for logical path rebasing"
+        )]
+        root: Option<PathBuf>,
+    },
     #[command(about = "Export one or more package directories as compressed CAR archive files")]
     Export {
         #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_OUTPUT")]

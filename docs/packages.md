@@ -279,23 +279,21 @@ Package Profile: Packages are just collections with dependencies. An adapter lay
 Full data package lifecycle:
 
 ```bash
-# 1. Initialize a folder as a data package
-# 1. Initialize a folder as a collection (e.g. dataset)
-syncweb collection init ./climate --name climate-hourly --type dataset
-# Creates local drafting state
+# 1. Initialize one or more paths as a versioned package (scans in one shot)
+syncweb package init ./climate --name climate-hourly
+# Paths are rebased against their common root; siblings at the root that are
+# not among the inputs are excluded. A single input defaults to its parent
+# directory as the root. An explicit `--root` overrides auto-detection.
 
-# 2. Add files to the collection
-syncweb collection add col_climate ./data/observations.csv
-# OR add from existing content hash (virtual collections):
-# syncweb collection add col_reading-list syncweb://content/b3:8e7a... --as data/hourly.csv
+# 2. Re-scan paths and update the local manifest
+syncweb package add ./climate ./data/observations.csv
 
-# 3. Publish (creates immutable version + updates mutable head)
-syncweb publish collection ./climate --namespace <namespace-id>
-# Output: Published climate-hourly@1.0.0 (manifest b3:19ac...)
+# 3. Bump to a new version
+syncweb package bump ./climate --version 1.1.0 --changelog "new observations"
 
-# 4. Diff versions
-syncweb collection diff col_climate 1.0.0 1.1.0
-# Output: syncweb://package/<node-ticket>/<namespace-id>?v=0.2.0
+# 4. Publish (creates immutable version + updates mutable head + announces)
+syncweb package publish ./climate ./data/observations.csv --namespace <namespace-id>
+# Output: manifest <hash> + manifest_ticket <ticket>
 ```
 
 Implementation:

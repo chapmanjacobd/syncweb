@@ -2255,7 +2255,7 @@ impl IpcServer {
             },
             None => {
                 return IpcResponse::Error {
-                    message: "collection publish requires manifest_bytes; run `collection init` first".to_owned(),
+                    message: "collection publish requires manifest_bytes; run `package init` first".to_owned(),
                 };
             }
         };

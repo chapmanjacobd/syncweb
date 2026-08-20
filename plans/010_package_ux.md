@@ -18,7 +18,7 @@ syncweb package install <ticket>                                 # 5. install
 Every release bump is three more commands (`collection versions` → `publish collection` →
 `package upgrade`).
 
-The second gap: a package can only be assembled from a **single** directory root. Users want to
+The second gap: a package can only be assembled from a single directory root. Users want to
 turn *multiple* paths into one package, with the package contents laid out relative to their
 common root.
 

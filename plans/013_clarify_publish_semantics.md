@@ -21,8 +21,8 @@ Handlers: `handle_publish` — `main.rs:2623`, `handle_unpublish` — `main.rs:2
 
 ## Goal
 
-Establish a clear model: **`create` provisions a local, private namespace; `publish` makes
-something discoverable/fetchable by others.** Reduce the surface to distinct, self-explanatory
+Establish a clear model: `create` provisions a local, private namespace; `publish` makes
+something discoverable/fetchable by others. Reduce the surface to distinct, self-explanatory
 verbs and make `create` stop doing double-duty as a share command.
 
 ## Open questions / alternatives

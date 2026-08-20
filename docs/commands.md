@@ -423,12 +423,12 @@ syncweb config set discovery.interface eth0
 | | `public list` | List announced public folders |
 | | `publish folder` | Publish a folder ticket for public read access |
 | | `publish blob` | Publish a content hash as an unauthenticated blob ticket |
-| | `publish collection` | Store a collection manifest, pin content, and announce a blob ticket |
 | | `publish catalog` | Publish folder metadata to a catalog |
 | | `unpublish` | Remove a public blob pin |
-| | `collection init` | Initialize folder as data package |
-| | `collection add` | Scan + hash files, update manifest |
-| | `collection versions` | Create new version with changelog |
+| | `package init` | Initialize one or more paths as a versioned package (scans in one shot) |
+| | `package add` | Re-scan paths and update the manifest |
+| | `package bump` | Create a new package version with changelog |
+| | `package publish` | Publish a package manifest ticket and announce it to the catalog |
 | | `package search` | Discover packages via gossip |
 | | `package info` | Detailed package metadata |
 | | `package export` | Export package versions as compressed `.car.zst` drops |
@@ -508,11 +508,10 @@ syncweb join <folder> --subscribe
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
-# Publish a folder, a blob, a collection, or folder metadata to a catalog
+# Publish a folder, a blob, or folder metadata to a catalog
 syncweb publish folder /path/to/folder
 syncweb publish folder . --namespace <namespace-id>
 syncweb publish blob <namespace-id> <hash>
-syncweb publish collection /path/to/collection --namespace <namespace-id>
 syncweb publish catalog /path/to/folder --catalog <name> --tag music
 
 # Unpublish a public blob pin

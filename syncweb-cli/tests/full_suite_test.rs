@@ -77,7 +77,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "verify",
         "publish",
         "unpublish",
-        "collection",
         "package",
         "network",
         "indexing",
@@ -366,19 +365,19 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
     let init = run_with_data(
         &data_dir,
         &[
-            "collection",
+            "package",
             "init",
             package_dir.to_str().context("UTF-8 package path")?,
             "--name",
             "example",
         ],
     )?;
-    assert_success(&init, "collection init")?;
+    assert_success(&init, "package init")?;
     let add = run_with_data(
         &data_dir,
-        &["collection", "add", package_dir.to_str().context("UTF-8 package path")?],
+        &["package", "add", package_dir.to_str().context("UTF-8 package path")?],
     )?;
-    assert_success(&add, "collection add")?;
+    assert_success(&add, "package add")?;
 
     let output = package_dir.join("example.car.zst");
     let export = run_with_data(
@@ -402,24 +401,29 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
 }
 
 #[test]
-fn collection_versions_bump() -> anyhow::Result<()> {
+fn package_bump() -> anyhow::Result<()> {
     let data_dir = test_dir("collection-versions");
     let package_dir = test_dir("collection-versions-pkg");
     fs::create_dir_all(&package_dir)?;
     fs::write(package_dir.join("a.txt"), b"a")?;
     let package_path = package_dir.to_str().context("UTF-8 package path")?;
+    let root = package_dir
+        .parent()
+        .context("package dir should have a parent")?
+        .to_str()
+        .context("UTF-8 root path")?;
 
-    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
-    assert_success(&init, "collection init")?;
+    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "package init")?;
 
-    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
-    assert_success(&add, "collection add")?;
+    let add = run_with_data(&data_dir, &["package", "add", package_path])?;
+    assert_success(&add, "package add")?;
 
     let bump = run_with_data(
         &data_dir,
         &[
-            "collection",
-            "versions",
+            "package",
+            "bump",
             package_path,
             "--version",
             "2.0.0",
@@ -427,13 +431,13 @@ fn collection_versions_bump() -> anyhow::Result<()> {
             "second release",
         ],
     )?;
-    assert_success(&bump, "collection versions")?;
+    assert_success(&bump, "package bump")?;
     let bump_out = stdout_string(&bump)?;
     ensure!(bump_out.contains("version: 2.0.0"), "bump output: {bump_out}");
 
     let db = syncweb_core::storage::node_db::NodeDatabase::open(data_dir.join("default").join("node.db"))?;
     let manifest_bytes = db
-        .load_workspace_manifest(package_path)?
+        .load_workspace_manifest(root)?
         .context("workspace manifest should exist")?;
     let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
     ensure!(manifest.version == "2.0.0", "manifest version: {}", manifest.version);
@@ -447,9 +451,9 @@ fn collection_versions_bump() -> anyhow::Result<()> {
 
     let bump_json = run_with_data(
         &data_dir,
-        &["--json", "collection", "versions", package_path, "--version", "3.0.0"],
+        &["--json", "package", "bump", package_path, "--version", "3.0.0"],
     )?;
-    assert_success(&bump_json, "collection versions json")?;
+    assert_success(&bump_json, "package bump json")?;
     let value: serde_json::Value = serde_json::from_slice(&bump_json.stdout)?;
     ensure!(
         value.get("version") == Some(&serde_json::Value::from("3.0.0")),
@@ -458,6 +462,85 @@ fn collection_versions_bump() -> anyhow::Result<()> {
 
     fs::remove_dir_all(data_dir)?;
     fs::remove_dir_all(package_dir)?;
+    Ok(())
+}
+
+fn logical_paths_of(data_dir: &std::path::Path, root: &str) -> anyhow::Result<Vec<String>> {
+    let db = syncweb_core::storage::node_db::NodeDatabase::open(data_dir.join("default").join("node.db"))?;
+    let manifest_bytes = db
+        .load_workspace_manifest(root)?
+        .context("workspace manifest should exist")?;
+    let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
+    Ok(manifest
+        .entries
+        .iter()
+        .map(|entry| entry.logical_path.to_string_lossy().into_owned())
+        .collect())
+}
+
+#[test]
+fn package_multipath_common_root_rebasing() -> anyhow::Result<()> {
+    let data_dir = test_dir("package-multipath");
+
+    // Example 1: /library/thingdata/ + /library/thing.txt -> root /library
+    let library = test_dir("library");
+    let thingdata = library.join("thingdata");
+    fs::create_dir_all(&thingdata)?;
+    fs::write(thingdata.join("a.txt"), b"a")?;
+    fs::write(library.join("thing.txt"), b"thing")?;
+    fs::write(library.join("sibling.txt"), b"excluded")?;
+
+    let lib_str = library.to_str().context("UTF-8 library path")?;
+    let td_str = thingdata.to_str().context("UTF-8 thingdata path")?;
+    let thing_txt_path = library.join("thing.txt");
+    let thing_txt = thing_txt_path.to_str().context("UTF-8 thing.txt path")?;
+
+    let init = run_with_data(&data_dir, &["package", "init", td_str, thing_txt, "--name", "example"])?;
+    assert_success(&init, "package init multi-path")?;
+    let paths = logical_paths_of(&data_dir, lib_str)?;
+    ensure!(
+        paths.iter().any(|p| p == "thingdata/a.txt"),
+        "expected thingdata/a.txt in {paths:?}"
+    );
+    ensure!(
+        paths.iter().any(|p| p == "thing.txt"),
+        "expected thing.txt in {paths:?}"
+    );
+    ensure!(
+        !paths.iter().any(|p| p == "sibling.txt"),
+        "sibling at the root must be excluded: {paths:?}"
+    );
+
+    // Example 2: /library/dir/thingdata/ + /library/dir/thing.txt -> root /library/dir
+    let library2 = test_dir("library2");
+    let dir = library2.join("dir");
+    let thingdata2 = dir.join("thingdata");
+    fs::create_dir_all(&thingdata2)?;
+    fs::write(thingdata2.join("b.txt"), b"b")?;
+    fs::write(dir.join("thing.txt"), b"thing2")?;
+    let dir_str = dir.to_str().context("UTF-8 dir path")?;
+    let td_second_str = thingdata2.to_str().context("UTF-8 thingdata2 path")?;
+    let thing_second_path = dir.join("thing.txt");
+    let thing_second = thing_second_path.to_str().context("UTF-8 thing2.txt path")?;
+
+    let init2 = run_with_data(
+        &data_dir,
+        &["package", "init", td_second_str, thing_second, "--name", "example2"],
+    )?;
+    assert_success(&init2, "package init example 2")?;
+    let paths2 = logical_paths_of(&data_dir, dir_str)?;
+    ensure!(
+        paths2.iter().any(|p| p == "thingdata/b.txt"),
+        "expected thingdata/b.txt in {paths2:?}"
+    );
+    ensure!(
+        paths2.iter().any(|p| p == "thing.txt"),
+        "expected thing.txt in {paths2:?}"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(library)?;
+    fs::remove_dir_all(library2)?;
     Ok(())
 }
 
@@ -472,8 +555,8 @@ fn publish_manifest_ticket(
         &[
             "--json",
             "--no-daemon",
+            "package",
             "publish",
-            "collection",
             package_path,
             "--namespace",
             namespace,
@@ -481,7 +564,7 @@ fn publish_manifest_ticket(
             sequence,
         ],
     )?;
-    assert_success(&publish, "publish collection")?;
+    assert_success(&publish, "package publish")?;
     let value: serde_json::Value = serde_json::from_slice(&publish.stdout)?;
     Ok(value
         .get("manifest_ticket")
@@ -550,10 +633,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
-    assert_success(&init, "collection init")?;
-    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
-    assert_success(&add, "collection add")?;
+    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "package init")?;
+    let add = run_with_data(&data_dir, &["package", "add", package_path])?;
+    assert_success(&add, "package add")?;
 
     let ticket1 = publish_manifest_ticket(&data_dir, namespace, package_path, "1")?;
     let collection = install_package(&data_dir, &ticket1)?;
@@ -561,8 +644,8 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     let bump = run_with_data(
         &data_dir,
         &[
-            "collection",
-            "versions",
+            "package",
+            "bump",
             package_path,
             "--version",
             "2.0.0",
@@ -570,7 +653,7 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
             "second release",
         ],
     )?;
-    assert_success(&bump, "collection versions")?;
+    assert_success(&bump, "package bump")?;
 
     let ticket2 = publish_manifest_ticket(&data_dir, namespace, package_path, "2")?;
     upgrade_package(&data_dir, &ticket2)?;
@@ -709,18 +792,18 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["collection", "init", package_path, "--name", "example"])?;
-    assert_success(&init, "collection init")?;
-    let add = run_with_data(&data_dir, &["collection", "add", package_path])?;
-    assert_success(&add, "collection add")?;
+    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    assert_success(&init, "package init")?;
+    let add = run_with_data(&data_dir, &["package", "add", package_path])?;
+    assert_success(&add, "package add")?;
 
     let publish = run_with_data(
         &data_dir,
         &[
             "--json",
             "--no-daemon",
+            "package",
             "publish",
-            "collection",
             package_path,
             "--namespace",
             namespace,
@@ -728,7 +811,7 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
             "1",
         ],
     )?;
-    assert_success(&publish, "publish collection")?;
+    assert_success(&publish, "package publish")?;
     let publish_json: serde_json::Value = serde_json::from_slice(&publish.stdout)?;
     let ticket = publish_json
         .get("manifest_ticket")

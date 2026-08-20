@@ -82,7 +82,6 @@ help_categories! {
     "Content" => [
         Command::Snapshot { .. } => "snapshot",
         Command::Transfer { .. } => "transfer",
-        Command::Collection { .. } => "collection",
         Command::Package { .. } => "package",
     ];
     "Network" => [

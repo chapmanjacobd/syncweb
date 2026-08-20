@@ -2,16 +2,28 @@
 .el .ds Aq '
 .TH package 1  "package " 
 .SH NAME
-package \- Manage locally installed collection packages
+package \- Create, version, publish, and manage collection packages
 .SH SYNOPSIS
 \fBpackage\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
-Manage locally installed collection packages
+Create, version, publish, and manage collection packages
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .SH SUBCOMMANDS
+.TP
+package\-init(1)
+Initialize one or more paths as a versioned package, scanning them in one shot
+.TP
+package\-add(1)
+Re\-scan paths and update the local package manifest
+.TP
+package\-bump(1)
+Create a new package manifest version
+.TP
+package\-publish(1)
+Publish a package manifest ticket and announce it to the catalog
 .TP
 package\-export(1)
 Export one or more package directories as compressed CAR archive files

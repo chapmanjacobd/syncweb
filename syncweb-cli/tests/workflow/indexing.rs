@@ -382,15 +382,15 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
     fs::write(pkg.join("lib.txt"), b"lib content")?;
     let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
 
-    let _init = run(alice, &["collection", "init", pkg_path, "--name", "sample"])?;
-    let _add = run(alice, &["collection", "add", pkg_path])?;
+    let _init = run(alice, &["package", "init", pkg_path, "--name", "sample"])?;
+    let _add = run(alice, &["package", "add", pkg_path])?;
 
     let published = run(
         alice,
         &[
             "--json",
+            "package",
             "publish",
-            "collection",
             pkg_path,
             "--namespace",
             &namespace,

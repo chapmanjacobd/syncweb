@@ -2,7 +2,7 @@
 
 ## Overview
 
-syncweb uses **eight** gossip topics, each with its own producer(s), optional daemon listener,
+syncweb uses eight gossip topics, each with its own producer(s), optional daemon listener,
 and consumer. Several of these overlap in intent (signed signals about content/providers) or may
 be effectively useless for small networks because gossip is ephemeral (both peers must be online
 during the broadcast). This plan is an *interrogation* first: produce a decision table, then
@@ -28,12 +28,12 @@ Seed constants live in `syncweb-core/src/constants.rs`:
 
 | # | Question | Notes |
 |---|----------|-------|
-| Q1 | **trust stream vs attestation**: are `trust stream publish` (provider trust signal) and `attest create --broadcast` (content claim) meaningfully distinct, or two flavors of "signed signal over gossip"? | Both sign a claim with Ed25519 and broadcast. Could merge into one signed-signal channel keyed by subject type. |
-| Q2 | **network vs resilience**: network gossip = membership + folder discovery; resilience = provider leases for mirroring. Are these two overlapping "who-has-what" protocols? | Mirroring currently takes a `--network` OR a provider ID; leases and membership may collapse into one discovery layer. |
-| Q3 | **revocation usefulness**: `link revoke --broadcast` only reaches peers online at broadcast time; the listener persists it, but is it *enforced* at `link resolve`? | Verify enforcement. If revocations are only ephemerally propagated, fold revocation into a persistent doc (catalog/trust doc) instead. |
-| Q4 | **moderation report broadcast**: is `moderation report --broadcast` (REPORT_TOPIC) consumed meaningfully, or is local `moderation hide` the real enforcement? | `listen_for_reports` persists incoming reports; check whether they affect fetch/hide decisions. |
-| Q5 | **attest verify**: with no online peers it returns empty (`workflow/indexing.rs::attest_verify_with_timeout`). Useful for small networks, or should verification read the persisted local index? | Ties to 012 Q3. |
-| Q6 | **ephemeral vs persistent**: for a small-network, delay-tolerant tool, should signals default to persistent docs (catalogs) rather than ephemeral gossip? | Channels already offer both backends (`ChannelBackend`). Extend that pattern to the other topics. |
+| Q1 | trust stream vs attestation: are `trust stream publish` (provider trust signal) and `attest create --broadcast` (content claim) meaningfully distinct, or two flavors of "signed signal over gossip"? | Both sign a claim with Ed25519 and broadcast. Could merge into one signed-signal channel keyed by subject type. |
+| Q2 | network vs resilience: network gossip = membership + folder discovery; resilience = provider leases for mirroring. Are these two overlapping "who-has-what" protocols? | Mirroring currently takes a `--network` OR a provider ID; leases and membership may collapse into one discovery layer. |
+| Q3 | revocation usefulness: `link revoke --broadcast` only reaches peers online at broadcast time; the listener persists it, but is it *enforced* at `link resolve`? | Verify enforcement. If revocations are only ephemerally propagated, fold revocation into a persistent doc (catalog/trust doc) instead. |
+| Q4 | moderation report broadcast: is `moderation report --broadcast` (REPORT_TOPIC) consumed meaningfully, or is local `moderation hide` the real enforcement? | `listen_for_reports` persists incoming reports; check whether they affect fetch/hide decisions. |
+| Q5 | attest verify: with no online peers it returns empty (`workflow/indexing.rs::attest_verify_with_timeout`). Useful for small networks, or should verification read the persisted local index? | Ties to 012 Q3. |
+| Q6 | ephemeral vs persistent: for a small-network, delay-tolerant tool, should signals default to persistent docs (catalogs) rather than ephemeral gossip? | Channels already offer both backends (`ChannelBackend`). Extend that pattern to the other topics. |
 
 ## Deliverable
 

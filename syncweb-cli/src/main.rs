@@ -16,11 +16,11 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        CollectionCommand, Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand,
-        PublishBlobArgs, PublishCollectionArgs, PublishCommand, PublishFolderArgs, ScheduleCommand, ShutdownArgs,
-        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
-        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
-        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand, PublishBlobArgs,
+        PublishCommand, PublishFolderArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
+        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
+        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -218,7 +218,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Publish { command } => handle_publish(&ctx, command).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
-        Command::Collection { command } => handle_collection(&ctx, command).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Stats { command } => handle_stats(&ctx, command).await?,
@@ -2624,7 +2623,6 @@ async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result
     match command {
         PublishCommand::Folder(args) => handle_publish_folder(ctx, args).await,
         PublishCommand::Blob(args) => handle_publish_blob(ctx, args).await,
-        PublishCommand::Collection(args) => handle_publish_collection(ctx, args).await,
         PublishCommand::Catalog(args) => cli::indexing::handle_catalog_publish(ctx, args).await,
     }
 }
@@ -2684,11 +2682,6 @@ async fn handle_publish_blob(ctx: &CliContext<'_>, args: PublishBlobArgs) -> Res
     Ok(())
 }
 
-async fn handle_publish_collection(ctx: &CliContext<'_>, args: PublishCollectionArgs) -> Result<()> {
-    let node_db = open_node_db(ctx.data_dir)?;
-    handle_collection_publish(ctx, &node_db, args.path, args.namespace, args.sequence, args.bootstrap).await
-}
-
 #[async_recursion]
 async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::UnpublishArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -2721,91 +2714,125 @@ async fn handle_unpublish(ctx: &CliContext<'_>, command: crate::cli::commands::U
 }
 
 #[async_recursion]
-async fn handle_collection(ctx: &CliContext<'_>, command: CollectionCommand) -> Result<()> {
-    let data_dir = ctx.data_dir;
+async fn handle_package_init(
+    ctx: &CliContext<'_>,
+    node_db: &NodeDatabase,
+    paths: Vec<PathBuf>,
+    version: String,
+    package_name: Option<String>,
+    root_override: Option<PathBuf>,
+) -> Result<()> {
     let output_json = ctx.output_json;
-    let node_db = open_node_db(data_dir)?;
-    match command {
-        CollectionCommand::Init {
-            path,
-            version,
-            name: package_name,
-        } => {
-            std::fs::create_dir_all(&path)?;
-            let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), version);
-            if let Some(name) = package_name {
-                manifest.package = Some(syncweb_core::folder::PackageProfile::new(name));
-            }
-            node_db.save_workspace_manifest(
-                &path.to_string_lossy(),
-                &manifest.to_bytes()?,
-                &manifest.collection_id.to_string(),
-            )?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"collection": manifest.collection_id.to_string()})
-                );
-            } else {
-                println!("collection: {}", manifest.collection_id);
-            }
-        }
-        CollectionCommand::Add { path } => {
-            let source = path.to_string_lossy();
-            let manifest_bytes = node_db
-                .load_workspace_manifest(&source)?
-                .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
-            let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
-            manifest.entries = scan_collection_entries(&path)?;
-            node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
-            if output_json {
-                println!("{}", serde_json::json!({"entries": manifest.entries.len()}));
-            } else {
-                println!("entries: {}", manifest.entries.len());
-            }
-        }
-        CollectionCommand::Versions {
-            path,
-            version,
-            changelog,
-        } => {
-            let source = path.to_string_lossy();
-            let manifest_bytes = node_db
-                .load_workspace_manifest(&source)?
-                .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
-            let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
-            let parent = manifest.blob_id()?;
-            manifest.parent = Some(parent);
-            manifest.version = version;
-            manifest.changelog = changelog;
-            node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
-            if output_json {
-                println!("{}", serde_json::json!({"version": manifest.version}));
-            } else {
-                println!("version: {}", manifest.version);
-            }
+    for path in &paths {
+        if !path.is_file() {
+            std::fs::create_dir_all(path)?;
         }
     }
+    let (root, entries) = scan_collection_entries(&paths, root_override)?;
+    let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), version);
+    if let Some(name) = package_name {
+        manifest.package = Some(syncweb_core::folder::PackageProfile::new(name));
+    }
+    manifest.entries = entries;
+    let source = root.to_string_lossy();
+    node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "collection": manifest.collection_id.to_string(),
+                "root": source,
+                "entries": manifest.entries.len(),
+            })
+        );
+    } else {
+        println!("collection: {}", manifest.collection_id);
+        println!("root: {source}");
+        println!("entries: {}", manifest.entries.len());
+    }
     Ok(())
+}
+
+fn handle_package_add(
+    ctx: &CliContext<'_>,
+    node_db: &NodeDatabase,
+    paths: &[PathBuf],
+    root_override: Option<PathBuf>,
+) -> Result<()> {
+    let output_json = ctx.output_json;
+    let (root, entries) = scan_collection_entries(paths, root_override)?;
+    let source = root.to_string_lossy();
+    let manifest_bytes = node_db
+        .load_workspace_manifest(&source)?
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
+    let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
+    manifest.entries = entries;
+    node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
+    if output_json {
+        println!("{}", serde_json::json!({"entries": manifest.entries.len()}));
+    } else {
+        println!("entries: {}", manifest.entries.len());
+    }
+    Ok(())
+}
+
+fn handle_package_bump(
+    ctx: &CliContext<'_>,
+    node_db: &NodeDatabase,
+    path: &PathBuf,
+    version: String,
+    changelog: Option<String>,
+) -> Result<()> {
+    let output_json = ctx.output_json;
+    let root = resolve_package_root(std::slice::from_ref(path), None);
+    let source = root.to_string_lossy();
+    let manifest_bytes = node_db
+        .load_workspace_manifest(&source)?
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
+    let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
+    let parent = manifest.blob_id()?;
+    manifest.parent = Some(parent);
+    manifest.version = version;
+    manifest.changelog = changelog;
+    node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
+    if output_json {
+        println!("{}", serde_json::json!({"version": manifest.version}));
+    } else {
+        println!("version: {}", manifest.version);
+    }
+    Ok(())
+}
+
+async fn handle_package_publish(
+    ctx: &CliContext<'_>,
+    node_db: &NodeDatabase,
+    paths: Vec<PathBuf>,
+    namespace: String,
+    sequence: u64,
+    bootstrap: Vec<String>,
+    root_override: Option<PathBuf>,
+) -> Result<()> {
+    let root = resolve_package_root(&paths, root_override);
+    handle_collection_publish(ctx, node_db, root, namespace, sequence, bootstrap).await
 }
 
 async fn handle_collection_publish(
     ctx: &CliContext<'_>,
     node_db: &NodeDatabase,
-    path: std::path::PathBuf,
+    root: std::path::PathBuf,
     namespace: String,
     sequence: u64,
     bootstrap: Vec<String>,
 ) -> Result<()> {
     let (data_dir, output_json, no_daemon) = (ctx.data_dir, ctx.output_json, ctx.no_daemon);
-    let source = path.to_string_lossy();
+    let source = root.to_string_lossy();
     let manifest_bytes = node_db
         .load_workspace_manifest(&source)?
-        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found; run `collection init` first"))?;
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CollectionPublish {
-                path,
+                path: root,
                 namespace,
                 sequence,
                 bootstrap,
@@ -2817,7 +2844,7 @@ async fn handle_collection_publish(
     let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
     let node = open_node(data_dir).await?;
     for entry in &manifest.entries {
-        let hash = node.blob_store().add_file(path.join(&entry.logical_path)).await?;
+        let hash = node.blob_store().add_file(root.join(&entry.logical_path)).await?;
         if hash != entry.content_id {
             anyhow::bail!(
                 "collection content changed while publishing: {}",
@@ -2879,8 +2906,27 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let node_db = open_node_db(data_dir)?;
-    let packages = PackageManager::new(data_dir.join("packages"), node_db);
+    let packages = PackageManager::new(data_dir.join("packages"), node_db.clone());
     match command {
+        PackageCommand::Init {
+            paths,
+            version,
+            name,
+            root,
+        } => handle_package_init(ctx, &node_db, paths, version, name, root).await?,
+        PackageCommand::Add { paths, root } => handle_package_add(ctx, &node_db, &paths, root)?,
+        PackageCommand::Bump {
+            path,
+            version,
+            changelog,
+        } => handle_package_bump(ctx, &node_db, &path, version, changelog)?,
+        PackageCommand::Publish {
+            paths,
+            namespace,
+            sequence,
+            bootstrap,
+            root,
+        } => handle_package_publish(ctx, &node_db, paths, namespace, sequence, bootstrap, root).await?,
         PackageCommand::Search {
             query,
             bootstrap: bootstrap_values,
@@ -3203,7 +3249,7 @@ async fn handle_package_archive_export(
     let exporter = DropExporter::new(node.blob_store().clone());
     let mut results = Vec::with_capacity(sources.len());
     for source in sources {
-        let entries = scan_collection_entries(&source)?;
+        let entries = scan_single_root_entries(&source)?;
         let collection_id = uuid::Uuid::new_v4();
         let mut manifest =
             CollectionManifest::new(collection_id, version.clone().unwrap_or_else(|| "1.0.0".to_owned()));
@@ -3689,7 +3735,7 @@ fn parse_bootstrap(values: Vec<String>) -> Result<Vec<iroh::PublicKey>> {
         .collect()
 }
 
-fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
+fn scan_single_root_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
     ParallelScanner::new(path, vec![], 0)
         .scan()?
         .into_iter()
@@ -3703,6 +3749,82 @@ fn scan_collection_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry
             .map_err(anyhow::Error::from)
         })
         .collect()
+}
+
+fn resolve_package_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> PathBuf {
+    if let Some(root) = root_override {
+        return root;
+    }
+    if paths.len() == 1 {
+        let parent = paths
+            .first()
+            .and_then(|p| p.parent())
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        return parent.to_path_buf();
+    }
+    longest_common_ancestor(paths)
+}
+
+fn longest_common_ancestor(paths: &[PathBuf]) -> PathBuf {
+    let Some((first, rest)) = paths.split_first() else {
+        return PathBuf::new();
+    };
+    let mut common: Vec<_> = first.components().collect();
+    for path in rest {
+        let comps: Vec<_> = path.components().collect();
+        let shared = common.iter().zip(comps.iter()).take_while(|(a, b)| a == b).count();
+        common.truncate(shared);
+    }
+    common.into_iter().collect()
+}
+
+fn scan_collection_entries(
+    paths: &[PathBuf],
+    root_override: Option<PathBuf>,
+) -> Result<(PathBuf, Vec<CollectionEntry>)> {
+    let root = resolve_package_root(paths, root_override);
+    let mut entries: Vec<CollectionEntry> = Vec::new();
+    for input in paths {
+        let rel = input.strip_prefix(&root).unwrap_or(input.as_path()).to_path_buf();
+        let is_file = input.is_file();
+        let scanned = ParallelScanner::new(input, vec![], 0).scan()?;
+        for entry in scanned {
+            if entry.file_type != FileType::File {
+                continue;
+            }
+            let logical = if is_file {
+                rel.clone()
+            } else {
+                rel.join(&entry.relative_path)
+            };
+            entries.push(
+                CollectionEntry::new(
+                    iroh_blobs::Hash::from_bytes(*entry.hash.as_bytes()),
+                    logical,
+                    entry.size,
+                )
+                .map_err(anyhow::Error::from)?,
+            );
+        }
+    }
+    entries.sort_by(|left, right| left.logical_path.cmp(&right.logical_path));
+    let mut deduped: Vec<CollectionEntry> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if let Some(last) = deduped.last()
+            && last.logical_path == entry.logical_path
+        {
+            if last.content_id != entry.content_id {
+                anyhow::bail!(
+                    "conflicting inputs resolve to the same logical path: {}",
+                    entry.logical_path.display()
+                );
+            }
+            continue;
+        }
+        deduped.push(entry);
+    }
+    Ok((root, deduped))
 }
 
 #[async_recursion]

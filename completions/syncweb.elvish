@@ -49,10 +49,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand watch 'Watch a folder and import filesystem changes'
             cand stats 'Show statistics for folders, files, and seeding status'
             cand verify 'Re-check local folder blob integrity'
-            cand publish 'Publish a folder, blob, collection, or catalog'
+            cand publish 'Publish a folder, blob, or catalog'
             cand unpublish 'Remove a public blob pin'
-            cand collection 'Create and publish versioned content collections'
-            cand package 'Manage locally installed collection packages'
+            cand package 'Create, version, publish, and manage collection packages'
             cand network 'Network connectivity utilities'
             cand db 'Database maintenance: check, vacuum, stats, backup'
             cand indexing 'Manage opt-in indexing, catalogs, and metadata'
@@ -651,7 +650,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand folder 'Publish a folder ticket for public read access'
             cand blob 'Publish a content hash as an unauthenticated blob ticket'
-            cand collection 'Store a collection manifest and mutable head in a folder'
             cand catalog 'Publish folder metadata to a catalog'
         }
         &'syncweb;publish;folder'= {
@@ -665,18 +663,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;publish;blob'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;publish;collection'= {
-            cand --namespace 'namespace'
-            cand --sequence 'sequence'
-            cand --bootstrap 'bootstrap'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -706,49 +692,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;collection'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-            cand init 'Initialize a directory as a versioned collection'
-            cand add 'Scan files and update the local collection manifest'
-            cand versions 'Create a new collection manifest version'
-        }
-        &'syncweb;collection;init'= {
-            cand --version 'version'
-            cand --name 'name'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;collection;add'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;collection;versions'= {
-            cand --version 'version'
-            cand --changelog 'changelog'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'syncweb;package'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -757,6 +700,10 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand init 'Initialize one or more paths as a versioned package, scanning them in one shot'
+            cand add 'Re-scan paths and update the local package manifest'
+            cand bump 'Create a new package manifest version'
+            cand publish 'Publish a package manifest ticket and announce it to the catalog'
             cand export 'Export one or more package directories as compressed CAR archive files'
             cand import 'Import and install a compressed CAR archive file'
             cand search 'List locally installed packages, optionally filtering by text'
@@ -768,6 +715,52 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand list 'List locally installed collections'
             cand versions 'List installed versions for a collection'
             cand switch 'Switch the active installed collection version'
+        }
+        &'syncweb;package;init'= {
+            cand --version 'version'
+            cand --name 'name'
+            cand --root 'Override the common root for logical path rebasing'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;add'= {
+            cand --root 'Override the common root for logical path rebasing'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;bump'= {
+            cand --version 'version'
+            cand --changelog 'changelog'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;package;publish'= {
+            cand --namespace 'namespace'
+            cand --sequence 'sequence'
+            cand --bootstrap 'bootstrap'
+            cand --root 'Override the common root for logical path rebasing'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'syncweb;package;export'= {
             cand --version 'version'

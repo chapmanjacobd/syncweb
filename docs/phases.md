@@ -77,10 +77,10 @@ Public sharing and data package versioning:
 - `syncweb publish`, `syncweb unpublish`, `syncweb join --subscribe`
 - `CollectionManifest` struct and iroh-docs storage
 - `CollectionState` local tracking (installed collections, versions)
-- `syncweb collection init` (with package profile) for folder initialization as data package
-- `syncweb collection add` for scanning, hashing files, and updating manifest
-- `syncweb collection versions` for creating new version with changelog
-- `syncweb publish collection` for blob ticket and gossip announcement
+- `syncweb package init` (with package profile) for initializing paths as a versioned package
+- `syncweb package add` for scanning, hashing files, and updating manifest
+- `syncweb package bump` for creating a new version with changelog
+- `syncweb package publish` for blob ticket and gossip announcement
 - `syncweb package search` for discovering packages via gossip
 - `syncweb package info` for detailed package metadata
 - `syncweb package install` for fetch, verify, stage, and atomic swap

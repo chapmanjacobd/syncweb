@@ -13,8 +13,8 @@ network inspection commands, per-peer/per-folder stats options, and `config sche
 ## Missing coverage
 
 ### `network`
-- `events <network_id>` (`--limit`) — **untested**
-- `health` (`--network`) — **untested**
+- `events <network_id>` (`--limit`) — untested
+- `health` (`--network`) — untested
 - `create`: `--label`, `--invite-only` tested
 - `ls <name>` inspect — tested
 - `kick`, `join`, `leave`, `invite` — tested
@@ -26,7 +26,7 @@ network inspection commands, per-peer/per-folder stats options, and `config sche
 
 ### `config`
 - `schedule set` tested (`--active`); `--bandwidth` + `--period` untested
-- `schedule folder <name>` (`--active`, `--max-upload`, `--max-download`) — **untested**
+- `schedule folder <name>` (`--active`, `--max-upload`, `--max-download`) — untested
 - `show <section>` tested; `config` with no subcommand (print full TOML) untested
 
 ## Proposed test cases

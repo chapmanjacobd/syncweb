@@ -269,6 +269,7 @@ pub struct Cli {
 
     #[arg(
         long,
+        global = true,
         help = "Network name for scoped operations (uses data_dir/<network>/). Defaults to 'default' if absent."
     )]
     pub network: Option<String>,

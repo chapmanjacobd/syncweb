@@ -841,3 +841,175 @@ fn test_cli_no_daemon_flag_bypasses_daemon() -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
 }
+
+#[test]
+fn test_global_network_flag_scopes_data_dir() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("network-scoped")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "--network",
+        "home",
+        "start",
+        "--bg",
+        "--no-relay",
+    ])?;
+    ensure!(start.status.success(), "daemon start with --network should succeed");
+
+    let mut daemon_ready = false;
+    for _ in 0..150 {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let status = syncweb(&["--data-dir", data_dir_arg, "--network", "home", "status"])?;
+        if status.status.success() && stdout_contains(&status, "daemon: running") {
+            daemon_ready = true;
+            break;
+        }
+    }
+    ensure!(daemon_ready, "daemon should be running after start with --network");
+
+    let network_subdir = data_dir.join("home");
+    ensure!(
+        network_subdir.exists(),
+        "--network home should create a home/ subdirectory under data_dir"
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "--network", "home", "shutdown", "--force"])?;
+    ensure!(shutdown.status.success(), "shutdown should succeed");
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_start_with_log_file_writes_log() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("log-file")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let log_file = data_dir.join("daemon.log");
+    let log_file_arg = log_file.to_str().context("UTF-8 path")?;
+
+    let start = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "start",
+        "--bg",
+        "--no-relay",
+        "--log-file",
+        log_file_arg,
+    ])?;
+    ensure!(start.status.success(), "daemon start with --log-file should succeed");
+
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success(), "shutdown should succeed");
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_start_media_only_exits() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("media-only")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "start", "--no-relay", "--media-only"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .context("spawn media-only process")?;
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
+    let status_stdout = String::from_utf8(status.stdout).context("UTF-8 output")?;
+    ensure!(
+        !status_stdout.contains("daemon: running"),
+        "--media-only should not leave a daemon running"
+    );
+
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_start_discovery_and_media_tuning_flags_accepted() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("tuning-flags")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "start",
+        "--bg",
+        "--no-relay",
+        "--max-threads",
+        "4",
+        "--sync-interval",
+        "120",
+    ])?;
+    ensure!(start.status.success(), "daemon start with tuning flags should succeed");
+
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
+    ensure!(status.status.success(), "status should succeed");
+    let stdout = String::from_utf8(status.stdout).context("UTF-8 output")?;
+    ensure!(stdout.contains("daemon: running"), "daemon should be running");
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_daemon_sync_scoped_to_namespace() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("daemon-sync-ns")?;
+    let dir = cli_test_dir("daemon-sync-ns-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success());
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "create",
+        dir.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success());
+
+    let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = stdout
+        .lines()
+        .find(|line| line.starts_with("namespace:"))
+        .and_then(|line| line.strip_prefix("namespace:").map(str::trim))
+        .context("create should output a namespace")?;
+
+    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync", namespace])?;
+    ensure!(sync.status.success(), "daemon-sync --namespace should succeed");
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_global_network_option_is_listed_in_help() -> anyhow::Result<()> {
+    let output = syncweb(&["--help"])?;
+    ensure!(output.status.success());
+    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(help.contains("--network"), "--help should list the --network option");
+    Ok(())
+}

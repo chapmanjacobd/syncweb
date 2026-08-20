@@ -15,18 +15,18 @@ few subcommands are untested, especially the gossip/broadcast and expiry/scoping
 - `search --limit` untested (bare `search` tested)
 - `meta add --sequence` untested
 - `filter add device` untested (only `hash` and `file` tested)
-- `filter subscribe <source>` — **untested**
+- `filter subscribe <source>` — untested
 
 ### `trust`
 - `delegate`: `--expires`, `--scope`, `--sequence`, `--max-depth` untested
-- `revoke-delegation <publisher>` (`--scope`) — **untested**
+- `revoke-delegation <publisher>` (`--scope`) — untested
 - `provider ban`: `--hash`, `--duration` untested
 - `provider vouch` / `distrust`: `--scope` untested (`--reason`, `--broadcast` tested)
 - `stream publish`: `--hash`, `--sequence` untested (`--provider`, `--signal` tested)
 
 ### `attest`
 - `create`: `--provenance`, `--derivative`, `--sequence`, `--broadcast` untested (`--license` tested)
-- `verify` (`--timeout`) — **entire subcommand untested**
+- `verify` (`--timeout`) — entire subcommand untested
 
 ### `moderation`
 - `hide --reason` untested

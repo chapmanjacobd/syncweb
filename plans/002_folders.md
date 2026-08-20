@@ -18,22 +18,22 @@ and `--ingest-only` are covered for.
 |--------|--------|
 | `--mode` | tested (`sendonly`) |
 | `--network` | tested |
-| `--relay-fallback` | **untested** |
+| `--relay-fallback` | untested |
 
 ### `join`
 | Option | Status |
 |--------|--------|
 | default `--mode receiveonly` | untested (join always uses default) |
-| `--relay-fallback` | **untested** |
+| `--relay-fallback` | untested |
 | `--network` | tested |
 | `--subscribe` | tested (help + daemon IPC) |
 | `--ingest-only` | tested (with subscribe) |
-| `--ignore-self` | **untested** |
-| `--prefix` | **untested** |
-| `--sync-prefix` | **untested** |
-| `--glob` | **untested** |
-| `--max-count` | **untested** |
-| `--max-size` | **untested** |
+| `--ignore-self` | untested |
+| `--prefix` | untested |
+| `--sync-prefix` | untested |
+| `--glob` | untested |
+| `--max-count` | untested |
+| `--max-size` | untested |
 
 ### `leave`
 | Option | Status |
@@ -58,7 +58,7 @@ and `--ingest-only` are covered for.
      - `--ignore-self`
      - `--prefix <dir>`
      - `--sync-prefix <area>`
-     - `--glob '**/*.txt'`
+     - `--glob '/*.txt'`
      - `--max-count <N>` and `--max-size <N>`
    - Assert the joiner only receives entries matching the filter (e.g. `--max-count` limits entries).
 

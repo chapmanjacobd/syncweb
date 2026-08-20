@@ -13,11 +13,11 @@ subcommand, and the bare `config` invocation are not.
 ## Missing coverage
 
 ### `manpages`
-- `manpages <dir>` — **entire command untested**
+- `manpages <dir>` — entire command untested
 - Options: default `dir` is `man`; no flags
 
 ### `help`
-- `help <command>` subcommand — **untested** (only `--help` tested)
+- `help <command>` subcommand — untested (only `--help` tested)
 - Because `disable_help_subcommand = true` is set in `args.rs:245`, verify the help subcommand is
   actually disabled at the top level and only reachable via `--help`.
 

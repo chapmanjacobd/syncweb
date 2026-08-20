@@ -24,17 +24,17 @@
 - `pause` / `resume` / `cancel` / `retry <id>`
 
 ### `snapshot`
-- `restore <path> <snapshot>` — **untested**
-- `diff <path> <first> <second>` — **untested**
-- `delete <path> <snapshot>` — **untested**
+- `restore <path> <snapshot>` — untested
+- `diff <path> <first> <second>` — untested
+- `delete <path> <snapshot>` — untested
 - `create`: `--description`, `--threads` untested
 
 ### `collection`
-- `versions --version --changelog` — **untested** (only `init`/`add`)
+- `versions --version --changelog` — untested (only `init`/`add`)
 
 ### `package`
 - `import`, `search` (`--bootstrap`, `--timeout-ms`, `--channel`), `info` (`--hash`, `--node-id`),
-  `install`, `upgrade`, `remove`, `verify`, `list`, `versions`, `switch` — all **untested**
+  `install`, `upgrade`, `remove`, `verify`, `list`, `versions`, `switch` — all untested
 - `export`: `--version`, `--filter` (`--filter` tested)
 
 ## Proposed test cases

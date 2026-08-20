@@ -13,16 +13,16 @@
 ## Missing coverage
 
 ### `publish`
-- `blob <namespace> <hash>` — **untested**
-- `collection` (`--namespace`, `--sequence`, `--bootstrap`) — **untested**
+- `blob <namespace> <hash>` — untested
+- `collection` (`--namespace`, `--sequence`, `--bootstrap`) — untested
 - `folder` — tested (daemon IPC)
 - `catalog` (`--catalog`, `--tag`) — `--catalog` tested; `--tag` untested
 
 ### `unpublish`
-- `unpublish <namespace> --blob <hash>` — **entire command untested**
+- `unpublish <namespace> --blob <hash>` — entire command untested
 
 ### `mirror`
-- `mirror <provider>` / `mirror --network <name>` real run — **untested** (only `--help` + no-args fail)
+- `mirror <provider>` / `mirror --network <name>` real run — untested (only `--help` + no-args fail)
 - `--min-providers`, `--no-sharing`, `--dry-run`
 
 ### `provider`

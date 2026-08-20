@@ -5,8 +5,7 @@ use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
 use syncweb_core::{
     folder::{
-        Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager,
-        PackageManager, SyncMode,
+        Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager, PackageManager, SyncMode,
     },
     node::{
         identity::IdentityManager,
@@ -615,10 +614,7 @@ async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
     let third_party = world.device("third_party")?;
 
     let folder = publisher.create_folder(SyncMode::SendReceive).await?;
-    let ticket = folder
-        .folder
-        .ticket(publisher.endpoint().addr(), true)
-        .await?;
+    let ticket = folder.folder.ticket(publisher.endpoint().addr(), true).await?;
     let ns = folder.namespace;
 
     let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
@@ -630,11 +626,9 @@ async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
     ];
     for (name, data) in files {
         let hash = publisher.write(&folder, name, data).await?;
-        manifest.entries.push(CollectionEntry::new(
-            hash,
-            *name,
-            u64::try_from(data.len())?,
-        )?);
+        manifest
+            .entries
+            .push(CollectionEntry::new(hash, *name, u64::try_from(data.len())?)?);
     }
 
     let store = CollectionStore::new(
@@ -650,7 +644,9 @@ async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
         .ticket(publisher.endpoint(), head.manifest)
         .to_string();
 
-    third_party.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
+    third_party
+        .join_folder(&ticket.to_string(), SyncMode::ReceiveOnly)
+        .await?;
     third_party.wait_entry(ns, "index.html").await?;
 
     let node_db = NodeDatabase::open(world.directory().join("third_party.db"))?;
@@ -670,10 +666,7 @@ async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
         .context("package should be installed")?;
     anyhow::ensure!(info.current == "1.0.0");
 
-    let pkg_dir = packages
-        .root()
-        .join(installed.collection_id.to_string())
-        .join("1.0.0");
+    let pkg_dir = packages.root().join(installed.collection_id.to_string()).join("1.0.0");
     anyhow::ensure!(pkg_dir.join("index.html").exists());
     anyhow::ensure!(std::fs::read(pkg_dir.join("index.html"))? == b"<html><body>Wikipedia</body></html>");
     anyhow::ensure!(pkg_dir.join("data/articles.zim").exists());
@@ -697,10 +690,7 @@ async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
     let consumer = world.device("consumer")?;
 
     let folder = publisher.create_folder(SyncMode::SendReceive).await?;
-    let ticket = folder
-        .folder
-        .ticket(publisher.endpoint().addr(), true)
-        .await?;
+    let ticket = folder.folder.ticket(publisher.endpoint().addr(), true).await?;
     let ns = folder.namespace;
     let collection_id = uuid::Uuid::new_v4();
 
@@ -725,19 +715,13 @@ async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
         .ticket(publisher.endpoint(), head_v1.manifest)
         .to_string();
 
-    consumer
-        .join_folder(&ticket.to_string(), SyncMode::ReceiveOnly)
-        .await?;
+    consumer.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
     consumer.wait_entry(ns, "README.md").await?;
 
     let node_db = NodeDatabase::open(world.directory().join("consumer.db"))?;
     let packages = PackageManager::new(world.directory().join("packages"), node_db);
     let installed_v1 = packages
-        .install_from_ticket(
-            &ticket_v1.parse()?,
-            consumer.endpoint(),
-            consumer.node().blob_store(),
-        )
+        .install_from_ticket(&ticket_v1.parse()?, consumer.endpoint(), consumer.node().blob_store())
         .await?;
     anyhow::ensure!(installed_v1.version == "1.0.0");
 
@@ -745,10 +729,7 @@ async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
     anyhow::ensure!(std::fs::read(pkg_root.join("current/README.md"))? == b"v1 readme");
     anyhow::ensure!(std::fs::read(pkg_root.join("current/bin/tool"))? == b"tool-v1");
 
-    let v2_files: &[(&str, &[u8])] = &[
-        ("README.md", b"v2 readme -- updated"),
-        ("bin/tool", b"tool-v2"),
-    ];
+    let v2_files: &[(&str, &[u8])] = &[("README.md", b"v2 readme -- updated"), ("bin/tool", b"tool-v2")];
     let mut v2_manifest = CollectionManifest::new(collection_id, "2.0.0");
     v2_manifest.parent = Some(head_v1.manifest);
     v2_manifest.changelog = Some("Same paths, new content".into());
@@ -766,31 +747,21 @@ async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
         .to_string();
 
     let installed_v2 = packages
-        .install_from_ticket(
-            &ticket_v2.parse()?,
-            consumer.endpoint(),
-            consumer.node().blob_store(),
-        )
+        .install_from_ticket(&ticket_v2.parse()?, consumer.endpoint(), consumer.node().blob_store())
         .await?;
     anyhow::ensure!(installed_v2.version == "2.0.0");
 
     let state = packages.state()?;
-    let info = state
-        .current(collection_id)
-        .context("collection should be installed")?;
+    let info = state.current(collection_id).context("collection should be installed")?;
     anyhow::ensure!(info.current == "2.0.0");
     anyhow::ensure!(info.versions.contains_key("1.0.0"));
     anyhow::ensure!(info.versions.contains_key("2.0.0"));
 
-    anyhow::ensure!(
-        std::fs::read(pkg_root.join("current/README.md"))? == b"v2 readme -- updated"
-    );
+    anyhow::ensure!(std::fs::read(pkg_root.join("current/README.md"))? == b"v2 readme -- updated");
     anyhow::ensure!(std::fs::read(pkg_root.join("current/bin/tool"))? == b"tool-v2");
 
     anyhow::ensure!(std::fs::read(pkg_root.join("1.0.0/README.md"))? == b"v1 readme");
-    anyhow::ensure!(
-        std::fs::read(pkg_root.join("2.0.0/README.md"))? == b"v2 readme -- updated"
-    );
+    anyhow::ensure!(std::fs::read(pkg_root.join("2.0.0/README.md"))? == b"v2 readme -- updated");
 
     packages.verify(&installed_v1)?;
     packages.verify(&installed_v2)?;

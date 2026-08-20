@@ -4,11 +4,15 @@ use anyhow::Context;
 use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
 use syncweb_core::{
-    folder::{Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
+    folder::{
+        Capability, CollectionEntry, CollectionManifest, CollectionStore, FolderManager,
+        PackageManager, SyncMode,
+    },
     node::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
+    storage::node_db::NodeDatabase,
 };
 
 use crate::test_utils::TestDirectory;
@@ -435,5 +439,375 @@ fn test_namespace_key_derivation() -> anyhow::Result<()> {
     anyhow::ensure!(author_a.id() != author_b.id());
 
     std::fs::remove_dir_all(&directory).context("failed to remove test directory")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Workflow-style tests using the World DSL
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn workflow_two_nodes_sync() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice", "bob"]).await?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_a = alice.create_folder(SyncMode::SendReceive).await?;
+    let hash = alice.write(&folder_a, "hello.txt", b"hello from alice").await?;
+
+    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+
+    let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
+
+    let entry = bob.wait_entry(folder_b.namespace, "hello.txt").await?;
+    anyhow::ensure!(entry.content_hash() == hash);
+
+    let data = bob.get_blob(hash).await?;
+    anyhow::ensure!(data.as_ref() == b"hello from alice");
+
+    alice.node().stop().await?;
+    bob.node().stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_bidirectional_sync() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice", "bob"]).await?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_a = alice.create_folder(SyncMode::SendReceive).await?;
+    alice.write(&folder_a, "from-alice.txt", b"alice's file").await?;
+
+    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+
+    let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::SendReceive).await?;
+    bob.write(&folder_b, "from-bob.txt", b"bob's file").await?;
+
+    // Verify bob can read alice's file
+    let entry_a = bob.wait_entry(folder_b.namespace, "from-alice.txt").await?;
+    let data = bob.get_blob(entry_a.content_hash()).await?;
+    anyhow::ensure!(data.as_ref() == b"alice's file");
+
+    alice.node().stop().await?;
+    bob.node().stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_sendonly_receiveonly() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["sender", "receiver"]).await?;
+    let sender = world.device("sender")?;
+    let receiver = world.device("receiver")?;
+
+    let folder_s = sender.create_folder(SyncMode::SendOnly).await?;
+    let hash = sender.write(&folder_s, "data.bin", b"binary data").await?;
+
+    let ticket = folder_s.folder.ticket(sender.endpoint().addr(), false).await?;
+
+    let folder_r = receiver.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
+
+    let entry = receiver.wait_entry(folder_r.namespace, "data.bin").await?;
+    anyhow::ensure!(entry.content_hash() == hash);
+
+    // ReceiveOnly cannot write
+    let write_result = receiver.write(&folder_r, "should-fail.txt", b"nope").await;
+    anyhow::ensure!(write_result.is_err());
+
+    sender.node().stop().await?;
+    receiver.node().stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_world_devices_and_directory() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice", "bob"]).await?;
+
+    let all = world.devices();
+    anyhow::ensure!(all.len() == 2, "expected 2 devices, got {}", all.len());
+    anyhow::ensure!(all.iter().any(|d| d.name == "alice"), "alice missing from devices()");
+    anyhow::ensure!(all.iter().any(|d| d.name == "bob"), "bob missing from devices()");
+
+    let dir = world.directory();
+    anyhow::ensure!(dir.exists(), "directory should exist: {dir:?}");
+
+    let alice = world.device("alice")?;
+    let alice_dir = alice.dir();
+    anyhow::ensure!(alice_dir.exists(), "alice dir should exist: {alice_dir:?}");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_list_entries_after_sync() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice", "bob"]).await?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_a = alice.create_folder(SyncMode::SendReceive).await?;
+    alice.write(&folder_a, "file1.txt", b"content1").await?;
+    alice.write(&folder_a, "file2.txt", b"content2").await?;
+
+    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+
+    let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
+    bob.wait_entry(folder_b.namespace, "file1.txt").await?;
+
+    let entries = alice.list_entries(folder_a.namespace).await?;
+    anyhow::ensure!(
+        entries.len() >= 2,
+        "alice should list >= 2 entries, got {}",
+        entries.len()
+    );
+
+    let bob_entries = bob.list_entries(folder_b.namespace).await?;
+    anyhow::ensure!(
+        bob_entries.iter().any(|e| e.key() == b"file1.txt"),
+        "bob should see file1.txt: {bob_entries:?}"
+    );
+
+    alice.node().stop().await?;
+    bob.node().stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_manager_lists_folders() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice"]).await?;
+    let alice = world.device("alice")?;
+
+    let handle = alice.create_folder(SyncMode::SendReceive).await?;
+    let folders = handle.manager.list().await?;
+    anyhow::ensure!(!folders.is_empty(), "manager should list at least one folder");
+
+    let handle2 = alice.create_folder(SyncMode::SendReceive).await?;
+    let folders2 = handle2.manager.list().await?;
+    anyhow::ensure!(folders2.len() >= 2, "should have >= 2 folders after second create");
+
+    alice.node().stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn workflow_memory_lookup_has_endpoints() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["alice", "bob"]).await?;
+
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let alice_info = world.memory_lookup.get_endpoint_info(alice.endpoint().id());
+    anyhow::ensure!(alice_info.is_some(), "alice endpoint should be in memory lookup");
+
+    let bob_info = world.memory_lookup.get_endpoint_info(bob.endpoint().id());
+    anyhow::ensure!(bob_info.is_some(), "bob endpoint should be in memory lookup");
+
+    alice.node().stop().await?;
+    bob.node().stop().await?;
+    Ok(())
+}
+
+/// Publish an IIAB package, share to a third party while publisher is online,
+/// publisher disconnects, third party verifies files on disk.
+#[tokio::test]
+async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["publisher", "third_party"]).await?;
+    let publisher = world.device("publisher")?;
+    let third_party = world.device("third_party")?;
+
+    let folder = publisher.create_folder(SyncMode::SendReceive).await?;
+    let ticket = folder
+        .folder
+        .ticket(publisher.endpoint().addr(), true)
+        .await?;
+    let ns = folder.namespace;
+
+    let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
+
+    let files: &[(&str, &[u8])] = &[
+        ("index.html", b"<html><body>Wikipedia</body></html>"),
+        ("data/articles.zim", b"zim-content-here"),
+        ("data/thumbs.db", b"thumb-cache"),
+    ];
+    for (name, data) in files {
+        let hash = publisher.write(&folder, name, data).await?;
+        manifest.entries.push(CollectionEntry::new(
+            hash,
+            *name,
+            u64::try_from(data.len())?,
+        )?);
+    }
+
+    let store = CollectionStore::new(
+        folder.folder.doc().clone(),
+        folder.folder.author(),
+        publisher.node().blob_store().clone(),
+        publisher.node().docs_engine().clone(),
+    );
+    let head = store.publish(&manifest, 1).await?;
+    let manifest_ticket = publisher
+        .node()
+        .blob_store()
+        .ticket(publisher.endpoint(), head.manifest)
+        .to_string();
+
+    third_party.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
+    third_party.wait_entry(ns, "index.html").await?;
+
+    let node_db = NodeDatabase::open(world.directory().join("third_party.db"))?;
+    let packages = PackageManager::new(world.directory().join("packages"), node_db);
+    let blob_ticket = manifest_ticket.parse()?;
+    let installed = packages
+        .install_from_ticket(&blob_ticket, third_party.endpoint(), third_party.node().blob_store())
+        .await?;
+    anyhow::ensure!(installed.collection_id == manifest.collection_id);
+    anyhow::ensure!(installed.version == "1.0.0");
+
+    publisher.node().stop().await?;
+
+    let state = packages.state()?;
+    let info = state
+        .current(installed.collection_id)
+        .context("package should be installed")?;
+    anyhow::ensure!(info.current == "1.0.0");
+
+    let pkg_dir = packages
+        .root()
+        .join(installed.collection_id.to_string())
+        .join("1.0.0");
+    anyhow::ensure!(pkg_dir.join("index.html").exists());
+    anyhow::ensure!(std::fs::read(pkg_dir.join("index.html"))? == b"<html><body>Wikipedia</body></html>");
+    anyhow::ensure!(pkg_dir.join("data/articles.zim").exists());
+    anyhow::ensure!(std::fs::read(pkg_dir.join("data/articles.zim"))? == b"zim-content-here");
+    anyhow::ensure!(pkg_dir.join("data/thumbs.db").exists());
+    anyhow::ensure!(std::fs::read(pkg_dir.join("data/thumbs.db"))? == b"thumb-cache");
+
+    packages.verify(&installed)?;
+
+    third_party.node().stop().await?;
+    Ok(())
+}
+
+/// Upgrade a package to a new version that reuses the same file paths with
+/// new content.  Both versions must coexist and the `current` symlink must
+/// point at the latest.
+#[tokio::test]
+async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
+    let world = crate::integration::world::World::new(&["publisher", "consumer"]).await?;
+    let publisher = world.device("publisher")?;
+    let consumer = world.device("consumer")?;
+
+    let folder = publisher.create_folder(SyncMode::SendReceive).await?;
+    let ticket = folder
+        .folder
+        .ticket(publisher.endpoint().addr(), true)
+        .await?;
+    let ns = folder.namespace;
+    let collection_id = uuid::Uuid::new_v4();
+
+    let v1_files: &[(&str, &[u8])] = &[("README.md", b"v1 readme"), ("bin/tool", b"tool-v1")];
+    let mut v1_manifest = CollectionManifest::new(collection_id, "1.0.0");
+    for (name, data) in v1_files {
+        let hash = publisher.write(&folder, name, data).await?;
+        v1_manifest
+            .entries
+            .push(CollectionEntry::new(hash, *name, u64::try_from(data.len())?)?);
+    }
+    let store = CollectionStore::new(
+        folder.folder.doc().clone(),
+        folder.folder.author(),
+        publisher.node().blob_store().clone(),
+        publisher.node().docs_engine().clone(),
+    );
+    let head_v1 = store.publish(&v1_manifest, 1).await?;
+    let ticket_v1 = publisher
+        .node()
+        .blob_store()
+        .ticket(publisher.endpoint(), head_v1.manifest)
+        .to_string();
+
+    consumer
+        .join_folder(&ticket.to_string(), SyncMode::ReceiveOnly)
+        .await?;
+    consumer.wait_entry(ns, "README.md").await?;
+
+    let node_db = NodeDatabase::open(world.directory().join("consumer.db"))?;
+    let packages = PackageManager::new(world.directory().join("packages"), node_db);
+    let installed_v1 = packages
+        .install_from_ticket(
+            &ticket_v1.parse()?,
+            consumer.endpoint(),
+            consumer.node().blob_store(),
+        )
+        .await?;
+    anyhow::ensure!(installed_v1.version == "1.0.0");
+
+    let pkg_root = packages.root().join(collection_id.to_string());
+    anyhow::ensure!(std::fs::read(pkg_root.join("current/README.md"))? == b"v1 readme");
+    anyhow::ensure!(std::fs::read(pkg_root.join("current/bin/tool"))? == b"tool-v1");
+
+    let v2_files: &[(&str, &[u8])] = &[
+        ("README.md", b"v2 readme -- updated"),
+        ("bin/tool", b"tool-v2"),
+    ];
+    let mut v2_manifest = CollectionManifest::new(collection_id, "2.0.0");
+    v2_manifest.parent = Some(head_v1.manifest);
+    v2_manifest.changelog = Some("Same paths, new content".into());
+    for (name, data) in v2_files {
+        let hash = publisher.write(&folder, name, data).await?;
+        v2_manifest
+            .entries
+            .push(CollectionEntry::new(hash, *name, u64::try_from(data.len())?)?);
+    }
+    let head_v2 = store.publish(&v2_manifest, 2).await?;
+    let ticket_v2 = publisher
+        .node()
+        .blob_store()
+        .ticket(publisher.endpoint(), head_v2.manifest)
+        .to_string();
+
+    let installed_v2 = packages
+        .install_from_ticket(
+            &ticket_v2.parse()?,
+            consumer.endpoint(),
+            consumer.node().blob_store(),
+        )
+        .await?;
+    anyhow::ensure!(installed_v2.version == "2.0.0");
+
+    let state = packages.state()?;
+    let info = state
+        .current(collection_id)
+        .context("collection should be installed")?;
+    anyhow::ensure!(info.current == "2.0.0");
+    anyhow::ensure!(info.versions.contains_key("1.0.0"));
+    anyhow::ensure!(info.versions.contains_key("2.0.0"));
+
+    anyhow::ensure!(
+        std::fs::read(pkg_root.join("current/README.md"))? == b"v2 readme -- updated"
+    );
+    anyhow::ensure!(std::fs::read(pkg_root.join("current/bin/tool"))? == b"tool-v2");
+
+    anyhow::ensure!(std::fs::read(pkg_root.join("1.0.0/README.md"))? == b"v1 readme");
+    anyhow::ensure!(
+        std::fs::read(pkg_root.join("2.0.0/README.md"))? == b"v2 readme -- updated"
+    );
+
+    packages.verify(&installed_v1)?;
+    packages.verify(&installed_v2)?;
+
+    let initial_link = std::fs::read_link(pkg_root.join("current"))?;
+    anyhow::ensure!(initial_link == std::path::Path::new("2.0.0"));
+
+    packages.switch(collection_id, "1.0.0")?;
+    let switched_link = std::fs::read_link(pkg_root.join("current"))?;
+    anyhow::ensure!(switched_link == std::path::Path::new("1.0.0"));
+    anyhow::ensure!(std::fs::read(pkg_root.join("current/README.md"))? == b"v1 readme");
+
+    packages.switch(collection_id, "2.0.0")?;
+    let final_link = std::fs::read_link(pkg_root.join("current"))?;
+    anyhow::ensure!(final_link == std::path::Path::new("2.0.0"));
+
+    publisher.node().stop().await?;
+    consumer.node().stop().await?;
     Ok(())
 }

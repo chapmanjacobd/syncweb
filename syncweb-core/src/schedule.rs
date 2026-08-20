@@ -153,53 +153,97 @@ fn parse_clock(value: &str) -> Result<u16> {
     Ok(hour_value.saturating_mul(60).saturating_add(minute_value))
 }
 
-/// Parse a byte-per-second rate such as `5MB/s`, `500KB/s`, or `0`.
+/// Parse a byte-per-second rate such as `5MB/s`, `500KB/s`, `2M`, `500K`, or `0`.
+///
+/// The scale letter (`k`/`m`/`g`/`t`) is case-insensitive; the unit letter
+/// distinguishes bytes (`B`) from bits (`b`). So `5KB` is 5000 bytes while
+/// `5Kb` is 5000 bits (625 bytes), and bare scales such as `2M` mean bytes.
 ///
 /// # Errors
 ///
-/// Returns an error if the rate is not a whole number with a supported suffix.
+/// Returns an error if the rate is not a whole number of bytes per second
+/// with a supported suffix.
 pub fn parse_rate(value: &str) -> Result<Option<u64>> {
-    let normalized = value.trim().to_ascii_lowercase();
-    if normalized.is_empty() || normalized == "0" || normalized == "unlimited" {
+    let normalized = value.trim();
+    if normalized.is_empty() || normalized == "0" || normalized.eq_ignore_ascii_case("unlimited") {
         return Ok(None);
     }
-    let rate_number = normalized.strip_suffix("/s").unwrap_or(&normalized).trim();
-    let (numeric_part, multiplier) = split_rate_suffix(rate_number);
+    let rate_number = normalized
+        .strip_suffix("/s")
+        .or_else(|| normalized.strip_suffix("/S"))
+        .unwrap_or(normalized)
+        .trim();
+    let (numeric_part, multiplier, is_bytes) = split_rate_suffix(rate_number);
     let amount = numeric_part.trim().parse::<u64>().map_err(|error| {
         SyncwebError::InvalidConfig(format!(
-            "invalid bandwidth rate {value:?}; expected a whole number with an optional B/s suffix: {error}"
+            "invalid bandwidth rate {value:?}; expected a whole number with an optional B/s, KB/s, or Kb/s suffix: {error}"
         ))
     })?;
-    amount
-        .checked_mul(multiplier)
-        .map(Some)
-        .ok_or_else(|| SyncwebError::InvalidConfig(format!("bandwidth rate {value:?} is too large")))
+    let scaled = amount.checked_mul(multiplier);
+    if is_bytes {
+        scaled
+            .map(Some)
+            .ok_or_else(|| SyncwebError::InvalidConfig(format!("bandwidth rate {value:?} is too large")))
+    } else {
+        let bits =
+            scaled.ok_or_else(|| SyncwebError::InvalidConfig(format!("bandwidth rate {value:?} is too large")))?;
+        if bits.rem_euclid(8) != 0 {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "bandwidth rate {value:?} is not a whole number of bytes per second"
+            )));
+        }
+        Ok(Some(bits.checked_div(8).unwrap_or_default()))
+    }
 }
 
+/// Split a rate into its numeric prefix, scale multiplier, and whether the
+/// unit is bytes (true) or bits (false).
 #[must_use]
-fn split_rate_suffix(value: &str) -> (&str, u64) {
-    if let Some(stripped) = value.strip_suffix("kib") {
-        return (stripped, 1024_u64);
+fn split_rate_suffix(value: &str) -> (&str, u64, bool) {
+    let lower = value.to_ascii_lowercase();
+    for (suffix, multiplier) in [
+        ("tibit", 1_u64 << 40),
+        ("gibit", 1_u64 << 30),
+        ("mibit", 1_u64 << 20),
+        ("kibit", 1_u64 << 10),
+        ("tib", 1_u64 << 40),
+        ("gib", 1_u64 << 30),
+        ("mib", 1_u64 << 20),
+        ("kib", 1_u64 << 10),
+        ("tbit", 1_000_000_000_000_u64),
+        ("gbit", 1_000_000_000_u64),
+        ("mbit", 1_000_000_u64),
+        ("kbit", 1_000_u64),
+        ("tb", 1_000_000_000_000_u64),
+        ("gb", 1_000_000_000_u64),
+        ("mb", 1_000_000_u64),
+        ("kb", 1_000_u64),
+        ("bit", 1_u64),
+    ] {
+        if let Some(rest) = lower.strip_suffix(suffix) {
+            let is_bytes = if suffix.ends_with('t') {
+                false
+            } else {
+                matches!(value.as_bytes().last(), Some(b'B'))
+            };
+            return (&value[..rest.len()], multiplier, is_bytes);
+        }
     }
-    if let Some(stripped) = value.strip_suffix("mib") {
-        return (stripped, 1024_u64.saturating_mul(1024));
-    }
-    if let Some(stripped) = value.strip_suffix("gib") {
-        return (stripped, 1024_u64.saturating_mul(1024).saturating_mul(1024));
-    }
-    if let Some(stripped) = value.strip_suffix("kb") {
-        return (stripped, 1000_u64);
-    }
-    if let Some(stripped) = value.strip_suffix("mb") {
-        return (stripped, 1000_u64.saturating_mul(1000));
-    }
-    if let Some(stripped) = value.strip_suffix("gb") {
-        return (stripped, 1000_u64.saturating_mul(1000).saturating_mul(1000));
-    }
-    if let Some(stripped) = value.strip_suffix('b') {
-        return (stripped, 1);
-    }
-    (value, 1)
+    let is_bytes = !matches!(value.as_bytes().last(), Some(b'b'));
+    let (cut, multiplier) = if lower.ends_with('t') {
+        (value.len().saturating_sub(1), 1_000_000_000_000_u64)
+    } else if lower.ends_with('g') {
+        (value.len().saturating_sub(1), 1_000_000_000_u64)
+    } else if lower.ends_with('m') {
+        (value.len().saturating_sub(1), 1_000_000_u64)
+    } else if lower.ends_with('k') {
+        (value.len().saturating_sub(1), 1_000_u64)
+    } else if lower.ends_with('b') {
+        (value.len().saturating_sub(1), 1_u64)
+    } else {
+        (value.len(), 1_u64)
+    };
+    (&value[..cut], multiplier, is_bytes)
 }
 
 /// A parsed bandwidth window.
@@ -389,4 +433,71 @@ pub(crate) fn current_minute() -> u16 {
         .map_or(0, |duration| duration.as_secs());
     let day_seconds = seconds % 86_400;
     u16::try_from(day_seconds.div_euclid(60)).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::ensure;
+
+    #[test]
+    fn parse_rate_accepts_bare_scale_suffixes() -> anyhow::Result<()> {
+        ensure!(parse_rate("500K")? == Some(500_000), "500K should be 500_000");
+        ensure!(parse_rate("2M")? == Some(2_000_000), "2M should be 2_000_000");
+        ensure!(parse_rate("1G")? == Some(1_000_000_000), "1G should be 1_000_000_000");
+        ensure!(parse_rate("2m/s")? == Some(2_000_000), "2m/s should be 2_000_000");
+        ensure!(
+            parse_rate("2T")? == Some(2_000_000_000_000),
+            "2T should be 2_000_000_000_000"
+        );
+        ensure!(parse_rate("0")?.is_none(), "0 should be unlimited");
+        ensure!(parse_rate("unlimited")?.is_none(), "unlimited should be unlimited");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_rate_preserves_existing_suffixes() -> anyhow::Result<()> {
+        ensure!(parse_rate("5MB/s")? == Some(5_000_000), "5MB/s should be 5_000_000");
+        ensure!(parse_rate("2MiB")? == Some(2_097_152), "2MiB should be 2_097_152");
+        ensure!(parse_rate("3KiB")? == Some(3_072), "3KiB should be 3_072");
+        ensure!(parse_rate("250B")? == Some(250), "250B should be 250");
+        ensure!(parse_rate("4096")? == Some(4096), "plain number should be bytes");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_rate_distinguishes_bytes_from_bits() -> anyhow::Result<()> {
+        ensure!(parse_rate("5KB")? == Some(5000), "5KB should be 5000 bytes");
+        ensure!(parse_rate("5Kb")? == Some(625), "5Kb should be 5000 bits = 625 bytes");
+        ensure!(parse_rate("1MB")? == Some(1_000_000), "1MB should be 1_000_000 bytes");
+        ensure!(
+            parse_rate("1Mb")? == Some(125_000),
+            "1Mb should be 1_000_000 bits = 125_000 bytes"
+        );
+        ensure!(parse_rate("2Mbit")? == Some(250_000), "2Mbit should be 250_000 bytes");
+        ensure!(parse_rate("5kb/s")? == Some(625), "5kb/s should be 625 bytes");
+        ensure!(parse_rate("8b")? == Some(1), "8b should be 1 byte");
+        ensure!(parse_rate("1b").is_err(), "1 bit should not be a whole byte");
+        ensure!(
+            parse_rate("2TB")? == Some(2_000_000_000_000),
+            "2TB should be 2 TB bytes"
+        );
+        ensure!(
+            parse_rate("2Tb")? == Some(250_000_000_000),
+            "2Tb should be 2 TB bits = 250 GB bytes"
+        );
+        ensure!(
+            parse_rate("1TiB")? == Some(1_099_511_627_776),
+            "1TiB should be 2^40 bytes"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_rate_rejects_invalid_values() -> anyhow::Result<()> {
+        ensure!(parse_rate("banana").is_err(), "non-numeric rate should fail");
+        ensure!(parse_rate("-2M").is_err(), "negative rate should fail");
+        ensure!(parse_rate("M").is_err(), "bare suffix should fail");
+        Ok(())
+    }
 }

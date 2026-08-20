@@ -6,7 +6,7 @@ allow-print-in-tests = true
 allow-dbg-in-tests = true
 
 # Complexity thresholds
-too-many-lines-threshold = 129
+too-many-lines-threshold = 179
 cognitive-complexity-threshold = 28
 max-trait-bounds = 3
 

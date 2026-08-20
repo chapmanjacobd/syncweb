@@ -358,6 +358,33 @@ impl StatsDatabase {
         })
     }
 
+    /// Delete all persisted bandwidth counters and transfer events across every
+    /// period, zeroing the totals reported by [`Self::current_stats`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub fn reset_bandwidth(&self) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
+        connection
+            .execute("DELETE FROM bandwidth_events", [])
+            .map_err(|error| SyncwebError::operation("failed to clear bandwidth events", error))?;
+        connection
+            .execute("DELETE FROM bandwidth_folder", [])
+            .map_err(|error| SyncwebError::operation("failed to clear folder bandwidth", error))?;
+        connection
+            .execute("DELETE FROM bandwidth_peer", [])
+            .map_err(|error| SyncwebError::operation("failed to clear peer bandwidth", error))?;
+        connection
+            .execute("DELETE FROM bandwidth_period", [])
+            .map_err(|error| SyncwebError::operation("failed to clear bandwidth periods", error))?;
+        drop(connection);
+        Ok(())
+    }
+
     /// Append a daemon log entry.
     ///
     /// # Errors

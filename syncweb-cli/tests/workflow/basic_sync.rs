@@ -472,3 +472,156 @@ fn leave_default_keeps_files() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn network_events_and_health() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let create = alice.run_ok(&["--json", "network", "create", "team"])?;
+    let created: serde_json::Value = serde_json::from_str(&create.stdout()).context("parse network create JSON")?;
+    let id = created
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .context("network id missing from create output")?;
+
+    alice.run_ok(&["network", "invite", "team"])?;
+
+    let events = alice.run_ok(&["network", "events", id, "--limit", "5"])?;
+    ensure!(
+        events.stdout().contains("Events for network"),
+        "should print events header: {}",
+        events.stdout()
+    );
+    ensure!(
+        events.stdout().contains("member_added"),
+        "should list member_added event: {}",
+        events.stdout()
+    );
+    ensure!(
+        events.stdout().contains("ticket_created"),
+        "should list ticket_created event: {}",
+        events.stdout()
+    );
+
+    let health = alice.run_ok(&["network", "health", "--network", id])?;
+    ensure!(
+        health.stdout().contains("events:"),
+        "should report event count: {}",
+        health.stdout()
+    );
+    ensure!(
+        health.stdout().contains("sessions:"),
+        "should report session count: {}",
+        health.stdout()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stats_files_by_and_top_largest() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("stats-files");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("small.txt"), b"s")?;
+    alice.write_file(&folder_dir.join("medium.txt"), &[0_u8; 2048])?;
+    alice.write_file(&folder_dir.join("large.txt"), &[0_u8; 4096])?;
+    alice.import(&folder_dir)?;
+
+    let report = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "stats",
+        "files",
+        "--folder",
+        &info.namespace,
+        "--by",
+        "size",
+        "--top-largest",
+        "2",
+    ])?;
+    let value: serde_json::Value = serde_json::from_str(&report.stdout()).context("parse stats files JSON")?;
+    ensure!(
+        value.get("total_files") == Some(&serde_json::Value::from(3)),
+        "should count 3 files: {value}"
+    );
+    let largest = value
+        .get("largest_files")
+        .and_then(serde_json::Value::as_array)
+        .context("largest_files should be an array")?;
+    ensure!(largest.len() == 2, "should list 2 largest files: {value}");
+    let first = largest.first().context("largest_files is empty")?;
+    ensure!(
+        first.get(0).and_then(serde_json::Value::as_str) == Some("large.txt"),
+        "largest file should be large.txt: {value}"
+    );
+    ensure!(
+        first.get(1).and_then(serde_json::Value::as_u64) == Some(4096),
+        "largest file size should be 4096: {value}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stats_seeding_with_content_filter() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("stats-seeding");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"seeding content")?;
+    alice.import(&folder_dir)?;
+
+    let base = alice.run_ok(&["--json", "--no-daemon", "stats", "seeding", "--folder", &info.namespace])?;
+    let base_json: serde_json::Value = serde_json::from_str(&base.stdout()).context("parse stats seeding JSON")?;
+    ensure!(
+        base_json.get("total") == Some(&serde_json::Value::from(1)),
+        "should report 1 blob: {base_json}"
+    );
+    let hash = base_json
+        .get("least_seeded")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|a| a.first())
+        .and_then(|b| b.get("hash"))
+        .and_then(serde_json::Value::as_str)
+        .context("seeding report missing hash")?;
+
+    let filtered = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "stats",
+        "seeding",
+        "--folder",
+        &info.namespace,
+        "--hash",
+        hash,
+    ])?;
+    let filtered_json: serde_json::Value =
+        serde_json::from_str(&filtered.stdout()).context("parse filtered stats seeding JSON")?;
+    ensure!(
+        filtered_json.get("total") == Some(&serde_json::Value::from(1)),
+        "matching hash should keep the blob: {filtered_json}"
+    );
+
+    let none = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "stats",
+        "seeding",
+        "--folder",
+        &info.namespace,
+        "--glob",
+        "*.md",
+    ])?;
+    let none_json: serde_json::Value = serde_json::from_str(&none.stdout()).context("parse glob stats seeding JSON")?;
+    ensure!(
+        none_json.get("total") == Some(&serde_json::Value::from(0)),
+        "non-matching glob should filter everything out: {none_json}"
+    );
+
+    Ok(())
+}

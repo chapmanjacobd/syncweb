@@ -40,7 +40,7 @@ use syncweb_core::{
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::{InitResult, open_node},
     mirror::{MirrorContext, MirrorEvent, MirrorOptions, mirror_network, mirror_provider},
-    net::{NetworkManager, NetworkOptions, TransportFallback},
+    net::{NetworkLogger, NetworkManager, NetworkOptions, TransportFallback},
     node::{
         identity::{DeviceId, IdentityManager},
         iroh_node::IrohNode,
@@ -2007,7 +2007,11 @@ fn handle_stats_network(ctx: &CliContext<'_>, command: StatsNetworkArgs) -> Resu
     if let Some(period) = command.period {
         parse_period(&period)?;
     }
-    let stats = open_stats_db(data_dir)?.current_stats()?;
+    let stats_db = open_stats_db(data_dir)?;
+    if command.reset {
+        stats_db.reset_bandwidth()?;
+    }
+    let stats = stats_db.current_stats()?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
         return Ok(());
@@ -2095,7 +2099,7 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
         let IpcResponse::FileStats(report) = response else {
             return print_daemon_message(response, output_json);
         };
-        print_file_stats_report(&report, &command.by, output_json)?;
+        print_file_stats_report(&report, &command.by, command.top_largest, output_json)?;
         return Ok(());
     }
 
@@ -2113,7 +2117,7 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
     }
     let report = collector.report();
 
-    print_file_stats_report(&report, &command.by, output_json)?;
+    print_file_stats_report(&report, &command.by, command.top_largest, output_json)?;
 
     node.stop().await?;
     Ok(())
@@ -2122,10 +2126,15 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
 fn print_file_stats_report(
     report: &syncweb_core::bandwidth_stats::FileStatsReport,
     by: &str,
+    top_largest: Option<usize>,
     output_json: bool,
 ) -> Result<()> {
     if output_json {
-        println!("{}", serde_json::to_string_pretty(report)?);
+        let mut trimmed = report.clone();
+        if let Some(limit) = top_largest {
+            trimmed.largest_files.truncate(limit);
+        }
+        println!("{}", serde_json::to_string_pretty(&trimmed)?);
         return Ok(());
     }
     println!("total_files: {}", report.total_files);
@@ -2156,6 +2165,19 @@ fn print_file_stats_report(
         for (label, count) in &report.time_buckets {
             println!("  {label:10} {count:>8} files");
         }
+    }
+
+    if let Some(limit) = top_largest
+        && !report.largest_files.is_empty()
+    {
+        println!();
+        println!("largest files:");
+        let mut table = Table::new();
+        table.set_header(["Size", "Path"]);
+        for (path, size) in report.largest_files.iter().take(limit) {
+            table.add_row([&format_bytes(*size), path.as_str()]);
+        }
+        println!("{table}");
     }
     Ok(())
 }
@@ -3939,7 +3961,8 @@ fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
     let empty_keys = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
-    Ok(NetworkManager::new(db, identity.node_id(), empty_keys)?)
+    let logger = NetworkLogger::new(open_stats_db(data_dir)?);
+    Ok(NetworkManager::with_logger(db, identity.node_id(), logger, empty_keys)?)
 }
 
 fn network_id_by_name(manager: &NetworkManager, name: &str) -> Result<syncweb_core::net::NetworkId> {

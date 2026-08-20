@@ -148,6 +148,8 @@ pub struct FileStatsReport {
     /// Age distribution of entry insertion timestamps.
     /// Labels: <24h, 1d-7d, 7d-30d, 1m-1y, >1y, unknown.
     pub time_buckets: BTreeMap<String, u64>,
+    /// Largest files by size (relative path, bytes), descending.
+    pub largest_files: Vec<(String, u64)>,
 }
 
 /// Collects file-level statistics from existing metadata (doc entries).
@@ -160,6 +162,7 @@ pub struct FileStatsCollector {
     /// Entry insertion timestamps in microseconds since Unix epoch.
     /// `None` when the timestamp was not provided.
     timestamps: Vec<Option<u64>>,
+    largest_files: Vec<(String, u64)>,
 }
 
 impl FileStatsCollector {
@@ -180,6 +183,10 @@ impl FileStatsCollector {
         group.count = group.count.saturating_add(1);
         group.total_size = group.total_size.saturating_add(size);
         self.sizes.push(size);
+        self.largest_files.push((path.to_owned(), size));
+        self.largest_files
+            .sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        self.largest_files.truncate(100);
     }
 
     /// Attempt to record an entry key stored as raw bytes (UTF-8).  Non-UTF-8 keys are silently skipped.
@@ -254,6 +261,7 @@ impl FileStatsCollector {
             by_extension: self.extensions.clone(),
             size_buckets,
             time_buckets,
+            largest_files: self.largest_files.clone(),
         }
     }
 }

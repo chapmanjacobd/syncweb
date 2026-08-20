@@ -336,6 +336,172 @@ fn syncweb(args: &[&str]) -> anyhow::Result<std::process::Output> {
 }
 
 #[test]
+fn stats_network_filters_and_reset() -> anyhow::Result<()> {
+    let directory = cli_test_dir("stats-network-filter");
+    let data_dir = directory.to_str().context("UTF-8 path")?;
+
+    let stats_db = syncweb_core::storage::stats_db::StatsDatabase::open(directory.join("default").join("stats.db"))?;
+    stats_db.record_download(1024, 1, Some("folderA"), Some("peer1"), None)?;
+    stats_db.record_download(2048, 2, Some("folderA"), Some("peer1"), None)?;
+    stats_db.record_upload(512, 1, Some("folderA"), Some("peer1"), None)?;
+    drop(stats_db);
+
+    let before = syncweb(&["--data-dir", data_dir, "--json", "stats", "network"])?;
+    ensure!(
+        before.status.success(),
+        "stats network before reset: {}",
+        String::from_utf8_lossy(&before.stderr)
+    );
+    let before_json: serde_json::Value = serde_json::from_slice(&before.stdout)?;
+    ensure!(
+        before_json.get("total_download") == Some(&serde_json::Value::from(3072)),
+        "total_download before reset: {before_json}"
+    );
+
+    let filtered = syncweb(&[
+        "--data-dir",
+        data_dir,
+        "stats",
+        "network",
+        "--folder",
+        "folderA",
+        "--peer",
+        "peer1",
+        "--period",
+        "1d",
+    ])?;
+    ensure!(
+        filtered.status.success(),
+        "stats network with filters: {}",
+        String::from_utf8_lossy(&filtered.stderr)
+    );
+    let filtered_out = String::from_utf8(filtered.stdout)?;
+    ensure!(
+        filtered_out.contains("total_download"),
+        "filtered stats output: {filtered_out}"
+    );
+
+    let reset = syncweb(&["--data-dir", data_dir, "--json", "stats", "network", "--reset"])?;
+    ensure!(
+        reset.status.success(),
+        "stats network --reset: {}",
+        String::from_utf8_lossy(&reset.stderr)
+    );
+    let after: serde_json::Value = serde_json::from_slice(&reset.stdout)?;
+    ensure!(
+        after.get("total_download") == Some(&serde_json::Value::from(0)),
+        "total_download after reset: {after}"
+    );
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn config_schedule_bandwidth_and_period() -> anyhow::Result<()> {
+    let directory = cli_test_dir("config-schedule-bandwidth");
+    let data_dir = directory.to_str().context("UTF-8 path")?;
+
+    let set = syncweb(&[
+        "--data-dir",
+        data_dir,
+        "config",
+        "schedule",
+        "set",
+        "--active",
+        "08:00-18:00",
+        "--bandwidth",
+        "2M",
+        "--period",
+        "08:00-18:00",
+    ])?;
+    ensure!(
+        set.status.success(),
+        "config schedule set bandwidth: {}",
+        String::from_utf8_lossy(&set.stderr)
+    );
+
+    let show = syncweb(&["--data-dir", data_dir, "config", "show", "schedule"])?;
+    ensure!(show.status.success());
+    let stdout = String::from_utf8(show.stdout)?;
+    ensure!(
+        stdout.contains("08:00-18:00"),
+        "schedule active hours persisted: {stdout}"
+    );
+    ensure!(stdout.contains("2M"), "schedule bandwidth rate persisted: {stdout}");
+    ensure!(stdout.contains("[[bandwidth]]"), "bandwidth window persisted: {stdout}");
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn config_schedule_folder_override() -> anyhow::Result<()> {
+    let directory = cli_test_dir("config-schedule-folder");
+    let data_dir = directory.to_str().context("UTF-8 path")?;
+
+    let set = syncweb(&[
+        "--data-dir",
+        data_dir,
+        "config",
+        "schedule",
+        "folder",
+        "project",
+        "--active",
+        "09:00-17:00",
+        "--max-upload",
+        "500K",
+        "--max-download",
+        "1M",
+    ])?;
+    ensure!(
+        set.status.success(),
+        "config schedule folder: {}",
+        String::from_utf8_lossy(&set.stderr)
+    );
+
+    let show = syncweb(&["--data-dir", data_dir, "config", "show", "schedule"])?;
+    ensure!(show.status.success());
+    let stdout = String::from_utf8(show.stdout)?;
+    ensure!(
+        stdout.contains("[folders.project]"),
+        "folder override persisted: {stdout}"
+    );
+    ensure!(stdout.contains("500K"), "max_upload persisted: {stdout}");
+    ensure!(stdout.contains("1M"), "max_download persisted: {stdout}");
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn config_no_subcommand_prints_full_toml() -> anyhow::Result<()> {
+    let directory = cli_test_dir("config-full-toml");
+    let data_dir = directory.to_str().context("UTF-8 path")?;
+
+    let output = syncweb(&["--data-dir", data_dir, "config"])?;
+    ensure!(
+        output.status.success(),
+        "bare config: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout)?;
+    ensure!(stdout.contains("auto_fallback"), "should print bep settings: {stdout}");
+    ensure!(stdout.contains("[schedule]"), "should print schedule section: {stdout}");
+    ensure!(
+        stdout.contains("[discovery]"),
+        "should print discovery section: {stdout}"
+    );
+    ensure!(
+        stdout.contains("[subscribe.folders]"),
+        "should print subscribe section: {stdout}"
+    );
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
 fn test_ls_streaming() -> anyhow::Result<()> {
     let source = cli_test_dir("ls-streaming");
     std::fs::create_dir_all(source.join("sub")).context("create dirs")?;

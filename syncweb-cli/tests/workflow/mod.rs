@@ -1,4 +1,6 @@
 mod basic_sync;
+mod indexing;
+mod transfer;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -173,12 +175,10 @@ impl Device {
         self.run_ok(&["--no-daemon", "verify", path.to_str().context("UTF-8 path")?])
     }
 
-    #[expect(dead_code, reason = "part of DSL public API")]
     pub fn config_show(&self) -> anyhow::Result<CmdOutput> {
         self.run_ok(&["config", "show"])
     }
 
-    #[expect(dead_code, reason = "part of DSL public API")]
     pub fn config_set(&self, key: &str, value: &str) -> anyhow::Result<CmdOutput> {
         self.run_ok(&["config", "set", key, value])
     }
@@ -291,7 +291,6 @@ impl Device {
         self.run_ok(&["db", "check"])
     }
 
-    #[expect(dead_code, reason = "part of DSL public API")]
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
     }
@@ -326,7 +325,6 @@ impl World {
         })
     }
 
-    #[expect(dead_code, reason = "part of DSL public API")]
     pub fn devices(&self) -> &[Device] {
         &self.devices
     }

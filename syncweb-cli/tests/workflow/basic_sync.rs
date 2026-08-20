@@ -100,14 +100,73 @@ fn create_with_mode() -> anyhow::Result<()> {
 }
 
 #[test]
-fn config_round_trip() -> anyhow::Result<()> {
+fn config_set_and_show_via_helpers() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let _ = alice.run_ok(&["config", "set", "bep.enabled", "true"])?;
+    let _ = alice.config_set("bep.enabled", "true")?;
 
-    let show = alice.run_ok(&["config", "show"])?;
+    let show = alice.config_show()?;
     ensure!(show.stdout().contains("bep"), "should show bep: {}", show.stdout());
+
+    Ok(())
+}
+
+#[test]
+fn data_dir_helper_exposes_isolated_dir() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    ensure!(
+        alice.data_dir() == world.root().join("data-alice"),
+        "alice data dir should be <root>/data-alice: {}",
+        alice.data_dir().display()
+    );
+    ensure!(
+        alice.data_dir().is_dir(),
+        "alice data dir should exist: {}",
+        alice.data_dir().display()
+    );
+
+    ensure!(
+        bob.data_dir() == world.root().join("data-bob"),
+        "bob data dir should be <root>/data-bob: {}",
+        bob.data_dir().display()
+    );
+    ensure!(
+        alice.data_dir() != bob.data_dir(),
+        "devices should have distinct data dirs"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn multi_device_sync_workflow() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    ensure!(
+        world.devices().iter().any(|d| d.name() == "alice") && world.devices().iter().any(|d| d.name() == "bob"),
+        "world.devices() should expose both devices"
+    );
+    ensure!(world.devices().len() == 2, "world.devices() should report both devices");
+
+    let folder_dir_a = world.root().join("alice-sync");
+    let info = alice.create(&folder_dir_a)?;
+    alice.write_file(&folder_dir_a.join("note.txt"), b"synced note")?;
+    alice.import(&folder_dir_a)?;
+
+    let folder_dir_b = world.root().join("bob-sync");
+    bob.join(&info.ticket, &folder_dir_b)?;
+
+    let folders = bob.folders()?;
+    ensure!(
+        folders.iter().any(|f| f.contains(&info.namespace)),
+        "bob should see the joined folder: {folders:?}"
+    );
 
     Ok(())
 }

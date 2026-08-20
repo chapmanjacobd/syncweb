@@ -1,8 +1,5 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-};
+use std::fs;
+use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 use ed25519_dalek::SigningKey;
@@ -11,106 +8,84 @@ use iroh_docs::NamespaceId;
 use serde_json::Value;
 use syncweb_core::indexing::denylist::{DenylistRule, FilterList};
 
+use super::*;
+
 const CONTENT_HASH: &str = "26209f835986cd30d5925b3bdbd30358d6d7ae1ea0f863ab69b9c40c2b91b18a";
 
-fn data_dir(test_name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("syncweb-indexing-{test_name}-{}", uuid::Uuid::new_v4()))
+fn run(device: &Device, args: &[&str]) -> Result<CmdOutput> {
+    let mut all = vec!["--no-daemon"];
+    all.extend_from_slice(args);
+    device.run_ok(&all)
 }
 
-fn run(data_dir: &Path, args: &[&str]) -> Result<Output> {
-    let data_dir_arg = data_dir.to_str().context("data directory is not UTF-8")?;
-    Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "--no-daemon"])
-        .args(args)
-        .output()
-        .with_context(|| format!("run syncweb {args:?}"))
-}
-
-fn assert_success(output: &Output, command: &str) -> Result<()> {
-    ensure!(
-        output.status.success(),
-        "{command} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-fn json_output(output: &Output) -> Result<Value> {
-    serde_json::from_slice(&output.stdout).context("parse JSON output")
+fn json_output(output: &CmdOutput) -> Result<Value> {
+    serde_json::from_str(&output.stdout()).context("parse JSON output")
 }
 
 #[test]
 fn indexing_enable_disable_uses_persistent_folder_namespace() -> Result<()> {
-    let data_dir = data_dir("enable-disable");
-    let folder = data_dir.join("folder");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("folder");
     fs::create_dir_all(&folder)?;
 
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
         .as_str()
-        .context("create namespace is not a string")?
+        .context("namespace is not a string")?
         .to_owned();
 
-    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
-    assert_success(&enabled, "indexing enable")?;
-    ensure!(String::from_utf8_lossy(&enabled.stdout).contains("enabled:"));
+    let enabled = run(alice, &["indexing", "enable", &namespace])?;
+    ensure!(enabled.stdout().contains("enabled:"));
 
-    let disabled = run(&data_dir, &["indexing", "disable", &namespace])?;
-    assert_success(&disabled, "indexing disable")?;
-    ensure!(String::from_utf8_lossy(&disabled.stdout).contains("disabled:"));
+    let disabled = run(alice, &["indexing", "disable", &namespace])?;
+    ensure!(disabled.stdout().contains("disabled:"));
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn mutable_links_advance_sequences_across_processes() -> Result<()> {
-    let data_dir = data_dir("mutable-links");
-    let first = run(&data_dir, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
-    assert_success(&first, "first mutable link")?;
-    let link = String::from_utf8(first.stdout)?
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let first = run(alice, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
+    let link = first
+        .stdout()
         .lines()
         .find_map(|line| line.strip_prefix("link: "))
         .context("mutable link output missing link")?
         .to_owned();
 
-    let second = run(&data_dir, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
-    assert_success(&second, "second mutable link")?;
+    let _second = run(alice, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
 
-    let resolved = run(&data_dir, &["--json", "link", "resolve", &link])?;
-    assert_success(&resolved, "mutable link resolve")?;
+    let resolved = run(alice, &["--json", "link", "resolve", &link])?;
     ensure!(json_output(&resolved)?.get("sequence") == Some(&Value::from(2)));
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn attest_report_and_moderation_state_persist() -> Result<()> {
-    let data_dir = data_dir("moderation");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
-    let attested = run(&data_dir, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
-    assert_success(&attested, "attest")?;
+    let _attested = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
 
-    let reported = run(
-        &data_dir,
+    let _reported = run(
+        alice,
         &["moderation", "report", CONTENT_HASH, "--reason", "test report"],
     )?;
-    assert_success(&reported, "moderation report")?;
 
-    let hidden = run(&data_dir, &["moderation", "hide", CONTENT_HASH])?;
-    assert_success(&hidden, "moderation hide")?;
+    let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
 
-    let listed = run(&data_dir, &["--json", "moderation", "ls"])?;
-    assert_success(&listed, "moderation ls")?;
+    let listed = run(alice, &["--json", "moderation", "ls"])?;
     ensure!(json_output(&listed)?.as_array().is_some_and(|items| items.len() == 1));
 
-    let trust_output = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
-    assert_success(&trust_output, "trust show")?;
+    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     let trust = json_output(&trust_output)?;
     ensure!(trust.get("moderation") == Some(&Value::from("hide")));
     ensure!(
@@ -120,19 +95,18 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
             .is_some_and(|items| items.len() == 1)
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_publish_and_search_round_trip() -> Result<()> {
-    let data_dir = data_dir("publish-search");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -140,32 +114,25 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
-    assert_success(&enabled, "indexing enable")?;
+    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
-    let published = run(
-        &data_dir,
-        &["publish", "catalog", &namespace, "--catalog", "test-catalog"],
-    )?;
-    assert_success(&published, "publish catalog")?;
-    let stdout = String::from_utf8_lossy(&published.stdout).to_string();
+    let published = run(alice, &["publish", "catalog", &namespace, "--catalog", "test-catalog"])?;
     ensure!(
-        stdout.contains("published:"),
+        published.stdout().contains("published:"),
         "publish output should confirm publication"
     );
 
-    let searched = run(&data_dir, &["indexing", "search", "test"])?;
-    assert_success(&searched, "indexing search")?;
+    let _searched = run(alice, &["indexing", "search", "test"])?;
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_health_checks_verified_providers() -> Result<()> {
-    let data_dir = data_dir("health");
-    let output = run(&data_dir, &["--json", "indexing", "health", CONTENT_HASH])?;
-    assert_success(&output, "indexing health")?;
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let output = run(alice, &["--json", "indexing", "health", CONTENT_HASH])?;
     let health = json_output(&output)?;
     ensure!(health.get("hash").is_some(), "health should report hash");
     ensure!(
@@ -173,30 +140,28 @@ fn indexing_health_checks_verified_providers() -> Result<()> {
         "new hash should have zero verified providers"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_filter_add_persists_rule() -> Result<()> {
-    let data_dir = data_dir("filter-add");
-    let added = run(&data_dir, &["indexing", "filter", "add", "hash", CONTENT_HASH])?;
-    assert_success(&added, "indexing filter add")?;
-    let stdout = String::from_utf8_lossy(&added.stdout).to_string();
-    ensure!(stdout.contains("added:"), "filter add should confirm addition");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
-    let added_file = run(&data_dir, &["indexing", "filter", "add", "file", "*.mp4"])?;
-    assert_success(&added_file, "indexing filter add file")?;
+    let added = run(alice, &["indexing", "filter", "add", "hash", CONTENT_HASH])?;
+    ensure!(added.stdout().contains("added:"), "filter add should confirm addition");
 
-    fs::remove_dir_all(data_dir)?;
+    let _added_file = run(alice, &["indexing", "filter", "add", "file", "*.mp4"])?;
+
     Ok(())
 }
 
 #[test]
 fn link_create_private_and_revoke() -> Result<()> {
-    let data_dir = data_dir("link-revoke");
-    let created = run(&data_dir, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
-    assert_success(&created, "link create --private")?;
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let created = run(alice, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
     let link = json_output(&created)?
         .get("link")
         .context("link output missing link")?
@@ -208,31 +173,29 @@ fn link_create_private_and_revoke() -> Result<()> {
         "private link should use capability URI"
     );
 
-    let revoked = run(&data_dir, &["link", "revoke", &link])?;
-    assert_success(&revoked, "link revoke")?;
-    let stdout = String::from_utf8_lossy(&revoked.stdout).to_string();
-    ensure!(stdout.contains("revoked:"), "revoke output should confirm revocation");
+    let revoked = run(alice, &["link", "revoke", &link])?;
+    ensure!(
+        revoked.stdout().contains("revoked:"),
+        "revoke output should confirm revocation"
+    );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_delegate_and_show() -> Result<()> {
-    let data_dir = data_dir("trust-delegate");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let new_key = iroh::SecretKey::generate().public();
     let new_key_hex = new_key.to_string();
 
-    let delegated = run(&data_dir, &["trust", "delegate", &new_key.to_string()])?;
-    assert_success(&delegated, "trust delegate")?;
-    let stdout = String::from_utf8_lossy(&delegated.stdout).to_string();
+    let delegated = run(alice, &["trust", "delegate", &new_key.to_string()])?;
     ensure!(
-        stdout.contains("delegated:"),
+        delegated.stdout().contains("delegated:"),
         "delegate output should confirm delegation"
     );
 
-    let shown = run(&data_dir, &["--json", "trust", "show", &new_key_hex])?;
-    assert_success(&shown, "trust show")?;
+    let shown = run(alice, &["--json", "trust", "show", &new_key_hex])?;
     let trust = json_output(&shown)?;
     let trust_value = trust.get("trust").and_then(Value::as_str);
     ensure!(
@@ -240,29 +203,23 @@ fn trust_delegate_and_show() -> Result<()> {
         "delegated publisher should be trusted, got {trust_value:?}"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_meta_add_persists_metadata() -> Result<()> {
-    let data_dir = data_dir("meta-add");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
     let added = run(
-        &data_dir,
+        alice,
         &["indexing", "meta", "add", CONTENT_HASH, "title", "test content"],
     )?;
-    assert_success(&added, "indexing meta add")?;
-    let stdout = String::from_utf8_lossy(&added.stdout).to_string();
-    ensure!(stdout.contains("metadata:"), "meta add should confirm metadata");
+    ensure!(added.stdout().contains("metadata:"), "meta add should confirm metadata");
 
-    let added_second = run(
-        &data_dir,
-        &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"],
-    )?;
-    assert_success(&added_second, "indexing meta add second")?;
+    let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
 
-    let shown = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
-    assert_success(&shown, "trust show after meta add")?;
+    let shown = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     let trust = json_output(&shown)?;
     ensure!(
         trust
@@ -272,28 +229,21 @@ fn indexing_meta_add_persists_metadata() -> Result<()> {
         "trust show should list two metadata entries"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
-    let data_dir = data_dir("provider-trust");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let provider = iroh::SecretKey::generate().public().to_string();
 
-    let vouched = run(&data_dir, &["trust", "provider", "vouch", &provider])?;
-    assert_success(&vouched, "trust provider vouch")?;
-    let shown = run(&data_dir, &["--json", "trust", "provider", "show", &provider])?;
-    assert_success(&shown, "trust provider show")?;
+    let _vouched = run(alice, &["trust", "provider", "vouch", &provider])?;
+    let shown = run(alice, &["--json", "trust", "provider", "show", &provider])?;
     ensure!(json_output(&shown)?.get("trust") == Some(&Value::from("trusted")));
 
-    let banned = run(
-        &data_dir,
-        &["trust", "provider", "ban", &provider, "--reason", "test ban"],
-    )?;
-    assert_success(&banned, "trust provider ban")?;
-    let listed = run(&data_dir, &["--json", "trust", "provider", "list"])?;
-    assert_success(&listed, "trust provider list")?;
+    let _banned = run(alice, &["trust", "provider", "ban", &provider, "--reason", "test ban"])?;
+    let listed = run(alice, &["--json", "trust", "provider", "list"])?;
     ensure!(
         json_output(&listed)?
             .as_array()
@@ -303,12 +253,9 @@ fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
             .is_some_and(|items| items.len() == 1)
     );
 
-    let distrusted = run(&data_dir, &["trust", "provider", "distrust", &provider])?;
-    assert_success(&distrusted, "trust provider distrust")?;
-    let unbanned = run(&data_dir, &["trust", "provider", "unban", &provider])?;
-    assert_success(&unbanned, "trust provider unban")?;
-    let final_state = run(&data_dir, &["--json", "trust", "provider", "show", &provider])?;
-    assert_success(&final_state, "trust provider final show")?;
+    let _distrusted = run(alice, &["trust", "provider", "distrust", &provider])?;
+    let _unbanned = run(alice, &["trust", "provider", "unban", &provider])?;
+    let final_state = run(alice, &["--json", "trust", "provider", "show", &provider])?;
     let final_state_json = json_output(&final_state)?;
     ensure!(final_state_json.get("trust") == Some(&Value::from("distrusted")));
     ensure!(
@@ -318,25 +265,26 @@ fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
             .is_some_and(Vec::is_empty)
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
-    let publisher_dir = data_dir("trust-stream-publisher");
-    let subscriber_dir = data_dir("trust-stream-subscriber");
+    let world = World::new(&["publisher", "subscriber"])?;
+    let publisher_node = world.device("publisher")?;
+    let subscriber_node = world.device("subscriber")?;
     let provider = iroh::SecretKey::generate().public().to_string();
-    let devices = run(&publisher_dir, &["devices"])?;
-    assert_success(&devices, "publisher devices")?;
-    let reporter = String::from_utf8(devices.stdout)?
+
+    let devices = run(publisher_node, &["devices"])?;
+    let reporter = devices
+        .stdout()
         .lines()
         .find_map(|line| line.strip_prefix("iroh: "))
         .context("publisher identity missing")?
         .to_owned();
 
     let published = run(
-        &publisher_dir,
+        publisher_node,
         &[
             "--json",
             "trust",
@@ -348,21 +296,16 @@ fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
             "failure",
         ],
     )?;
-    assert_success(&published, "trust stream publish")?;
     let ticket = json_output(&published)?
         .get("ticket")
         .and_then(Value::as_str)
         .context("trust stream ticket missing")?
         .to_owned();
 
-    let delegated = run(&subscriber_dir, &["trust", "delegate", &reporter])?;
-    assert_success(&delegated, "delegate trust stream reporter")?;
-    let subscribed = run(&subscriber_dir, &["--json", "trust", "stream", "subscribe", &ticket])?;
-    assert_success(&subscribed, "trust stream subscribe")?;
+    let _delegated = run(subscriber_node, &["trust", "delegate", &reporter])?;
+    let subscribed = run(subscriber_node, &["--json", "trust", "stream", "subscribe", &ticket])?;
     ensure!(json_output(&subscribed)?.get("accepted") == Some(&Value::from(1)));
 
-    fs::remove_dir_all(publisher_dir)?;
-    fs::remove_dir_all(subscriber_dir)?;
     Ok(())
 }
 
@@ -372,15 +315,15 @@ fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
 
 #[test]
 fn publish_blob_and_unpublish_round_trip() -> Result<()> {
-    let data_dir = data_dir("publish-blob");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     let file = folder.join("hello.txt");
     fs::write(&file, b"hello publish blob")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -388,8 +331,8 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let imported = run(
-        &data_dir,
+    let _imported = run(
+        alice,
         &[
             "import",
             file.to_str().context("file path is not UTF-8")?,
@@ -397,40 +340,36 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
             &namespace,
         ],
     )?;
-    assert_success(&imported, "import")?;
 
     let hash = Hash::from_bytes(*blake3::hash(b"hello publish blob").as_bytes());
     let hash_str = hash.to_string();
 
-    let published = run(&data_dir, &["--json", "publish", "blob", &namespace, &hash_str])?;
-    assert_success(&published, "publish blob")?;
+    let published = run(alice, &["--json", "publish", "blob", &namespace, &hash_str])?;
     let published_json = json_output(&published)?;
     ensure!(
         published_json.get("blob_ticket").is_some(),
         "publish blob should emit a blob ticket"
     );
 
-    let unpublished = run(&data_dir, &["--json", "unpublish", &namespace, "--blob", &hash_str])?;
-    assert_success(&unpublished, "unpublish blob")?;
+    let unpublished = run(alice, &["--json", "unpublish", &namespace, "--blob", &hash_str])?;
     ensure!(
         json_output(&unpublished)?.get("status") == Some(&Value::from("unpublished")),
         "unpublish should confirm the pin was removed"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
-    let data_dir = data_dir("publish-collection");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     fs::write(folder.join("readme.txt"), b"readme")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -438,18 +377,16 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let pkg = data_dir.join("pkg");
+    let pkg = alice.data_dir().join("pkg");
     fs::create_dir_all(&pkg)?;
     fs::write(pkg.join("lib.txt"), b"lib content")?;
     let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
 
-    let init = run(&data_dir, &["collection", "init", pkg_path, "--name", "sample"])?;
-    assert_success(&init, "collection init")?;
-    let add = run(&data_dir, &["collection", "add", pkg_path])?;
-    assert_success(&add, "collection add")?;
+    let _init = run(alice, &["collection", "init", pkg_path, "--name", "sample"])?;
+    let _add = run(alice, &["collection", "add", pkg_path])?;
 
     let published = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "publish",
@@ -461,7 +398,6 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
             "3",
         ],
     )?;
-    assert_success(&published, "publish collection")?;
     let published_json = json_output(&published)?;
     ensure!(
         published_json.get("sequence") == Some(&Value::from(3)),
@@ -476,20 +412,19 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
         "publish collection should emit a manifest ticket"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn publish_catalog_with_tags() -> Result<()> {
-    let data_dir = data_dir("publish-catalog-tags");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     fs::write(folder.join("clip.mp4"), b"video")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -497,11 +432,10 @@ fn publish_catalog_with_tags() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
-    assert_success(&enabled, "indexing enable")?;
+    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
     let published = run(
-        &data_dir,
+        alice,
         &[
             "publish",
             "catalog",
@@ -512,37 +446,30 @@ fn publish_catalog_with_tags() -> Result<()> {
             "sci-fi",
         ],
     )?;
-    assert_success(&published, "publish catalog with tag")?;
-    let stdout = String::from_utf8_lossy(&published.stdout).to_string();
     ensure!(
-        stdout.contains("published:"),
+        published.stdout().contains("published:"),
         "publish output should confirm publication"
     );
     ensure!(
-        stdout.contains("catalog: tagged"),
+        published.stdout().contains("catalog: tagged"),
         "publish output should reference the catalog"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn mirror_from_provider_and_network() -> Result<()> {
-    let data_dir = data_dir("mirror");
-    let content = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let content = alice.data_dir().join("content");
     fs::create_dir_all(&content)?;
     fs::write(content.join("hello.txt"), b"hello mirror")?;
     let content_path = content.to_str().context("content path is not UTF-8")?;
 
-    let net = run(&data_dir, &["network", "create", "mirror-net"])?;
-    assert_success(&net, "network create")?;
+    let _net = run(alice, &["network", "create", "mirror-net"])?;
 
-    let created = run(
-        &data_dir,
-        &["--json", "create", "--network", "mirror-net", content_path],
-    )?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", "--network", "mirror-net", content_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -550,8 +477,8 @@ fn mirror_from_provider_and_network() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let imported = run(
-        &data_dir,
+    let _imported = run(
+        alice,
         &[
             "import",
             content.join("hello.txt").to_str().context("file is not UTF-8")?,
@@ -559,10 +486,8 @@ fn mirror_from_provider_and_network() -> Result<()> {
             &namespace,
         ],
     )?;
-    assert_success(&imported, "import")?;
 
-    let dry = run(&data_dir, &["--json", "mirror", "--network", "mirror-net", "--dry-run"])?;
-    assert_success(&dry, "mirror --network --dry-run")?;
+    let dry = run(alice, &["--json", "mirror", "--network", "mirror-net", "--dry-run"])?;
     let dry_json = json_output(&dry)?;
     ensure!(
         dry_json.get("dry_run") == Some(&Value::from(true)),
@@ -575,7 +500,7 @@ fn mirror_from_provider_and_network() -> Result<()> {
     ensure!(total >= 1, "network mirror should discover at least one blob");
 
     let real = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "mirror",
@@ -586,7 +511,6 @@ fn mirror_from_provider_and_network() -> Result<()> {
             "--no-sharing",
         ],
     )?;
-    assert_success(&real, "mirror --network")?;
     let real_json = json_output(&real)?;
     ensure!(
         real_json.get("total_blobs") == Some(&Value::from(total)),
@@ -602,26 +526,24 @@ fn mirror_from_provider_and_network() -> Result<()> {
     );
 
     let provider = iroh::SecretKey::generate().public().to_string();
-    let provider_mirror = run(&data_dir, &["--json", "mirror", &provider])?;
-    assert_success(&provider_mirror, "mirror provider")?;
+    let provider_mirror = run(alice, &["--json", "mirror", &provider])?;
     ensure!(
         json_output(&provider_mirror)?.get("total_blobs") == Some(&Value::from(0)),
         "unknown provider should expose no blobs to mirror"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn link_create_version_sequence_expires_publish() -> Result<()> {
-    let data_dir = data_dir("link-create-options");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -630,7 +552,7 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
         .to_owned();
 
     let created_link = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "link",
@@ -646,7 +568,6 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             &namespace,
         ],
     )?;
-    assert_success(&created_link, "link create with options")?;
     let link = json_output(&created_link)?
         .get("link")
         .and_then(Value::as_str)
@@ -662,7 +583,7 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
         .map_or(0, |d| d.as_secs())
         .saturating_add(3600);
     let created_private = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "link",
@@ -673,7 +594,6 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             &expires.to_string(),
         ],
     )?;
-    assert_success(&created_private, "link create --expires")?;
     let private_link = json_output(&created_private)?
         .get("link")
         .and_then(Value::as_str)
@@ -684,15 +604,16 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
         "expiring link should be a private capability"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn link_resolve_with_version() -> Result<()> {
-    let data_dir = data_dir("link-resolve-version");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
     let created = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "link",
@@ -704,15 +625,13 @@ fn link_resolve_with_version() -> Result<()> {
             "2",
         ],
     )?;
-    assert_success(&created, "link create")?;
     let link = json_output(&created)?
         .get("link")
         .and_then(Value::as_str)
         .context("link output missing link")?
         .to_owned();
 
-    let resolved = run(&data_dir, &["--json", "link", "resolve", &link, "--version", "2"])?;
-    assert_success(&resolved, "link resolve --version")?;
+    let resolved = run(alice, &["--json", "link", "resolve", &link, "--version", "2"])?;
     let resolved_json = json_output(&resolved)?;
     ensure!(
         resolved_json.get("version") == Some(&Value::from("2")),
@@ -723,27 +642,27 @@ fn link_resolve_with_version() -> Result<()> {
         "resolution should include a manifest"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn link_revoke_with_broadcast() -> Result<()> {
-    let data_dir = data_dir("link-revoke-broadcast");
-    let created = run(&data_dir, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
-    assert_success(&created, "link create private")?;
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let created = run(alice, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
     let link = json_output(&created)?
         .get("link")
         .and_then(Value::as_str)
         .context("link output missing link")?
         .to_owned();
 
-    let revoked = run(&data_dir, &["link", "revoke", &link, "--broadcast"])?;
-    assert_success(&revoked, "link revoke --broadcast")?;
-    let stdout = String::from_utf8_lossy(&revoked.stdout).to_string();
-    ensure!(stdout.contains("revoked:"), "revoke output should confirm revocation");
+    let revoked = run(alice, &["link", "revoke", &link, "--broadcast"])?;
+    ensure!(
+        revoked.stdout().contains("revoked:"),
+        "revoke output should confirm revocation"
+    );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
@@ -753,14 +672,14 @@ fn link_revoke_with_broadcast() -> Result<()> {
 
 #[test]
 fn indexing_search_with_limit() -> Result<()> {
-    let data_dir = data_dir("search-limit");
-    let folder = data_dir.join("content");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     fs::write(folder.join("test-file.txt"), b"searchable content")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(&data_dir, &["--json", "create", folder_path])?;
-    assert_success(&created, "create")?;
+    let created = run(alice, &["--json", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -768,8 +687,8 @@ fn indexing_search_with_limit() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let imported = run(
-        &data_dir,
+    let _imported = run(
+        alice,
         &[
             "import",
             folder.join("test-file.txt").to_str().context("file is not UTF-8")?,
@@ -777,30 +696,27 @@ fn indexing_search_with_limit() -> Result<()> {
             &namespace,
         ],
     )?;
-    assert_success(&imported, "import")?;
 
-    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
-    assert_success(&enabled, "indexing enable")?;
+    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
-    let published = run(&data_dir, &["publish", "catalog", &namespace, "--catalog", "library"])?;
-    assert_success(&published, "publish catalog")?;
+    let _published = run(alice, &["publish", "catalog", &namespace, "--catalog", "library"])?;
 
-    let searched = run(&data_dir, &["--json", "indexing", "search", "test", "--limit", "5"])?;
-    assert_success(&searched, "indexing search --limit")?;
+    let searched = run(alice, &["--json", "indexing", "search", "test", "--limit", "5"])?;
     let search_json = json_output(&searched)?;
     let results = search_json.as_array().context("search should emit a JSON array")?;
     ensure!(!results.is_empty(), "search should find the imported record");
     ensure!(results.len() <= 5, "search limit should cap results to 5");
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_meta_add_with_sequence() -> Result<()> {
-    let data_dir = data_dir("meta-add-sequence");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
     let added = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "indexing",
@@ -813,7 +729,6 @@ fn indexing_meta_add_with_sequence() -> Result<()> {
             "7",
         ],
     )?;
-    assert_success(&added, "indexing meta add --sequence")?;
     let meta = json_output(&added)?;
     ensure!(meta.get("status") == Some(&Value::from("added")));
     ensure!(
@@ -821,18 +736,17 @@ fn indexing_meta_add_with_sequence() -> Result<()> {
         "meta add should record the requested sequence"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn indexing_filter_add_device_and_subscribe() -> Result<()> {
-    let data_dir = data_dir("filter-device-subscribe");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
-    let added = run(&data_dir, &["indexing", "filter", "add", "device", "device-123"])?;
-    assert_success(&added, "indexing filter add device")?;
+    let added = run(alice, &["indexing", "filter", "add", "device", "device-123"])?;
     ensure!(
-        String::from_utf8_lossy(&added.stdout).contains("added:"),
+        added.stdout().contains("added:"),
         "filter add should confirm the device rule"
     );
 
@@ -843,11 +757,11 @@ fn indexing_filter_add_device_and_subscribe() -> Result<()> {
         vec![DenylistRule::file(b"blocked.txt")],
         &signing,
     )?;
-    let filter_path = data_dir.join("filter-list.json");
+    let filter_path = alice.data_dir().join("filter-list.json");
     fs::write(&filter_path, list.to_bytes()?)?;
 
     let subscribed = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "indexing",
@@ -856,19 +770,18 @@ fn indexing_filter_add_device_and_subscribe() -> Result<()> {
             filter_path.to_str().context("filter path is not UTF-8")?,
         ],
     )?;
-    assert_success(&subscribed, "indexing filter subscribe")?;
     let status = json_output(&subscribed)?;
     ensure!(status.get("status") == Some(&Value::from("subscribed")));
     ensure!(status.get("sequence") == Some(&Value::from(1)));
     ensure!(status.get("entries") == Some(&Value::from(1)));
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
-    let data_dir = data_dir("trust-delegate-options");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let publisher = iroh::SecretKey::generate().public().to_string();
     let expires = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -876,7 +789,7 @@ fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
         .saturating_add(3600);
 
     let delegated = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -892,7 +805,6 @@ fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
             "2",
         ],
     )?;
-    assert_success(&delegated, "trust delegate with options")?;
     let delegation = json_output(&delegated)?;
     ensure!(delegation.get("status") == Some(&Value::from("delegated")));
     ensure!(
@@ -902,43 +814,38 @@ fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
     ensure!(delegation.get("scope") == Some(&Value::from(CONTENT_HASH)));
     ensure!(delegation.get("max_depth") == Some(&Value::from(2)));
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_revoke_delegation() -> Result<()> {
-    let data_dir = data_dir("trust-revoke-delegation");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let publisher = iroh::SecretKey::generate().public().to_string();
 
-    let delegated = run(&data_dir, &["trust", "delegate", &publisher])?;
-    assert_success(&delegated, "trust delegate")?;
-    let shown = run(&data_dir, &["--json", "trust", "show", &publisher])?;
-    assert_success(&shown, "trust show before revoke")?;
+    let _delegated = run(alice, &["trust", "delegate", &publisher])?;
+    let shown = run(alice, &["--json", "trust", "show", &publisher])?;
     ensure!(
         json_output(&shown)?.get("trust") == Some(&Value::from("trusted-delegation")),
         "delegate should be trusted before revocation"
     );
 
-    let revoked = run(&data_dir, &["--json", "trust", "revoke-delegation", &publisher])?;
-    assert_success(&revoked, "trust revoke-delegation")?;
+    let revoked = run(alice, &["--json", "trust", "revoke-delegation", &publisher])?;
     ensure!(json_output(&revoked)?.get("status") == Some(&Value::from("revoked")));
 
-    let shown_after = run(&data_dir, &["--json", "trust", "show", &publisher])?;
-    assert_success(&shown_after, "trust show after revoke")?;
+    let shown_after = run(alice, &["--json", "trust", "show", &publisher])?;
     ensure!(
         json_output(&shown_after)?.get("trust") == Some(&Value::from("untrusted")),
         "revoked delegation should no longer be trusted"
     );
 
     let scoped_publisher = iroh::SecretKey::generate().public().to_string();
-    let scoped_delegated = run(
-        &data_dir,
+    let _scoped_delegated = run(
+        alice,
         &["trust", "delegate", &scoped_publisher, "--scope", CONTENT_HASH],
     )?;
-    assert_success(&scoped_delegated, "trust delegate scoped")?;
     let scoped_revoked = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -948,18 +855,17 @@ fn trust_revoke_delegation() -> Result<()> {
             CONTENT_HASH,
         ],
     )?;
-    assert_success(&scoped_revoked, "trust revoke-delegation --scope")?;
     let scoped = json_output(&scoped_revoked)?;
     ensure!(scoped.get("status") == Some(&Value::from("revoked")));
     ensure!(scoped.get("scope") == Some(&Value::from(CONTENT_HASH)));
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_provider_ban_scoped_and_durable() -> Result<()> {
-    let data_dir = data_dir("provider-ban-scoped");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let provider = iroh::SecretKey::generate().public().to_string();
     let duration = 120_u64;
     let before = std::time::SystemTime::now()
@@ -967,7 +873,7 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
         .map_or(0, |d| d.as_secs());
 
     let banned = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -982,7 +888,6 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
             "scoped abuse",
         ],
     )?;
-    assert_success(&banned, "trust provider ban")?;
     let result = json_output(&banned)?;
     ensure!(result.get("status") == Some(&Value::from("banned")));
     let ban = result.get("ban").context("ban output missing ban")?;
@@ -998,10 +903,9 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
     );
 
     let shown = run(
-        &data_dir,
+        alice,
         &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
     )?;
-    assert_success(&shown, "trust provider show")?;
     let report = json_output(&shown)?;
     ensure!(
         report
@@ -1011,17 +915,17 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
         "scoped ban should be visible for the content hash"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
-    let data_dir = data_dir("provider-vouch-scope");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let provider = iroh::SecretKey::generate().public().to_string();
 
     let vouched = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -1032,7 +936,6 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
             CONTENT_HASH,
         ],
     )?;
-    assert_success(&vouched, "trust provider vouch --scope")?;
     let vouch = json_output(&vouched)?;
     ensure!(vouch.get("status") == Some(&Value::from("updated")));
     ensure!(vouch.get("action") == Some(&Value::from("vouch")));
@@ -1040,7 +943,7 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
     ensure!(vouch.get("sequence") == Some(&Value::from(1)));
 
     let distrusted = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -1051,16 +954,14 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
             CONTENT_HASH,
         ],
     )?;
-    assert_success(&distrusted, "trust provider distrust --scope")?;
     let distrust = json_output(&distrusted)?;
     ensure!(distrust.get("action") == Some(&Value::from("distrust")));
     ensure!(distrust.get("sequence") == Some(&Value::from(2)));
 
     let shown = run(
-        &data_dir,
+        alice,
         &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
     )?;
-    assert_success(&shown, "trust provider show")?;
     let report = json_output(&shown)?;
     ensure!(
         report.get("trust") == Some(&Value::from("distrusted")),
@@ -1073,17 +974,17 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
             .is_some_and(|items| items.len() == 2)
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn trust_stream_publish_with_hash_and_sequence() -> Result<()> {
-    let data_dir = data_dir("trust-stream-hash");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
     let provider = iroh::SecretKey::generate().public().to_string();
 
     let published = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "trust",
@@ -1099,7 +1000,6 @@ fn trust_stream_publish_with_hash_and_sequence() -> Result<()> {
             "5",
         ],
     )?;
-    assert_success(&published, "trust stream publish")?;
     let result = json_output(&published)?;
     ensure!(result.get("status") == Some(&Value::from("published")));
     ensure!(result.get("provider") == Some(&Value::from(provider)));
@@ -1113,16 +1013,16 @@ fn trust_stream_publish_with_hash_and_sequence() -> Result<()> {
         "trust stream ticket file should be written"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn attest_provenance_derivative_and_broadcast() -> Result<()> {
-    let data_dir = data_dir("attest-provenance");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
     let provenance = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "attest",
@@ -1134,20 +1034,18 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
             "3",
         ],
     )?;
-    assert_success(&provenance, "attest create provenance")?;
     let provenance_json = json_output(&provenance)?;
     ensure!(provenance_json.get("status") == Some(&Value::from("attested")));
     ensure!(provenance_json.get("value") == Some(&Value::from("archive")));
 
     let derivative = run(
-        &data_dir,
+        alice,
         &["--json", "attest", "create", CONTENT_HASH, "--derivative", "remix"],
     )?;
-    assert_success(&derivative, "attest create derivative")?;
     ensure!(json_output(&derivative)?.get("status") == Some(&Value::from("attested")));
 
     let license = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "attest",
@@ -1158,11 +1056,9 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
             "--broadcast",
         ],
     )?;
-    assert_success(&license, "attest create license broadcast")?;
     ensure!(json_output(&license)?.get("status") == Some(&Value::from("attested")));
 
-    let shown = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
-    assert_success(&shown, "trust show after attestations")?;
+    let shown = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     let trust = json_output(&shown)?;
     let attestations = trust
         .get("attestations")
@@ -1176,21 +1072,17 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
         "provenance attestation should record its sequence"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn attest_verify_with_timeout() -> Result<()> {
-    let data_dir = data_dir("attest-verify");
-    let created = run(&data_dir, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
-    assert_success(&created, "attest create")?;
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
-    let verified = run(
-        &data_dir,
-        &["--json", "attest", "verify", CONTENT_HASH, "--timeout", "1"],
-    )?;
-    assert_success(&verified, "attest verify --timeout")?;
+    let _created = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
+
+    let verified = run(alice, &["--json", "attest", "verify", CONTENT_HASH, "--timeout", "1"])?;
     let results = json_output(&verified)?;
     ensure!(results.is_array(), "attest verify should emit a JSON array");
     ensure!(
@@ -1198,25 +1090,24 @@ fn attest_verify_with_timeout() -> Result<()> {
         "no peers should broadcast attestations for the hash"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }
 
 #[test]
 fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
-    let data_dir = data_dir("moderation-options");
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
 
     let hidden = run(
-        &data_dir,
+        alice,
         &["--json", "moderation", "hide", CONTENT_HASH, "--reason", "private data"],
     )?;
-    assert_success(&hidden, "moderation hide --reason")?;
     let hide = json_output(&hidden)?;
     ensure!(hide.get("status") == Some(&Value::from("hidden")));
     ensure!(hide.get("sequence") == Some(&Value::from(1)));
 
     let reported = run(
-        &data_dir,
+        alice,
         &[
             "--json",
             "moderation",
@@ -1227,18 +1118,15 @@ fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
             "--broadcast",
         ],
     )?;
-    assert_success(&reported, "moderation report --broadcast")?;
     let report = json_output(&reported)?;
     ensure!(report.get("status") == Some(&Value::from("reported")));
     ensure!(report.get("reason") == Some(&Value::from("abuse")));
 
-    let trust_output = run(&data_dir, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
-    assert_success(&trust_output, "trust show after moderation")?;
+    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
     ensure!(
         json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
         "hidden record should stay hidden after a report"
     );
 
-    fs::remove_dir_all(data_dir)?;
     Ok(())
 }

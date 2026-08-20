@@ -100,6 +100,23 @@ impl Device {
         self.run_ok(&["--no-daemon", "join", ticket, path.to_str().context("UTF-8 path")?])
     }
 
+    pub fn join_with_options(&self, args: &[&str], ticket: &str, path: &Path) -> anyhow::Result<CmdOutput> {
+        let mut all = vec!["--no-daemon", "join"];
+        all.extend_from_slice(args);
+        all.push(ticket);
+        all.push(path.to_str().context("UTF-8 path")?);
+        self.run_ok(&all)
+    }
+
+    pub fn leave(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&["--no-daemon", "leave", namespace])
+    }
+
+    #[expect(dead_code, reason = "part of DSL public API")]
+    pub fn leave_delete_files(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
+        self.run_ok(&["--no-daemon", "leave", namespace, "--delete-files"])
+    }
+
     #[expect(clippy::unused_self, reason = "API consistency")]
     pub fn write_file(&self, path: &Path, content: &[u8]) -> anyhow::Result<()> {
         if let Some(parent) = path.parent() {

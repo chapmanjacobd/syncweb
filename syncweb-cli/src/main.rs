@@ -517,16 +517,15 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
 fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: Option<&str>) -> Result<Child> {
     let executable = std::env::current_exe().context("resolve syncweb executable")?;
     let mut command = ProcessCommand::new(executable);
+    command.arg("--data-dir").arg(data_dir);
+    if let Some(net) = network {
+        command.arg("--network").arg(net);
+    }
     command
-        .arg("--data-dir")
-        .arg(data_dir)
         .arg("start")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    if let Some(net) = network {
-        command.arg("--network").arg(net);
-    }
     if let Some(log_file) = &args.log_file {
         command.arg("--log-file").arg(log_file);
     }

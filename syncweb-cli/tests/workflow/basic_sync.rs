@@ -1,4 +1,4 @@
-use anyhow::ensure;
+use anyhow::{Context, ensure};
 
 use super::*;
 
@@ -290,6 +290,100 @@ fn create_multiple_folders() -> anyhow::Result<()> {
 
     let folders = alice.folders()?;
     ensure!(folders.len() >= 2, "should list at least 2 folders: {folders:?}");
+
+    Ok(())
+}
+
+#[test]
+fn join_with_mode_receiveonly() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("alice-ro");
+    let info = alice.create(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-ro");
+    bob.join_with_options(&["--mode", "receiveonly"], &info.ticket, &bob_dir)?;
+
+    let folders = bob.folders()?;
+    ensure!(
+        folders.iter().any(|f| f.contains(&info.namespace)),
+        "bob should see the joined folder: {folders:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn create_with_relay_fallback() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("relay-folder");
+    let info = alice.run_ok(&[
+        "--no-daemon",
+        "create",
+        "--relay-fallback",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(info.stdout().contains("namespace:"));
+    ensure!(info.stdout().contains("ticket:"));
+
+    Ok(())
+}
+
+#[test]
+fn join_with_relay_fallback() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("relay-docs");
+    let info = alice.create(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-relay-docs");
+    bob.join_with_options(&["--relay-fallback"], &info.ticket, &bob_dir)?;
+
+    let folders = bob.folders()?;
+    ensure!(
+        folders.iter().any(|f| f.contains(&info.namespace)),
+        "bob should see the joined folder: {folders:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn join_subscribe_help_lists_new_options() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let help = alice.run_ok(&["join", "--help"])?;
+    let text = help.stdout();
+    ensure!(
+        text.contains("--ignore-self"),
+        "help should mention --ignore-self: {text}"
+    );
+    ensure!(text.contains("--prefix"), "help should mention --prefix: {text}");
+    ensure!(text.contains("--max-count"), "help should mention --max-count: {text}");
+    ensure!(text.contains("--max-size"), "help should mention --max-size: {text}");
+
+    Ok(())
+}
+
+#[test]
+fn leave_default_keeps_files() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("leave-keeps");
+    let info = alice.create(&folder_dir)?;
+    std::fs::write(folder_dir.join("file.txt"), b"content")?;
+
+    alice.leave(&info.namespace)?;
+
+    ensure!(folder_dir.exists(), "folder directory should remain after leave");
 
     Ok(())
 }

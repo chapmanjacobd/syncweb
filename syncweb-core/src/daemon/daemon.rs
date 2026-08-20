@@ -60,6 +60,8 @@ pub struct DaemonConfig {
     pub relay_mode: crate::node::iroh_node::RelayMode,
     pub media_listen: Option<SocketAddr>,
     pub discovery: crate::node::iroh_node::DiscoveryConfig,
+    /// Shared address lookup for tests that need multiple daemons to discover each other.
+    pub address_lookup: Option<iroh::address_lookup::memory::MemoryLookup>,
 }
 
 impl Default for DaemonConfig {
@@ -79,6 +81,7 @@ impl Default for DaemonConfig {
             relay_mode: crate::node::iroh_node::RelayMode::Default,
             media_listen: None,
             discovery: crate::node::iroh_node::DiscoveryConfig::default(),
+            address_lookup: None,
         }
     }
 }
@@ -131,6 +134,13 @@ struct PendingWatch {
 type SignalTask<'a> = std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
 impl Daemon {
+    /// Return a clone of the daemon's iroh endpoint, useful for awaiting
+    /// relay connectivity in tests.
+    #[must_use]
+    pub fn endpoint(&self) -> iroh::Endpoint {
+        self.node.endpoint().clone()
+    }
+
     async fn open_identity_and_node(
         data_dir: &Path,
         node_db: &NodeDatabase,
@@ -138,19 +148,35 @@ impl Daemon {
         relay_mode: crate::node::iroh_node::RelayMode,
         discovery: crate::node::iroh_node::DiscoveryConfig,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        address_lookup: Option<iroh::address_lookup::memory::MemoryLookup>,
     ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
         let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
             let _ = node_db.remove_lifecycle();
             let _ = pid_lock.release();
         })?;
-        let node = Arc::new(
-            IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
+        let err_cleanup = |_: &_| {
+            let _ = node_db.remove_lifecycle();
+            let _ = pid_lock.release();
+        };
+        let node = Arc::new(match address_lookup {
+            Some(lookup) => {
+                IrohNode::new_with_address_lookup(
+                    identity,
+                    data_dir.join("data"),
+                    relay_mode,
+                    lookup,
+                    discovery,
+                    member_keys,
+                )
                 .await
-                .inspect_err(|_| {
-                    let _ = node_db.remove_lifecycle();
-                    let _ = pid_lock.release();
-                })?,
-        );
+                .inspect_err(err_cleanup)?
+            }
+            None => {
+                IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
+                    .await
+                    .inspect_err(err_cleanup)?
+            }
+        });
         let folder_manager = FolderManager::new(&node);
         let sync_engine = SyncEngine::new(
             folder_manager.clone(),
@@ -246,6 +272,7 @@ impl Daemon {
             config.relay_mode.clone(),
             node_discovery,
             member_keys.clone(),
+            config.address_lookup.clone(),
         )
         .await
         {

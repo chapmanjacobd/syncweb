@@ -87,6 +87,72 @@ fn subscription_limits_and_deleted_entries_are_enforced() -> anyhow::Result<()> 
 }
 
 #[test]
+fn subscribe_params_from_filters_maps_flags_to_runtime_filters() -> anyhow::Result<()> {
+    use syncweb_core::storage::config::SubscribeFilters;
+
+    let ignore_self_params = SubscribeParams::from_filters(&SubscribeFilters::new(false, true, None, None, None, None))?;
+    ensure!(ignore_self_params.ignore_session.is_some(), "--ignore-self should set a session id");
+    ensure!(!ignore_self_params.ingest_only);
+    ensure!(ignore_self_params.area_filter.is_none());
+    ensure!(ignore_self_params.area_of_interest.is_none());
+
+    let ingest_only_params = SubscribeParams::from_filters(&SubscribeFilters::new(true, false, None, None, None, None))?;
+    ensure!(ingest_only_params.ingest_only, "--ingest-only should enable ingest-only mode");
+    ensure!(ingest_only_params.ignore_session.is_none());
+
+    let prefix_params =
+        SubscribeParams::from_filters(&SubscribeFilters::new(false, false, Some(std::path::PathBuf::from("docs")), None, None, None))?;
+    ensure!(
+        matches!(prefix_params.area_filter, Some(AreaFilter::Prefix(ref path)) if path == std::path::Path::new("docs")),
+        "--sync-prefix should become an AreaFilter::Prefix"
+    );
+
+    let glob_params =
+        SubscribeParams::from_filters(&SubscribeFilters::new(false, false, None, Some("*.txt".to_owned()), None, None))?;
+    ensure!(
+        matches!(glob_params.area_filter, Some(AreaFilter::Glob(ref pattern)) if pattern == "*.txt"),
+        "--glob should become an AreaFilter::Glob"
+    );
+
+    let count_params = SubscribeParams::from_filters(&SubscribeFilters::new(false, false, None, None, Some(3), None))?;
+    let count_area = count_params
+        .area_of_interest
+        .as_ref()
+        .context("--max-count should set an area of interest")?;
+    ensure!(count_area.max_count == 3, "--max-count should be 3, got {}", count_area.max_count);
+    ensure!(count_area.max_size == 0);
+
+    let size_params = SubscribeParams::from_filters(&SubscribeFilters::new(false, false, None, None, None, Some(2048)))?;
+    let size_area = size_params
+        .area_of_interest
+        .as_ref()
+        .context("--max-size should set an area of interest")?;
+    ensure!(size_area.max_size == 2048, "--max-size should be 2048, got {}", size_area.max_size);
+    ensure!(size_area.max_count == 0);
+
+    let combined_params = SubscribeParams::from_filters(&SubscribeFilters::new(
+        false,
+        false,
+        Some(std::path::PathBuf::from("docs")),
+        None,
+        Some(5),
+        Some(1024),
+    ))?;
+    let combined_area = combined_params
+        .area_of_interest
+        .as_ref()
+        .context("combined limits should set an area of interest")?;
+    ensure!(combined_area.max_count == 5);
+    ensure!(combined_area.max_size == 1024);
+    ensure!(
+        matches!(combined_area.area, AreaFilter::Prefix(ref path) if path == std::path::Path::new("docs")),
+        "area of interest should inherit the prefix filter"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn transfer_stats_report_rate_and_eta() -> anyhow::Result<()> {
     let stats = TransferStats::from_progress(500, Some(1_000), Duration::from_secs(2), 3);
     anyhow::ensure!(stats.bytes_per_second == 250);

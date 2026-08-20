@@ -159,23 +159,19 @@ impl Daemon {
             let _ = pid_lock.release();
         };
         let node = Arc::new(match address_lookup {
-            Some(lookup) => {
-                IrohNode::new_with_address_lookup(
-                    identity,
-                    data_dir.join("data"),
-                    relay_mode,
-                    lookup,
-                    discovery,
-                    member_keys,
-                )
+            Some(lookup) => IrohNode::new_with_address_lookup(
+                identity,
+                data_dir.join("data"),
+                relay_mode,
+                lookup,
+                discovery,
+                member_keys,
+            )
+            .await
+            .inspect_err(err_cleanup)?,
+            None => IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
                 .await
-                .inspect_err(err_cleanup)?
-            }
-            None => {
-                IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
-                    .await
-                    .inspect_err(err_cleanup)?
-            }
+                .inspect_err(err_cleanup)?,
         });
         let folder_manager = FolderManager::new(&node);
         let sync_engine = SyncEngine::new(

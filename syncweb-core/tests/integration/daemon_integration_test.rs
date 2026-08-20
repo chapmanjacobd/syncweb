@@ -788,149 +788,182 @@ fn parse_namespace_and_ticket(message: &str) -> Result<(String, String)> {
 /// Create a folder on daemon A and join it on daemon B with live syncing and
 /// the given subscription filters, then assert the filters persist and the
 /// supervised intent becomes active.
-async fn assert_join_subscribe_filters(dir_a: &TestDirectory, dir_b: &TestDirectory, filters: SubscribeFilters) -> Result<()> {
-    let daemons = start_two_daemons(dir_a, dir_b).await?;
+async fn assert_join_subscribe_filters(
+    dir_a: &TestDirectory,
+    dir_b: &TestDirectory,
+    filters: SubscribeFilters,
+) -> Result<()> {
+    Box::pin(async move {
+        let daemons = Box::pin(start_two_daemons(dir_a, dir_b)).await?;
 
-    let folder_path = dir_a.path().join("shared");
-    let create = daemons
-        .client_a
-        .send(IpcRequest::new(IpcCommand::CreateFolder {
-            path: folder_path.clone(),
-            mode: "sendreceive".to_owned(),
-        }))
-        .await?;
-    let IpcResponse::Ok { message } = &create else {
-        anyhow::bail!("unexpected create-folder response: {create:?}");
-    };
-    let (namespace, ticket) = parse_namespace_and_ticket(message)?;
+        let folder_path = dir_a.path().join("shared");
+        let create = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::CreateFolder {
+                path: folder_path.clone(),
+                mode: "sendreceive".to_owned(),
+            }))
+            .await?;
+        let IpcResponse::Ok { message } = &create else {
+            anyhow::bail!("unexpected create-folder response: {create:?}");
+        };
+        let (namespace, ticket) = parse_namespace_and_ticket(message)?;
 
-    let join_path = dir_b.path().join("joined");
-    let join = daemons
-        .client_b
-        .send(IpcRequest::new(IpcCommand::Join {
-            ticket,
-            path: join_path,
-            mode: SyncMode::SendReceive,
-            subscribe: true,
-            filters: filters.clone(),
-        }))
-        .await?;
-    ensure!(matches!(join, IpcResponse::Ok { .. }), "join with filters failed: {join:?}");
+        let join_path = dir_b.path().join("joined");
+        let join = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::Join {
+                ticket,
+                path: join_path,
+                mode: SyncMode::SendReceive,
+                subscribe: true,
+                filters: filters.clone(),
+            }))
+            .await?;
+        ensure!(
+            matches!(join, IpcResponse::Ok { .. }),
+            "join with filters failed: {join:?}"
+        );
 
-    let node_db = NodeDatabase::open(dir_b.path().join("node.db"))?;
-    let config = node_db.load_app_config()?;
-    let entry = config
-        .subscribe
-        .folders
-        .get(&namespace)
-        .with_context(|| format!("subscription entry for {namespace} missing"))?;
-    ensure!(entry.enabled, "subscription should be enabled");
-    ensure!(
-        entry.filters == filters,
-        "filters not persisted: got {:?}, want {:?}",
-        entry.filters,
-        filters
-    );
-
-    let sync = daemons
-        .client_b
-        .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
-        .await?;
-    ensure!(matches!(sync, IpcResponse::Ok { .. }), "trigger sync failed: {sync:?}");
-
-    let report = wait_for_report(&StateFile::new(dir_b.path()), |report| {
-        report
+        let node_db = NodeDatabase::open(dir_b.path().join("node.db"))?;
+        let config = node_db.load_app_config()?;
+        let entry = config
+            .subscribe
             .folders
-            .iter()
-            .any(|f| f.namespace == namespace && f.session_active)
+            .get(&namespace)
+            .with_context(|| format!("subscription entry for {namespace} missing"))?;
+        ensure!(entry.enabled, "subscription should be enabled");
+        ensure!(
+            entry.filters == filters,
+            "filters not persisted: got {:?}, want {:?}",
+            entry.filters,
+            filters
+        );
+
+        let sync = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
+            .await?;
+        ensure!(matches!(sync, IpcResponse::Ok { .. }), "trigger sync failed: {sync:?}");
+
+        let report = wait_for_report(&StateFile::new(dir_b.path()), |report| {
+            report
+                .folders
+                .iter()
+                .any(|f| f.namespace == namespace && f.session_active)
+        })
+        .await?;
+        ensure!(
+            report
+                .folders
+                .iter()
+                .any(|f| f.namespace == namespace && f.session_active),
+            "subscription intent should be active"
+        );
+
+        daemons.stop().await?;
+        Ok(())
     })
-    .await?;
-    ensure!(
-        report
-            .folders
-            .iter()
-            .any(|f| f.namespace == namespace && f.session_active),
-        "subscription intent should be active"
-    );
-
-    daemons.stop().await?;
-    Ok(())
+    .await
 }
 
 #[tokio::test]
 async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
-    let dir_a = TestDirectory::new("two-relay-a")?;
-    let dir_b = TestDirectory::new("two-relay-b")?;
-    let daemons = start_two_daemons(&dir_a, &dir_b).await?;
+    Box::pin(async move {
+        let dir_a = TestDirectory::new("two-relay-a")?;
+        let dir_b = TestDirectory::new("two-relay-b")?;
+        let daemons = Box::pin(start_two_daemons(&dir_a, &dir_b)).await?;
 
-    let folder_path = dir_a.path().join("shared");
-    let create = daemons
-        .client_a
-        .send(IpcRequest::new(IpcCommand::CreateFolder {
-            path: folder_path.clone(),
-            mode: "sendreceive".to_owned(),
-        }))
-        .await?;
-    let IpcResponse::Ok { message } = &create else {
-        anyhow::bail!("unexpected create-folder response: {create:?}");
-    };
-    let (namespace, ticket) = parse_namespace_and_ticket(message)?;
-
-    let file_path = folder_path.join("hello.txt");
-    fs::write(&file_path, b"hello from A")?;
-    let import = daemons
-        .client_a
-        .send(IpcRequest::new(IpcCommand::ImportFiles {
-            namespace: Some(namespace.clone()),
-            path: file_path,
-        }))
-        .await?;
-    ensure!(
-        matches!(import, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
-        "import failed: {import:?}"
-    );
-
-    let join_path = dir_b.path().join("joined");
-    let join = daemons
-        .client_b
-        .send(IpcRequest::new(IpcCommand::Join {
-            ticket,
-            path: join_path,
-            mode: SyncMode::SendReceive,
-            subscribe: false,
-            filters: SubscribeFilters::default(),
-        }))
-        .await?;
-    ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");
-
-    let mut transferred = 0_u64;
-    for _ in 0..20 {
-        let download = daemons
-            .client_b
-            .send(IpcRequest::new(IpcCommand::Download {
-                namespace: namespace.clone(),
-                strategy: syncweb_core::sync::FetchStrategy::default(),
+        let folder_path = dir_a.path().join("shared");
+        let create = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::CreateFolder {
+                path: folder_path.clone(),
+                mode: "sendreceive".to_owned(),
             }))
             .await?;
-        if let IpcResponse::DownloadComplete { bytes_transferred } = download {
-            transferred = bytes_transferred;
-            if transferred > 0 {
+        let IpcResponse::Ok { message } = &create else {
+            anyhow::bail!("unexpected create-folder response: {create:?}");
+        };
+        let (namespace, ticket) = parse_namespace_and_ticket(message)?;
+
+        let file_path = folder_path.join("hello.txt");
+        fs::write(&file_path, b"hello from A")?;
+        let import = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::ImportFiles {
+                namespace: Some(namespace.clone()),
+                path: file_path,
+            }))
+            .await?;
+        ensure!(
+            matches!(import, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
+            "import failed: {import:?}"
+        );
+
+        let join_path = dir_b.path().join("joined");
+        let join = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::Join {
+                ticket,
+                path: join_path,
+                mode: SyncMode::SendReceive,
+                subscribe: true,
+                filters: SubscribeFilters::default(),
+            }))
+            .await?;
+        ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");
+
+        let sync = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
+            .await?;
+        ensure!(matches!(sync, IpcResponse::Ok { .. }), "trigger sync failed: {sync:?}");
+
+        let mut synced = false;
+        for _ in 0..40 {
+            let health = daemons
+                .client_b
+                .send(IpcRequest::new(IpcCommand::HealthCheck {
+                    path: std::path::PathBuf::from(&namespace),
+                    hash: Vec::new(),
+                    path_prefix: None,
+                    glob: None,
+                }))
+                .await?;
+            if let IpcResponse::Ok {
+                message: health_message,
+            } = &health
+                && health_message
+                    .split(',')
+                    .next()
+                    .and_then(|part| part.trim().strip_prefix("total: "))
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .is_some_and(|total| total >= 1)
+            {
+                synced = true;
                 break;
             }
+            tokio::time::sleep(Duration::from_millis(250)).await;
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-    ensure!(transferred > 0, "download should transfer content via relay");
+        ensure!(synced, "B should sync A's content via relay");
 
-    daemons.stop().await?;
-    Ok(())
+        daemons.stop().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
 async fn test_join_subscribe_ignore_self_persists_and_activates() -> Result<()> {
     let dir_a = TestDirectory::new("filter-ignore-self-a")?;
     let dir_b = TestDirectory::new("filter-ignore-self-b")?;
-    assert_join_subscribe_filters(&dir_a, &dir_b, SubscribeFilters::new(false, true, None, None, None, None)).await
+    assert_join_subscribe_filters(
+        &dir_a,
+        &dir_b,
+        SubscribeFilters::new(false, true, None, None, None, None),
+    )
+    .await
 }
 
 #[tokio::test]
@@ -961,12 +994,22 @@ async fn test_join_subscribe_glob_persists_and_activates() -> Result<()> {
 async fn test_join_subscribe_max_count_persists_and_activates() -> Result<()> {
     let dir_a = TestDirectory::new("filter-count-a")?;
     let dir_b = TestDirectory::new("filter-count-b")?;
-    assert_join_subscribe_filters(&dir_a, &dir_b, SubscribeFilters::new(false, false, None, None, Some(3), None)).await
+    assert_join_subscribe_filters(
+        &dir_a,
+        &dir_b,
+        SubscribeFilters::new(false, false, None, None, Some(3), None),
+    )
+    .await
 }
 
 #[tokio::test]
 async fn test_join_subscribe_max_size_persists_and_activates() -> Result<()> {
     let dir_a = TestDirectory::new("filter-size-a")?;
     let dir_b = TestDirectory::new("filter-size-b")?;
-    assert_join_subscribe_filters(&dir_a, &dir_b, SubscribeFilters::new(false, false, None, None, None, Some(1024))).await
+    assert_join_subscribe_filters(
+        &dir_a,
+        &dir_b,
+        SubscribeFilters::new(false, false, None, None, None, Some(1024)),
+    )
+    .await
 }

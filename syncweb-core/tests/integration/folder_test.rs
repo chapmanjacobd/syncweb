@@ -461,7 +461,7 @@ async fn workflow_two_nodes_sync() -> anyhow::Result<()> {
     let entry = bob.wait_entry(folder_b.namespace, "hello.txt").await?;
     anyhow::ensure!(entry.content_hash() == hash);
 
-    let data = bob.get_blob(hash).await?;
+    let data = bob.wait_blob(hash).await?;
     anyhow::ensure!(data.as_ref() == b"hello from alice");
 
     alice.node().stop().await?;
@@ -483,10 +483,15 @@ async fn workflow_bidirectional_sync() -> anyhow::Result<()> {
     let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::SendReceive).await?;
     bob.write(&folder_b, "from-bob.txt", b"bob's file").await?;
 
-    // Verify bob can read alice's file
+    // Verify bob can read alice's file.
     let entry_a = bob.wait_entry(folder_b.namespace, "from-alice.txt").await?;
-    let data = bob.get_blob(entry_a.content_hash()).await?;
+    let data = bob.wait_blob(entry_a.content_hash()).await?;
     anyhow::ensure!(data.as_ref() == b"alice's file");
+
+    // Verify alice can read bob's file.
+    let entry_b = alice.wait_entry(folder_a.namespace, "from-bob.txt").await?;
+    let bob_data = alice.wait_blob(entry_b.content_hash()).await?;
+    anyhow::ensure!(bob_data.as_ref() == b"bob's file");
 
     alice.node().stop().await?;
     bob.node().stop().await?;

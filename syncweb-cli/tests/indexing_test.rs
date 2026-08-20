@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use iroh_blobs::Hash;
 use serde_json::Value;
 
 const CONTENT_HASH: &str = "26209f835986cd30d5925b3bdbd30358d6d7ae1ea0f863ab69b9c40c2b91b18a";
@@ -359,5 +360,386 @@ fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
 
     fs::remove_dir_all(publisher_dir)?;
     fs::remove_dir_all(subscriber_dir)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Plan 004 — Sharing & publishing coverage
+// ---------------------------------------------------------------------------
+
+#[test]
+fn publish_blob_and_unpublish_round_trip() -> Result<()> {
+    let data_dir = data_dir("publish-blob");
+    let folder = data_dir.join("content");
+    fs::create_dir_all(&folder)?;
+    let file = folder.join("hello.txt");
+    fs::write(&file, b"hello publish blob")?;
+    let folder_path = folder.to_str().context("folder path is not UTF-8")?;
+
+    let created = run(&data_dir, &["--json", "create", folder_path])?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let imported = run(
+        &data_dir,
+        &[
+            "import",
+            file.to_str().context("file path is not UTF-8")?,
+            "--folder",
+            &namespace,
+        ],
+    )?;
+    assert_success(&imported, "import")?;
+
+    let hash = Hash::from_bytes(*blake3::hash(b"hello publish blob").as_bytes());
+    let hash_str = hash.to_string();
+
+    let published = run(&data_dir, &["--json", "publish", "blob", &namespace, &hash_str])?;
+    assert_success(&published, "publish blob")?;
+    let published_json = json_output(&published)?;
+    ensure!(
+        published_json.get("blob_ticket").is_some(),
+        "publish blob should emit a blob ticket"
+    );
+
+    let unpublished = run(&data_dir, &["--json", "unpublish", &namespace, "--blob", &hash_str])?;
+    assert_success(&unpublished, "unpublish blob")?;
+    ensure!(
+        json_output(&unpublished)?.get("status") == Some(&Value::from("unpublished")),
+        "unpublish should confirm the pin was removed"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
+    let data_dir = data_dir("publish-collection");
+    let folder = data_dir.join("content");
+    fs::create_dir_all(&folder)?;
+    fs::write(folder.join("readme.txt"), b"readme")?;
+    let folder_path = folder.to_str().context("folder path is not UTF-8")?;
+
+    let created = run(&data_dir, &["--json", "create", folder_path])?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let pkg = data_dir.join("pkg");
+    fs::create_dir_all(&pkg)?;
+    fs::write(pkg.join("lib.txt"), b"lib content")?;
+    let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
+
+    let init = run(&data_dir, &["collection", "init", pkg_path, "--name", "sample"])?;
+    assert_success(&init, "collection init")?;
+    let add = run(&data_dir, &["collection", "add", pkg_path])?;
+    assert_success(&add, "collection add")?;
+
+    let published = run(
+        &data_dir,
+        &[
+            "--json",
+            "publish",
+            "collection",
+            pkg_path,
+            "--namespace",
+            &namespace,
+            "--sequence",
+            "3",
+        ],
+    )?;
+    assert_success(&published, "publish collection")?;
+    let published_json = json_output(&published)?;
+    ensure!(
+        published_json.get("sequence") == Some(&Value::from(3)),
+        "publish collection should use the requested sequence"
+    );
+    ensure!(
+        published_json.get("manifest").is_some(),
+        "publish collection should emit a manifest hash"
+    );
+    ensure!(
+        published_json.get("manifest_ticket").is_some(),
+        "publish collection should emit a manifest ticket"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn publish_catalog_with_tags() -> Result<()> {
+    let data_dir = data_dir("publish-catalog-tags");
+    let folder = data_dir.join("content");
+    fs::create_dir_all(&folder)?;
+    fs::write(folder.join("clip.mp4"), b"video")?;
+    let folder_path = folder.to_str().context("folder path is not UTF-8")?;
+
+    let created = run(&data_dir, &["--json", "create", folder_path])?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let enabled = run(&data_dir, &["indexing", "enable", &namespace])?;
+    assert_success(&enabled, "indexing enable")?;
+
+    let published = run(
+        &data_dir,
+        &[
+            "publish",
+            "catalog",
+            &namespace,
+            "--catalog",
+            "tagged",
+            "--tag",
+            "sci-fi",
+        ],
+    )?;
+    assert_success(&published, "publish catalog with tag")?;
+    let stdout = String::from_utf8_lossy(&published.stdout).to_string();
+    ensure!(
+        stdout.contains("published:"),
+        "publish output should confirm publication"
+    );
+    ensure!(
+        stdout.contains("catalog: tagged"),
+        "publish output should reference the catalog"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn mirror_from_provider_and_network() -> Result<()> {
+    let data_dir = data_dir("mirror");
+    let content = data_dir.join("content");
+    fs::create_dir_all(&content)?;
+    fs::write(content.join("hello.txt"), b"hello mirror")?;
+    let content_path = content.to_str().context("content path is not UTF-8")?;
+
+    let net = run(&data_dir, &["network", "create", "mirror-net"])?;
+    assert_success(&net, "network create")?;
+
+    let created = run(
+        &data_dir,
+        &["--json", "create", "--network", "mirror-net", content_path],
+    )?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let imported = run(
+        &data_dir,
+        &[
+            "import",
+            content.join("hello.txt").to_str().context("file is not UTF-8")?,
+            "--folder",
+            &namespace,
+        ],
+    )?;
+    assert_success(&imported, "import")?;
+
+    let dry = run(&data_dir, &["--json", "mirror", "--network", "mirror-net", "--dry-run"])?;
+    assert_success(&dry, "mirror --network --dry-run")?;
+    let dry_json = json_output(&dry)?;
+    ensure!(
+        dry_json.get("dry_run") == Some(&Value::from(true)),
+        "dry-run should report without fetching"
+    );
+    let total = dry_json
+        .get("total_blobs")
+        .and_then(Value::as_u64)
+        .context("mirror result missing total_blobs")?;
+    ensure!(total >= 1, "network mirror should discover at least one blob");
+
+    let real = run(
+        &data_dir,
+        &[
+            "--json",
+            "mirror",
+            "--network",
+            "mirror-net",
+            "--min-providers",
+            "2",
+            "--no-sharing",
+        ],
+    )?;
+    assert_success(&real, "mirror --network")?;
+    let real_json = json_output(&real)?;
+    ensure!(
+        real_json.get("total_blobs") == Some(&Value::from(total)),
+        "real mirror should discover the same blobs"
+    );
+    ensure!(
+        real_json.get("skipped") == Some(&Value::from(total)),
+        "already-local blobs should be skipped"
+    );
+    ensure!(
+        real_json.get("failed") == Some(&Value::from(0)),
+        "no remote fetch should fail for local blobs"
+    );
+
+    let provider = iroh::SecretKey::generate().public().to_string();
+    let provider_mirror = run(&data_dir, &["--json", "mirror", &provider])?;
+    assert_success(&provider_mirror, "mirror provider")?;
+    ensure!(
+        json_output(&provider_mirror)?.get("total_blobs") == Some(&Value::from(0)),
+        "unknown provider should expose no blobs to mirror"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn link_create_version_sequence_expires_publish() -> Result<()> {
+    let data_dir = data_dir("link-create-options");
+    let folder = data_dir.join("content");
+    fs::create_dir_all(&folder)?;
+    let folder_path = folder.to_str().context("folder path is not UTF-8")?;
+
+    let created = run(&data_dir, &["--json", "create", folder_path])?;
+    assert_success(&created, "create")?;
+    let namespace = json_output(&created)?
+        .get("namespace")
+        .context("create output missing namespace")?
+        .as_str()
+        .context("namespace is not a string")?
+        .to_owned();
+
+    let created_link = run(
+        &data_dir,
+        &[
+            "--json",
+            "link",
+            "create",
+            CONTENT_HASH,
+            "--name",
+            "latest",
+            "--version",
+            "2",
+            "--sequence",
+            "5",
+            "--publish",
+            &namespace,
+        ],
+    )?;
+    assert_success(&created_link, "link create with options")?;
+    let link = json_output(&created_link)?
+        .get("link")
+        .and_then(Value::as_str)
+        .context("link output missing link")?
+        .to_owned();
+    ensure!(
+        link.starts_with("syncweb://name/"),
+        "mutable link should use a name URI"
+    );
+
+    let expires = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+        .saturating_add(3600);
+    let created_private = run(
+        &data_dir,
+        &[
+            "--json",
+            "link",
+            "create",
+            CONTENT_HASH,
+            "--private",
+            "--expires",
+            &expires.to_string(),
+        ],
+    )?;
+    assert_success(&created_private, "link create --expires")?;
+    let private_link = json_output(&created_private)?
+        .get("link")
+        .and_then(Value::as_str)
+        .context("private link output missing link")?
+        .to_owned();
+    ensure!(
+        private_link.starts_with("syncweb://private/"),
+        "expiring link should be a private capability"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn link_resolve_with_version() -> Result<()> {
+    let data_dir = data_dir("link-resolve-version");
+    let created = run(
+        &data_dir,
+        &[
+            "--json",
+            "link",
+            "create",
+            CONTENT_HASH,
+            "--name",
+            "release",
+            "--version",
+            "2",
+        ],
+    )?;
+    assert_success(&created, "link create")?;
+    let link = json_output(&created)?
+        .get("link")
+        .and_then(Value::as_str)
+        .context("link output missing link")?
+        .to_owned();
+
+    let resolved = run(&data_dir, &["--json", "link", "resolve", &link, "--version", "2"])?;
+    assert_success(&resolved, "link resolve --version")?;
+    let resolved_json = json_output(&resolved)?;
+    ensure!(
+        resolved_json.get("version") == Some(&Value::from("2")),
+        "resolution should report the requested version"
+    );
+    ensure!(
+        resolved_json.get("manifest").is_some(),
+        "resolution should include a manifest"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn link_revoke_with_broadcast() -> Result<()> {
+    let data_dir = data_dir("link-revoke-broadcast");
+    let created = run(&data_dir, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
+    assert_success(&created, "link create private")?;
+    let link = json_output(&created)?
+        .get("link")
+        .and_then(Value::as_str)
+        .context("link output missing link")?
+        .to_owned();
+
+    let revoked = run(&data_dir, &["link", "revoke", &link, "--broadcast"])?;
+    assert_success(&revoked, "link revoke --broadcast")?;
+    let stdout = String::from_utf8_lossy(&revoked.stdout).to_string();
+    ensure!(stdout.contains("revoked:"), "revoke output should confirm revocation");
+
+    fs::remove_dir_all(data_dir)?;
     Ok(())
 }

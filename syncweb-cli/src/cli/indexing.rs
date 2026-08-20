@@ -319,7 +319,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             if broadcast {
                 let node = open_node(data_dir).await?;
                 let topic_id = gossip_topic_id(REVOCATION_TOPIC);
-                let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+                let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
                 let (sender, _receiver) = GossipService::split(topic);
                 let topic_channel =
                     TopicChannel::<PrivateLink>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
@@ -1246,7 +1246,7 @@ fn read_trust_stream_source(source: &str) -> Result<Option<Vec<u8>>> {
     Ok(None)
 }
 
-pub fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()> {
+pub async fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
@@ -1284,8 +1284,7 @@ pub fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()>
             }
 
             if broadcast {
-                let rt = tokio::runtime::Handle::current();
-                rt.block_on(publish_attestation(data_dir, &attestation))?;
+                publish_attestation(data_dir, &attestation).await?;
             }
 
             print_status(
@@ -1299,15 +1298,14 @@ pub fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()>
                 format!("attested: {}\nvalue: {}", attestation.content, attestation.value),
             )
         }
-        AttestCommand::Verify { hash, timeout } => handle_attest_verify(data_dir, output_json, &hash, timeout),
+        AttestCommand::Verify { hash, timeout } => handle_attest_verify(data_dir, output_json, &hash, timeout).await,
     }
 }
 
-fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout: Option<u64>) -> Result<()> {
+async fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout: Option<u64>) -> Result<()> {
     let content_hash = parse_hash(hash)?;
     let timeout_duration = Duration::from_secs(timeout.unwrap_or(5));
-    let rt = tokio::runtime::Handle::current();
-    let attestations: Vec<Attestation> = rt.block_on(collect_attestations(data_dir, content_hash, timeout_duration))?;
+    let attestations: Vec<Attestation> = collect_attestations(data_dir, content_hash, timeout_duration).await?;
 
     if output_json {
         println!("{}", serde_json::to_string_pretty(&attestations)?);
@@ -1319,7 +1317,7 @@ fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout:
     Ok(())
 }
 
-pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {
+pub async fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
@@ -1380,13 +1378,13 @@ pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Re
             reason,
             broadcast,
         } => {
-            handle_moderation_report(ctx, &record, &reason, broadcast)?;
+            handle_moderation_report(ctx, &record, &reason, broadcast).await?;
         }
     }
     Ok(())
 }
 
-fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, broadcast: bool) -> Result<()> {
+async fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, broadcast: bool) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let content = parse_hash(record)?;
@@ -1399,19 +1397,14 @@ fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, br
     db.save_content_reports(&state.reports)?;
 
     if broadcast {
-        let rt = tokio::runtime::Handle::current();
-        let owned_dir = data_dir.to_path_buf();
-        rt.block_on(async {
-            let node = open_node(&owned_dir).await?;
-            let topic_id = gossip_topic_id(REPORT_TOPIC);
-            let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
-            let (sender, _receiver) = GossipService::split(topic);
-            let topic_channel =
-                TopicChannel::<ReportRecord>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
-            topic_channel.publish(&report).await?;
-            node.stop().await?;
-            Ok::<_, anyhow::Error>(())
-        })?;
+        let node = open_node(data_dir).await?;
+        let topic_id = gossip_topic_id(REPORT_TOPIC);
+        let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
+        let (sender, _receiver) = GossipService::split(topic);
+        let topic_channel =
+            TopicChannel::<ReportRecord>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
+        topic_channel.publish(&report).await?;
+        node.stop().await?;
     }
 
     print_status(
@@ -1914,7 +1907,7 @@ const fn moderation_label(action: &ModerationAction) -> &'static str {
 async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {
     let node = open_node(data_dir).await?;
     let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
-    let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+    let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
     let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
     let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
         Arc::new(node.gossip_service().inner().clone()),
@@ -1933,7 +1926,7 @@ async fn collect_attestations(
 ) -> Result<Vec<Attestation>> {
     let node = open_node(data_dir).await?;
     let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
-    let topic = node.gossip_service().subscribe_and_join(topic_id, Vec::new()).await?;
+    let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
     let (sender, receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
     let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
         Arc::new(node.gossip_service().inner().clone()),

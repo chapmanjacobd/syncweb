@@ -6,7 +6,7 @@ pub fn init_tracing(verbose: bool) -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     fmt()
         .json()
-        .with_writer(std::io::stdout)
+        .with_writer(std::io::stderr)
         .with_env_filter(filter)
         .try_init()
         .map_err(|err| anyhow!("failed to initialize structured logging: {err}"))?;

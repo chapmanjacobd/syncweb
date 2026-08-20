@@ -383,10 +383,10 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
 fn verbose_and_rust_log_control_logging() -> anyhow::Result<()> {
     let verbose = run(&["--verbose", "version"])?;
     assert_success(&verbose, "verbose version")?;
-    let verbose_out = stdout_string(&verbose)?;
+    let verbose_out = String::from_utf8(verbose.stderr).context("UTF-8 stderr")?;
     ensure!(
         verbose_out.contains("\"level\":\"DEBUG\""),
-        "verbose should produce debug output: {verbose_out}"
+        "verbose should produce debug output on stderr: {verbose_out}"
     );
 
     let rust_log = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -395,7 +395,7 @@ fn verbose_and_rust_log_control_logging() -> anyhow::Result<()> {
         .output()
         .context("run with RUST_LOG")?;
     assert_success(&rust_log, "RUST_LOG version")?;
-    let rust_log_out = stdout_string(&rust_log)?;
+    let rust_log_out = String::from_utf8(rust_log.stderr).context("UTF-8 stderr")?;
     ensure!(rust_log_out.contains("\"level\":\"DEBUG\""));
     Ok(())
 }

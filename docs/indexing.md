@@ -12,13 +12,16 @@ document entries, and subscribes to subsequent document events. The service
 publishes indexing events through `subscribe`; disabling a folder removes its
 local index entries without affecting the synchronized namespace.
 
-Public discovery uses `syncweb_core::indexing::CatalogService`. A catalog is an
-iroh-docs namespace containing searchable folder metadata (paths, titles, tags,
-hashes, and sizes), never the file contents. `create_catalog` creates a
-namespace, `publish_folder` writes a folder's records, and `subscribe` accepts
-the catalog's doc ticket, starts synchronization, and imports new records into
-the subscriber's local FTS database. `search` searches subscribed catalogs;
-the existing database `search` method remains the local-folder search.
+Public discovery uses `syncweb_core::indexing::CatalogService`. A catalog is
+conceptually a folder that stores searchable metadata (paths, titles, tags,
+hashes, and sizes) — never the file contents. Catalogs are provisioned through
+the same `DocsEngine::create_or_open_namespace` helper as folders and the
+network membership doc, so all three namespace types share one provisioning
+path. `create_catalog` creates the namespace, `publish_folder` writes a folder's
+`CatalogRecord` entries, and `subscribe` accepts the catalog's doc ticket,
+starts synchronization, and imports new records into the subscriber's local FTS
+database. `search` searches subscribed catalogs; the existing database `search`
+method remains the local-folder search.
 
 An indexer may be:
 

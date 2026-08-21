@@ -3,10 +3,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use async_trait::async_trait;
 use iroh::PublicKey;
 use iroh_blobs::{Hash, ticket::BlobTicket};
-use iroh_docs::{
-    AuthorId, DocTicket, NamespaceId,
-    api::{Doc, protocol::ShareMode},
-};
+use iroh_docs::{AuthorId, DocTicket, NamespaceId, api::Doc};
 use tokio::sync::RwLock;
 
 use crate::error::{Result, SyncwebError};
@@ -69,8 +66,8 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the namespace cannot be created or the default author cannot be retrieved.
     pub async fn create(docs_engine: DocsEngine, blob_store: BlobStore, sync_mode: SyncMode) -> Result<Self> {
-        let doc = docs_engine
-            .create_namespace()
+        let (doc, _ticket) = docs_engine
+            .create_or_open_namespace(None)
             .await
             .map_err(|error| SyncwebError::operation("failed to create folder namespace", error))?;
         let author = docs_engine
@@ -262,13 +259,9 @@ impl SyncwebFolder {
     /// # Errors
     ///
     /// Returns an error if the folder ticket cannot be created.
-    pub async fn ticket(&self, endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
-        let mode = if writable && self.sync_mode.can_grant_write() {
-            ShareMode::Write
-        } else {
-            ShareMode::Read
-        };
-        self.docs_engine.share(&self.doc, mode, endpoint).await
+    pub async fn ticket(&self, _endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
+        let can_write = writable && self.sync_mode.can_grant_write();
+        self.docs_engine.share_ticket(&self.doc, can_write).await
     }
 
     /// Create an unauthenticated ticket for a blob in this folder and pin it

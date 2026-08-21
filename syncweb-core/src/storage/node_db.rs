@@ -757,6 +757,26 @@ impl NodeDatabase {
         Ok(())
     }
 
+    /// Update the membership-doc ticket stored for a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn set_network_doc_ticket(&self, id: NetworkId, doc_ticket: &Option<String>) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "UPDATE networks SET doc_ticket = ?1 WHERE id = ?2",
+                params![doc_ticket, id.to_string()],
+            )
+            .map_err(|error| SyncwebError::operation("failed to update network doc ticket", error))?;
+        drop(connection);
+        Ok(())
+    }
+
     /// Add a member to a network.
     ///
     /// # Errors

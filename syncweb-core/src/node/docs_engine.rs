@@ -40,6 +40,29 @@ impl DocsEngine {
             .map_err(|error| SyncwebError::operation("failed to create namespace", error))
     }
 
+    /// Provision a namespace and a shareable ticket for it.
+    ///
+    /// With `existing == None` a fresh namespace is created; with
+    /// `existing == Some(id)` an already-local namespace is opened instead.
+    /// In both cases a write ticket is returned so the caller can hand the
+    /// namespace to a peer. Folder, catalog, and membership-doc provisioning
+    /// all funnel through this single helper.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be created, opened, or shared.
+    pub async fn create_or_open_namespace(&self, existing: Option<NamespaceId>) -> Result<(Doc, DocTicket)> {
+        let doc = match existing {
+            Some(namespace_id) => self
+                .open(namespace_id)
+                .await?
+                .ok_or(SyncwebError::NamespaceNotAvailable)?,
+            None => self.create_namespace().await?,
+        };
+        let ticket = self.share_ticket(&doc, true).await?;
+        Ok((doc, ticket))
+    }
+
     /// # Errors
     ///
     /// Returns an error if the ticket cannot be imported.
@@ -88,10 +111,20 @@ impl DocsEngine {
     /// # Errors
     ///
     /// Returns an error if the document cannot be shared.
-    pub async fn share(&self, doc: &Doc, mode: ShareMode, _endpoint: iroh::EndpointAddr) -> Result<DocTicket> {
+    pub async fn share(&self, doc: &Doc, mode: ShareMode) -> Result<DocTicket> {
         doc.share(mode, AddrInfoOptions::RelayAndAddresses)
             .await
             .map_err(|error| SyncwebError::operation("failed to share document", error))
+    }
+
+    /// Share a read or write ticket for a document.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document cannot be shared.
+    pub async fn share_ticket(&self, doc: &Doc, writable: bool) -> Result<DocTicket> {
+        let mode = if writable { ShareMode::Write } else { ShareMode::Read };
+        self.share(doc, mode).await
     }
 
     /// # Errors

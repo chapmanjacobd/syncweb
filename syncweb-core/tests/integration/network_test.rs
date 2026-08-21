@@ -1,9 +1,91 @@
 use anyhow::{Context, ensure};
 use iroh::SecretKey;
-use syncweb_core::net::{NetworkManager, NetworkOptions, NetworkTicket};
-use syncweb_core::storage::node_db::NodeDatabase;
+use syncweb_core::{
+    constants::NETWORK_MEMBERS_KEY,
+    net::{
+        NetworkManager, NetworkOptions, NetworkTicket,
+        membership_doc::{SignedMemberList, write_member_list},
+    },
+    node::{
+        identity::IdentityManager,
+        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
+    },
+    storage::node_db::NodeDatabase,
+};
 
-use crate::test_utils::empty_member_keys;
+use crate::test_utils::{TestDirectory, empty_member_keys};
+
+async fn node(directory: &TestDirectory, name: &str) -> anyhow::Result<IrohNode> {
+    let root = directory.path().join(name);
+    let identity = IdentityManager::new(root.join("identity.key"))?;
+    Ok(IrohNode::new(
+        identity,
+        root.join("data"),
+        RelayMode::Default,
+        empty_member_keys(),
+        DiscoveryConfig::disabled(),
+    )
+    .await?)
+}
+
+async fn read_member_list(node: &IrohNode, doc: &iroh_docs::api::Doc) -> anyhow::Result<SignedMemberList> {
+    let entry = node
+        .docs_engine()
+        .get_any(doc, NETWORK_MEMBERS_KEY)
+        .await?
+        .context("member list entry missing")?;
+    let bytes = node.blob_store().get(entry.content_hash()).await?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+#[tokio::test]
+async fn membership_doc_writer_signs_and_tracks_invites() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-network-membership")?;
+    let alice = node(&directory, "alice").await?;
+    let bob = node(&directory, "bob").await?;
+
+    let db = NodeDatabase::open(directory.path().join("owner.db"))?;
+    let mut manager = NetworkManager::new(db, alice.endpoint().id(), empty_member_keys())?;
+    let id = manager.create("team", NetworkOptions::default())?;
+    let network = manager.get(&id).context("network missing")?.clone();
+
+    let docs = alice.docs_engine();
+    let (doc, _write_ticket) = docs.create_or_open_namespace(None).await?;
+    let author = docs.author().await?;
+    let signing = ed25519_dalek::SigningKey::from_bytes(&alice.endpoint().secret_key().to_bytes());
+
+    let initial_sequence = write_member_list(docs, alice.blob_store(), &doc, author, &signing, &network).await?;
+    ensure!(initial_sequence == 1, "first member list should use sequence 1");
+
+    let initial_list = read_member_list(&alice, &doc).await?;
+    initial_list.verify()?;
+    ensure!(initial_list.members.len() == 1);
+    ensure!(initial_list.members.first().context("member entry missing")?.key == alice.endpoint().id().to_string());
+
+    let member = bob.endpoint().id();
+    manager.invite(id, member)?;
+    let updated_network = manager.get(&id).context("network missing")?.clone();
+    let next_sequence = write_member_list(docs, alice.blob_store(), &doc, author, &signing, &updated_network).await?;
+    ensure!(next_sequence == 2, "second member list should use sequence 2");
+
+    let updated_list = read_member_list(&alice, &doc).await?;
+    updated_list.verify()?;
+    ensure!(updated_list.members.len() == 2, "invited member should be listed");
+    ensure!(
+        updated_list
+            .members
+            .iter()
+            .any(|entry| entry.key == bob.endpoint().id().to_string())
+    );
+
+    let read_ticket = docs.share_ticket(&doc, false).await?;
+    let bob_doc = bob.docs_engine().import_ticket(read_ticket).await?;
+    ensure!(bob_doc.id() == doc.id(), "imported membership doc should match");
+
+    alice.stop().await?;
+    bob.stop().await?;
+    Ok(())
+}
 
 #[test]
 fn network_lifecycle_persists_and_tickets_round_trip() -> anyhow::Result<()> {

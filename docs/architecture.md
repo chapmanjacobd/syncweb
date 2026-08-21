@@ -11,9 +11,13 @@ grouping abstraction.
 - Folders: Associated with a network via the node database (`NetworkTicket`
   carries the folder namespaces); used for `create --network` /
   `join --network` auto-join.
-- Membership docs: An optional iroh-docs ticket (`sys/network/members`) may
-  carry a signed member list for removal detection when invited via
-  `--doc-ticket`.
+- Membership docs: A network carries an iroh-docs namespace provisioned by the
+  owner through the same `DocsEngine::create_or_open_namespace` helper used for
+  folders and catalogs. The owner signs the current member list under
+  `sys/network/members` on create/invite/kick, and a read-only doc ticket flows
+  through `NetworkTicket` so members can detect when they are removed. Because
+  membership namespaces are not user folders, `FolderManager` excludes them from
+  folder listing.
 
 ### Local (LAN) Discovery
 

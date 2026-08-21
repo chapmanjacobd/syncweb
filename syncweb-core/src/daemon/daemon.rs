@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use crate::{
-    constants::SIGNAL_TOPIC,
+    constants::{NETWORK_MEMBERS_KEY, SIGNAL_TOPIC},
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::{FolderManager, PublicSubscription},
@@ -1382,7 +1382,7 @@ impl Daemon {
                             };
                             match event_result {
                                 Ok(iroh_docs::engine::LiveEvent::InsertLocal { entry } | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. }) => {
-                                    if entry.key() == b"sys/network/members" {
+                                    if entry.key() == NETWORK_MEMBERS_KEY {
                                         let hash = entry.content_hash();
                                         let Ok(content) = bs.get(hash).await else { continue; };
                                         match serde_json::from_slice::<crate::net::membership_doc::SignedMemberList>(&content) {

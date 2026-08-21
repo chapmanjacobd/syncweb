@@ -1,11 +1,14 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use iroh_docs::NamespaceId;
+use iroh_docs::{AuthorId, NamespaceId, api::Doc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     Result, SyncwebError,
-    constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_DOC_NAMESPACE_CONTEXT},
+    constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_DOC_NAMESPACE_CONTEXT, NETWORK_MEMBERS_KEY},
+    node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
+
+use super::network::Network;
 
 /// The canonical, owner-signed list of network members.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -46,6 +49,39 @@ impl SignedMemberList {
             sequence: 0,
             members: Vec::new(),
             updated_at: current_unix_secs(),
+            signature: String::new(),
+        }
+    }
+
+    /// Build the member list from a network's current membership.
+    ///
+    /// The owner is encoded as the hex of the node's ed25519 public key, which
+    /// matches what [`SignedMemberList::sign`] and [`SignedMemberList::verify`]
+    /// expect.
+    #[must_use]
+    pub fn from_network(network: &Network) -> Self {
+        let owner = hex::encode(network.owner.as_bytes());
+        let now = current_unix_secs();
+        let mut members = network
+            .members
+            .iter()
+            .map(|key| MemberEntry {
+                key: key.to_string(),
+                joined_at: now,
+                role: if *key == network.owner {
+                    MemberRole::Admin
+                } else {
+                    MemberRole::Member
+                },
+            })
+            .collect::<Vec<_>>();
+        members.sort_by(|left, right| left.key.cmp(&right.key));
+        Self {
+            network_id: network.id.to_string(),
+            owner,
+            sequence: 0,
+            members,
+            updated_at: now,
             signature: String::new(),
         }
     }
@@ -126,6 +162,45 @@ pub struct NetworkInfo {
     pub name: String,
     pub label: String,
     pub created_at: u64,
+}
+
+/// Sign and publish the current member list for a network into its membership
+/// doc under `sys/network/members`.
+///
+/// The writer is the network owner: `signing` must match `network.owner`.
+/// Returns the next list sequence number used.
+///
+/// # Errors
+///
+/// Returns an error if the previous list cannot be read, the list cannot be
+/// signed, or the entry cannot be written.
+pub async fn write_member_list(
+    docs: &DocsEngine,
+    blobs: &BlobStore,
+    doc: &Doc,
+    author: AuthorId,
+    signing: &SigningKey,
+    network: &Network,
+) -> Result<u64> {
+    let sequence = next_member_list_sequence(docs, blobs, doc).await?;
+    let mut list = SignedMemberList::from_network(network);
+    list.sequence = sequence;
+    list.sign(signing)?;
+    let bytes =
+        serde_json::to_vec(&list).map_err(|error| SyncwebError::operation("failed to serialize member list", error))?;
+    docs.set(doc, author, NETWORK_MEMBERS_KEY, bytes).await?;
+    Ok(sequence)
+}
+
+/// Return the sequence number to use for the next member list write.
+async fn next_member_list_sequence(docs: &DocsEngine, blobs: &BlobStore, doc: &Doc) -> Result<u64> {
+    let Some(entry) = docs.get_any(doc, NETWORK_MEMBERS_KEY).await? else {
+        return Ok(1);
+    };
+    let bytes = blobs.get(entry.content_hash()).await?;
+    let current: SignedMemberList = serde_json::from_slice(&bytes)
+        .map_err(|error| SyncwebError::operation("failed to deserialize member list", error))?;
+    Ok(current.sequence.saturating_add(1))
 }
 
 fn current_unix_secs() -> u64 {

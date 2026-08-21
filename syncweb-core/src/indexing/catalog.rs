@@ -1,7 +1,11 @@
 //! Public metadata catalogs for the opt-in indexing service.
 //!
-//! Catalogs are ordinary iroh-docs namespaces. The catalog contains metadata
-//! only; the synchronized folder remains the source of the actual content.
+//! Catalogs are iroh-docs namespaces provisioned exactly like folders (via
+//! [`crate::node::docs_engine::DocsEngine::create_or_open_namespace`]): a
+//! catalog is a folder whose entries are [`CatalogRecord`] metadata, plus an
+//! [`IndexingDatabase::enable_catalog`] registration. The catalog contains
+//! metadata only; the synchronized folder remains the source of the actual
+//! content.
 
 use std::{
     collections::HashMap,
@@ -10,11 +14,7 @@ use std::{
 };
 
 use iroh_blobs::Hash;
-use iroh_docs::{
-    AuthorId, DocTicket, Entry, NamespaceId,
-    api::{Doc, protocol::ShareMode},
-    engine::LiveEvent,
-};
+use iroh_docs::{AuthorId, DocTicket, Entry, NamespaceId, api::Doc, engine::LiveEvent};
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
@@ -275,13 +275,18 @@ impl CatalogService {
 
     /// Create and register a catalog namespace.
     ///
+    /// Catalogs are folders that store indexable [`CatalogRecord`] entries:
+    /// provisioning is unified with folder creation through
+    /// [`DocsEngine::create_or_open_namespace`], and the catalog metadata lives
+    /// under the `sys/` key namespace like folder metadata.
+    ///
     /// # Errors
     ///
     /// Returns an error if the namespace or its metadata cannot be created.
     pub async fn create_catalog(&self, name: impl Into<String>) -> Result<Catalog> {
         let metadata = CatalogMetadata::new(name, self.author.to_string());
         metadata.validate()?;
-        let doc = self.docs.create_namespace().await?;
+        let (doc, _ticket) = self.docs.create_or_open_namespace(None).await?;
         let catalog = Catalog::new(doc, metadata.name.clone());
         self.docs
             .set(&catalog.doc, self.author, CATALOG_METADATA_KEY, metadata.to_bytes()?)
@@ -374,9 +379,8 @@ impl CatalogService {
     /// # Errors
     ///
     /// Returns an error if the catalog ticket cannot be created.
-    pub async fn ticket(&self, catalog: &Catalog, endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
-        let mode = if writable { ShareMode::Write } else { ShareMode::Read };
-        self.docs.share(&catalog.doc, mode, endpoint).await
+    pub async fn ticket(&self, catalog: &Catalog, _endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
+        self.docs.share_ticket(&catalog.doc, writable).await
     }
 
     /// Subscribe to a catalog using its iroh-docs ticket.
@@ -409,11 +413,7 @@ impl CatalogService {
     ///
     /// Returns an error if the namespace is not available or cannot be synced.
     pub async fn subscribe_namespace(&self, namespace_id: NamespaceId) -> Result<Catalog> {
-        let doc = self
-            .docs
-            .open(namespace_id)
-            .await?
-            .ok_or(SyncwebError::NamespaceNotAvailable)?;
+        let (doc, _ticket) = self.docs.create_or_open_namespace(Some(namespace_id)).await?;
         let catalog = Catalog::new(doc, "remote catalog");
         self.activate(&catalog).await?;
         Ok(catalog)

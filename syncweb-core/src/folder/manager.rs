@@ -10,7 +10,7 @@ use iroh_docs::{DocTicket, NamespaceId, api::Doc};
 use n0_future::StreamExt;
 use tokio::sync::RwLock;
 
-use crate::constants::MODE_KEY;
+use crate::constants::{MODE_KEY, NETWORK_MEMBERS_KEY};
 use crate::error::{Result, SyncwebError};
 use crate::node::discovery::TopicTracker;
 use crate::node::iroh_node::IrohNode;
@@ -50,7 +50,7 @@ impl FolderManager {
     ///
     /// Returns an error if the folder namespace cannot be created or initialized.
     pub async fn create(&self, mode: SyncMode) -> Result<SyncwebFolder> {
-        let doc = self.docs_engine.create_namespace().await?;
+        let (doc, _ticket) = self.docs_engine.create_or_open_namespace(None).await?;
         let author = self.docs_engine.author().await?;
         self.docs_engine.set(&doc, author, MODE_KEY, mode.to_string()).await?;
         let folder = SyncwebFolder::new(doc, author, self.blob_store.clone(), self.docs_engine.clone(), mode);
@@ -107,11 +107,7 @@ impl FolderManager {
         if let Some(folder) = existing_folder {
             return Ok(folder);
         }
-        let doc = self
-            .docs_engine
-            .open(namespace_id)
-            .await?
-            .ok_or(SyncwebError::NamespaceNotAvailable)?;
+        let (doc, _ticket) = self.docs_engine.create_or_open_namespace(Some(namespace_id)).await?;
         let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
         self.folders.write().await.insert(namespace_id, folder.clone());
         self.announce_namespace(namespace_id).await;
@@ -244,6 +240,9 @@ impl FolderManager {
                 .open(namespace_id)
                 .await?
                 .ok_or(SyncwebError::NamespaceNotAvailable)?;
+            if self.docs_engine.get_any(&doc, NETWORK_MEMBERS_KEY).await?.is_some() {
+                continue;
+            }
             let fallback_mode = match capability {
                 iroh_docs::CapabilityKind::Write => SyncMode::SendReceive,
                 iroh_docs::CapabilityKind::Read => SyncMode::ReceiveOnly,

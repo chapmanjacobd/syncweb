@@ -4051,6 +4051,11 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             options.label = label;
             options.invite_only = invite_only;
             let id = manager.create(&name, options)?;
+            if let Some(network) = manager.get(&id).cloned()
+                && let Err(error) = provision_network_doc(data_dir, &network, &mut manager).await
+            {
+                tracing::warn!(%error, "network created without a membership doc (doc_ticket)");
+            }
             if output_json {
                 println!(
                     "{}",
@@ -4090,6 +4095,12 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             } else {
                 manager.invite_any(id)?
             };
+            if let Some(network) = manager.get(&id).cloned()
+                && network.doc_ticket.is_some()
+                && let Err(error) = refresh_network_doc(data_dir, &network).await
+            {
+                tracing::warn!(%error, "failed to refresh network membership doc");
+            }
             if output_json {
                 println!("{}", serde_json::json!({"ticket": ticket.to_string()}));
             } else {
@@ -4103,6 +4114,12 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
             let id = network_id_by_name(&manager, &name)?;
             manager.kick(id, &device.parse()?)?;
+            if let Some(network) = manager.get(&id).cloned()
+                && network.doc_ticket.is_some()
+                && let Err(error) = refresh_network_doc(data_dir, &network).await
+            {
+                tracing::warn!(%error, "failed to refresh network membership doc");
+            }
             if output_json {
                 println!("{}", serde_json::json!({"status": "kicked", "device": device}));
             } else {
@@ -4311,6 +4328,44 @@ fn add_folder_to_network(
     let mut networks = open_network_manager(data_dir)?;
     let id = network_id_by_name(&networks, network_name)?;
     networks.add_folder(id, namespace)?;
+    Ok(())
+}
+
+/// Create the owner-signed membership doc for a network and persist its
+/// read-only ticket on the network so members can import it for removal
+/// detection.
+async fn provision_network_doc(
+    data_dir: &Path,
+    network: &syncweb_core::net::Network,
+    manager: &mut NetworkManager,
+) -> Result<()> {
+    let node = open_node(data_dir).await?;
+    let docs = node.docs_engine();
+    let (doc, _write_ticket) = docs.create_or_open_namespace(None).await?;
+    let author = docs.author().await?;
+    let signing = ed25519_dalek::SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
+    syncweb_core::net::membership_doc::write_member_list(docs, node.blob_store(), &doc, author, &signing, network)
+        .await?;
+    let read_ticket = docs.share_ticket(&doc, false).await?;
+    node.stop().await?;
+    manager.set_doc_ticket(network.id, &Some(read_ticket.to_string()))?;
+    Ok(())
+}
+
+/// Re-sign and re-publish the member list after a membership change
+/// (invite/kick) by the owner.
+async fn refresh_network_doc(data_dir: &Path, network: &syncweb_core::net::Network) -> Result<()> {
+    let Some(ref doc_ticket) = network.doc_ticket else {
+        return Ok(());
+    };
+    let node = open_node(data_dir).await?;
+    let docs = node.docs_engine();
+    let doc = docs.import_ticket(doc_ticket.parse()?).await?;
+    let author = docs.author().await?;
+    let signing = ed25519_dalek::SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
+    syncweb_core::net::membership_doc::write_member_list(docs, node.blob_store(), &doc, author, &signing, network)
+        .await?;
+    node.stop().await?;
     Ok(())
 }
 

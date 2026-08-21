@@ -92,6 +92,9 @@ pub const MODE_KEY: &[u8] = b"sys/syncweb/mode";
 /// Iroh-docs key for catalog namespace metadata.
 pub const CATALOG_METADATA_KEY: &[u8] = b"sys/syncweb/catalog/metadata";
 
+/// Iroh-docs key for the owner-signed network member list.
+pub const NETWORK_MEMBERS_KEY: &[u8] = b"sys/network/members";
+
 // ---------------------------------------------------------------------------
 // URI scheme
 // ---------------------------------------------------------------------------

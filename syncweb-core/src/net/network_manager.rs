@@ -284,6 +284,20 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Set (or clear) the membership-doc ticket on a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network does not exist or persistence fails.
+    pub fn set_doc_ticket(&mut self, id: NetworkId, doc_ticket: &Option<String>) -> Result<()> {
+        let network = self
+            .networks
+            .get_mut(&id)
+            .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))?;
+        network.doc_ticket.clone_from(doc_ticket);
+        self.db.set_network_doc_ticket(id, doc_ticket)
+    }
+
     /// Associate a folder with a network.
     ///
     /// # Errors

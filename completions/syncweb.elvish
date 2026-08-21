@@ -40,6 +40,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand config 'Show or update local configuration'
             cand ls 'List files in a local folder'
             cand find 'Search local files'
+            cand search 'Search catalog content, packages, and editorial channels'
             cand sort 'Sort local files by discovery criteria'
             cand stat 'Show detailed metadata for a local file'
             cand download 'Download folder content or copy a local file'
@@ -306,6 +307,20 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
+        }
+        &'syncweb;search'= {
+            cand --kind 'Which backend to search: all, catalog, package, or channel'
+            cand --channel 'Restrict results to an editorial channel'
+            cand --limit 'Maximum number of results'
+            cand --timeout-ms 'Gossip search timeout in milliseconds'
+            cand --bootstrap 'Bootstrap gossip search with a node ID'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help (see more with ''--help'')'
+            cand --help 'Print help (see more with ''--help'')'
         }
         &'syncweb;sort'= {
             cand --by 'by'
@@ -715,7 +730,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand publish 'Publish a package manifest ticket and announce it to the catalog'
             cand export 'Export one or more package directories as compressed CAR archive files'
             cand import 'Import and install a compressed CAR archive file'
-            cand search 'List locally installed packages, optionally filtering by text'
             cand info 'Show a collection manifest from a ticket or blob hash'
             cand install 'Verify, stage, and atomically install a collection version'
             cand upgrade 'Install a newer collection manifest version via ticket'
@@ -784,18 +798,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;package;import'= {
             cand --filter 'filter'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;package;search'= {
-            cand --bootstrap 'bootstrap'
-            cand --timeout-ms 'timeout-ms'
-            cand --channel 'Search an editorial channel (uses catalog-backed persistence when the channel is configured in config.toml)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1045,7 +1047,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand enable 'Opt a synchronized folder into indexing'
             cand disable 'Remove a folder from the local index'
-            cand search 'Search subscribed catalogs'
             cand health 'Show verified provider health for a content hash'
             cand meta 'Manage signed metadata'
             cand filter 'Manage local and federated denylists'
@@ -1060,16 +1061,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;indexing;disable'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;indexing;search'= {
-            cand --limit 'limit'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

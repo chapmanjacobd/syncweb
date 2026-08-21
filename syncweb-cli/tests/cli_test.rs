@@ -539,7 +539,7 @@ fn test_ls_sort() -> anyhow::Result<()> {
     std::fs::write(source.join("small.txt"), b"s").context("write small")?;
 
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["ls", source.to_str().context("UTF-8 path")?, "--sort", "peers"])
+        .args(["ls", "--sort", "peers", source.to_str().context("UTF-8 path")?])
         .output()
         .context("run syncweb ls --sort")?;
 
@@ -565,10 +565,10 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_regex = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
-            r"report-\d+\.pdf",
-            source.to_str().context("UTF-8 path")?,
             "--kind",
             "regex",
+            r"report-\d+\.pdf",
+            source.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb find regex")?;
@@ -579,10 +579,10 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_glob = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
-            "*.txt",
-            source.to_str().context("UTF-8 path")?,
             "--kind",
             "glob",
+            "*.txt",
+            source.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb find glob")?;
@@ -596,10 +596,10 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_exact = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
-            "data",
-            source.to_str().context("UTF-8 path")?,
             "--kind",
             "exact",
+            "data",
+            source.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb find exact")?;
@@ -623,7 +623,7 @@ fn test_sort_algorithms() -> anyhow::Result<()> {
 
     for algorithm in ["niche", "frecency", "peers", "random", "folder"] {
         let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-            .args(["sort", source.to_str().context("UTF-8 path")?, "--by", algorithm])
+            .args(["sort", "--by", algorithm, source.to_str().context("UTF-8 path")?])
             .output()
             .context("run syncweb sort")?;
         ensure!(
@@ -653,10 +653,10 @@ fn test_sort_with_enrich_flag() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "sort",
-            source.to_str().context("UTF-8 path")?,
             "--by",
             "peers",
             "--enrich",
+            source.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb sort --by peers --enrich")?;
@@ -700,8 +700,8 @@ fn test_stat_detailed() -> anyhow::Result<()> {
     let output_terse = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "stat",
-            source.join("file.txt").to_str().context("UTF-8 path")?,
             "--terse",
+            source.join("file.txt").to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb stat --terse")?;
@@ -886,8 +886,8 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            directory.to_str().context("UTF-8 path")?,
             "--write",
+            directory.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb share --write")?;
@@ -922,8 +922,8 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--no-daemon",
             "share",
             "rm",
-            directory.to_str().context("UTF-8 path")?,
             "--write",
+            directory.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb share rm --write")?;
@@ -1051,10 +1051,10 @@ fn network_create_with_label_and_invite_only() -> anyhow::Result<()> {
             data_dir,
             "network",
             "create",
-            "secure-net",
             "--label",
             "Secure",
             "--invite-only",
+            "secure-net",
         ])
         .output()
         .context("create network with options")?;
@@ -1281,10 +1281,10 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             data_dir,
             "--no-daemon",
             "join",
-            &ticket,
-            join_dir.to_str().context("UTF-8 path")?,
             "--network",
             "join-net",
+            &ticket,
+            join_dir.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("join with --network")?;

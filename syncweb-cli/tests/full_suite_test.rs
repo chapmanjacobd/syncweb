@@ -296,16 +296,16 @@ fn ls_find_sort_stat_workflow() -> anyhow::Result<()> {
 
     let find = run(&[
         "find",
-        r"report-\d+\.pdf",
-        source.to_str().context("UTF-8 path")?,
         "--kind",
         "regex",
+        r"report-\d+\.pdf",
+        source.to_str().context("UTF-8 path")?,
     ])?;
     assert_success(&find, "find regex")?;
     let find_out = stdout_string(&find)?;
     ensure!(find_out.contains("report-01.pdf"), "find should match: {find_out}");
 
-    let sort = run(&["sort", source.to_str().context("UTF-8 path")?, "--by", "peers"])?;
+    let sort = run(&["sort", "--by", "peers", source.to_str().context("UTF-8 path")?])?;
     assert_success(&sort, "sort")?;
     let sort_out = stdout_string(&sort)?;
     ensure!(sort_out.lines().count() == 3, "sort should list 3 files: {sort_out}");
@@ -366,9 +366,9 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
         &[
             "package",
             "init",
-            package_dir.to_str().context("UTF-8 package path")?,
             "--name",
             "example",
+            package_dir.to_str().context("UTF-8 package path")?,
         ],
     )?;
     assert_success(&init, "package init")?;
@@ -412,7 +412,7 @@ fn package_bump() -> anyhow::Result<()> {
         .to_str()
         .context("UTF-8 root path")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
     assert_success(&init, "package init")?;
 
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
@@ -423,11 +423,11 @@ fn package_bump() -> anyhow::Result<()> {
         &[
             "package",
             "bump",
-            package_path,
             "--version",
             "2.0.0",
             "--changelog",
             "second release",
+            package_path,
         ],
     )?;
     assert_success(&bump, "package bump")?;
@@ -450,7 +450,7 @@ fn package_bump() -> anyhow::Result<()> {
 
     let bump_json = run_with_data(
         &data_dir,
-        &["--json", "package", "bump", package_path, "--version", "3.0.0"],
+        &["--json", "package", "bump", "--version", "3.0.0", package_path],
     )?;
     assert_success(&bump_json, "package bump json")?;
     let value: serde_json::Value = serde_json::from_slice(&bump_json.stdout)?;
@@ -494,7 +494,7 @@ fn package_multipath_common_root_rebasing() -> anyhow::Result<()> {
     let thing_txt_path = library.join("thing.txt");
     let thing_txt = thing_txt_path.to_str().context("UTF-8 thing.txt path")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", td_str, thing_txt, "--name", "example"])?;
+    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", td_str, thing_txt])?;
     assert_success(&init, "package init multi-path")?;
     let paths = logical_paths_of(&data_dir, lib_str)?;
     ensure!(
@@ -524,7 +524,7 @@ fn package_multipath_common_root_rebasing() -> anyhow::Result<()> {
 
     let init2 = run_with_data(
         &data_dir,
-        &["package", "init", td_second_str, thing_second, "--name", "example2"],
+        &["package", "init", "--name", "example2", td_second_str, thing_second],
     )?;
     assert_success(&init2, "package init example 2")?;
     let paths2 = logical_paths_of(&data_dir, dir_str)?;
@@ -556,11 +556,11 @@ fn publish_manifest_ticket(
             "--no-daemon",
             "package",
             "publish",
-            package_path,
             "--namespace",
             namespace,
             "--sequence",
             sequence,
+            package_path,
         ],
     )?;
     assert_success(&publish, "package publish")?;
@@ -632,7 +632,7 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
     assert_success(&init, "package init")?;
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
     assert_success(&add, "package add")?;
@@ -645,11 +645,11 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         &[
             "package",
             "bump",
-            package_path,
             "--version",
             "2.0.0",
             "--changelog",
             "second release",
+            package_path,
         ],
     )?;
     assert_success(&bump, "package bump")?;
@@ -666,10 +666,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     ensure!(installed_collection.get("collection") == Some(&serde_json::Value::from(collection.as_str())));
     ensure!(installed_collection.get("current") == Some(&serde_json::Value::from("2.0.0")));
 
-    let search = run_with_data(&data_dir, &["--json", "package", "search", &collection])?;
-    assert_success(&search, "package search")?;
+    let search = run_with_data(&data_dir, &["--json", "search", "--kind", "package", &collection])?;
+    assert_success(&search, "search --kind package")?;
     let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
-    let results = search_json.as_array().context("package search should be an array")?;
+    let results = search_json.as_array().context("search should be an array")?;
     ensure!(
         results
             .iter()
@@ -791,7 +791,7 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", package_path, "--name", "example"])?;
+    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
     assert_success(&init, "package init")?;
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
     assert_success(&add, "package add")?;
@@ -803,11 +803,11 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
             "--no-daemon",
             "package",
             "publish",
-            package_path,
             "--namespace",
             namespace,
             "--sequence",
             "1",
+            package_path,
         ],
     )?;
     assert_success(&publish, "package publish")?;
@@ -877,16 +877,15 @@ fn package_search_channel_and_bootstrap() -> anyhow::Result<()> {
         &data_dir,
         &[
             "--json",
-            "package",
             "search",
-            "example",
             "--channel",
             "unconfigured",
             "--timeout-ms",
             "100",
+            "example",
         ],
     )?;
-    assert_success(&search, "package search --channel --timeout-ms")?;
+    assert_success(&search, "search --channel --timeout-ms")?;
     let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
     ensure!(search_json.is_array(), "search should produce an array: {search_json}");
 
@@ -894,14 +893,7 @@ fn package_search_channel_and_bootstrap() -> anyhow::Result<()> {
     // error instead of hanging on a connection attempt.
     let invalid = run_with_data(
         &data_dir,
-        &[
-            "--json",
-            "package",
-            "search",
-            "example",
-            "--bootstrap",
-            "not-a-valid-node",
-        ],
+        &["--json", "search", "--bootstrap", "not-a-valid-node", "example"],
     )?;
     ensure!(
         !invalid.status.success(),

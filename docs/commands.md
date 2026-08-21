@@ -132,8 +132,8 @@ syncweb find --fixed-string 'beethoven' music/
 syncweb find --type f --ext mp3 --min-size 10MB --max-size 500MB music/
 
 # Time filters
-syncweb find 'report.*\.md$' --modified-within 7d
-syncweb find 'old-log.*' --modified-before 30d
+syncweb find --modified-within 7d 'report.*\.md$'
+syncweb find --modified-before 30d 'old-log.*'
 
 # Depth constraints
 syncweb find --depth +2 --depth -5 'config.*'
@@ -394,10 +394,10 @@ syncweb share ./documents
 #         ticket: <read-only ticket>
 
 # Share with write access
-syncweb share ./documents --write
+syncweb share --write ./documents
 
 # Skip pinning and/or persistence
-syncweb share ./documents --no-pin --no-persist
+syncweb share --no-pin --no-persist ./documents
 
 # Share by namespace directly
 syncweb share --namespace <ns> --write
@@ -407,7 +407,7 @@ syncweb share --blob <hash> --namespace <ns>
 
 # List and remove persisted shares; remove a shared blob pin
 syncweb share list
-syncweb share rm ./documents --write
+syncweb share rm --write ./documents
 syncweb share rm --blob <hash> --namespace <ns>
 ```
 
@@ -464,6 +464,7 @@ syncweb config set discovery.interface eth0
 | `devices` | `devices` | List known peers + connection status |
 | `ls` | `ls` | List doc entries (lazy) |
 | `find` | `find` | Search doc entries (with filters) |
+| | `search` | Unified search across catalog content, packages, and editorial channels (`--kind`, `--channel`, `--bootstrap`, `--limit`, `--timeout-ms`) |
 | `download` | `download` | Trigger lazy fetch for paths |
 | `sort` | `sort` | Sort results (uses peer tracker) |
 | `stat` | `stat` | File metadata from doc + blob store |
@@ -487,7 +488,6 @@ syncweb config set discovery.interface eth0
 | | `package add` | Re-scan paths and update the manifest |
 | | `package bump` | Create a new package version with changelog |
 | | `package publish` | Publish a package manifest ticket and announce it to the catalog |
-| | `package search` | Discover packages via gossip |
 | | `package info` | Detailed package metadata |
 | | `package export` | Export package versions as compressed `.car.zst` drops |
 | | `package import` | Import and install a compressed `.car.zst` drop |
@@ -544,7 +544,7 @@ syncweb verify ./documents
 syncweb config schedule
 syncweb config schedule set --active "22:00-06:00"
 syncweb config schedule set --bandwidth "5MB/s" --period "08:00-18:00"
-syncweb config schedule folder media --active "01:00-05:00"
+syncweb config schedule folder --active "01:00-05:00" media
 
 # Download with limits (max entries)
 syncweb download --limit 10 /path/to/files
@@ -556,32 +556,32 @@ syncweb download --size 1GB /path/to/files
 syncweb join <ticket> /path/to/folder
 
 # Track + enable live syncing (persisted), then exit
-syncweb join <ticket> --subscribe /path/to/folder
+syncweb join --subscribe <ticket> /path/to/folder
 
 # Live-sync filters: only files ingested after enabling, and ignore our own writes
-syncweb join <ticket> --subscribe --ingest-only --ignore-self /path/to/folder
+syncweb join --subscribe --ingest-only --ignore-self <ticket> /path/to/folder
 
 # Join and download existing content in one step (receive-side symmetry to
 # `create --import`); honors the same prefix/glob/max filters
-syncweb join <ticket> --download /path/to/folder
-syncweb join <ticket> --download --glob '*.md' /path/to/folder
+syncweb join --download <ticket> /path/to/folder
+syncweb join --download --glob '*.md' <ticket> /path/to/folder
 
 # Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
-syncweb join <folder> --subscribe
+syncweb join --subscribe <folder>
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
 # Share a folder (read-only by default, --write for write access), a single blob,
 # or publish folder metadata to a catalog
 syncweb share /path/to/folder
-syncweb share /path/to/folder --write
-syncweb share . --namespace <namespace-id>
+syncweb share --write /path/to/folder
+syncweb share --namespace <namespace-id> .
 syncweb share --blob <hash> --namespace <namespace-id>
-syncweb publish catalog /path/to/folder --catalog <name> --tag music
+syncweb publish catalog --catalog <name> --tag music /path/to/folder
 
 # List and remove persisted shares; remove a shared blob pin
 syncweb share list
-syncweb share rm /path/to/folder --write
+syncweb share rm --write /path/to/folder
 syncweb share rm --blob <hash> --namespace <namespace-id>
 
 # Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
@@ -610,7 +610,7 @@ syncweb export /path/to/output
 syncweb stats seeding --folder audio/
 
 # Capacity-aware transfer placement
-syncweb transfer root media /srv/media --min-free 10GB
+syncweb transfer root --min-free 10GB media /srv/media
 syncweb transfer remaining
 syncweb transfer info --state failed --sort updated --group-by namespace
 syncweb transfer allocate --dry-run
@@ -628,7 +628,7 @@ syncweb folders --limit-upload 1MB/s --limit-download 5MB/s
 syncweb devices --peer-limit NODE-ID --upload 500KB/s --download 2MB/s
 
 # Snapshot commands
-syncweb snapshot create documents/ --description "before edit"
+syncweb snapshot create --description "before edit" documents/
 syncweb snapshot list documents/
 syncweb snapshot restore documents/ a1b2c3d4
 syncweb snapshot diff documents/ a1b2c3d4 e5f6g7h8
@@ -642,7 +642,7 @@ syncweb network invite work <device-id>
 # Find with filters
 syncweb find --glob '/*.mp3' music/
 syncweb find --type f --ext mp3 --min-size 10MB music/
-syncweb find 'report.*' --modified-within 7d
+syncweb find --modified-within 7d 'report.*'
 
 # Stat with format
 syncweb stat docs/report.md
@@ -672,7 +672,7 @@ syncweb devices --bep
 syncweb conflicts
 syncweb conflicts --resolve
 syncweb conflicts --auto-resolve
-syncweb conflicts resolve <id> --keep-local
+syncweb conflicts resolve --keep-local <id>
 
 # Offline queue
 syncweb pending

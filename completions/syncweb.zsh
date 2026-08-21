@@ -343,6 +343,26 @@ _arguments "${_arguments_options[@]}" : \
 '::path:_files' \
 && ret=0
 ;;
+(search)
+_arguments "${_arguments_options[@]}" : \
+'--kind=[Which backend to search\: all, catalog, package, or channel]:KIND:((all\:"Search the local catalog index (FTS) and, when requested, editorial channels and gossip"
+catalog\:"Search only the local catalog index (FTS over subscribed catalog docs)"
+package\:"Search installed packages and, when requested, the gossip package catalog"
+channel\:"Search only an editorial channel"))' \
+'--channel=[Restrict results to an editorial channel]:CHANNEL:_default' \
+'--limit=[Maximum number of results]:LIMIT:_default' \
+'--timeout-ms=[Gossip search timeout in milliseconds]:TIMEOUT_MS:_default' \
+'*--bootstrap=[Bootstrap gossip search with a node ID]:NODE_ID:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'::query -- Search query; omit to list everything:_default' \
+&& ret=0
+;;
 (sort)
 _arguments "${_arguments_options[@]}" : \
 '--by=[]:BY:(niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count)' \
@@ -970,21 +990,6 @@ _arguments "${_arguments_options[@]}" : \
 '*::archives:_files' \
 && ret=0
 ;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-'*--bootstrap=[]:NODE_ID:_default' \
-'--timeout-ms=[]:TIMEOUT_MS:_default' \
-'--channel=[Search an editorial channel (uses catalog-backed persistence when the channel is configured in config.toml)]:CHANNEL:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::query:_default' \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 '--hash=[Blob hash of the manifest (requires --node-id)]:HASH:_default' \
@@ -1336,19 +1341,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
-&& ret=0
-;;
-(search)
-_arguments "${_arguments_options[@]}" : \
-'--limit=[]:LIMIT:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':query:_default' \
 && ret=0
 ;;
 (health)
@@ -1989,6 +1981,7 @@ _syncweb_commands() {
 'config:Show or update local configuration' \
 'ls:List files in a local folder' \
 'find:Search local files' \
+'search:Search catalog content, packages, and editorial channels' \
 'sort:Sort local files by discovery criteria' \
 'stat:Show detailed metadata for a local file' \
 'download:Download folder content or copy a local file' \
@@ -2157,7 +2150,6 @@ _syncweb__subcmd__indexing_commands() {
     local commands; commands=(
 'enable:Opt a synchronized folder into indexing' \
 'disable:Remove a folder from the local index' \
-'search:Search subscribed catalogs' \
 'health:Show verified provider health for a content hash' \
 'meta:Manage signed metadata' \
 'filter:Manage local and federated denylists' \
@@ -2214,11 +2206,6 @@ _syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
 _syncweb__subcmd__indexing__subcmd__meta__subcmd__list_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing meta list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__search_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing search commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__join_commands] )) ||
 _syncweb__subcmd__join_commands() {
@@ -2362,7 +2349,6 @@ _syncweb__subcmd__package_commands() {
 'publish:Publish a package manifest ticket and announce it to the catalog' \
 'export:Export one or more package directories as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
-'search:List locally installed packages, optionally filtering by text' \
 'info:Show a collection manifest from a ticket or blob hash' \
 'install:Verify, stage, and atomically install a collection version' \
 'upgrade:Install a newer collection manifest version via ticket' \
@@ -2424,11 +2410,6 @@ _syncweb__subcmd__package__subcmd__remove_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package remove commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__package__subcmd__search_commands] )) ||
-_syncweb__subcmd__package__subcmd__search_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package search commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__package__subcmd__switch_commands] )) ||
 _syncweb__subcmd__package__subcmd__switch_commands() {
     local commands; commands=()
@@ -2477,6 +2458,11 @@ _syncweb__subcmd__publish__subcmd__catalog_commands() {
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__search_commands] )) ||
+_syncweb__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb search commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__share_commands] )) ||
 _syncweb__subcmd__share_commands() {

@@ -17,10 +17,10 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand, PublishCommand,
-        ScheduleCommand, ShareArgs, ShareCommand, ShareRemoveArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShareRemoveArgs, ShutdownArgs,
+        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
+        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
+        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -207,6 +207,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Devices => handle_devices(&ctx)?,
         Command::Ls(command) => handle_ls(&ctx, command)?,
         Command::Find(command) => handle_find(&ctx, command)?,
+        Command::Search(args) => handle_search(&ctx, args).await?,
         Command::Sort(command) => handle_sort(&ctx, &command)?,
         Command::Stat(command) => handle_stat(&ctx, command)?,
         Command::Download(command) => handle_download(&ctx, command).await?,
@@ -3136,12 +3137,6 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             bootstrap,
             root,
         } => handle_package_publish(ctx, &node_db, paths, namespace, sequence, bootstrap, root).await?,
-        PackageCommand::Search {
-            query,
-            bootstrap: bootstrap_values,
-            timeout_ms,
-            channel,
-        } => handle_package_search(ctx, query, bootstrap_values, timeout_ms, &packages, channel).await?,
         PackageCommand::Export { paths, version, filter } => {
             handle_package_archive_export(ctx, paths, version, filter).await?;
         }
@@ -3630,127 +3625,186 @@ fn handle_package_list(packages: &PackageManager, output_json: bool) -> Result<(
     Ok(())
 }
 
-#[async_recursion]
-async fn handle_package_search(
-    ctx: &CliContext<'_>,
-    query: Option<String>,
-    bootstrap_values: Vec<String>,
-    timeout_ms: u64,
-    packages: &PackageManager,
-    channel: Option<String>,
-) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let mut all_results = Vec::new();
-    for (collection, installed) in packages.state()?.installed {
-        let line = format!("{collection}\t{}", installed.current);
-        if query.as_ref().is_none_or(|value| line.contains(value)) {
-            all_results.push(serde_json::json!({
-                "name": "",
-                "version": installed.current,
-                "collection": collection.to_string(),
-                "manifest": "",
-            }));
+#[derive(serde::Serialize)]
+struct SearchResult {
+    kind: &'static str,
+    title: String,
+    name: String,
+    version: String,
+    collection: String,
+    hash: String,
+    size: u64,
+    manifest: String,
+    publisher: String,
+    tags: Vec<String>,
+}
+
+impl SearchResult {
+    fn catalog(record: syncweb_core::indexing::CatalogRecord) -> Self {
+        Self {
+            kind: "catalog",
+            title: record.title.clone(),
+            name: record.title,
+            version: String::new(),
+            collection: record.folder_name,
+            hash: record.hash.to_string(),
+            size: record.size,
+            manifest: String::new(),
+            publisher: record.publisher,
+            tags: record.tags,
         }
     }
 
-    // If a channel is specified, try the catalog-backed path first.
-    if let Some(ref channel_name) = channel {
+    fn package(name: &str, version: &str, collection: &str, manifest: &str) -> Self {
+        Self {
+            kind: "package",
+            title: name.to_string(),
+            name: name.to_string(),
+            version: version.to_string(),
+            collection: collection.to_string(),
+            hash: String::new(),
+            size: 0,
+            manifest: manifest.to_string(),
+            publisher: String::new(),
+            tags: Vec::new(),
+        }
+    }
+}
+
+fn apply_limit(results: &mut Vec<SearchResult>, limit: usize) {
+    results.truncate(limit);
+}
+
+async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let query = args.query.as_deref().unwrap_or("");
+    let mut all_results: Vec<SearchResult> = Vec::new();
+
+    // Local catalog index (FTS over subscribed catalog docs).
+    if matches!(args.kind, SearchKind::All | SearchKind::Catalog)
+        && let Ok(indexing) = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite"))
+        && let Ok(records) = indexing.search(query, args.limit)
+    {
+        all_results.extend(records.into_iter().map(SearchResult::catalog));
+    }
+
+    // Installed packages.
+    if matches!(args.kind, SearchKind::All | SearchKind::Package)
+        && let Ok(node_db) = open_node_db(data_dir)
+    {
+        let packages = PackageManager::new(data_dir.join("packages"), node_db);
+        if let Ok(state) = packages.state() {
+            for (collection, installed) in state.installed {
+                let line = format!("{collection}\t{}", installed.current);
+                if query.is_empty() || line.contains(query) {
+                    all_results.push(SearchResult::package(
+                        "",
+                        &installed.current,
+                        &collection.to_string(),
+                        "",
+                    ));
+                }
+            }
+        }
+    }
+
+    let needs_node = matches!(args.kind, SearchKind::All | SearchKind::Package | SearchKind::Channel)
+        && (!args.bootstrap.is_empty()
+            || matches!(args.kind, SearchKind::Package | SearchKind::Channel)
+            || args.channel.is_some());
+
+    if needs_node {
+        let node = open_node(data_dir).await?;
+
+        // Editorial channel via catalog-backed persistence when configured.
         let config_path = data_dir.join("config.toml");
-        if let Ok(app_config) = syncweb_core::storage::config::Config::load(&config_path)
+        if let Some(ref channel_name) = args.channel
+            && let Ok(app_config) = AppConfig::load(&config_path)
             && app_config.channels.contains_key(channel_name)
         {
             let indexing = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite"))?;
-            let node = open_node(data_dir).await?;
             let author = node.docs_engine().author().await?;
             let catalog_service = indexing.catalog_service(node.docs_engine(), node.blob_store(), author);
-            let query_str = query.as_deref().unwrap_or("");
-            let limit = 100;
-            match catalog_service.search(query_str, limit) {
-                Ok(records) => {
-                    if let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name) {
-                        for record in records.into_iter().filter(|r| r.catalog_namespace_id == namespace_id) {
-                            let announcement = record.to_package_announcement();
-                            all_results.push(serde_json::json!({
-                                "name": announcement.name,
-                                "version": announcement.version,
-                                "collection": announcement.collection_id.to_string(),
-                                "manifest": announcement.manifest,
-                            }));
-                        }
-                    }
-                }
-                Err(error) => {
-                    eprintln!("catalog search failed: {error}");
+            if let Ok(records) = catalog_service.search(query, 100)
+                && let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name)
+            {
+                for record in records.into_iter().filter(|r| r.catalog_namespace_id == namespace_id) {
+                    let announcement = record.to_package_announcement();
+                    all_results.push(SearchResult::package(
+                        &announcement.name,
+                        &announcement.version,
+                        &announcement.collection_id.to_string(),
+                        &announcement.manifest.to_string(),
+                    ));
                 }
             }
-            node.stop().await?;
-            // Skip the gossip path — catalog results are authoritative.
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&all_results)?);
-                return Ok(());
-            }
-            if !all_results.is_empty() {
-                let mut table = Table::new();
-                table.set_header(["Name", "Version", "Collection", "Manifest"]);
-                for r in &all_results {
-                    table.add_row([
-                        r["name"].as_str().unwrap_or_default(),
-                        r["version"].as_str().unwrap_or_default(),
-                        r["collection"].as_str().unwrap_or_default(),
-                        r["manifest"].as_str().unwrap_or_default(),
-                    ]);
-                }
-                println!("{table}");
-            }
-            return Ok(());
         }
+
+        // Gossip search when explicitly requested (--bootstrap or --kind package/channel).
+        let gossip = !args.bootstrap.is_empty() || matches!(args.kind, SearchKind::Package | SearchKind::Channel);
+        if gossip {
+            let bootstrap = parse_bootstrap(args.bootstrap.clone())?;
+            let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
+            let mut topic = if bootstrap.is_empty() {
+                catalog.subscribe(bootstrap).await?
+            } else {
+                catalog.subscribe_and_join(bootstrap).await?
+            };
+            for announcement in catalog
+                .search(&mut topic, Some(query), Duration::from_millis(args.timeout_ms))
+                .await?
+            {
+                all_results.push(SearchResult::package(
+                    &announcement.name,
+                    &announcement.version,
+                    &announcement.collection_id.to_string(),
+                    &announcement.manifest.to_string(),
+                ));
+            }
+        }
+        node.stop().await?;
     }
 
-    // Fall back to gossip-based search.
-    let bootstrap = parse_bootstrap(bootstrap_values)?;
-    let node = open_node(data_dir).await?;
-    let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
-    let mut topic = if bootstrap.is_empty() {
-        catalog.subscribe(bootstrap).await?
-    } else {
-        catalog.subscribe_and_join(bootstrap).await?
-    };
-    for announcement in catalog
-        .search(
-            &mut topic,
-            query.as_deref(),
-            std::time::Duration::from_millis(timeout_ms),
-        )
-        .await?
-    {
-        all_results.push(serde_json::json!({
-            "name": announcement.name,
-            "version": announcement.version,
-            "collection": announcement.collection_id.to_string(),
-            "manifest": announcement.manifest,
-        }));
-    }
+    apply_limit(&mut all_results, args.limit);
+
     if output_json {
         println!("{}", serde_json::to_string_pretty(&all_results)?);
-        node.stop().await?;
         return Ok(());
     }
 
-    if !all_results.is_empty() {
-        let mut table = Table::new();
-        table.set_header(["Name", "Version", "Collection", "Manifest"]);
-        for r in &all_results {
-            table.add_row([
-                r["name"].as_str().unwrap_or_default(),
-                r["version"].as_str().unwrap_or_default(),
-                r["collection"].as_str().unwrap_or_default(),
-                r["manifest"].as_str().unwrap_or_default(),
-            ]);
-        }
-        println!("{table}");
+    if all_results.is_empty() {
+        println!("no results found for query: {query}");
+        return Ok(());
     }
-    node.stop().await?;
+
+    let mut table = Table::new();
+    table.set_header([
+        "Kind",
+        "Title",
+        "Name",
+        "Version",
+        "Collection",
+        "Hash/Manifest",
+        "Size",
+    ]);
+    for r in &all_results {
+        let id = if r.hash.is_empty() {
+            r.manifest.clone()
+        } else {
+            r.hash.clone()
+        };
+        table.add_row([
+            r.kind,
+            &r.title,
+            &r.name,
+            &r.version,
+            &r.collection,
+            &id,
+            &r.size.to_string(),
+        ]);
+    }
+    println!("{table}");
     Ok(())
 }
 

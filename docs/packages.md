@@ -132,7 +132,7 @@ async fn subscribe_public(&self, ticket: BlobTicket) -> Result<NamespaceId> {
 syncweb policy show [file-or-folder-or-network]
 
 # Generate a public ticket for a folder (pins content)
-syncweb policy set audio/ --access public_ticket --pinning true
+syncweb policy set --access public_ticket --pinning true audio/
 # Output: iroh-blob://<ticket>  (shareable URL)
 
 # Explain why a file has its effective policy settings
@@ -149,7 +149,7 @@ syncweb public list
 syncweb public info <ticket>
 
 # Revert access to capability-only
-syncweb policy set audio/ --access capability --pinning false
+syncweb policy set --access capability --pinning false audio/
 ```
 
 Noninteractive promotion to public should require an explicit flag such as `--confirm-public summary.csv`. Configuration errors that would broaden access must fail closed and name the field and source scopes.
@@ -280,7 +280,7 @@ Full data package lifecycle:
 
 ```bash
 # 1. Initialize one or more paths as a versioned package (scans in one shot)
-syncweb package init ./climate --name climate-hourly
+syncweb package init --name climate-hourly ./climate
 # Paths are rebased against their common root; siblings at the root that are
 # not among the inputs are excluded. A single input defaults to its parent
 # directory as the root. An explicit `--root` overrides auto-detection.
@@ -289,10 +289,10 @@ syncweb package init ./climate --name climate-hourly
 syncweb package add ./climate ./data/observations.csv
 
 # 3. Bump to a new version
-syncweb package bump ./climate --version 1.1.0 --changelog "new observations"
+syncweb package bump --version 1.1.0 --changelog "new observations" ./climate
 
 # 4. Publish (creates immutable version + updates mutable head + announces)
-syncweb package publish ./climate ./data/observations.csv --namespace <namespace-id>
+syncweb package publish --namespace <namespace-id> ./climate ./data/observations.csv
 # Output: manifest <hash> + manifest_ticket <ticket>
 ```
 
@@ -472,7 +472,7 @@ CLI:
 
 ```bash
 # Search available packages (queries gossip + local cache)
-syncweb package search "climate"
+syncweb search --kind package "climate"
 # Output:
 # NAME              VERSION  TAGS          DESCRIPTION
 # climate-hourly    1.2.0    weather data  Hourly climate observations
@@ -492,10 +492,10 @@ syncweb package info climate-hourly
 # Lineage: v1.0.0 → v1.1.0 → v1.2.0
 
 # Browse by tag
-syncweb package search --tag weather
+syncweb search --kind package "weather"
 
 # List all announced packages (no filter)
-syncweb package search --all
+syncweb search --kind package ""
 ```
 
 ### 4. Install/Remove State Management
@@ -633,7 +633,7 @@ syncweb package verify climate-hourly
 # Output: OK -- 47 files verified, all hashes match
 
 # Verify with verbose output
-syncweb package verify climate-hourly --verbose
+syncweb package verify --verbose climate-hourly
 # Output:
 # climate-hourly 1.2.0 -- verifying 47 files...
 #   data/observations.csv   OK (sha3: a1b2c3...)

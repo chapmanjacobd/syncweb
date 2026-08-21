@@ -257,7 +257,7 @@ struct SnapshotDiff {
 CLI:
 ```bash
 # Create a snapshot
-syncweb snapshot create documents/ --description "before major edit"
+syncweb snapshot create --description "before major edit" documents/
 
 # List snapshots
 syncweb snapshot list documents/

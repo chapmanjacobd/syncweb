@@ -21,12 +21,12 @@ use syncweb_core::{
     folder::{FolderManager, SyncwebFolder},
     gossip::gossip_topic_id,
     indexing::{
-        Attestation, AttestationKind, BanRecord, CatalogRecord, ContentLink, DenylistRule, FilterList,
-        IndexingDatabase, IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext,
-        ModerationRecord, MutablePointer, NameLink, PrivateLink, ProviderLease, ProviderReputationStore,
-        ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget,
-        ReportRecord, ReputationConfig, ResilienceConfig, ResilienceService, SignedSignal, TrustDecision,
-        TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
+        Attestation, AttestationKind, BanRecord, ContentLink, DenylistRule, FilterList, IndexingDatabase,
+        IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord,
+        MutablePointer, NameLink, PrivateLink, ProviderLease, ProviderReputationStore, ProviderTrustAction,
+        ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget, ReportRecord,
+        ReputationConfig, ResilienceConfig, ResilienceService, SignedSignal, TrustDecision, TrustDelegation,
+        TrustPolicy, TrustSignalKind, WotService,
     },
     node::identity::IdentityManager,
 };
@@ -146,14 +146,6 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
                 format!("disabled: {namespace}"),
             )?;
             node.stop().await?;
-        }
-        IndexingCommand::Search { query, limit } => {
-            let results = open_indexing(data_dir)?.search(&query, limit)?;
-            if results.is_empty() {
-                println!("no results found for query: {query}");
-                return Ok(());
-            }
-            print_catalog_results(&results, output_json)?;
         }
         IndexingCommand::Health { hash } => {
             let content_hash = parse_hash(&hash)?;
@@ -1799,24 +1791,6 @@ async fn resolve_folder(manager: &FolderManager, selector: &Path) -> Result<Sync
         [] => anyhow::bail!(ERR_NO_FOLDERS),
         _ => anyhow::bail!("folder selector is not a namespace ID and more than one synchronized folder is available"),
     }
-}
-
-fn print_catalog_results(results: &[CatalogRecord], output_json: bool) -> Result<()> {
-    if output_json {
-        println!("{}", serde_json::to_string_pretty(results)?);
-    } else {
-        for result in results {
-            println!(
-                "{}\t{}\t{}\t{}\t{}",
-                result.title,
-                result.folder_name,
-                result.hash,
-                result.size,
-                String::from_utf8_lossy(&result.key)
-            );
-        }
-    }
-    Ok(())
 }
 
 fn print_status<T, S>(output_json: bool, json: T, text: S) -> Result<()>

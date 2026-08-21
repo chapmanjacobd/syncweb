@@ -91,6 +91,9 @@ _syncweb() {
             syncweb,reload)
                 cmd="syncweb__subcmd__reload"
                 ;;
+            syncweb,search)
+                cmd="syncweb__subcmd__search"
+                ;;
             syncweb,share)
                 cmd="syncweb__subcmd__share"
                 ;;
@@ -181,9 +184,6 @@ _syncweb() {
             syncweb__subcmd__indexing,meta)
                 cmd="syncweb__subcmd__indexing__subcmd__meta"
                 ;;
-            syncweb__subcmd__indexing,search)
-                cmd="syncweb__subcmd__indexing__subcmd__search"
-                ;;
             syncweb__subcmd__indexing__subcmd__filter,add)
                 cmd="syncweb__subcmd__indexing__subcmd__filter__subcmd__add"
                 ;;
@@ -270,9 +270,6 @@ _syncweb() {
                 ;;
             syncweb__subcmd__package,remove)
                 cmd="syncweb__subcmd__package__subcmd__remove"
-                ;;
-            syncweb__subcmd__package,search)
-                cmd="syncweb__subcmd__package__subcmd__search"
                 ;;
             syncweb__subcmd__package,switch)
                 cmd="syncweb__subcmd__package__subcmd__switch"
@@ -398,7 +395,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot transfer watch stats verify publish share package network db indexing link mirror provider trust attest moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find search sort stat download import snapshot transfer watch stats verify publish share package network db indexing link mirror provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1008,7 +1005,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__indexing)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help enable disable search health meta filter"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help enable disable health meta filter"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1180,28 +1177,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__indexing__subcmd__search)
-            opts="-h --limit --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --limit)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -1720,7 +1695,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__package)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help init add bump publish export import search info install upgrade remove verify list versions switch"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help init add bump publish export import info install upgrade remove verify list versions switch"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1981,36 +1956,6 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        syncweb__subcmd__package__subcmd__search)
-            opts="-h --bootstrap --timeout-ms --channel --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --bootstrap)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --timeout-ms)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --channel)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         syncweb__subcmd__package__subcmd__switch)
             opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -2178,6 +2123,44 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__search)
+            opts="-h --kind --channel --limit --timeout-ms --bootstrap --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --kind)
+                    COMPREPLY=($(compgen -W "all catalog package channel" -- "${cur}"))
+                    return 0
+                    ;;
+                --channel)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --limit)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timeout-ms)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --bootstrap)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

@@ -424,7 +424,7 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
 
     if let Some(ns) = namespace {
-        let subscribe = syncweb(&["--data-dir", data_dir_arg, "join", ns, "--subscribe", "--ingest-only"])?;
+        let subscribe = syncweb(&["--data-dir", data_dir_arg, "join", "--subscribe", "--ingest-only", ns])?;
         ensure!(subscribe.status.success(), "join --subscribe should succeed via daemon");
     }
 
@@ -541,7 +541,7 @@ fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
     std::fs::write(dir.join("file.txt"), b"content")?;
     ensure!(dir.exists(), "folder directory should exist before leave");
 
-    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns, "--delete-files"])?;
+    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", "--delete-files", ns])?;
     ensure!(
         leave.status.success(),
         "leave --delete-files should succeed, got: {}",
@@ -1069,9 +1069,9 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         bob_data_arg,
         "--no-daemon",
         "join",
+        "--download",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
-        "--download",
     ])?;
     ensure!(
         join.status.success(),
@@ -1223,9 +1223,9 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "join",
+        "--download",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
-        "--download",
     ])?;
     ensure!(
         join.status.success(),

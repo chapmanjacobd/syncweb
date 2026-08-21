@@ -230,7 +230,7 @@ impl ScheduleManager {
 syncweb config schedule               # Show current schedule
 syncweb config schedule set --active "22:00-06:00"
 syncweb config schedule set --bandwidth "1MB/s" --period "08:00-18:00"
-syncweb config schedule folder media --active "01:00-05:00"
+syncweb config schedule folder --active "01:00-05:00" media
 ```
 
 ---

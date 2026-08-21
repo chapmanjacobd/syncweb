@@ -545,7 +545,7 @@ fn network_events_and_health() -> anyhow::Result<()> {
 
     alice.run_ok(&["network", "invite", "team"])?;
 
-    let events = alice.run_ok(&["network", "events", id, "--limit", "5"])?;
+    let events = alice.run_ok(&["network", "events", "--limit", "5", id])?;
     ensure!(
         events.stdout().contains("Events for network"),
         "should print events header: {}",

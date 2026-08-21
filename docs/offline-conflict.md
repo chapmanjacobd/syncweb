@@ -168,8 +168,8 @@ syncweb conflicts
 syncweb conflicts --auto-resolve
 
 # Resolve specific conflict
-syncweb conflicts resolve <conflict-id> --keep-local
-syncweb conflicts resolve <conflict-id> --keep-remote
+syncweb conflicts resolve --keep-local <conflict-id>
+syncweb conflicts resolve --keep-remote <conflict-id>
 ```
 
 ### Sync Status Display

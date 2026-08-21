@@ -81,7 +81,7 @@ Public sharing and data package versioning:
 - `syncweb package add` for scanning, hashing files, and updating manifest
 - `syncweb package bump` for creating a new version with changelog
 - `syncweb package publish` for blob ticket and gossip announcement
-- `syncweb package search` for discovering packages via gossip
+- `syncweb search --kind package` for discovering packages via gossip
 - `syncweb package info` for detailed package metadata
 - `syncweb package install` for fetch, verify, stage, and atomic swap
 - `syncweb package upgrade` for updating to latest version

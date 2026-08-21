@@ -35,6 +35,8 @@ pub enum Command {
     Ls(LocalPathArgs),
     #[command(about = "Search local files")]
     Find(FindArgs),
+    #[command(about = "Search catalog content, packages, and editorial channels")]
+    Search(SearchArgs),
     #[command(about = "Sort local files by discovery criteria")]
     Sort(SortArgs),
     #[command(about = "Show detailed metadata for a local file")]
@@ -329,6 +331,39 @@ pub struct LocalPathArgs {
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum SearchKind {
+    /// Search the local catalog index (FTS) and, when requested, editorial channels and gossip.
+    All,
+    /// Search only the local catalog index (FTS over subscribed catalog docs).
+    Catalog,
+    /// Search installed packages and, when requested, the gossip package catalog.
+    Package,
+    /// Search only an editorial channel.
+    Channel,
+}
+
+#[derive(Debug, Args)]
+pub struct SearchArgs {
+    #[arg(help = "Search query; omit to list everything")]
+    pub query: Option<String>,
+    #[arg(
+        long,
+        value_enum,
+        default_value = "all",
+        help = "Which backend to search: all, catalog, package, or channel"
+    )]
+    pub kind: SearchKind,
+    #[arg(long, help = "Restrict results to an editorial channel")]
+    pub channel: Option<String>,
+    #[arg(long, default_value_t = 20, help = "Maximum number of results")]
+    pub limit: usize,
+    #[arg(long, default_value_t = 250, help = "Gossip search timeout in milliseconds")]
+    pub timeout_ms: u64,
+    #[arg(long, value_name = "NODE_ID", help = "Bootstrap gossip search with a node ID")]
+    pub bootstrap: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -875,18 +910,6 @@ pub enum PackageCommand {
         #[arg(long, value_name = "EXPRESSION")]
         filter: Vec<String>,
     },
-    #[command(about = "List locally installed packages, optionally filtering by text")]
-    Search {
-        query: Option<String>,
-        #[arg(long, value_name = "NODE_ID")]
-        bootstrap: Vec<String>,
-        #[arg(long, default_value_t = 250)]
-        timeout_ms: u64,
-        /// Search an editorial channel (uses catalog-backed persistence
-        /// when the channel is configured in config.toml).
-        #[arg(long)]
-        channel: Option<String>,
-    },
     #[command(about = "Show a collection manifest from a ticket or blob hash")]
     Info {
         ticket: Option<String>,
@@ -971,12 +994,6 @@ pub enum IndexingCommand {
     Enable { folder: PathBuf },
     #[command(about = "Remove a folder from the local index")]
     Disable { folder: PathBuf },
-    #[command(about = "Search subscribed catalogs")]
-    Search {
-        query: String,
-        #[arg(long, default_value_t = 20)]
-        limit: usize,
-    },
     #[command(about = "Show verified provider health for a content hash")]
     Health { hash: String },
     #[command(about = "Manage signed metadata")]

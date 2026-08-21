@@ -52,7 +52,7 @@ fn mutable_links_advance_sequences_across_processes() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let first = run(alice, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
+    let first = run(alice, &["link", "create", "--name", "latest", CONTENT_HASH])?;
     let link = first
         .stdout()
         .lines()
@@ -60,7 +60,7 @@ fn mutable_links_advance_sequences_across_processes() -> Result<()> {
         .context("mutable link output missing link")?
         .to_owned();
 
-    let _second = run(alice, &["link", "create", CONTENT_HASH, "--name", "latest"])?;
+    let _second = run(alice, &["link", "create", "--name", "latest", CONTENT_HASH])?;
 
     let resolved = run(alice, &["--json", "link", "resolve", &link])?;
     ensure!(json_output(&resolved)?.get("sequence") == Some(&Value::from(2)));
@@ -73,11 +73,11 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let _attested = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
+    let _attested = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
 
     let _reported = run(
         alice,
-        &["moderation", "report", CONTENT_HASH, "--reason", "test report"],
+        &["moderation", "report", "--reason", "test report", CONTENT_HASH],
     )?;
 
     let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
@@ -85,7 +85,7 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
     let listed = run(alice, &["--json", "moderation", "ls"])?;
     ensure!(json_output(&listed)?.as_array().is_some_and(|items| items.len() == 1));
 
-    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     let trust = json_output(&trust_output)?;
     ensure!(trust.get("moderation") == Some(&Value::from("hide")));
     ensure!(
@@ -116,13 +116,13 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
 
     let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
-    let published = run(alice, &["publish", "catalog", &namespace, "--catalog", "test-catalog"])?;
+    let published = run(alice, &["publish", "catalog", "--catalog", "test-catalog", &namespace])?;
     ensure!(
         published.stdout().contains("published:"),
         "publish output should confirm publication"
     );
 
-    let _searched = run(alice, &["indexing", "search", "test"])?;
+    let _searched = run(alice, &["search", "--kind", "catalog", "test"])?;
 
     Ok(())
 }
@@ -161,7 +161,7 @@ fn link_create_private_and_revoke() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let created = run(alice, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
+    let created = run(alice, &["--json", "link", "create", "--private", CONTENT_HASH])?;
     let link = json_output(&created)?
         .get("link")
         .context("link output missing link")?
@@ -219,7 +219,7 @@ fn indexing_meta_add_persists_metadata() -> Result<()> {
 
     let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
 
-    let shown = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let shown = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     let trust = json_output(&shown)?;
     ensure!(
         trust
@@ -242,7 +242,7 @@ fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
     let shown = run(alice, &["--json", "trust", "provider", "show", &provider])?;
     ensure!(json_output(&shown)?.get("trust") == Some(&Value::from("trusted")));
 
-    let _banned = run(alice, &["trust", "provider", "ban", &provider, "--reason", "test ban"])?;
+    let _banned = run(alice, &["trust", "provider", "ban", "--reason", "test ban", &provider])?;
     let listed = run(alice, &["--json", "trust", "provider", "list"])?;
     ensure!(
         json_output(&listed)?
@@ -335,9 +335,9 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
         alice,
         &[
             "import",
-            file.to_str().context("file path is not UTF-8")?,
             "--folder",
             &namespace,
+            file.to_str().context("file path is not UTF-8")?,
         ],
     )?;
 
@@ -388,7 +388,7 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
     fs::write(pkg.join("lib.txt"), b"lib content")?;
     let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
 
-    let _init = run(alice, &["package", "init", pkg_path, "--name", "sample"])?;
+    let _init = run(alice, &["package", "init", "--name", "sample", pkg_path])?;
     let _add = run(alice, &["package", "add", pkg_path])?;
 
     let published = run(
@@ -397,11 +397,11 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
             "--json",
             "package",
             "publish",
-            pkg_path,
             "--namespace",
             &namespace,
             "--sequence",
             "3",
+            pkg_path,
         ],
     )?;
     let published_json = json_output(&published)?;
@@ -445,11 +445,11 @@ fn publish_catalog_with_tags() -> Result<()> {
         &[
             "publish",
             "catalog",
-            &namespace,
             "--catalog",
             "tagged",
             "--tag",
             "sci-fi",
+            &namespace,
         ],
     )?;
     ensure!(
@@ -487,9 +487,9 @@ fn mirror_from_provider_and_network() -> Result<()> {
         alice,
         &[
             "import",
-            content.join("hello.txt").to_str().context("file is not UTF-8")?,
             "--folder",
             &namespace,
+            content.join("hello.txt").to_str().context("file is not UTF-8")?,
         ],
     )?;
 
@@ -563,7 +563,6 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             "--json",
             "link",
             "create",
-            CONTENT_HASH,
             "--name",
             "latest",
             "--version",
@@ -572,6 +571,7 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             "5",
             "--publish",
             &namespace,
+            CONTENT_HASH,
         ],
     )?;
     let link = json_output(&created_link)?
@@ -594,10 +594,10 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             "--json",
             "link",
             "create",
-            CONTENT_HASH,
             "--private",
             "--expires",
             &expires.to_string(),
+            CONTENT_HASH,
         ],
     )?;
     let private_link = json_output(&created_private)?
@@ -624,11 +624,11 @@ fn link_resolve_with_version() -> Result<()> {
             "--json",
             "link",
             "create",
-            CONTENT_HASH,
             "--name",
             "release",
             "--version",
             "2",
+            CONTENT_HASH,
         ],
     )?;
     let link = json_output(&created)?
@@ -637,7 +637,7 @@ fn link_resolve_with_version() -> Result<()> {
         .context("link output missing link")?
         .to_owned();
 
-    let resolved = run(alice, &["--json", "link", "resolve", &link, "--version", "2"])?;
+    let resolved = run(alice, &["--json", "link", "resolve", "--version", "2", &link])?;
     let resolved_json = json_output(&resolved)?;
     ensure!(
         resolved_json.get("version") == Some(&Value::from("2")),
@@ -656,7 +656,7 @@ fn link_revoke_persists_locally() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let created = run(alice, &["--json", "link", "create", CONTENT_HASH, "--private"])?;
+    let created = run(alice, &["--json", "link", "create", "--private", CONTENT_HASH])?;
     let link = json_output(&created)?
         .get("link")
         .and_then(Value::as_str)
@@ -697,17 +697,17 @@ fn indexing_search_with_limit() -> Result<()> {
         alice,
         &[
             "import",
-            folder.join("test-file.txt").to_str().context("file is not UTF-8")?,
             "--folder",
             &namespace,
+            folder.join("test-file.txt").to_str().context("file is not UTF-8")?,
         ],
     )?;
 
     let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
-    let _published = run(alice, &["publish", "catalog", &namespace, "--catalog", "library"])?;
+    let _published = run(alice, &["publish", "catalog", "--catalog", "library", &namespace])?;
 
-    let searched = run(alice, &["--json", "indexing", "search", "test", "--limit", "5"])?;
+    let searched = run(alice, &["--json", "search", "--limit", "5", "test"])?;
     let search_json = json_output(&searched)?;
     let results = search_json.as_array().context("search should emit a JSON array")?;
     ensure!(!results.is_empty(), "search should find the imported record");
@@ -728,11 +728,11 @@ fn indexing_meta_add_with_sequence() -> Result<()> {
             "indexing",
             "meta",
             "add",
+            "--sequence",
+            "7",
             CONTENT_HASH,
             "category",
             "test",
-            "--sequence",
-            "7",
         ],
     )?;
     let meta = json_output(&added)?;
@@ -800,7 +800,6 @@ fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
             "--json",
             "trust",
             "delegate",
-            &publisher,
             "--scope",
             CONTENT_HASH,
             "--expires",
@@ -809,6 +808,7 @@ fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
             "2",
             "--max-depth",
             "2",
+            &publisher,
         ],
     )?;
     let delegation = json_output(&delegated)?;
@@ -848,7 +848,7 @@ fn trust_revoke_delegation() -> Result<()> {
     let scoped_publisher = iroh::SecretKey::generate().public().to_string();
     let _scoped_delegated = run(
         alice,
-        &["trust", "delegate", &scoped_publisher, "--scope", CONTENT_HASH],
+        &["trust", "delegate", "--scope", CONTENT_HASH, &scoped_publisher],
     )?;
     let scoped_revoked = run(
         alice,
@@ -856,9 +856,9 @@ fn trust_revoke_delegation() -> Result<()> {
             "--json",
             "trust",
             "revoke-delegation",
-            &scoped_publisher,
             "--scope",
             CONTENT_HASH,
+            &scoped_publisher,
         ],
     )?;
     let scoped = json_output(&scoped_revoked)?;
@@ -885,13 +885,13 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
             "trust",
             "provider",
             "ban",
-            &provider,
             "--hash",
             CONTENT_HASH,
             "--duration",
             &duration.to_string(),
             "--reason",
             "scoped abuse",
+            &provider,
         ],
     )?;
     let result = json_output(&banned)?;
@@ -910,7 +910,7 @@ fn trust_provider_ban_scoped_and_durable() -> Result<()> {
 
     let shown = run(
         alice,
-        &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
+        &["--json", "trust", "provider", "show", "--hash", CONTENT_HASH, &provider],
     )?;
     let report = json_output(&shown)?;
     ensure!(
@@ -937,9 +937,9 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
             "trust",
             "provider",
             "vouch",
-            &provider,
             "--scope",
             CONTENT_HASH,
+            &provider,
         ],
     )?;
     let vouch = json_output(&vouched)?;
@@ -955,9 +955,9 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
             "trust",
             "provider",
             "distrust",
-            &provider,
             "--scope",
             CONTENT_HASH,
+            &provider,
         ],
     )?;
     let distrust = json_output(&distrusted)?;
@@ -966,7 +966,7 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
 
     let shown = run(
         alice,
-        &["--json", "trust", "provider", "show", &provider, "--hash", CONTENT_HASH],
+        &["--json", "trust", "provider", "show", "--hash", CONTENT_HASH, &provider],
     )?;
     let report = json_output(&shown)?;
     ensure!(
@@ -1033,11 +1033,11 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
             "--json",
             "attest",
             "create",
-            CONTENT_HASH,
             "--provenance",
             "archive",
             "--sequence",
             "3",
+            CONTENT_HASH,
         ],
     )?;
     let provenance_json = json_output(&provenance)?;
@@ -1046,7 +1046,7 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
 
     let derivative = run(
         alice,
-        &["--json", "attest", "create", CONTENT_HASH, "--derivative", "remix"],
+        &["--json", "attest", "create", "--derivative", "remix", CONTENT_HASH],
     )?;
     ensure!(json_output(&derivative)?.get("status") == Some(&Value::from("attested")));
 
@@ -1056,15 +1056,15 @@ fn attest_provenance_derivative_and_broadcast() -> Result<()> {
             "--json",
             "attest",
             "create",
-            CONTENT_HASH,
             "--license",
             "MIT",
             "--broadcast",
+            CONTENT_HASH,
         ],
     )?;
     ensure!(json_output(&license)?.get("status") == Some(&Value::from("attested")));
 
-    let shown = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let shown = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     let trust = json_output(&shown)?;
     let attestations = trust
         .get("attestations")
@@ -1086,9 +1086,9 @@ fn attest_verify_with_timeout() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let _created = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
+    let _created = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
 
-    let verified = run(alice, &["--json", "attest", "verify", CONTENT_HASH, "--timeout", "1"])?;
+    let verified = run(alice, &["--json", "attest", "verify", "--timeout", "1", CONTENT_HASH])?;
     let results = json_output(&verified)?;
     ensure!(results.is_array(), "attest verify should emit a JSON array");
     ensure!(
@@ -1106,7 +1106,7 @@ fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
 
     let hidden = run(
         alice,
-        &["--json", "moderation", "hide", CONTENT_HASH, "--reason", "private data"],
+        &["--json", "moderation", "hide", "--reason", "private data", CONTENT_HASH],
     )?;
     let hide = json_output(&hidden)?;
     ensure!(hide.get("status") == Some(&Value::from("hidden")));
@@ -1118,17 +1118,17 @@ fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
             "--json",
             "moderation",
             "report",
-            CONTENT_HASH,
             "--reason",
             "abuse",
             "--broadcast",
+            CONTENT_HASH,
         ],
     )?;
     let report = json_output(&reported)?;
     ensure!(report.get("status") == Some(&Value::from("reported")));
     ensure!(report.get("reason") == Some(&Value::from("abuse")));
 
-    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     ensure!(
         json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
         "hidden record should stay hidden after a report"
@@ -1154,7 +1154,7 @@ fn indexing_meta_list() -> Result<()> {
     let entries = listed_json.as_array().context("meta list should be an array")?;
     ensure!(entries.len() == 2, "meta list should return both metadata entries");
 
-    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     let trust_json = json_output(&trust_output)?;
     let trust_metadata = trust_json
         .get("metadata")
@@ -1173,8 +1173,8 @@ fn attest_list_local() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let _license = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
-    let _provenance = run(alice, &["attest", "create", CONTENT_HASH, "--provenance", "archive"])?;
+    let _license = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
+    let _provenance = run(alice, &["attest", "create", "--provenance", "archive", CONTENT_HASH])?;
 
     let listed = run(alice, &["--json", "attest", "list", CONTENT_HASH])?;
     let listed_json = json_output(&listed)?;
@@ -1184,7 +1184,7 @@ fn attest_list_local() -> Result<()> {
         "attest list should return both local attestations"
     );
 
-    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     let trust_json = json_output(&trust_output)?;
     let trust_attestations = trust_json
         .get("attestations")
@@ -1215,7 +1215,7 @@ fn moderation_list_content_scoped() -> Result<()> {
         "content-scoped moderation ls should return only matching records"
     );
 
-    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
     ensure!(
         json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
         "content-scoped moderation list should agree with trust show"

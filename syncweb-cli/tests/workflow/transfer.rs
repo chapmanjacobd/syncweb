@@ -41,10 +41,10 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
         &[
             "transfer",
             "root",
-            "root-a",
-            root_dir.to_str().context("UTF-8 path")?,
             "--min-free",
             "0",
+            "root-a",
+            root_dir.to_str().context("UTF-8 path")?,
         ],
     )?;
     ensure!(root.stdout().contains("saved storage root"));

@@ -34,7 +34,7 @@ An indexer may be:
 Users can explicitly publish folder metadata to a catalog namespace for discovery.
 *   Action: When a user opts a folder into public discovery, the indexing service reads the files and publishes `CatalogRecords` (title, tags, hashes) to a dedicated public `iroh-docs` catalog namespace.
 *   Search: The service maintains a local SQLite FTS5 index of any catalogs the user subscribes to, entirely outside the core file-sync path.
-*   Overlap Note: Core `syncweb find` performs local regex/glob searches on the filesystem or synced namespaces. `syncweb indexing search` performs global queries across published catalogs even for files you have not downloaded.
+*   Overlap Note: Core `syncweb find` performs local regex/glob searches on the filesystem or synced namespaces. `syncweb search --kind catalog` performs global queries across published catalogs even for files you have not downloaded.
 
 ### 2. Resilience and Availability
 The indexing service acts as an automated fleet manager for replication.
@@ -126,8 +126,8 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 
 ### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`, `syncweb report`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
-*   `syncweb publish catalog <folder> --catalog <name>` - Publish to a catalog.
-*   `syncweb indexing search "query"` - Search across known catalogs (FTS).
+*   `syncweb publish catalog --catalog <name> <folder>` - Publish to a catalog.
+*   `syncweb search --kind catalog "query"` - Search across known catalogs (FTS).
 *   `syncweb indexing health <hash>` - Check verified leases and availability.
  *   `syncweb indexing meta add <hash> <key> <value>` - Append WoT metadata to an entry.
  *   `syncweb indexing meta list <hash>` - List signed metadata for a content hash.
@@ -145,8 +145,8 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
  *   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
  *   `syncweb trust stream publish --provider <pubkey> --signal <kind>` - Publish a signed provider observation.
  *   `syncweb trust stream subscribe <ticket>` - Subscribe to a trust stream and ingest trusted signals.
- *   `syncweb attest <content> --license <license>` - Sign an attestation for content.
+ *   `syncweb attest --license <license> <content>` - Sign an attestation for content.
  *   `syncweb attest list <hash>` - List local attestations for a content hash.
- *   `syncweb report <record> --reason <reason>` - Submit a moderation report.
+ *   `syncweb report --reason <reason> <record>` - Submit a moderation report.
  *   `syncweb moderation ls [<content>]` - List moderation records and decisions, optionally scoped to content.
  *   `syncweb moderation hide <record>` - Hide a record based on local or community policy.

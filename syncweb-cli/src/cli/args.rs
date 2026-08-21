@@ -63,6 +63,7 @@ help_categories! {
     "Files" => [
         Command::Ls(_) => "ls",
         Command::Find(_) => "find",
+        Command::Search(_) => "search",
         Command::Sort(_) => "sort",
         Command::Stat(_) => "stat",
         Command::Download(_) => "download",

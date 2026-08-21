@@ -13,8 +13,8 @@ pub const CATALOG_TOPIC: &[u8] = b"syncweb/public-package-catalog/v1";
 
 /// Unified signed-signal gossip topic seed.
 ///
-/// Attestations, moderation reports, and provider trust signals are all
-/// broadcast on this single topic, discriminated by [`crate::indexing::SignedSignal`].
+/// Attestations are broadcast on this topic, discriminated by
+/// [`crate::indexing::SignedSignal`].
 pub const SIGNAL_TOPIC: &[u8] = b"syncweb/signed-signals/v1";
 
 /// Provider lease gossip topic seed.
@@ -38,9 +38,6 @@ pub const REPUTATION_SIGNAL_CONTEXT: &[u8] = b"syncweb/provider-trust/v1\0";
 
 /// Domain separator for signed network membership lists.
 pub const MEMBER_LIST_SIGNATURE_CONTEXT: &[u8] = b"syncweb/network-membership/v1\0";
-
-/// Domain separator for network document namespace derivation.
-pub const NETWORK_DOC_NAMESPACE_CONTEXT: &[u8] = b"syncweb/network-doc/v1\0";
 
 /// Domain separator for `WoT` metadata signatures.
 pub const METADATA_CONTEXT: &[u8] = b"syncweb/wot/metadata/v1\0";

@@ -1713,7 +1713,6 @@ _arguments "${_arguments_options[@]}" : \
 '--scope=[]:SCOPE:_default' \
 '--reason=[]:REASON:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--broadcast[Broadcast vouch via gossip trust stream]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1728,7 +1727,6 @@ _arguments "${_arguments_options[@]}" : \
 '--scope=[]:SCOPE:_default' \
 '--reason=[]:REASON:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--broadcast[Broadcast distrust via gossip trust stream]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1736,56 +1734,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':provider:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(stream)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__trust__subcmd__stream_commands" \
-"*::: :->stream" \
-&& ret=0
-
-    case $state in
-    (stream)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-stream-command-$line[1]:"
-        case $line[1] in
-            (subscribe)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':ticket:_default' \
-&& ret=0
-;;
-(publish)
-_arguments "${_arguments_options[@]}" : \
-'--provider=[]:PROVIDER:_default' \
-'--signal=[]:SIGNAL:_default' \
-'--hash=[]:HASH:_default' \
-'--sequence=[]:SEQUENCE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
 && ret=0
 ;;
         esac
@@ -1903,20 +1851,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':record:_default' \
-&& ret=0
-;;
-(report)
-_arguments "${_arguments_options[@]}" : \
-'--reason=[Reason for the report]:REASON:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--broadcast[Also broadcast to peers via gossip]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':record -- Content hash to report:_default' \
 && ret=0
 ;;
         esac
@@ -2261,7 +2195,6 @@ _syncweb__subcmd__moderation_commands() {
     local commands; commands=(
 'ls:List local moderation records' \
 'hide:Hide a content record locally' \
-'report:Sign and submit a moderation report (broadcasts via gossip)' \
     )
     _describe -t commands 'syncweb moderation commands' commands "$@"
 }
@@ -2274,11 +2207,6 @@ _syncweb__subcmd__moderation__subcmd__hide_commands() {
 _syncweb__subcmd__moderation__subcmd__ls_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb moderation ls commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__report_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__report_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation report commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network_commands] )) ||
 _syncweb__subcmd__network_commands() {
@@ -2640,7 +2568,6 @@ _syncweb__subcmd__trust_commands() {
 'delegate:Delegate trust to a publisher identity' \
 'revoke-delegation:Revoke a trust delegation' \
 'provider:Manage provider trust and bans' \
-'stream:Publish or subscribe to provider trust signals' \
     )
     _describe -t commands 'syncweb trust commands' commands "$@"
 }
@@ -2700,24 +2627,6 @@ _syncweb__subcmd__trust__subcmd__revoke-delegation_commands() {
 _syncweb__subcmd__trust__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream_commands() {
-    local commands; commands=(
-'subscribe:Subscribe to a provider trust stream ticket or file' \
-'publish:Publish a signed provider trust signal' \
-    )
-    _describe -t commands 'syncweb trust stream commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust stream publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands] )) ||
-_syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust stream subscribe commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

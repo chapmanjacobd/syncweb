@@ -25,7 +25,6 @@ use super::IndexingDatabase;
 use crate::{
     constants::{LINK_SCHEME, LINK_SIGNATURE_CONTEXT},
     error::{Result, SyncwebError},
-    gossip::{SignedGossipMessage, gossip_topic_id},
     indexing::ProviderLease,
 };
 
@@ -1317,27 +1316,6 @@ fn next_part<'a>(parts: &mut Split<'a, char>, field: &str) -> Result<&'a str> {
         return Err(SyncwebError::InvalidConfig(format!("{field} is empty")));
     }
     Ok(part)
-}
-
-impl SignedGossipMessage for PrivateLink {
-    fn verify_signature(&self) -> Result<()> {
-        // PrivateLink uses bearer-capability auth (random 32-byte secret).
-        // The capability proves authorization — anyone who knows it can revoke.
-        //
-        // SECURITY: This is only safe on authenticated gossip topics where
-        // membership is restricted (private networks). On public gossip topics,
-        // any peer could broadcast a revocation for any (manifest, capability)
-        // pair. Ensure the gossip topic enforces membership auth at the
-        // application layer.
-        Ok(())
-    }
-}
-
-/// Deterministic gossip topic ID for link revocations.
-#[deprecated(note = "link revocations are no longer broadcast via gossip")]
-#[must_use]
-pub fn revocation_topic_id() -> iroh_gossip::TopicId {
-    gossip_topic_id(b"syncweb/link-revocations/v1")
 }
 
 #[cfg(test)]

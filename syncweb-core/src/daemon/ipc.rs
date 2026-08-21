@@ -27,8 +27,7 @@ use crate::{
         PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
-    gossip::{TopicChannel, gossip_topic_id},
-    indexing::{IndexingService, ProviderTrustSignal, SignedSignal, resilience::ResilienceService},
+    indexing::{IndexingService, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
     storage::config::SubscribeFilters,
@@ -205,7 +204,6 @@ pub enum IpcCommand {
     EnrichSort {
         path: PathBuf,
     },
-    BroadcastTrustSignal(ProviderTrustSignal),
     NetworkInvite {
         network_id: String,
         device: String,
@@ -823,9 +821,6 @@ impl IpcServer {
         if let IpcCommand::NetworkJoin { ticket } = cmd {
             return self.handle_network_join(ticket).await;
         }
-        if let IpcCommand::BroadcastTrustSignal(signal) = cmd {
-            return self.handle_broadcast_trust_signal_response(signal).await;
-        }
         IpcResponse::Error {
             message: format!("unhandled network command: {cmd:?}"),
         }
@@ -962,17 +957,7 @@ impl IpcServer {
             | C::NetworkKick { .. }
             | C::NetworkLeave { .. }
             | C::NetworkCreate { .. }
-            | C::NetworkJoin { .. }
-            | C::BroadcastTrustSignal(..) => self.handle_network_group(request.command).await,
-        }
-    }
-
-    async fn handle_broadcast_trust_signal_response(&self, signal: ProviderTrustSignal) -> IpcResponse {
-        match self.handle_broadcast_trust_signal(signal).await {
-            Ok(()) => IpcResponse::Ok {
-                message: "trust signal broadcast".to_owned(),
-            },
-            Err(error) => response_from_error(error),
+            | C::NetworkJoin { .. } => self.handle_network_group(request.command).await,
         }
     }
 
@@ -2841,22 +2826,6 @@ impl IpcServer {
             ));
         }
         Ok(manifests)
-    }
-
-    async fn handle_broadcast_trust_signal(&self, signal: ProviderTrustSignal) -> Result<()> {
-        let context = self.archive_context.clone().ok_or_else(|| {
-            SyncwebError::operation(
-                "broadcast trust signal IPC is unavailable",
-                "server has no node context",
-            )
-        })?;
-        let (channel, _receiver) = TopicChannel::<SignedSignal>::open(
-            context.node.gossip_service(),
-            gossip_topic_id(crate::constants::SIGNAL_TOPIC),
-            Vec::new(),
-        )
-        .await?;
-        channel.publish(&SignedSignal::Trust(signal)).await
     }
 }
 

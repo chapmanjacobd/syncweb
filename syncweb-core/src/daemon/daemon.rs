@@ -21,7 +21,7 @@ use crate::{
     fs::{FsWatcher, Importer},
     gossip::{gossip_topic_id, spawn_topic_listener},
     indexing::{
-        IndexingDatabase, IndexingService, ProviderTrustSignal, ReportRecord, SignedSignal,
+        IndexingDatabase, IndexingService, SignedSignal,
         resilience::{ProviderLease, ReplicationBudget, ResilienceConfig},
         wot::Attestation,
     },
@@ -1459,28 +1459,18 @@ fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
 
 /// Durable state for incoming signed-signal gossip.
 ///
-/// Each signal kind is persisted to its own table on receipt so that
-/// `attest verify`, `moderation ls`, and reputation hydration work without any
-/// peer being online at query time.
+/// Attestations are persisted on receipt so that `attest verify` works without
+/// any peer being online at query time.
 struct IncomingSignals {
     db: IndexingDatabase,
     attestations: Vec<Attestation>,
-    reports: Vec<ReportRecord>,
-    signals: Vec<ProviderTrustSignal>,
 }
 
 impl IncomingSignals {
     fn open(data_dir: &Path) -> Result<Self> {
         let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
         let attestations = db.load_attestations()?;
-        let reports = db.load_content_reports()?;
-        let signals = db.load_provider_trust_signals()?;
-        Ok(Self {
-            db,
-            attestations,
-            reports,
-            signals,
-        })
+        Ok(Self { db, attestations })
     }
 
     /// Persist a verified signal, skipping duplicates. Returns `false` to stop
@@ -1494,22 +1484,6 @@ impl IncomingSignals {
                 tracing::debug!(content = %att.content, issuer = %att.issuer, kind = %att.kind, "attestation received via gossip");
                 self.attestations.push(att.clone());
                 self.db.save_attestations(&self.attestations)?;
-            }
-            SignedSignal::Report(report) => {
-                if self.reports.contains(report) {
-                    return Ok(true);
-                }
-                tracing::debug!(content = %report.content, reason = %report.reason, "report received via gossip");
-                self.reports.push(report.clone());
-                self.db.save_content_reports(&self.reports)?;
-            }
-            SignedSignal::Trust(trust) => {
-                if self.signals.contains(trust) {
-                    return Ok(true);
-                }
-                tracing::debug!(provider = %trust.provider, kind = ?trust.signal, "trust signal received via gossip");
-                self.signals.push(trust.clone());
-                self.db.save_provider_trust_signals(&self.signals)?;
             }
         }
         Ok(true)

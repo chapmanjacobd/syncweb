@@ -457,11 +457,18 @@ impl CatalogService {
 
     /// Search records imported from all known catalogs.
     ///
+    /// Records blocked by the local denylist are excluded from discovery.
+    ///
     /// # Errors
     ///
     /// Returns an error if the FTS query is invalid.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        self.database().search_catalogs(query, limit)
+        Ok(self
+            .database()
+            .search_catalogs(query, limit)?
+            .into_iter()
+            .filter(|record| self.indexing.denylist_service().check_discovery(record).is_ok())
+            .collect())
     }
 
     /// Search records imported from all known catalogs. Alias for [`Self::search`].

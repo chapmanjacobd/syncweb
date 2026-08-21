@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 use ed25519_dalek::SigningKey;
@@ -74,11 +73,6 @@ fn attest_report_and_moderation_state_persist() -> Result<()> {
     let alice = world.device("alice")?;
 
     let _attested = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
-
-    let _reported = run(
-        alice,
-        &["moderation", "report", "--reason", "test report", CONTENT_HASH],
-    )?;
 
     let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
 
@@ -264,47 +258,6 @@ fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
             .and_then(Value::as_array)
             .is_some_and(Vec::is_empty)
     );
-
-    Ok(())
-}
-
-#[test]
-fn trust_stream_publish_and_subscribe_aggregates_signed_signal() -> Result<()> {
-    let world = World::new(&["publisher", "subscriber"])?;
-    let publisher_node = world.device("publisher")?;
-    let subscriber_node = world.device("subscriber")?;
-    let provider = iroh::SecretKey::generate().public().to_string();
-
-    let devices = run(publisher_node, &["devices"])?;
-    let reporter = devices
-        .stdout()
-        .lines()
-        .find_map(|line| line.strip_prefix("iroh: "))
-        .context("publisher identity missing")?
-        .to_owned();
-
-    let published = run(
-        publisher_node,
-        &[
-            "--json",
-            "trust",
-            "stream",
-            "publish",
-            "--provider",
-            &provider,
-            "--signal",
-            "failure",
-        ],
-    )?;
-    let ticket = json_output(&published)?
-        .get("ticket")
-        .and_then(Value::as_str)
-        .context("trust stream ticket missing")?
-        .to_owned();
-
-    let _delegated = run(subscriber_node, &["trust", "delegate", &reporter])?;
-    let subscribed = run(subscriber_node, &["--json", "trust", "stream", "subscribe", &ticket])?;
-    ensure!(json_output(&subscribed)?.get("accepted") == Some(&Value::from(1)));
 
     Ok(())
 }
@@ -984,45 +937,6 @@ fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
 }
 
 #[test]
-fn trust_stream_publish_with_hash_and_sequence() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let provider = iroh::SecretKey::generate().public().to_string();
-
-    let published = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "stream",
-            "publish",
-            "--provider",
-            &provider,
-            "--signal",
-            "failure",
-            "--hash",
-            CONTENT_HASH,
-            "--sequence",
-            "5",
-        ],
-    )?;
-    let result = json_output(&published)?;
-    ensure!(result.get("status") == Some(&Value::from("published")));
-    ensure!(result.get("provider") == Some(&Value::from(provider)));
-    ensure!(result.get("sequence") == Some(&Value::from(5)));
-    let ticket = result
-        .get("ticket")
-        .and_then(Value::as_str)
-        .context("trust stream ticket missing")?;
-    ensure!(
-        Path::new(ticket.strip_prefix("file://").unwrap_or(ticket)).exists(),
-        "trust stream ticket file should be written"
-    );
-
-    Ok(())
-}
-
-#[test]
 fn attest_provenance_derivative_and_broadcast() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -1094,44 +1008,6 @@ fn attest_verify_with_timeout() -> Result<()> {
     ensure!(
         results.as_array().is_some_and(|attestations| attestations.len() == 1),
         "attest verify should read the locally persisted attestation even with no online peers"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let hidden = run(
-        alice,
-        &["--json", "moderation", "hide", "--reason", "private data", CONTENT_HASH],
-    )?;
-    let hide = json_output(&hidden)?;
-    ensure!(hide.get("status") == Some(&Value::from("hidden")));
-    ensure!(hide.get("sequence") == Some(&Value::from(1)));
-
-    let reported = run(
-        alice,
-        &[
-            "--json",
-            "moderation",
-            "report",
-            "--reason",
-            "abuse",
-            "--broadcast",
-            CONTENT_HASH,
-        ],
-    )?;
-    let report = json_output(&reported)?;
-    ensure!(report.get("status") == Some(&Value::from("reported")));
-    ensure!(report.get("reason") == Some(&Value::from("abuse")));
-
-    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    ensure!(
-        json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
-        "hidden record should stay hidden after a report"
     );
 
     Ok(())

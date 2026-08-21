@@ -1099,11 +1099,6 @@ pub enum TrustCommand {
         #[command(subcommand)]
         command: ProviderTrustCommand,
     },
-    #[command(about = "Publish or subscribe to provider trust signals")]
-    Stream {
-        #[command(subcommand)]
-        command: TrustStreamCommand,
-    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1138,8 +1133,6 @@ pub enum ProviderTrustCommand {
         scope: Option<String>,
         #[arg(long, default_value = "locally vouched provider")]
         reason: String,
-        #[arg(long, help = "Broadcast vouch via gossip trust stream")]
-        broadcast: bool,
     },
     #[command(about = "Distrust a provider")]
     Distrust {
@@ -1148,25 +1141,6 @@ pub enum ProviderTrustCommand {
         scope: Option<String>,
         #[arg(long, default_value = "locally distrusted provider")]
         reason: String,
-        #[arg(long, help = "Broadcast distrust via gossip trust stream")]
-        broadcast: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum TrustStreamCommand {
-    #[command(about = "Subscribe to a provider trust stream ticket or file")]
-    Subscribe { ticket: String },
-    #[command(about = "Publish a signed provider trust signal")]
-    Publish {
-        #[arg(long)]
-        provider: String,
-        #[arg(long)]
-        signal: String,
-        #[arg(long)]
-        hash: Option<String>,
-        #[arg(long)]
-        sequence: Option<u64>,
     },
 }
 
@@ -1219,14 +1193,5 @@ pub enum ModerationCommand {
         record: String,
         #[arg(long, default_value = "hidden by local policy")]
         reason: String,
-    },
-    #[command(about = "Sign and submit a moderation report (broadcasts via gossip)")]
-    Report {
-        #[arg(help = "Content hash to report")]
-        record: String,
-        #[arg(long, help = "Reason for the report")]
-        reason: String,
-        #[arg(long, help = "Also broadcast to peers via gossip")]
-        broadcast: bool,
     },
 }

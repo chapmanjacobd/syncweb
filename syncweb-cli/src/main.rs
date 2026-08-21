@@ -225,12 +225,12 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Mirror(command) => handle_mirror(&ctx, command).await?,
-        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
+        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command).await?,
         Command::Trust { command: trust_command } => {
             cli::indexing::handle_trust(&ctx, trust_command).await?;
         }
         Command::Attest { command } => cli::indexing::handle_attest(&ctx, command).await?,
-        Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command).await?,
+        Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command)?,
         Command::Start(_)
         | Command::Shutdown(_)
         | Command::Status

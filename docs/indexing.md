@@ -59,11 +59,11 @@ and provider selection.
 
 `ProviderReputationStore` keeps longer-lived fetch history separate from
 leases. It applies minimum-sample scoring, time decay, failure weighting, and
-exponential temporary-ban backoff. `ProviderTrustSignal` carries a
-domain-separated reporter signature and is broadcast alongside attestations
-and moderation reports on a single signed-signal gossip topic
-(`SignedSignal`); only reporters trusted through the local `TrustPolicy`
-affect reputation.
+exponential temporary-ban backoff. It is fed by direct fetch observations
+(`record_failure_at`/`record_success`) and manual `ProviderTrustRecord` vouch /
+distrust opinions; there is no gossip trust stream (culled in plan 017).
+`ProviderTrustSignal` carries a domain-separated reporter signature for local
+reputation ingestion.
 
 ### 3. Web of Trust (WoT) Metadata
 Metadata extraction is crowdsourced to trusted entities.
@@ -115,8 +115,17 @@ To keep the core engine lightweight (relying only on basic `PeerStats` and `Fold
 
 `Denylist` supports device, file, and content-hash rules. `check_fetch` and
 `check_discovery` are the hooks for transfer and catalog pipelines.
-`FilterList` updates are signed and monotonic per namespace, and
-`IndexingService::denylist_service` exposes the thread-safe local policy.
+`check_discovery` is enforced in `CatalogService::search` and
+`IndexingService::search`, so denylisted records are excluded from catalog and
+channel discovery; the transfer-side `check_fetch` hook is wired when content
+is resolved for download. `FilterList` updates are signed and monotonic per
+namespace, and `IndexingService::denylist_service` exposes the thread-safe
+local policy.
+
+Moderation decisions (`moderation hide`) filter display of records in
+`trust show` and metadata search; they do not block blob transfer. Moderation
+remains a local policy layer over immutable content — plan 017 documented this
+rather than enforcing it at fetch/serve time.
 
 ### 6. Trust, Governance, and Moderation
 Content hashes prove integrity, but they do not prove accuracy, authorship, legality, or quality. Public and community catalogs require mechanisms for spam, abuse, takedown, and conflicting claims without relying on a single global authority.
@@ -124,7 +133,7 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 *   Execution: Trust policies are evaluated locally (scoped by network, folder, or file). Moderation hides or de-prioritizes records in an index; it does not rewrite or delete immutable content on other nodes. The indexing service evaluates these records to return a discovery decision (Show, Warn, Hide, Quarantine).
 *   Overlap Note: Core `syncweb` ensures cryptographic integrity of content hashes. The indexing service evaluates contextual trust, licenses, provenance, and community moderation policies.
 
-### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`, `syncweb report`)
+### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
 *   `syncweb publish catalog --catalog <name> <folder>` - Publish to a catalog.
 *   `syncweb search --kind catalog "query"` - Search across known catalogs (FTS).
@@ -143,10 +152,7 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
  *   `syncweb trust provider list` - List providers known to the local indexing state.
  *   `syncweb trust provider ban <pubkey>` / `unban <pubkey>` - Manage global or scoped provider bans.
  *   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
- *   `syncweb trust stream publish --provider <pubkey> --signal <kind>` - Publish a signed provider observation.
- *   `syncweb trust stream subscribe <ticket>` - Subscribe to a trust stream and ingest trusted signals.
  *   `syncweb attest --license <license> <content>` - Sign an attestation for content.
  *   `syncweb attest list <hash>` - List local attestations for a content hash.
- *   `syncweb report --reason <reason> <record>` - Submit a moderation report.
  *   `syncweb moderation ls [<content>]` - List moderation records and decisions, optionally scoped to content.
  *   `syncweb moderation hide <record>` - Hide a record based on local or community policy.

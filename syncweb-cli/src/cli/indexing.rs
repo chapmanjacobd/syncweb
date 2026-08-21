@@ -14,37 +14,35 @@ use serde::{Deserialize, Serialize};
 use super::args::CliContext;
 use super::commands::{
     AttestCommand, FilterCommand, IndexingCommand, LinkCommand, MetaCommand, ModerationCommand, ProviderCommand,
-    ProviderTrustCommand, PublishCatalogArgs, TrustCommand, TrustStreamCommand,
+    ProviderTrustCommand, PublishCatalogArgs, TrustCommand,
 };
 use syncweb_core::{
-    constants::{DOWNLOAD_PIN_PREFIX, SIGNAL_TOPIC},
+    constants::{DOWNLOAD_PIN_PREFIX, RESILIENCE_TOPIC, SIGNAL_TOPIC},
     folder::{FolderManager, SyncwebFolder},
     gossip::gossip_topic_id,
     indexing::{
         Attestation, AttestationKind, BanRecord, ContentLink, DenylistRule, FilterList, IndexingDatabase,
         IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext, ModerationRecord,
         MutablePointer, NameLink, PrivateLink, ProviderLease, ProviderReputationStore, ProviderTrustAction,
-        ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget, ReportRecord,
-        ReputationConfig, ResilienceConfig, ResilienceService, SignedSignal, TrustDecision, TrustDelegation,
-        TrustPolicy, TrustSignalKind, WotService,
+        ProviderTrustDecision, ProviderTrustRecord, ReplicationBudget, ReputationConfig, ResilienceConfig,
+        ResilienceService, SignedSignal, TrustDecision, TrustDelegation, TrustPolicy, WotService,
     },
     node::identity::IdentityManager,
 };
 
 use dialoguer::Confirm;
-use iroh::PublicKey;
+use iroh::{EndpointAddr, PublicKey};
 use iroh_blobs::{
-    Hash,
+    BlobFormat, Hash,
     api::blobs::ExportMode,
     get::fsm::{self, ConnectedNext, EndBlobNext},
     protocol::GetRequest,
     ticket::BlobTicket,
 };
 use iroh_docs::NamespaceId;
-use syncweb_core::{gossip::TopicChannel, init::open_node};
+use syncweb_core::{gossip::TopicChannel, init::open_node, node::iroh_node::IrohNode};
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
-const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available; use `syncweb folders` to list available folders";
 
 fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
@@ -80,15 +78,9 @@ struct IndexingState {
     #[serde(default)]
     attestations: Vec<Attestation>,
     #[serde(default)]
-    reports: Vec<ReportRecord>,
-    #[serde(default)]
     provider_bans: Vec<BanRecord>,
     #[serde(default)]
     provider_trust: Vec<ProviderTrustRecord>,
-    #[serde(default)]
-    trust_signals: Vec<ProviderTrustSignal>,
-    #[serde(default)]
-    trust_streams: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -446,7 +438,7 @@ async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Re
     Ok(())
 }
 
-pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result<()> {
+pub async fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
@@ -464,6 +456,11 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
                 state.links.mirrors.push(provider.clone());
             }
             db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
+            let node = open_node(data_dir).await?;
+            if ticket.addr().id == node.endpoint().id() {
+                announce_self_lease(data_dir, &node, ticket.hash()).await?;
+            }
+            node.stop().await?;
             print_status(
                 output_json,
                 serde_json::json!({"status": "added", "hash": ticket.hash().to_string(), "provider": provider}),
@@ -497,6 +494,7 @@ pub async fn download_blob(
                 .context("failed to fetch blob")?;
             let pin_name = format!("{DOWNLOAD_PIN_PREFIX}{content_hash}");
             node.blob_store().pin(&pin_name, content_hash).await?;
+            announce_self_lease(data_dir, &node, content_hash).await?;
             node.stop().await?;
         }
     } else {
@@ -511,6 +509,10 @@ pub async fn download_blob(
         let result = resilience
             .ensure_replication(node.endpoint(), node.blob_store(), content_hash)
             .await?;
+
+        if result.pinned {
+            announce_self_lease(data_dir, &node, content_hash).await?;
+        }
 
         if output_json {
             println!(
@@ -565,6 +567,39 @@ pub async fn download_blob(
     }
 
     Ok(())
+}
+
+/// Publish a provider lease over the resilience gossip topic.
+///
+/// Remote peers hydrate their mirror/replication provider sets from these
+/// time-bound announcements (see the daemon's lease listener).
+///
+/// # Errors
+///
+/// Returns an error if the gossip channel cannot be opened or the lease cannot
+/// be published.
+async fn announce_lease(node: &IrohNode, lease: &ProviderLease) -> Result<()> {
+    let (channel, _receiver) =
+        TopicChannel::<ProviderLease>::open(node.gossip_service(), gossip_topic_id(RESILIENCE_TOPIC), Vec::new())
+            .await?;
+    channel.publish(lease).await?;
+    Ok(())
+}
+
+/// Sign and announce a lease advertising that this node serves `hash`.
+///
+/// The lease uses a self-ticket so the node's own identity key is the signing
+/// key, which is what gossip receivers verify against.
+///
+/// # Errors
+///
+/// Returns an error if the lease cannot be signed or published.
+async fn announce_self_lease(data_dir: &Path, node: &IrohNode, hash: Hash) -> Result<()> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let ticket = BlobTicket::new(EndpointAddr::new(node.endpoint().id()), hash, BlobFormat::Raw).to_string();
+    let expires_at = epoch_seconds().saturating_add(365 * 24 * 60 * 60);
+    let lease = ProviderLease::signed(hash, ticket, epoch_seconds(), expires_at, identity.secret_key())?;
+    announce_lease(node, &lease).await
 }
 
 async fn direct_fetch_to_path(data_dir: &Path, ticket: &BlobTicket, hash: Hash, path: &Path) -> Result<()> {
@@ -788,15 +823,12 @@ pub async fn handle_trust(ctx: &CliContext<'_>, command: TrustCommand) -> Result
         } => handle_trust_revoke_delegation(data_dir, output_json, &publisher, requested_scope)?,
         TrustCommand::Provider {
             command: provider_command,
-        } => handle_provider_trust(ctx, provider_command).await?,
-        TrustCommand::Stream {
-            command: stream_command,
-        } => handle_trust_stream(ctx, stream_command).await?,
+        } => handle_provider_trust(ctx, provider_command)?,
     }
     Ok(())
 }
 
-async fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) -> Result<()> {
+fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustCommand) -> Result<()> {
     match command {
         ProviderTrustCommand::Show { provider, hash } => {
             handle_provider_show(ctx, &provider, hash.as_deref())?;
@@ -817,33 +849,15 @@ async fn handle_provider_trust(ctx: &CliContext<'_>, command: ProviderTrustComma
             provider,
             scope,
             reason,
-            broadcast,
         } => {
-            handle_provider_trust_record(
-                ctx,
-                &provider,
-                scope.as_deref(),
-                reason,
-                ProviderTrustAction::Vouch,
-                broadcast,
-            )
-            .await?;
+            handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Vouch)?;
         }
         ProviderTrustCommand::Distrust {
             provider,
             scope,
             reason,
-            broadcast,
         } => {
-            handle_provider_trust_record(
-                ctx,
-                &provider,
-                scope.as_deref(),
-                reason,
-                ProviderTrustAction::Distrust,
-                broadcast,
-            )
-            .await?;
+            handle_provider_trust_record(ctx, &provider, scope.as_deref(), reason, ProviderTrustAction::Distrust)?;
         }
     }
     Ok(())
@@ -911,7 +925,6 @@ fn handle_provider_list(ctx: &CliContext<'_>, hash: Option<&str>) -> Result<()> 
         .map(|lease| lease.provider)
         .chain(state.provider_bans.iter().map(|ban| ban.provider))
         .chain(state.provider_trust.iter().map(|record| record.provider))
-        .chain(state.trust_signals.iter().map(|signal| signal.provider))
         .collect::<Vec<_>>();
     providers.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
     providers.dedup();
@@ -1001,13 +1014,12 @@ fn handle_provider_unban(ctx: &CliContext<'_>, provider: &str) -> Result<()> {
     )
 }
 
-async fn handle_provider_trust_record(
+fn handle_provider_trust_record(
     ctx: &CliContext<'_>,
     provider: &str,
     scope: Option<&str>,
     reason: String,
     action: ProviderTrustAction,
-    broadcast: bool,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -1034,11 +1046,6 @@ async fn handle_provider_trust_record(
         db.save_provider_trust_records(&state.provider_trust)?;
     }
 
-    if broadcast {
-        let signal = ProviderTrustSignal::from_trust_record(&record, &signing)?;
-        let _ = publish_signed_signal(data_dir, &SignedSignal::Trust(signal)).await?;
-    }
-
     print_status(
         output_json,
         serde_json::json!({
@@ -1050,142 +1057,6 @@ async fn handle_provider_trust_record(
         }),
         format!("{}: {provider_key}", provider_trust_action_label(&record.action)),
     )
-}
-
-#[async_recursion]
-async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    match command {
-        TrustStreamCommand::Publish {
-            provider,
-            signal,
-            hash,
-            sequence,
-        } => {
-            let provider_key = parse_provider(&provider)?;
-            let signal_kind = parse_signal_kind(&signal)?;
-            let scope = hash.map(|value| parse_hash(&value)).transpose()?;
-            let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-            let signing = signing_key(&identity);
-            let reporter = PublicKey::from_bytes(&signing.verifying_key().to_bytes())?;
-            let (db, mut state) = open_indexing_state(data_dir)?;
-            let next_sequence = sequence.unwrap_or_else(|| {
-                state
-                    .trust_signals
-                    .iter()
-                    .filter(|existing| existing.provider == provider_key && existing.reporter == reporter)
-                    .map(|existing| existing.sequence)
-                    .max()
-                    .unwrap_or(0)
-                    .saturating_add(1)
-            });
-            let trust_signal =
-                ProviderTrustSignal::new_with_time(provider_key, signal_kind, scope, next_sequence, &signing)?;
-
-            let bootstrap = publish_signed_signal(data_dir, &SignedSignal::Trust(trust_signal.clone())).await?;
-
-            if !state.trust_signals.contains(&trust_signal) {
-                state.trust_signals.push(trust_signal.clone());
-            }
-            let stream_path = data_dir.join("trust-stream.json");
-            fs::write(&stream_path, serde_json::to_vec_pretty(&state.trust_signals)?)?;
-            db.save_provider_trust_signals(&state.trust_signals)?;
-            print_status(
-                output_json,
-                serde_json::json!({
-                    "status": "published",
-                    "provider": provider_key,
-                    "signal": trust_signal_label(signal_kind),
-                    "sequence": trust_signal.sequence,
-                    "ticket": format!("file://{}", stream_path.display()),
-                    "bootstrap": bootstrap,
-                }),
-                format!(
-                    "published: {}\nprovider: {provider_key}\nticket: file://{}",
-                    trust_signal_label(signal_kind),
-                    stream_path.display()
-                ),
-            )?;
-        }
-        TrustStreamCommand::Subscribe { ticket } => {
-            let imported = if let Some(bytes) = read_trust_stream_source(&ticket)? {
-                parse_trust_signals(&bytes)?
-            } else if let Ok(bootstrap) = parse_provider(&ticket) {
-                receive_trust_signals(data_dir, bootstrap).await?
-            } else {
-                anyhow::bail!("invalid trust stream ticket or source: {ticket}");
-            };
-            let (db, mut state) = open_indexing_state(data_dir)?;
-            let indexing = open_indexing(data_dir)?;
-            let wot = load_wot(&indexing, &state)?;
-            let mut reputation = load_reputation(&wot, &state)?;
-            let mut accepted = 0_usize;
-            for signal in imported {
-                if state.trust_signals.contains(&signal) {
-                    continue;
-                }
-                if reputation.ingest_trust_signal(signal.clone())? {
-                    state.trust_signals.push(signal);
-                    accepted = accepted.saturating_add(1);
-                }
-            }
-            if !state.trust_streams.contains(&ticket) {
-                state.trust_streams.push(ticket.clone());
-            }
-            db.save_provider_trust_signals(&state.trust_signals)?;
-            db.save_trust_streams(&state.trust_streams)?;
-            print_status(
-                output_json,
-                serde_json::json!({
-                    "status": "subscribed",
-                    "ticket": ticket,
-                    "accepted": accepted,
-                    "signals": state.trust_signals.len(),
-                }),
-                format!("subscribed: {ticket}\naccepted: {accepted}"),
-            )?;
-        }
-    }
-    Ok(())
-}
-
-async fn receive_trust_signals(data_dir: &Path, bootstrap: PublicKey) -> Result<Vec<ProviderTrustSignal>> {
-    let signals = collect_signed_signals(
-        data_dir,
-        vec![bootstrap],
-        |signal| matches!(signal, SignedSignal::Trust(_)),
-        Duration::from_millis(250),
-    )
-    .await?;
-    Ok(signals
-        .into_iter()
-        .filter_map(|signal| match signal {
-            SignedSignal::Trust(inner) => Some(inner),
-            SignedSignal::Attestation(_) | SignedSignal::Report(_) | _ => None,
-        })
-        .collect())
-}
-
-fn parse_trust_signals(bytes: &[u8]) -> Result<Vec<ProviderTrustSignal>> {
-    let signals = serde_json::from_slice::<Vec<ProviderTrustSignal>>(bytes)
-        .or_else(|_| serde_json::from_slice::<ProviderTrustSignal>(bytes).map(|signal| vec![signal]))
-        .context("trust stream must contain a signed signal or signal array")?;
-    for signal in &signals {
-        signal.verify()?;
-    }
-    Ok(signals)
-}
-
-fn read_trust_stream_source(source: &str) -> Result<Option<Vec<u8>>> {
-    let path = source.strip_prefix("file://").unwrap_or(source);
-    if Path::new(path).is_file() {
-        return Ok(Some(fs::read(path)?));
-    }
-    if source.trim_start().starts_with('{') || source.trim_start().starts_with('[') {
-        return Ok(Some(source.as_bytes().to_vec()));
-    }
-    Ok(None)
 }
 
 pub async fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Result<()> {
@@ -1288,7 +1159,7 @@ async fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, ti
     Ok(())
 }
 
-pub async fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {
+pub fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
@@ -1344,44 +1215,8 @@ pub async fn handle_moderation(ctx: &CliContext<'_>, command: ModerationCommand)
                 format!("hidden: {content}"),
             )?;
         }
-        ModerationCommand::Report {
-            record,
-            reason,
-            broadcast,
-        } => {
-            handle_moderation_report(ctx, &record, &reason, broadcast).await?;
-        }
     }
     Ok(())
-}
-
-async fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &str, broadcast: bool) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let content = parse_hash(record)?;
-    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
-    let signing = signing_key(&identity);
-    let (db, mut state) = open_indexing_state(data_dir)?;
-
-    let report = ReportRecord::new(content, reason.to_owned(), epoch_seconds()).sign_with(&signing)?;
-    state.reports.push(report.clone());
-    db.save_content_reports(&state.reports)?;
-
-    if broadcast {
-        let _ = publish_signed_signal(data_dir, &SignedSignal::Report(report.clone())).await?;
-    }
-
-    print_status(
-        output_json,
-        serde_json::json!({
-            "status": "reported",
-            "content": content.to_string(),
-            "reason": report.reason,
-            "reporter": report.reporter,
-            "signature": report.signature,
-        }),
-        format!("reported: {content}\nreason: {}", report.reason),
-    )
 }
 
 fn handle_meta(ctx: &CliContext<'_>, command: MetaCommand) -> Result<()> {
@@ -1564,17 +1399,11 @@ fn load_resilience(state: &IndexingState) -> Result<ResilienceService> {
     Ok(resilience)
 }
 
-fn load_reputation(wot: &WotService, state: &IndexingState) -> Result<ProviderReputationStore> {
-    let mut reputation = ProviderReputationStore::with_policy(ReputationConfig::default(), wot.policy()?);
-    let now = epoch_seconds();
-    for signal in &state.trust_signals {
-        if signal.timestamp <= now && now.saturating_sub(signal.timestamp) > TRUST_SIGNAL_TTL_SECONDS {
-            continue;
-        }
-        signal.verify()?;
-        reputation.ingest_trust_signal(signal.clone())?;
-    }
-    Ok(reputation)
+fn load_reputation(wot: &WotService, _state: &IndexingState) -> Result<ProviderReputationStore> {
+    Ok(ProviderReputationStore::with_policy(
+        ReputationConfig::default(),
+        wot.policy()?,
+    ))
 }
 
 fn active_provider_bans(state: &IndexingState, provider: PublicKey, scope: Option<&Hash>, now: u64) -> Vec<BanRecord> {
@@ -1625,11 +1454,8 @@ fn open_indexing_state(data_dir: &Path) -> Result<(IndexingDatabase, IndexingSta
     let delegations = db.load_trust_delegations()?;
     let moderation = db.load_moderation_records()?;
     let attestations = db.load_attestations()?;
-    let reports = db.load_content_reports()?;
     let provider_bans = db.load_provider_bans()?;
     let provider_trust = db.load_provider_trust_records()?;
-    let trust_signals = db.load_provider_trust_signals()?;
-    let trust_streams = db.load_trust_streams()?;
     let state = IndexingState {
         catalogs,
         denylist,
@@ -1642,11 +1468,8 @@ fn open_indexing_state(data_dir: &Path) -> Result<(IndexingDatabase, IndexingSta
         delegations,
         moderation,
         attestations,
-        reports,
         provider_bans,
         provider_trust,
-        trust_signals,
-        trust_streams,
         ..Default::default()
     };
     Ok((db, state))
@@ -1812,24 +1635,6 @@ fn epoch_seconds() -> u64 {
         .map_or(0, |duration| duration.as_secs())
 }
 
-fn parse_signal_kind(value: &str) -> Result<TrustSignalKind> {
-    match value.to_ascii_lowercase().replace('_', "-").as_str() {
-        "success" | "observed-success" => Ok(TrustSignalKind::ObservedSuccess),
-        "failure" | "observed-failure" => Ok(TrustSignalKind::ObservedFailure),
-        "corruption" | "observed-corruption" => Ok(TrustSignalKind::ObservedCorruption),
-        _ => anyhow::bail!("unsupported trust signal {value:?}; use success, failure, or corruption"),
-    }
-}
-
-const fn trust_signal_label(signal: TrustSignalKind) -> &'static str {
-    match signal {
-        TrustSignalKind::ObservedSuccess => "success",
-        TrustSignalKind::ObservedFailure => "failure",
-        TrustSignalKind::ObservedCorruption => "corruption",
-        _ => "unknown",
-    }
-}
-
 const fn provider_trust_action_label(action: &ProviderTrustAction) -> &'static str {
     match action {
         ProviderTrustAction::Trust => "trust",
@@ -1923,7 +1728,7 @@ async fn collect_attestations(
         .into_iter()
         .filter_map(|signal| match signal {
             SignedSignal::Attestation(att) => Some(att),
-            SignedSignal::Report(_) | SignedSignal::Trust(_) | _ => None,
+            _ => None,
         })
         .collect())
 }

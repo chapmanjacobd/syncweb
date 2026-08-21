@@ -1228,7 +1228,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand delegate 'Delegate trust to a publisher identity'
             cand revoke-delegation 'Revoke a trust delegation'
             cand provider 'Manage provider trust and bans'
-            cand stream 'Publish or subscribe to provider trust signals'
         }
         &'syncweb;trust;show'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1323,7 +1322,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --scope 'scope'
             cand --reason 'reason'
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --broadcast 'Broadcast vouch via gossip trust stream'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -1334,40 +1332,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;trust;provider;distrust'= {
             cand --scope 'scope'
             cand --reason 'reason'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --broadcast 'Broadcast distrust via gossip trust stream'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;trust;stream'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-            cand subscribe 'Subscribe to a provider trust stream ticket or file'
-            cand publish 'Publish a signed provider trust signal'
-        }
-        &'syncweb;trust;stream;subscribe'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;trust;stream;publish'= {
-            cand --provider 'provider'
-            cand --signal 'signal'
-            cand --hash 'hash'
-            cand --sequence 'sequence'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1431,7 +1395,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand ls 'List local moderation records'
             cand hide 'Hide a content record locally'
-            cand report 'Sign and submit a moderation report (broadcasts via gossip)'
         }
         &'syncweb;moderation;ls'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1445,17 +1408,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;moderation;hide'= {
             cand --reason 'reason'
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;moderation;report'= {
-            cand --reason 'Reason for the report'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --broadcast 'Also broadcast to peers via gossip'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

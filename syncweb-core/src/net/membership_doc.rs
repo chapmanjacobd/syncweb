@@ -1,10 +1,10 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use iroh_docs::{AuthorId, NamespaceId, api::Doc};
+use iroh_docs::{AuthorId, api::Doc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     Result, SyncwebError,
-    constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_DOC_NAMESPACE_CONTEXT, NETWORK_MEMBERS_KEY},
+    constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_MEMBERS_KEY},
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
 
@@ -140,19 +140,6 @@ impl SignedMemberList {
         unsigned.signature = String::new();
         serde_json::to_vec(&unsigned).map_err(|error| SyncwebError::operation("failed to serialize member list", error))
     }
-}
-
-/// Derive the deterministic Iroh docs namespace for a network.
-///
-/// Used by the owner at network creation time. New members receive the
-/// namespace via the `doc_ticket` in the `NetworkTicket`.
-#[must_use]
-pub fn network_doc_namespace(network_id: &[u8; 32], shared_secret: &[u8; 32]) -> NamespaceId {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(NETWORK_DOC_NAMESPACE_CONTEXT);
-    hasher.update(network_id);
-    hasher.update(shared_secret);
-    NamespaceId::from(hasher.finalize().as_bytes())
 }
 
 /// Network metadata stored in the membership doc.

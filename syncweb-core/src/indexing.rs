@@ -43,19 +43,16 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::PublicKey;
 use iroh_blobs::Hash;
 use iroh_docs::{Entry, NamespaceId, engine::LiveEvent};
 use n0_future::StreamExt;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
 use tokio::{sync::broadcast, task::JoinHandle};
 
 use crate::{
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
-    gossip::SignedGossipMessage,
 };
 
 /// Current indexing database schema version.
@@ -1621,73 +1618,6 @@ impl IndexingDatabase {
         })
     }
 
-    /// Save content reports to the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the reports cannot be persisted.
-    pub fn save_content_reports(&self, reports: &[ReportRecord]) -> Result<()> {
-        self.with_connection(|connection| {
-            connection
-                .execute("DELETE FROM content_reports_v2", [])
-                .map_err(|error| database_error("failed to clear content reports", error))?;
-            for r in reports {
-                let reporter = r.reporter.as_deref().unwrap_or("cli");
-                connection
-                    .execute(
-                        "INSERT INTO content_reports_v2(content_hash, reporter, reason, scope, created_at, signature)
-                     VALUES (?1, ?2, ?3, 'global', ?4, ?5)",
-                        params![
-                            r.content.as_bytes().to_vec(),
-                            reporter,
-                            r.reason,
-                            i64::try_from(r.created_at).unwrap_or(i64::MAX),
-                            r.signature,
-                        ],
-                    )
-                    .map_err(|error| database_error("failed to save content report", error))?;
-            }
-            Ok(())
-        })
-    }
-
-    /// Load content reports from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the reports cannot be read.
-    pub fn load_content_reports(&self) -> Result<Vec<ReportRecord>> {
-        self.with_connection(|connection| {
-            let mut stmt = connection
-                .prepare(
-                    "SELECT content_hash, reason, created_at, reporter, signature
-                     FROM content_reports_v2 ORDER BY created_at",
-                )
-                .map_err(|error| database_error("failed to prepare reports query", error))?;
-            let reports = stmt
-                .query_map([], |row| {
-                    let hash_bytes: Vec<u8> = row.get(0)?;
-                    let arr: [u8; 32] = hash_bytes.try_into().map_err(|error: Vec<u8>| {
-                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
-                            "invalid hash length",
-                            format!("expected 32 bytes, got {}", error.len()),
-                        )))
-                    })?;
-                    Ok(ReportRecord {
-                        content: Hash::from(arr),
-                        reason: row.get::<_, String>(1)?,
-                        created_at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
-                        reporter: row.get::<_, Option<String>>(3)?,
-                        signature: row.get::<_, Option<String>>(4)?,
-                    })
-                })
-                .map_err(|error| database_error("failed to query content reports", error))?
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|error| database_error("failed to read report rows", error))?;
-            Ok(reports)
-        })
-    }
-
     /// Save provider bans to the database.
     ///
     /// # Errors
@@ -2204,138 +2134,6 @@ impl IndexingDatabase {
             Ok(records)
         })
     }
-
-    /// Save provider trust signals to the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the signals cannot be persisted.
-    pub fn save_provider_trust_signals(&self, signals: &[reputation::ProviderTrustSignal]) -> Result<()> {
-        self.with_connection(|connection| {
-            connection.execute("DELETE FROM provider_trust_signals_v2", [])
-                .map_err(|error| database_error("failed to clear provider trust signals", error))?;
-            for s in signals {
-                let kind_str = format!("{:?}", s.signal);
-                connection.execute(
-                    "INSERT INTO provider_trust_signals_v2(reporter, provider, signal_kind, content_hash, sequence, timestamp, signature)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![
-                        s.reporter.to_string(), s.provider.to_string(),
-                        kind_str,
-                        s.hash.map(|h| h.as_bytes().to_vec()),
-                        i64::try_from(s.sequence).unwrap_or(i64::MAX),
-                        i64::try_from(s.timestamp).unwrap_or(i64::MAX),
-                        s.signature,
-                    ],
-                ).map_err(|error| database_error("failed to save trust signal", error))?;
-            }
-            Ok(())
-        })
-    }
-
-    /// Load provider trust signals from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the signals cannot be read.
-    pub fn load_provider_trust_signals(&self) -> Result<Vec<reputation::ProviderTrustSignal>> {
-        self.with_connection(|connection| {
-            let mut stmt = connection
-                .prepare(
-                    "SELECT reporter, provider, signal_kind, content_hash, sequence, timestamp, signature
-                 FROM provider_trust_signals_v2 ORDER BY timestamp",
-                )
-                .map_err(|error| database_error("failed to prepare trust signals query", error))?;
-            let signals = stmt
-                .query_map([], |row| {
-                    let reporter_str: String = row.get(0)?;
-                    let provider_str: String = row.get(1)?;
-                    let kind_str: String = row.get(2)?;
-                    let content_hash: Option<Vec<u8>> = row.get(3)?;
-                    let reporter = reporter_str.parse::<PublicKey>().map_err(|error| {
-                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
-                            "invalid reporter",
-                            error,
-                        )))
-                    })?;
-                    let provider = provider_str.parse::<PublicKey>().map_err(|error| {
-                        rusqlite::Error::ToSqlConversionFailure(Box::new(SyncwebError::operation(
-                            "invalid provider",
-                            error,
-                        )))
-                    })?;
-                    let kind = match kind_str.as_str() {
-                        "ObservedSuccess" => reputation::TrustSignalKind::ObservedSuccess,
-                        "ObservedFailure" => reputation::TrustSignalKind::ObservedFailure,
-                        "ObservedCorruption" => reputation::TrustSignalKind::ObservedCorruption,
-                        _ => {
-                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
-                                SyncwebError::operation("unknown signal kind", kind_str),
-                            )));
-                        }
-                    };
-                    let hash = content_hash.and_then(|b| {
-                        let arr: [u8; 32] = b.try_into().ok()?;
-                        Some(Hash::from(arr))
-                    });
-                    Ok(reputation::ProviderTrustSignal {
-                        provider,
-                        signal: kind,
-                        hash,
-                        reporter,
-                        timestamp: u64::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
-                        sequence: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
-                        signature: row.get(6)?,
-                    })
-                })
-                .map_err(|error| database_error("failed to query trust signals", error))?
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|error| database_error("failed to read trust signal rows", error))?;
-            Ok(signals)
-        })
-    }
-
-    /// Save trust streams to the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the streams cannot be persisted.
-    pub fn save_trust_streams(&self, streams: &[String]) -> Result<()> {
-        self.with_connection(|connection| {
-            connection
-                .execute("DELETE FROM trust_streams", [])
-                .map_err(|error| database_error("failed to clear trust streams", error))?;
-            let now = now_seconds();
-            for ns in streams {
-                connection
-                    .execute(
-                        "INSERT INTO trust_streams(namespace, subscribed_at) VALUES (?1, ?2)",
-                        params![ns, now],
-                    )
-                    .map_err(|error| database_error("failed to save trust stream", error))?;
-            }
-            Ok(())
-        })
-    }
-
-    /// Load trust streams from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the streams cannot be read.
-    pub fn load_trust_streams(&self) -> Result<Vec<String>> {
-        self.with_connection(|connection| {
-            let mut stmt = connection
-                .prepare("SELECT namespace FROM trust_streams ORDER BY subscribed_at")
-                .map_err(|error| database_error("failed to prepare trust streams query", error))?;
-            let streams = stmt
-                .query_map([], |row| row.get::<_, String>(0))
-                .map_err(|error| database_error("failed to query trust streams", error))?
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|error| database_error("failed to read trust stream rows", error))?;
-            Ok(streams)
-        })
-    }
 }
 
 /// The opt-in indexing service for synchronized folders.
@@ -2466,13 +2264,18 @@ impl IndexingService {
 
     /// Search records imported from subscribed catalogs.
     ///
-    /// This is the service-level search used by `indexing search`.
+    /// This is the service-level search used by `indexing search`. Records
+    /// blocked by the local denylist are excluded from discovery.
     ///
     /// # Errors
     ///
     /// Returns an error if the query is invalid or `SQLite` cannot read results.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        self.search_global(query, limit)
+        Ok(self
+            .search_global(query, limit)?
+            .into_iter()
+            .filter(|record| self.denylist.check_discovery(record).is_ok())
+            .collect())
     }
 
     /// Subscribe to indexing and core-engine events.
@@ -2926,16 +2729,7 @@ const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
          signature TEXT,
          PRIMARY KEY(content_hash, issuer, kind)
      );
-      CREATE TABLE IF NOT EXISTS content_reports_v2 (
-          content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
-          reporter TEXT NOT NULL,
-          reason TEXT NOT NULL,
-          scope TEXT NOT NULL DEFAULT 'global',
-          created_at INTEGER NOT NULL,
-          signature TEXT,
-          PRIMARY KEY(content_hash, reporter, reason)
-      );
-     CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
+      CREATE TABLE IF NOT EXISTS provider_trust_records_v2 (
          id INTEGER PRIMARY KEY AUTOINCREMENT,
          provider TEXT NOT NULL,
          action TEXT NOT NULL,
@@ -2955,22 +2749,6 @@ const SCHEMA_PART3: &str = "CREATE TABLE IF NOT EXISTS provider_reputation (
          reason TEXT NOT NULL,
          source TEXT NOT NULL,
          PRIMARY KEY(provider, content_hash)
-     );
-     CREATE TABLE IF NOT EXISTS provider_trust_signals_v2 (
-         reporter TEXT NOT NULL,
-         provider TEXT NOT NULL,
-         signal_kind TEXT NOT NULL,
-         content_hash BLOB CHECK(content_hash IS NULL OR length(content_hash) = 32),
-         sequence INTEGER NOT NULL,
-         timestamp INTEGER NOT NULL,
-         signature TEXT,
-         PRIMARY KEY(reporter, provider, sequence)
-     );
-     CREATE INDEX IF NOT EXISTS idx_trust_signals_provider_v2 ON provider_trust_signals_v2(provider);
-     CREATE INDEX IF NOT EXISTS idx_trust_signals_ts_v2 ON provider_trust_signals_v2(timestamp);
-     CREATE TABLE IF NOT EXISTS trust_streams (
-         namespace TEXT PRIMARY KEY,
-         subscribed_at INTEGER NOT NULL
      );
      CREATE TABLE IF NOT EXISTS channel_namespaces (
          channel_name TEXT PRIMARY KEY NOT NULL,
@@ -3018,92 +2796,4 @@ fn database_error(context: &'static str, error: impl std::fmt::Display) -> Syncw
 
 fn send_event(events: &broadcast::Sender<IndexingEvent>, event: IndexingEvent) {
     let _ = events.send(event);
-}
-
-/// A signed content report stored in the indexing database.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct ReportRecord {
-    pub content: Hash,
-    pub reason: String,
-    pub created_at: u64,
-    pub reporter: Option<String>,
-    pub signature: Option<String>,
-}
-
-impl ReportRecord {
-    #[must_use]
-    pub const fn new(content: Hash, reason: String, created_at: u64) -> Self {
-        Self {
-            content,
-            reason,
-            created_at,
-            reporter: None,
-            signature: None,
-        }
-    }
-
-    /// Sign this report with the node's Ed25519 signing key.
-    ///
-    /// Sets `reporter` to the hex-encoded verifying key and `signature` to
-    /// the hex-encoded Ed25519 signature over the canonical payload.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the canonical signing payload cannot be serialized.
-    pub fn sign_with(mut self, signing_key: &SigningKey) -> Result<Self> {
-        let payload = self.signing_payload()?;
-        let sig = signing_key.sign(&payload);
-        self.reporter = Some(hex::encode(signing_key.verifying_key().to_bytes()));
-        self.signature = Some(hex::encode(sig.to_bytes()));
-        Ok(self)
-    }
-
-    /// Verify the report's signature against the given public key.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the signature is missing, malformed, or invalid.
-    pub fn verify(&self, public_key: &VerifyingKey) -> Result<()> {
-        let sig_hex = self
-            .signature
-            .as_ref()
-            .ok_or_else(|| SyncwebError::MissingSignature("report has no signature".into()))?;
-        let sig_bytes = hex::decode(sig_hex).map_err(|e| SyncwebError::operation("report signature hex decode", e))?;
-        let sig_len = sig_bytes.len();
-        let sig: [u8; 64] = sig_bytes.try_into().map_err(|_v| {
-            SyncwebError::InvalidSignature(format!(
-                "report signature has wrong length (expected 64, got {sig_len})"
-            ))
-        })?;
-        let signature = Signature::from_bytes(&sig);
-        public_key
-            .verify(&self.signing_payload()?, &signature)
-            .map_err(|e| SyncwebError::InvalidSignature(format!("report signature does not match: {e}")))
-    }
-
-    /// Canonical payload for signing: `(content_hash_bytes, reason, created_at)`.
-    ///
-    /// The reporter and signature fields are excluded — the reporter IS the
-    /// signer, and the signature cannot sign itself.
-    fn signing_payload(&self) -> Result<Vec<u8>> {
-        let canonical = (self.content.as_bytes(), &self.reason, self.created_at);
-        serde_json::to_vec(&canonical).map_err(|e| SyncwebError::operation("canonical report serialization", e))
-    }
-}
-
-impl SignedGossipMessage for ReportRecord {
-    fn verify_signature(&self) -> Result<()> {
-        let reporter_hex = self.reporter.as_ref().ok_or_else(|| {
-            SyncwebError::MissingSignature("report has no reporter; unsigned reports must not be gossiped".into())
-        })?;
-        let bytes = hex::decode(reporter_hex).map_err(|e| SyncwebError::operation("decode reporter key", e))?;
-        let key_len = bytes.len();
-        let key_bytes: [u8; 32] = bytes.try_into().map_err(|_v| {
-            SyncwebError::InvalidSignature(format!("reporter key has wrong length (expected 32, got {key_len})"))
-        })?;
-        let public_key = VerifyingKey::from_bytes(&key_bytes)
-            .map_err(|e| SyncwebError::InvalidSignature(format!("invalid reporter key: {e}")))?;
-        self.verify(&public_key)
-    }
 }

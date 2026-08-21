@@ -803,16 +803,15 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -f -a "show" -d 'Show trust and moderation state'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -f -a "delegate" -d 'Delegate trust to a publisher identity'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -f -a "provider" -d 'Manage provider trust and bans'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider stream" -f -a "stream" -d 'Publish or subscribe to provider trust signals'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "show" -d 'Show trust and moderation state'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "delegate" -d 'Delegate trust to a publisher identity'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
+complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "provider" -d 'Manage provider trust and bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l content -d 'Treat the subject as a content hash rather than a publisher identity'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l verbose -d 'Enable verbose structured logging'
@@ -845,13 +844,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "unban" -d 'Remove a provider\'s global and scoped bans'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "vouch" -d 'Vouch for a provider'
 complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "distrust" -d 'Distrust a provider'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -f -a "subscribe" -d 'Subscribe to a provider trust stream ticket or file'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from stream" -f -a "publish" -d 'Publish a signed provider trust signal'
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l json -d 'Emit machine-readable JSON where supported'
@@ -881,14 +873,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -f -a "ls" -d 'List local moderation records'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -f -a "hide" -d 'Hide a content record locally'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide report" -f -a "report" -d 'Sign and submit a moderation report (broadcasts via gossip)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -f -a "ls" -d 'List local moderation records'
+complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -f -a "hide" -d 'Hide a content record locally'
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l json -d 'Emit machine-readable JSON where supported'
@@ -900,13 +891,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l reason -d 'Reason for the report' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l broadcast -d 'Also broadcast to peers via gossip'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from report" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l json -d 'Emit machine-readable JSON where supported'

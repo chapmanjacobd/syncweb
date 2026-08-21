@@ -82,9 +82,6 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "indexing",
         "link",
         "provider",
-        "trust",
-        "attest",
-        "moderation",
         "completions",
         "manpages",
     ] {
@@ -365,13 +362,13 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
         &data_dir,
         &[
             "package",
-            "init",
+            "add",
             "--name",
             "example",
             package_dir.to_str().context("UTF-8 package path")?,
         ],
     )?;
-    assert_success(&init, "package init")?;
+    assert_success(&init, "package add")?;
     let add = run_with_data(
         &data_dir,
         &["package", "add", package_dir.to_str().context("UTF-8 package path")?],
@@ -412,8 +409,8 @@ fn package_bump() -> anyhow::Result<()> {
         .to_str()
         .context("UTF-8 root path")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
-    assert_success(&init, "package init")?;
+    let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
+    assert_success(&init, "package add")?;
 
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
     assert_success(&add, "package add")?;
@@ -494,8 +491,8 @@ fn package_multipath_common_root_rebasing() -> anyhow::Result<()> {
     let thing_txt_path = library.join("thing.txt");
     let thing_txt = thing_txt_path.to_str().context("UTF-8 thing.txt path")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", td_str, thing_txt])?;
-    assert_success(&init, "package init multi-path")?;
+    let init = run_with_data(&data_dir, &["package", "add", "--name", "example", td_str, thing_txt])?;
+    assert_success(&init, "package add multi-path")?;
     let paths = logical_paths_of(&data_dir, lib_str)?;
     ensure!(
         paths.iter().any(|p| p == "thingdata/a.txt"),
@@ -524,9 +521,9 @@ fn package_multipath_common_root_rebasing() -> anyhow::Result<()> {
 
     let init2 = run_with_data(
         &data_dir,
-        &["package", "init", "--name", "example2", td_second_str, thing_second],
+        &["package", "add", "--name", "example2", td_second_str, thing_second],
     )?;
-    assert_success(&init2, "package init example 2")?;
+    assert_success(&init2, "package add example 2")?;
     let paths2 = logical_paths_of(&data_dir, dir_str)?;
     ensure!(
         paths2.iter().any(|p| p == "thingdata/b.txt"),
@@ -632,8 +629,8 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
-    assert_success(&init, "package init")?;
+    let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
+    assert_success(&init, "package add")?;
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
     assert_success(&add, "package add")?;
 
@@ -791,8 +788,8 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_str)
         .context("create output missing namespace")?;
 
-    let init = run_with_data(&data_dir, &["package", "init", "--name", "example", package_path])?;
-    assert_success(&init, "package init")?;
+    let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
+    assert_success(&init, "package add")?;
     let add = run_with_data(&data_dir, &["package", "add", package_path])?;
     assert_success(&add, "package add")?;
 
@@ -944,10 +941,8 @@ fn create_outputs_all_fields() -> anyhow::Result<()> {
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("path:"), "should print path: {stdout}");
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(
-        !stdout.contains("ticket"),
-        "create should not print a ticket (use share): {stdout}"
-    );
+    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
+    ensure!(stdout.contains("url:"), "should print a share url: {stdout}");
     Ok(())
 }
 

@@ -4,7 +4,7 @@
 .SH NAME
 share \- Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH SYNOPSIS
-\fBshare\fR [\fB\-\-namespace\fR] [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] [\fIsubcommands\fR]
+\fBshare\fR [\fB\-\-namespace\fR] [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-\-list\fR] [\fB\-\-rm\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fISELECTOR\fR] 
 .SH DESCRIPTION
 Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH OPTIONS
@@ -24,18 +24,14 @@ Skip pinning the shared folder\*(Aqs blobs
 \fB\-\-no\-persist\fR
 Skip persisting the share record
 .TP
+\fB\-\-list\fR
+List persisted shares, optionally filtered by the positional selectors
+.TP
+\fB\-\-rm\fR
+Stop sharing a folder or blob
+.TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .TP
-[\fIPATH\fR] [default: .]
-Folder path or namespace to share
-.SH SUBCOMMANDS
-.TP
-share\-list(1)
-List persisted folder shares
-.TP
-share\-rm(1)
-Stop sharing a folder or blob
-.TP
-share\-help(1)
-Print this message or the help of the given subcommand(s)
+[\fISELECTOR\fR]
+Folder path, namespace, or (with \-\-list) filters to list shares

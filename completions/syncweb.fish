@@ -36,7 +36,7 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "shutdown" -d 'Stop 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "status" -d 'Show the local daemon status'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "reload" -d 'Ask the local daemon to reload configuration'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "daemon-sync" -d 'Ask the local daemon to trigger synchronization'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "create" -d 'Create a private synchronized folder and print a writable join ticket'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "create" -d 'Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "join" -d 'Join a folder from an Iroh document ticket'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "folders" -d 'List managed folders'
@@ -63,9 +63,6 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "indexing" -d 'Manag
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "link" -d 'Create and resolve stable syncweb links'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "mirror" -d 'Mirror all blobs from a provider or network'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "provider" -d 'Manage blob provider registrations'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "trust" -d 'Inspect and delegate local trust'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "attest" -d 'Sign content provenance attestations'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "moderation" -d 'Manage local moderation decisions'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "completions" -d 'Generate shell completions'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "manpages" -d 'Generate manpages'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
@@ -117,6 +114,8 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l data-dir -d '
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l import -d 'Scan and import existing files in the directory'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l no-import -d 'Skip scanning existing files in the directory'
+complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l write -d 'Grant write access on the share ticket (default: read-only)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l no-share -d 'Create the folder without sharing it (no ticket/URL printed)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -282,7 +281,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l verbose -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l folder -d 'Folder namespace; defaults to the only managed folder' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l folder -l namespace -d 'Folder namespace or managed folder path; defaults to the only managed folder' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand import" -l enrich -d 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
@@ -443,7 +442,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from network" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l folder -d 'Namespace ID or path to a managed folder' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l folder -l namespace -d 'Namespace ID or path to a managed folder' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l by -r -f -a "extension\t''
 size\t''
 all\t''
@@ -454,7 +453,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l folder -d 'Namespace ID or path to a managed folder' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l folder -l namespace -d 'Namespace ID or path to a managed folder' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l hash -d 'Content hash(es) to select (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l glob -d 'Only entries whose path matches this glob pattern' -r
@@ -463,6 +462,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l namespace -d 'Namespace ID or managed folder path (alternative to the positional path)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to select (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob -d 'Only entries whose path matches this glob pattern' -r
@@ -481,6 +481,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and not __fish_
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and not __fish_seen_subcommand_from catalog" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and not __fish_seen_subcommand_from catalog" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and not __fish_seen_subcommand_from catalog" -f -a "catalog" -d 'Publish folder metadata to a catalog'
+complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l namespace -d 'Namespace ID or managed folder path (alternative to the positional folder)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l catalog -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l tag -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
@@ -488,58 +489,38 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand publish; and __fish_seen_subcommand_from catalog" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l namespace -d 'Namespace ID or managed folder path' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l blob -d 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l write -d 'Grant write access (default: read-only)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l no-pin -d 'Skip pinning the shared folder\'s blobs'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l no-persist -d 'Skip persisting the share record'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -a "list" -d 'List persisted folder shares'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list rm" -a "rm" -d 'Stop sharing a folder or blob'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from list" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from list" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from list" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from list" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l namespace -d 'Namespace ID or managed folder path' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l blob -d 'Remove a shared blob pin' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l write -d 'Remove the write-access share (default: read-only)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand share; and __fish_seen_subcommand_from rm" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "init" -d 'Initialize one or more paths as a versioned package, scanning them in one shot'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "add" -d 'Re-scan paths and update the local package manifest'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "bump" -d 'Create a new package manifest version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "publish" -d 'Publish a package manifest ticket and announce it to the catalog'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "export" -d 'Export one or more package directories as compressed CAR archive files'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "import" -d 'Import and install a compressed CAR archive file'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "info" -d 'Show a collection manifest from a ticket or blob hash'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "install" -d 'Verify, stage, and atomically install a collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "upgrade" -d 'Install a newer collection manifest version via ticket'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "remove" -d 'Remove a non-current installed collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "verify" -d 'Verify an installed collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "list" -d 'List locally installed collections'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "versions" -d 'List installed versions for a collection'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from init add bump publish export import info install upgrade remove verify list versions switch" -f -a "switch" -d 'Switch the active installed collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l version -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l name -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l root -d 'Override the common root for logical path rebasing' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from init" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l namespace -d 'Namespace ID or managed folder path' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l blob -d 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l write -d 'Grant write access (default: read-only)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l no-pin -d 'Skip pinning the shared folder\'s blobs'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l no-persist -d 'Skip persisting the share record'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l list -d 'List persisted shares, optionally filtered by the positional selectors'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l rm -d 'Stop sharing a folder or blob'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l json -d 'Emit machine-readable JSON where supported'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "add" -d 'Scan one or more paths into a package manifest (creates it if missing)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "bump" -d 'Create a new package manifest version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "publish" -d 'Publish a package manifest ticket and announce it to the catalog'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "export" -d 'Export one or more package directories as compressed CAR archive files'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "import" -d 'Import and install a compressed CAR archive file'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "info" -d 'Show a collection manifest from a ticket or blob hash'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "install" -d 'Verify, stage, and atomically install a collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "upgrade" -d 'Install a newer collection manifest version via ticket'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "remove" -d 'Remove a non-current installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "verify" -d 'Verify an installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "list" -d 'List locally installed collections'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "versions" -d 'List installed versions for a collection'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "switch" -d 'Switch the active installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l version -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l name -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l root -d 'Override the common root for logical path rebasing' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l verbose -d 'Enable verbose structured logging'
@@ -724,11 +705,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and not __fish
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and not __fish_seen_subcommand_from enable disable health meta filter" -f -a "health" -d 'Show verified provider health for a content hash'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and not __fish_seen_subcommand_from enable disable health meta filter" -f -a "meta" -d 'Manage signed metadata'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and not __fish_seen_subcommand_from enable disable health meta filter" -f -a "filter" -d 'Manage local and federated denylists'
+complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -l namespace -d 'Namespace ID or managed folder path (alternative to the positional folder)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from enable" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from disable" -l namespace -d 'Namespace ID or managed folder path (alternative to the positional folder)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from disable" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from disable" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand indexing; and __fish_seen_subcommand_from disable" -l json -d 'Emit machine-readable JSON where supported'
@@ -803,94 +786,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand provider; and __fish_seen_subcommand_from add" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "show" -d 'Show trust and moderation state'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "delegate" -d 'Delegate trust to a publisher identity'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "revoke-delegation" -d 'Revoke a trust delegation'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and not __fish_seen_subcommand_from show delegate revoke-delegation provider" -f -a "provider" -d 'Manage provider trust and bans'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l content -d 'Treat the subject as a content hash rather than a publisher identity'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l expires -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l scope -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l sequence -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l max-depth -d 'Maximum delegation chain depth (1 = delegate only)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from delegate" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l scope -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from revoke-delegation" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "show" -d 'Show provider reputation, bans, and trust records'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "list" -d 'List providers known to the local index'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "ban" -d 'Ban a provider globally or for one content hash'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "unban" -d 'Remove a provider\'s global and scoped bans'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "vouch" -d 'Vouch for a provider'
-complete -c syncweb -n "__fish_syncweb_using_subcommand trust; and __fish_seen_subcommand_from provider" -f -a "distrust" -d 'Distrust a provider'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -f -a "create" -d 'Sign and optionally broadcast a content attestation'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -f -a "verify" -d 'Verify attestations for content from the network'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and not __fish_seen_subcommand_from create verify list" -f -a "list" -d 'List local attestations for a content hash'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l license -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l provenance -d 'Provenance attestation type' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l derivative -d 'Derivative work attestation type' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l sequence -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l broadcast -d 'Broadcast attestation via gossip'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from create" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l timeout -d 'Timeout in seconds for gossip collection' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from verify" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand attest; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -f -a "ls" -d 'List local moderation records'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and not __fish_seen_subcommand_from ls hide" -f -a "hide" -d 'Hide a content record locally'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from ls" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l reason -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l json -d 'Emit machine-readable JSON where supported'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand moderation; and __fish_seen_subcommand_from hide" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand completions" -l json -d 'Emit machine-readable JSON where supported'

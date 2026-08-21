@@ -47,7 +47,7 @@ syncweb\-daemon\-sync(1)
 Ask the local daemon to trigger synchronization
 .TP
 syncweb\-create(1)
-Create a private synchronized folder and print a writable join ticket
+Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
 .TP
 syncweb\-join(1)
 Join a folder from an Iroh document ticket
@@ -126,15 +126,6 @@ Mirror all blobs from a provider or network
 .TP
 syncweb\-provider(1)
 Manage blob provider registrations
-.TP
-syncweb\-trust(1)
-Inspect and delegate local trust
-.TP
-syncweb\-attest(1)
-Sign content provenance attestations
-.TP
-syncweb\-moderation(1)
-Manage local moderation decisions
 .TP
 syncweb\-completions(1)
 Generate shell completions

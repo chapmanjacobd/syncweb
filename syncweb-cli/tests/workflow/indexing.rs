@@ -68,31 +68,6 @@ fn mutable_links_advance_sequences_across_processes() -> Result<()> {
 }
 
 #[test]
-fn attest_report_and_moderation_state_persist() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let _attested = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
-
-    let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
-
-    let listed = run(alice, &["--json", "moderation", "ls"])?;
-    ensure!(json_output(&listed)?.as_array().is_some_and(|items| items.len() == 1));
-
-    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    let trust = json_output(&trust_output)?;
-    ensure!(trust.get("moderation") == Some(&Value::from("hide")));
-    ensure!(
-        trust
-            .get("attestations")
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.len() == 1)
-    );
-
-    Ok(())
-}
-
-#[test]
 fn indexing_publish_and_search_round_trip() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -177,30 +152,6 @@ fn link_create_private_and_revoke() -> Result<()> {
 }
 
 #[test]
-fn trust_delegate_and_show() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let new_key = iroh::SecretKey::generate().public();
-    let new_key_hex = new_key.to_string();
-
-    let delegated = run(alice, &["trust", "delegate", &new_key.to_string()])?;
-    ensure!(
-        delegated.stdout().contains("delegated:"),
-        "delegate output should confirm delegation"
-    );
-
-    let shown = run(alice, &["--json", "trust", "show", &new_key_hex])?;
-    let trust = json_output(&shown)?;
-    let trust_value = trust.get("trust").and_then(Value::as_str);
-    ensure!(
-        trust_value == Some("trusted-delegation"),
-        "delegated publisher should be trusted, got {trust_value:?}"
-    );
-
-    Ok(())
-}
-
-#[test]
 fn indexing_meta_add_persists_metadata() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -213,51 +164,10 @@ fn indexing_meta_add_persists_metadata() -> Result<()> {
 
     let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
 
-    let shown = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    let trust = json_output(&shown)?;
-    ensure!(
-        trust
-            .get("metadata")
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.len() == 2),
-        "trust show should list two metadata entries"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn provider_trust_and_ban_commands_persist_across_processes() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let provider = iroh::SecretKey::generate().public().to_string();
-
-    let _vouched = run(alice, &["trust", "provider", "vouch", &provider])?;
-    let shown = run(alice, &["--json", "trust", "provider", "show", &provider])?;
-    ensure!(json_output(&shown)?.get("trust") == Some(&Value::from("trusted")));
-
-    let _banned = run(alice, &["trust", "provider", "ban", "--reason", "test ban", &provider])?;
-    let listed = run(alice, &["--json", "trust", "provider", "list"])?;
-    ensure!(
-        json_output(&listed)?
-            .as_array()
-            .and_then(|items| items.first())
-            .and_then(|item| item.get("bans"))
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.len() == 1)
-    );
-
-    let _distrusted = run(alice, &["trust", "provider", "distrust", &provider])?;
-    let _unbanned = run(alice, &["trust", "provider", "unban", &provider])?;
-    let final_state = run(alice, &["--json", "trust", "provider", "show", &provider])?;
-    let final_state_json = json_output(&final_state)?;
-    ensure!(final_state_json.get("trust") == Some(&Value::from("distrusted")));
-    ensure!(
-        final_state_json
-            .get("bans")
-            .and_then(Value::as_array)
-            .is_some_and(Vec::is_empty)
-    );
+    let shown = run(alice, &["--json", "indexing", "meta", "list", CONTENT_HASH])?;
+    let shown_json = json_output(&shown)?;
+    let entries = shown_json.as_array().context("meta list should be an array")?;
+    ensure!(entries.len() == 2, "meta list should list two metadata entries");
 
     Ok(())
 }
@@ -309,11 +219,19 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
 
     let unpublished = run(
         alice,
-        &["--json", "share", "rm", "--namespace", &namespace, "--blob", &hash_str],
+        &[
+            "--json",
+            "share",
+            "--rm",
+            "--namespace",
+            &namespace,
+            "--blob",
+            &hash_str,
+        ],
     )?;
     ensure!(
         json_output(&unpublished)?.get("status") == Some(&Value::from("unshared")),
-        "share rm --blob should confirm the pin was removed"
+        "share --rm --blob should confirm the pin was removed"
     );
 
     Ok(())
@@ -341,7 +259,7 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
     fs::write(pkg.join("lib.txt"), b"lib content")?;
     let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
 
-    let _init = run(alice, &["package", "init", "--name", "sample", pkg_path])?;
+    let _init = run(alice, &["package", "add", "--name", "sample", pkg_path])?;
     let _add = run(alice, &["package", "add", pkg_path])?;
 
     let published = run(
@@ -738,286 +656,6 @@ fn indexing_filter_add_device_and_subscribe() -> Result<()> {
 }
 
 #[test]
-fn trust_delegate_with_scope_expiry_depth() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let publisher = iroh::SecretKey::generate().public().to_string();
-    let expires = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-        .saturating_add(3600);
-
-    let delegated = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "delegate",
-            "--scope",
-            CONTENT_HASH,
-            "--expires",
-            &expires.to_string(),
-            "--sequence",
-            "2",
-            "--max-depth",
-            "2",
-            &publisher,
-        ],
-    )?;
-    let delegation = json_output(&delegated)?;
-    ensure!(delegation.get("status") == Some(&Value::from("delegated")));
-    ensure!(
-        delegation.get("expires_at") == Some(&Value::from(expires)),
-        "delegate should honor the requested expiration"
-    );
-    ensure!(delegation.get("scope") == Some(&Value::from(CONTENT_HASH)));
-    ensure!(delegation.get("max_depth") == Some(&Value::from(2)));
-
-    Ok(())
-}
-
-#[test]
-fn trust_revoke_delegation() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let publisher = iroh::SecretKey::generate().public().to_string();
-
-    let _delegated = run(alice, &["trust", "delegate", &publisher])?;
-    let shown = run(alice, &["--json", "trust", "show", &publisher])?;
-    ensure!(
-        json_output(&shown)?.get("trust") == Some(&Value::from("trusted-delegation")),
-        "delegate should be trusted before revocation"
-    );
-
-    let revoked = run(alice, &["--json", "trust", "revoke-delegation", &publisher])?;
-    ensure!(json_output(&revoked)?.get("status") == Some(&Value::from("revoked")));
-
-    let shown_after = run(alice, &["--json", "trust", "show", &publisher])?;
-    ensure!(
-        json_output(&shown_after)?.get("trust") == Some(&Value::from("untrusted")),
-        "revoked delegation should no longer be trusted"
-    );
-
-    let scoped_publisher = iroh::SecretKey::generate().public().to_string();
-    let _scoped_delegated = run(
-        alice,
-        &["trust", "delegate", "--scope", CONTENT_HASH, &scoped_publisher],
-    )?;
-    let scoped_revoked = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "revoke-delegation",
-            "--scope",
-            CONTENT_HASH,
-            &scoped_publisher,
-        ],
-    )?;
-    let scoped = json_output(&scoped_revoked)?;
-    ensure!(scoped.get("status") == Some(&Value::from("revoked")));
-    ensure!(scoped.get("scope") == Some(&Value::from(CONTENT_HASH)));
-
-    Ok(())
-}
-
-#[test]
-fn trust_provider_ban_scoped_and_durable() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let provider = iroh::SecretKey::generate().public().to_string();
-    let duration = 120_u64;
-    let before = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-
-    let banned = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "provider",
-            "ban",
-            "--hash",
-            CONTENT_HASH,
-            "--duration",
-            &duration.to_string(),
-            "--reason",
-            "scoped abuse",
-            &provider,
-        ],
-    )?;
-    let result = json_output(&banned)?;
-    ensure!(result.get("status") == Some(&Value::from("banned")));
-    let ban = result.get("ban").context("ban output missing ban")?;
-    ensure!(ban.get("hash") == Some(&Value::from(CONTENT_HASH)));
-    ensure!(ban.get("reason") == Some(&Value::from("scoped abuse")));
-    let expires_at = ban
-        .get("expires_at")
-        .and_then(Value::as_u64)
-        .context("ban should expire")?;
-    ensure!(
-        expires_at.saturating_sub(before) >= duration,
-        "ban duration should be honored"
-    );
-
-    let shown = run(
-        alice,
-        &["--json", "trust", "provider", "show", "--hash", CONTENT_HASH, &provider],
-    )?;
-    let report = json_output(&shown)?;
-    ensure!(
-        report
-            .get("bans")
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.len() == 1),
-        "scoped ban should be visible for the content hash"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn trust_provider_vouch_and_distrust_with_scope() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let provider = iroh::SecretKey::generate().public().to_string();
-
-    let vouched = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "provider",
-            "vouch",
-            "--scope",
-            CONTENT_HASH,
-            &provider,
-        ],
-    )?;
-    let vouch = json_output(&vouched)?;
-    ensure!(vouch.get("status") == Some(&Value::from("updated")));
-    ensure!(vouch.get("action") == Some(&Value::from("vouch")));
-    ensure!(vouch.get("scope") == Some(&Value::from(CONTENT_HASH)));
-    ensure!(vouch.get("sequence") == Some(&Value::from(1)));
-
-    let distrusted = run(
-        alice,
-        &[
-            "--json",
-            "trust",
-            "provider",
-            "distrust",
-            "--scope",
-            CONTENT_HASH,
-            &provider,
-        ],
-    )?;
-    let distrust = json_output(&distrusted)?;
-    ensure!(distrust.get("action") == Some(&Value::from("distrust")));
-    ensure!(distrust.get("sequence") == Some(&Value::from(2)));
-
-    let shown = run(
-        alice,
-        &["--json", "trust", "provider", "show", "--hash", CONTENT_HASH, &provider],
-    )?;
-    let report = json_output(&shown)?;
-    ensure!(
-        report.get("trust") == Some(&Value::from("distrusted")),
-        "the most recent scoped record should win"
-    );
-    ensure!(
-        report
-            .get("records")
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.len() == 2)
-    );
-
-    Ok(())
-}
-
-#[test]
-fn attest_provenance_derivative_and_broadcast() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let provenance = run(
-        alice,
-        &[
-            "--json",
-            "attest",
-            "create",
-            "--provenance",
-            "archive",
-            "--sequence",
-            "3",
-            CONTENT_HASH,
-        ],
-    )?;
-    let provenance_json = json_output(&provenance)?;
-    ensure!(provenance_json.get("status") == Some(&Value::from("attested")));
-    ensure!(provenance_json.get("value") == Some(&Value::from("archive")));
-
-    let derivative = run(
-        alice,
-        &["--json", "attest", "create", "--derivative", "remix", CONTENT_HASH],
-    )?;
-    ensure!(json_output(&derivative)?.get("status") == Some(&Value::from("attested")));
-
-    let license = run(
-        alice,
-        &[
-            "--json",
-            "attest",
-            "create",
-            "--license",
-            "MIT",
-            "--broadcast",
-            CONTENT_HASH,
-        ],
-    )?;
-    ensure!(json_output(&license)?.get("status") == Some(&Value::from("attested")));
-
-    let shown = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    let trust = json_output(&shown)?;
-    let attestations = trust
-        .get("attestations")
-        .and_then(Value::as_array)
-        .context("attestations missing")?;
-    ensure!(attestations.len() == 3, "all three attestations should persist");
-    ensure!(
-        attestations.iter().any(|att| {
-            att.get("value") == Some(&Value::from("archive")) && att.get("sequence") == Some(&Value::from(3))
-        }),
-        "provenance attestation should record its sequence"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn attest_verify_with_timeout() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let _created = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
-
-    let verified = run(alice, &["--json", "attest", "verify", "--timeout", "1", CONTENT_HASH])?;
-    let results = json_output(&verified)?;
-    ensure!(results.is_array(), "attest verify should emit a JSON array");
-    ensure!(
-        results.as_array().is_some_and(|attestations| attestations.len() == 1),
-        "attest verify should read the locally persisted attestation even with no online peers"
-    );
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Plan 012 — Metadata / moderation / attestation read-write symmetry
-// ---------------------------------------------------------------------------
-
-#[test]
 fn indexing_meta_list() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -1029,73 +667,6 @@ fn indexing_meta_list() -> Result<()> {
     let listed_json = json_output(&listed)?;
     let entries = listed_json.as_array().context("meta list should be an array")?;
     ensure!(entries.len() == 2, "meta list should return both metadata entries");
-
-    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    let trust_json = json_output(&trust_output)?;
-    let trust_metadata = trust_json
-        .get("metadata")
-        .and_then(Value::as_array)
-        .context("trust show metadata missing")?;
-    ensure!(
-        trust_metadata.len() == entries.len(),
-        "meta list should agree with trust show --content"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn attest_list_local() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let _license = run(alice, &["attest", "create", "--license", "MIT", CONTENT_HASH])?;
-    let _provenance = run(alice, &["attest", "create", "--provenance", "archive", CONTENT_HASH])?;
-
-    let listed = run(alice, &["--json", "attest", "list", CONTENT_HASH])?;
-    let listed_json = json_output(&listed)?;
-    let attestations = listed_json.as_array().context("attest list should be an array")?;
-    ensure!(
-        attestations.len() == 2,
-        "attest list should return both local attestations"
-    );
-
-    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    let trust_json = json_output(&trust_output)?;
-    let trust_attestations = trust_json
-        .get("attestations")
-        .and_then(Value::as_array)
-        .context("trust show attestations missing")?;
-    ensure!(
-        trust_attestations.len() == attestations.len(),
-        "attest list should agree with trust show --content"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn moderation_list_content_scoped() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let other_hash = "9b7d5d2e2f5f0d7b3e2d1b9d9b7d5d2e2f5f0d7b3e2d1b9d9b7d5d2e2f5f0d7b";
-
-    let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
-    let _hidden_other = run(alice, &["moderation", "hide", other_hash])?;
-
-    let listed = run(alice, &["--json", "moderation", "ls", CONTENT_HASH])?;
-    let listed_json = json_output(&listed)?;
-    let records = listed_json.as_array().context("moderation ls should be an array")?;
-    ensure!(
-        records.len() == 1,
-        "content-scoped moderation ls should return only matching records"
-    );
-
-    let trust_output = run(alice, &["--json", "trust", "show", "--content", CONTENT_HASH])?;
-    ensure!(
-        json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
-        "content-scoped moderation list should agree with trust show"
-    );
 
     Ok(())
 }

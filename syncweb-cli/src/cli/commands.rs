@@ -16,7 +16,9 @@ pub enum Command {
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync(DaemonSyncArgs),
-    #[command(about = "Create a private synchronized folder and print a writable join ticket")]
+    #[command(
+        about = "Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)"
+    )]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
     Join(FolderJoin),
@@ -102,21 +104,6 @@ pub enum Command {
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
-    },
-    #[command(about = "Inspect and delegate local trust")]
-    Trust {
-        #[command(subcommand)]
-        command: TrustCommand,
-    },
-    #[command(about = "Sign content provenance attestations")]
-    Attest {
-        #[command(subcommand)]
-        command: AttestCommand,
-    },
-    #[command(about = "Manage local moderation decisions")]
-    Moderation {
-        #[command(subcommand)]
-        command: ModerationCommand,
     },
     #[command(about = "Generate shell completions")]
     Completions {
@@ -279,6 +266,10 @@ pub struct FolderCreate {
         help = "Skip scanning existing files in the directory"
     )]
     pub no_import: bool,
+    #[arg(long, help = "Grant write access on the share ticket (default: read-only)")]
+    pub write: bool,
+    #[arg(long, help = "Create the folder without sharing it (no ticket/URL printed)")]
+    pub no_share: bool,
 }
 
 #[derive(Debug, Args)]
@@ -583,7 +574,11 @@ pub struct MirrorArgs {
 #[derive(Debug, Args)]
 pub struct ImportArgs {
     pub path: PathBuf,
-    #[arg(long, help = "Folder namespace; defaults to the only managed folder")]
+    #[arg(
+        long,
+        visible_alias = "namespace",
+        help = "Folder namespace or managed folder path; defaults to the only managed folder"
+    )]
     pub folder: Option<String>,
     #[arg(
         long,
@@ -642,7 +637,12 @@ pub struct StatsNetworkArgs {
 
 #[derive(Debug, Args)]
 pub struct StatsFilesArgs {
-    #[arg(long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    #[arg(
+        long,
+        default_value = ".",
+        visible_alias = "namespace",
+        help = "Namespace ID or path to a managed folder"
+    )]
     pub folder: PathBuf,
     #[arg(
         long,
@@ -656,7 +656,12 @@ pub struct StatsFilesArgs {
 
 #[derive(Debug, Args)]
 pub struct StatsSeedingArgs {
-    #[arg(long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    #[arg(
+        long,
+        default_value = ".",
+        visible_alias = "namespace",
+        help = "Namespace ID or path to a managed folder"
+    )]
     pub folder: PathBuf,
     #[command(flatten)]
     pub filter: super::filter::ContentFilter,
@@ -741,6 +746,11 @@ pub struct WatchArgs {
 pub struct VerifyArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
+    #[arg(
+        long,
+        help = "Namespace ID or managed folder path (alternative to the positional path)"
+    )]
+    pub namespace: Option<String>,
     #[command(flatten)]
     pub filter: super::filter::ContentFilter,
     #[arg(long, help = "Attempt to repair corrupted blobs by re-downloading from peers")]
@@ -785,6 +795,11 @@ pub enum PublishCommand {
 #[derive(Debug, Args)]
 pub struct PublishCatalogArgs {
     pub folder: PathBuf,
+    #[arg(
+        long,
+        help = "Namespace ID or managed folder path (alternative to the positional folder)"
+    )]
+    pub namespace: Option<String>,
     #[arg(long)]
     pub catalog: String,
     #[arg(long = "tag")]
@@ -793,8 +808,12 @@ pub struct PublishCatalogArgs {
 
 #[derive(Debug, Args)]
 pub struct ShareArgs {
-    #[arg(default_value = ".", value_name = "PATH", help = "Folder path or namespace to share")]
-    pub path: Option<PathBuf>,
+    #[arg(
+        value_name = "SELECTOR",
+        num_args = 0..,
+        help = "Folder path, namespace, or (with --list) filters to list shares"
+    )]
+    pub selectors: Vec<String>,
     #[arg(long, help = "Namespace ID or managed folder path")]
     pub namespace: Option<String>,
     #[arg(
@@ -808,59 +827,25 @@ pub struct ShareArgs {
     pub no_pin: bool,
     #[arg(long, help = "Skip persisting the share record")]
     pub no_persist: bool,
-    #[command(subcommand)]
-    pub command: Option<ShareCommand>,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ShareCommand {
-    #[command(about = "List persisted folder shares")]
-    List,
-    #[command(name = "rm", alias = "remove", about = "Stop sharing a folder or blob")]
-    Remove(ShareRemoveArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct ShareRemoveArgs {
     #[arg(
-        default_value = ".",
-        value_name = "PATH",
-        help = "Folder path or namespace to stop sharing"
+        long = "list",
+        help = "List persisted shares, optionally filtered by the positional selectors"
     )]
-    pub path: PathBuf,
-    #[arg(long, help = "Namespace ID or managed folder path")]
-    pub namespace: Option<String>,
-    #[arg(long, help = "Remove a shared blob pin")]
-    pub blob: Option<String>,
-    #[arg(
-        long = "write",
-        alias = "writable",
-        help = "Remove the write-access share (default: read-only)"
-    )]
-    pub write: bool,
+    pub list: bool,
+    #[arg(long = "rm", alias = "remove", help = "Stop sharing a folder or blob")]
+    pub rm: bool,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum PackageCommand {
-    #[command(about = "Initialize one or more paths as a versioned package, scanning them in one shot")]
-    Init {
+    #[command(about = "Scan one or more paths into a package manifest (creates it if missing)")]
+    Add {
         #[arg(required = true, num_args = 1.., value_name = "PATH", default_value = ".")]
         paths: Vec<PathBuf>,
         #[arg(long, default_value = "1.0.0")]
         version: String,
         #[arg(long)]
         name: Option<String>,
-        #[arg(
-            long,
-            value_name = "PATH",
-            help = "Override the common root for logical path rebasing"
-        )]
-        root: Option<PathBuf>,
-    },
-    #[command(about = "Re-scan paths and update the local package manifest")]
-    Add {
-        #[arg(required = true, num_args = 1.., value_name = "PATH", default_value = ".")]
-        paths: Vec<PathBuf>,
         #[arg(
             long,
             value_name = "PATH",
@@ -991,9 +976,23 @@ pub enum NetworkCommand {
 #[derive(Debug, Subcommand)]
 pub enum IndexingCommand {
     #[command(about = "Opt a synchronized folder into indexing")]
-    Enable { folder: PathBuf },
+    Enable {
+        folder: PathBuf,
+        #[arg(
+            long,
+            help = "Namespace ID or managed folder path (alternative to the positional folder)"
+        )]
+        namespace: Option<String>,
+    },
     #[command(about = "Remove a folder from the local index")]
-    Disable { folder: PathBuf },
+    Disable {
+        folder: PathBuf,
+        #[arg(
+            long,
+            help = "Namespace ID or managed folder path (alternative to the positional folder)"
+        )]
+        namespace: Option<String>,
+    },
     #[command(about = "Show verified provider health for a content hash")]
     Health { hash: String },
     #[command(about = "Manage signed metadata")]
@@ -1066,132 +1065,4 @@ pub enum LinkCommand {
 pub enum ProviderCommand {
     #[command(about = "Register a blob ticket as an alternate provider")]
     Add { collection: String, provider: String },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum TrustCommand {
-    #[command(about = "Show trust and moderation state")]
-    Show {
-        subject: String,
-        #[arg(long, help = "Treat the subject as a content hash rather than a publisher identity")]
-        content: bool,
-    },
-    #[command(about = "Delegate trust to a publisher identity")]
-    Delegate {
-        publisher: String,
-        #[arg(long)]
-        expires: Option<u64>,
-        #[arg(long)]
-        scope: Option<String>,
-        #[arg(long, default_value_t = 1)]
-        sequence: u64,
-        #[arg(long, help = "Maximum delegation chain depth (1 = delegate only)")]
-        max_depth: Option<u32>,
-    },
-    #[command(about = "Revoke a trust delegation")]
-    RevokeDelegation {
-        publisher: String,
-        #[arg(long)]
-        scope: Option<String>,
-    },
-    #[command(about = "Manage provider trust and bans")]
-    Provider {
-        #[command(subcommand)]
-        command: ProviderTrustCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ProviderTrustCommand {
-    #[command(about = "Show provider reputation, bans, and trust records")]
-    Show {
-        provider: String,
-        #[arg(long, help = "Evaluate content-scoped trust for this hash")]
-        hash: Option<String>,
-    },
-    #[command(name = "list", about = "List providers known to the local index")]
-    List {
-        #[arg(long, help = "Evaluate content-scoped trust for this hash")]
-        hash: Option<String>,
-    },
-    #[command(about = "Ban a provider globally or for one content hash")]
-    Ban {
-        provider: String,
-        #[arg(long)]
-        hash: Option<String>,
-        #[arg(long, default_value = "manual provider ban")]
-        reason: String,
-        #[arg(long, help = "Ban duration in seconds")]
-        duration: Option<u64>,
-    },
-    #[command(about = "Remove a provider's global and scoped bans")]
-    Unban { provider: String },
-    #[command(about = "Vouch for a provider")]
-    Vouch {
-        provider: String,
-        #[arg(long)]
-        scope: Option<String>,
-        #[arg(long, default_value = "locally vouched provider")]
-        reason: String,
-    },
-    #[command(about = "Distrust a provider")]
-    Distrust {
-        provider: String,
-        #[arg(long)]
-        scope: Option<String>,
-        #[arg(long, default_value = "locally distrusted provider")]
-        reason: String,
-    },
-}
-
-#[derive(Debug, Args)]
-pub struct AttestArgs {
-    #[arg(help = "Content hash to attest")]
-    pub content: String,
-    #[arg(long, conflicts_with_all = ["provenance", "derivative"])]
-    pub license: Option<String>,
-    #[arg(long, conflicts_with_all = ["license", "derivative"], help = "Provenance attestation type")]
-    pub provenance: Option<String>,
-    #[arg(long, conflicts_with_all = ["license", "provenance"], help = "Derivative work attestation type")]
-    pub derivative: Option<String>,
-    #[arg(long, default_value_t = 1)]
-    pub sequence: u64,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum AttestCommand {
-    #[command(about = "Sign and optionally broadcast a content attestation")]
-    Create {
-        content: String,
-        #[arg(long, conflicts_with_all = ["provenance", "derivative"])]
-        license: Option<String>,
-        #[arg(long, conflicts_with_all = ["license", "derivative"], help = "Provenance attestation type")]
-        provenance: Option<String>,
-        #[arg(long, conflicts_with_all = ["license", "provenance"], help = "Derivative work attestation type")]
-        derivative: Option<String>,
-        #[arg(long, default_value_t = 1)]
-        sequence: u64,
-        #[arg(long, help = "Broadcast attestation via gossip")]
-        broadcast: bool,
-    },
-    #[command(about = "Verify attestations for content from the network")]
-    Verify {
-        hash: String,
-        #[arg(long, help = "Timeout in seconds for gossip collection")]
-        timeout: Option<u64>,
-    },
-    #[command(about = "List local attestations for a content hash")]
-    List { hash: String },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ModerationCommand {
-    #[command(name = "ls", about = "List local moderation records")]
-    List { content: Option<String> },
-    #[command(about = "Hide a content record locally")]
-    Hide {
-        record: String,
-        #[arg(long, default_value = "hidden by local policy")]
-        reason: String,
-    },
 }

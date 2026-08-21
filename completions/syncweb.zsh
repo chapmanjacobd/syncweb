@@ -119,6 +119,8 @@ _arguments "${_arguments_options[@]}" : \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--import[Scan and import existing files in the directory]' \
 '(--import)--no-import[Skip scanning existing files in the directory]' \
+'--write[Grant write access on the share ticket (default\: read-only)]' \
+'--no-share[Create the folder without sharing it (no ticket/URL printed)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -429,7 +431,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
-'--folder=[Folder namespace; defaults to the only managed folder]:FOLDER:_default' \
+'--folder=[Folder namespace or managed folder path; defaults to the only managed folder]:FOLDER:_default' \
+'--namespace=[Folder namespace or managed folder path; defaults to the only managed folder]:FOLDER:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--enrich[Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting]' \
@@ -743,6 +746,7 @@ _arguments "${_arguments_options[@]}" : \
 (files)
 _arguments "${_arguments_options[@]}" : \
 '--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
+'--namespace=[Namespace ID or path to a managed folder]:FOLDER:_files' \
 '--by=[]:BY:(extension size all time)' \
 '--top-largest=[Top N largest files by size]:TOP_LARGEST:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -757,6 +761,7 @@ _arguments "${_arguments_options[@]}" : \
 (seeding)
 _arguments "${_arguments_options[@]}" : \
 '--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
+'--namespace=[Namespace ID or path to a managed folder]:FOLDER:_files' \
 '*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
@@ -775,6 +780,7 @@ esac
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path (alternative to the positional path)]:NAMESPACE:_default' \
 '*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
@@ -815,6 +821,7 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (catalog)
 _arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--catalog=[]:CATALOG:_default' \
 '*--tag=[]:TAGS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -839,52 +846,16 @@ _arguments "${_arguments_options[@]}" : \
 '--write[Grant write access (default\: read-only)]' \
 '--no-pin[Skip pinning the shared folder'\''s blobs]' \
 '--no-persist[Skip persisting the share record]' \
+'--list[List persisted shares, optionally filtered by the positional selectors]' \
+'--rm[Stop sharing a folder or blob]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::path -- Folder path or namespace to share:_files' \
-":: :_syncweb__subcmd__share_commands" \
-"*::: :->share" \
+'*::selectors -- Folder path, namespace, or (with --list) filters to list shares:_default' \
 && ret=0
-
-    case $state in
-    (share)
-        words=($line[2] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-share-command-$line[2]:"
-        case $line[2] in
-            (list)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(rm)
-_arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
-'--blob=[Remove a shared blob pin]:BLOB:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--write[Remove the write-access share (default\: read-only)]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path -- Folder path or namespace to stop sharing:_files' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
 (package)
 _arguments "${_arguments_options[@]}" : \
@@ -905,23 +876,10 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-package-command-$line[1]:"
         case $line[1] in
-            (init)
+            (add)
 _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '--name=[]:NAME:_default' \
-'--root=[Override the common root for logical path rebasing]:PATH:_files' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'*::paths:_files' \
-&& ret=0
-;;
-(add)
-_arguments "${_arguments_options[@]}" : \
 '--root=[Override the common root for logical path rebasing]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -1321,6 +1279,7 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (enable)
 _arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1333,6 +1292,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (disable)
 _arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1576,287 +1536,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(trust)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__trust_commands" \
-"*::: :->trust" \
-&& ret=0
-
-    case $state in
-    (trust)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--content[Treat the subject as a content hash rather than a publisher identity]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':subject:_default' \
-&& ret=0
-;;
-(delegate)
-_arguments "${_arguments_options[@]}" : \
-'--expires=[]:EXPIRES:_default' \
-'--scope=[]:SCOPE:_default' \
-'--sequence=[]:SEQUENCE:_default' \
-'--max-depth=[Maximum delegation chain depth (1 = delegate only)]:MAX_DEPTH:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':publisher:_default' \
-&& ret=0
-;;
-(revoke-delegation)
-_arguments "${_arguments_options[@]}" : \
-'--scope=[]:SCOPE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':publisher:_default' \
-&& ret=0
-;;
-(provider)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__trust__subcmd__provider_commands" \
-"*::: :->provider" \
-&& ret=0
-
-    case $state in
-    (provider)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-trust-provider-command-$line[1]:"
-        case $line[1] in
-            (show)
-_arguments "${_arguments_options[@]}" : \
-'--hash=[Evaluate content-scoped trust for this hash]:HASH:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':provider:_default' \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-'--hash=[Evaluate content-scoped trust for this hash]:HASH:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(ban)
-_arguments "${_arguments_options[@]}" : \
-'--hash=[]:HASH:_default' \
-'--reason=[]:REASON:_default' \
-'--duration=[Ban duration in seconds]:DURATION:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':provider:_default' \
-&& ret=0
-;;
-(unban)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':provider:_default' \
-&& ret=0
-;;
-(vouch)
-_arguments "${_arguments_options[@]}" : \
-'--scope=[]:SCOPE:_default' \
-'--reason=[]:REASON:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':provider:_default' \
-&& ret=0
-;;
-(distrust)
-_arguments "${_arguments_options[@]}" : \
-'--scope=[]:SCOPE:_default' \
-'--reason=[]:REASON:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':provider:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-        esac
-    ;;
-esac
-;;
-(attest)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__attest_commands" \
-"*::: :->attest" \
-&& ret=0
-
-    case $state in
-    (attest)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-attest-command-$line[1]:"
-        case $line[1] in
-            (create)
-_arguments "${_arguments_options[@]}" : \
-'(--provenance --derivative)--license=[]:LICENSE:_default' \
-'(--license --derivative)--provenance=[Provenance attestation type]:PROVENANCE:_default' \
-'(--license --provenance)--derivative=[Derivative work attestation type]:DERIVATIVE:_default' \
-'--sequence=[]:SEQUENCE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--broadcast[Broadcast attestation via gossip]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':content:_default' \
-&& ret=0
-;;
-(verify)
-_arguments "${_arguments_options[@]}" : \
-'--timeout=[Timeout in seconds for gossip collection]:TIMEOUT:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':hash:_default' \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':hash:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
-(moderation)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__moderation_commands" \
-"*::: :->moderation" \
-&& ret=0
-
-    case $state in
-    (moderation)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-moderation-command-$line[1]:"
-        case $line[1] in
-            (ls)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::content:_default' \
-&& ret=0
-;;
-(hide)
-_arguments "${_arguments_options[@]}" : \
-'--reason=[]:REASON:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':record:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
 (completions)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1907,7 +1586,7 @@ _syncweb_commands() {
 'status:Show the local daemon status' \
 'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'create:Create a private synchronized folder and print a writable join ticket' \
+'create:Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave a synchronized folder, optionally deleting its local files' \
 'folders:List managed folders' \
@@ -1934,38 +1613,11 @@ _syncweb_commands() {
 'link:Create and resolve stable syncweb links' \
 'mirror:Mirror all blobs from a provider or network' \
 'provider:Manage blob provider registrations' \
-'trust:Inspect and delegate local trust' \
-'attest:Sign content provenance attestations' \
-'moderation:Manage local moderation decisions' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest_commands] )) ||
-_syncweb__subcmd__attest_commands() {
-    local commands; commands=(
-'create:Sign and optionally broadcast a content attestation' \
-'verify:Verify attestations for content from the network' \
-'list:List local attestations for a content hash' \
-    )
-    _describe -t commands 'syncweb attest commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__create_commands] )) ||
-_syncweb__subcmd__attest__subcmd__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest create commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__list_commands] )) ||
-_syncweb__subcmd__attest__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__attest__subcmd__verify_commands] )) ||
-_syncweb__subcmd__attest__subcmd__verify_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb attest verify commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__completions_commands] )) ||
 _syncweb__subcmd__completions_commands() {
@@ -2190,24 +1842,6 @@ _syncweb__subcmd__mirror_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb mirror commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__moderation_commands] )) ||
-_syncweb__subcmd__moderation_commands() {
-    local commands; commands=(
-'ls:List local moderation records' \
-'hide:Hide a content record locally' \
-    )
-    _describe -t commands 'syncweb moderation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__hide_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__hide_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation hide commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__moderation__subcmd__ls_commands] )) ||
-_syncweb__subcmd__moderation__subcmd__ls_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb moderation ls commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__network_commands] )) ||
 _syncweb__subcmd__network_commands() {
     local commands; commands=(
@@ -2271,8 +1905,7 @@ _syncweb__subcmd__network__subcmd__test-relay_commands() {
 (( $+functions[_syncweb__subcmd__package_commands] )) ||
 _syncweb__subcmd__package_commands() {
     local commands; commands=(
-'init:Initialize one or more paths as a versioned package, scanning them in one shot' \
-'add:Re-scan paths and update the local package manifest' \
+'add:Scan one or more paths into a package manifest (creates it if missing)' \
 'bump:Create a new package manifest version' \
 'publish:Publish a package manifest ticket and announce it to the catalog' \
 'export:Export one or more package directories as compressed CAR archive files' \
@@ -2312,11 +1945,6 @@ _syncweb__subcmd__package__subcmd__import_commands() {
 _syncweb__subcmd__package__subcmd__info_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package info commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__package__subcmd__init_commands] )) ||
-_syncweb__subcmd__package__subcmd__init_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package init commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__install_commands] )) ||
 _syncweb__subcmd__package__subcmd__install_commands() {
@@ -2394,21 +2022,8 @@ _syncweb__subcmd__search_commands() {
 }
 (( $+functions[_syncweb__subcmd__share_commands] )) ||
 _syncweb__subcmd__share_commands() {
-    local commands; commands=(
-'list:List persisted folder shares' \
-'rm:Stop sharing a folder or blob' \
-    )
+    local commands; commands=()
     _describe -t commands 'syncweb share commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__share__subcmd__list_commands] )) ||
-_syncweb__subcmd__share__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb share list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__share__subcmd__rm_commands] )) ||
-_syncweb__subcmd__share__subcmd__rm_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb share rm commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__shutdown_commands] )) ||
 _syncweb__subcmd__shutdown_commands() {
@@ -2560,73 +2175,6 @@ _syncweb__subcmd__transfer__subcmd__retry_commands() {
 _syncweb__subcmd__transfer__subcmd__root_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer root commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust_commands] )) ||
-_syncweb__subcmd__trust_commands() {
-    local commands; commands=(
-'show:Show trust and moderation state' \
-'delegate:Delegate trust to a publisher identity' \
-'revoke-delegation:Revoke a trust delegation' \
-'provider:Manage provider trust and bans' \
-    )
-    _describe -t commands 'syncweb trust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__delegate_commands] )) ||
-_syncweb__subcmd__trust__subcmd__delegate_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust delegate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider_commands() {
-    local commands; commands=(
-'show:Show provider reputation, bans, and trust records' \
-'list:List providers known to the local index' \
-'ban:Ban a provider globally or for one content hash' \
-'unban:Remove a provider'\''s global and scoped bans' \
-'vouch:Vouch for a provider' \
-'distrust:Distrust a provider' \
-    )
-    _describe -t commands 'syncweb trust provider commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__ban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__ban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider ban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__distrust_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__distrust_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider distrust commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider list commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__show_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider show commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__unban_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__unban_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider unban commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__provider__subcmd__vouch_commands] )) ||
-_syncweb__subcmd__trust__subcmd__provider__subcmd__vouch_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust provider vouch commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__revoke-delegation_commands] )) ||
-_syncweb__subcmd__trust__subcmd__revoke-delegation_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust revoke-delegation commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__trust__subcmd__show_commands] )) ||
-_syncweb__subcmd__trust__subcmd__show_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb trust show commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

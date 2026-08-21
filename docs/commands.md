@@ -3,25 +3,30 @@
 ## Sharing model
 
 syncweb separates "creating" from "sharing/publishing". `create` provisions a local
-namespace; `share`/`publish` make something discoverable/fetchable by others.
+namespace and shares it by default (printing a read-only ticket/URL); `share`/`publish`
+manage sharing and publishing explicitly.
 
 | Level | Command | Access | What you get |
 |-------|---------|--------|--------------|
-| Create | `create <path>` | Local | Prints only `path` and `namespace`. Content is private until you share or publish it. |
+| Create | `create <path>` | Public, read-only access (default) | Creates the folder and prints `path`, `namespace`, `access: read`, and a `ticket`/`url`. Pins + persists the share. |
+| Create | `create --write <path>` | Public, write access | Same, but the ticket grants write access. |
+| Create | `create --no-share <path>` | Local | Prints only `path` and `namespace`. Content is private until you share or publish it. |
+| Create | `create --no-import <path>` | Local | Skips scanning existing files in the directory. |
 | Share | `share <path>` | Public, read-only access (default) | A read-only access folder `ticket` anyone can use to fetch content. Persisted + pins folder blobs. |
 | Share | `share <path> --write` | Public, write access | A write-access folder `ticket`; holders can edit. Persisted + pins folder blobs. |
 | Share | `share --blob <hash> --namespace <ns>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
-| Share | `share list` / `share rm <path>` | — | List or remove persisted folder shares (rm unpins folder blobs). |
-| Share | `share rm --blob <hash> --namespace <ns>` | — | Removes a shared blob pin. |
+| Share | `share --list` / `share --list <ns>` | — | List persisted shares, optionally filtered by namespace/path selectors. |
+| Share | `share --rm <path>` / `share --rm --blob <hash> --namespace <ns>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
 | Publish | `publish catalog <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
 
-Key distinction: `create` provisions a folder and prints only its identity; `share` derives a
-read-only access ticket by default, or a write-access ticket with `--write`. Hand a
-`--write` ticket only to collaborators you trust to edit; hand a read-only ticket to anyone
-who may fetch the content. `share` persists the record (see `share list` / `share rm`) and
-pins the folder's blobs by default (`--no-pin` to skip, `--no-persist` to avoid saving).
-`share --blob` publishes a single immutable content hash (always pinned, never persisted).
+Key distinction: `create` provisions a folder and shares it by default, printing a
+read-only access ticket/URL. Hand a `--write` ticket only to collaborators you trust to
+edit; hand a read-only ticket to anyone who may fetch the content. Use `--no-share` when
+you only want a local folder. `share` persists the record (see `share --list` /
+`share --rm`) and pins the folder's blobs by default (`--no-pin` to skip,
+`--no-persist` to avoid saving). `share --blob` publishes a single immutable content
+hash (always pinned, never persisted).
 
 ## `find` Command Design
 
@@ -363,10 +368,19 @@ impl IrohNode {
 
 CLI:
 ```bash
-# Create folder (prints only path + namespace)
+# Create folder (default: shares read-only and prints a ticket/URL)
 syncweb create ./documents
 # Output: path: ./documents
 #         namespace: <ns>
+#         access: read
+#         ticket: <read-only ticket>
+#         url: syncweb://folder/<ns>?ticket=<ticket>
+
+# Create with a writable share ticket
+syncweb create --write ./documents
+
+# Create locally without sharing (no ticket/URL)
+syncweb create --no-share ./documents
 
 # Create with sync mode
 syncweb create --mode sendreceive ./documents
@@ -405,10 +419,13 @@ syncweb share --namespace <ns> --write
 # Share a single content hash as an unauthenticated blob ticket
 syncweb share --blob <hash> --namespace <ns>
 
-# List and remove persisted shares; remove a shared blob pin
-syncweb share list
-syncweb share rm --write ./documents
-syncweb share rm --blob <hash> --namespace <ns>
+# List persisted shares, optionally filtered by namespace/path selectors
+syncweb share --list
+syncweb share --list <ns>
+
+# Stop sharing a folder (unpins blobs) or remove a shared blob pin
+syncweb share --rm --write ./documents
+syncweb share --rm --blob <hash> --namespace <ns>
 ```
 
 ### Config Command
@@ -456,7 +473,7 @@ syncweb config set discovery.interface eth0
 
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
-| `create` | `create` | Create folder + doc + blob store + write-access ticket |
+| `create` | `create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
 | `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
 | `accept` | `accept` | Grant capability to peer |
 | `drop` | `drop` | Revoke capability, remove peer |
@@ -479,12 +496,12 @@ syncweb config set discovery.interface eth0
 | | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
 | | `public list` | List announced public folders |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
-| | `share list` | List persisted folder shares |
-| | `share rm` | Stop sharing a folder (unpins folder blobs) |
+| | `share --list` | List persisted folder shares, optionally filtered by selectors |
+| | `share --rm` | Stop sharing a folder (unpins folder blobs) |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
-| | `share rm --blob` | Remove a shared blob pin |
+| | `share --rm --blob` | Remove a shared blob pin |
 | | `publish catalog` | Publish folder metadata to a catalog |
-| | `package init` | Initialize one or more paths as a versioned package (scans in one shot) |
+| | `package add` | Scan one or more paths into a package manifest (idempotent; creates it if missing) |
 | | `package add` | Re-scan paths and update the manifest |
 | | `package bump` | Create a new package version with changelog |
 | | `package publish` | Publish a package manifest ticket and announce it to the catalog |
@@ -580,9 +597,10 @@ syncweb share --blob <hash> --namespace <namespace-id>
 syncweb publish catalog --catalog <name> --tag music /path/to/folder
 
 # List and remove persisted shares; remove a shared blob pin
-syncweb share list
-syncweb share rm --write /path/to/folder
-syncweb share rm --blob <hash> --namespace <namespace-id>
+syncweb share --list
+syncweb share --list <namespace-id>
+syncweb share --rm --write /path/to/folder
+syncweb share --rm --blob <hash> --namespace <namespace-id>
 
 # Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
 # (size/limit filters live on `syncweb download`, not `publish`)

@@ -17,10 +17,10 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand, PublishCommand,
-        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShareRemoveArgs, ShutdownArgs,
-        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
-        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
-        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
+        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
+        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -226,11 +226,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
         Command::Mirror(command) => handle_mirror(&ctx, command).await?,
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command).await?,
-        Command::Trust { command: trust_command } => {
-            cli::indexing::handle_trust(&ctx, trust_command).await?;
-        }
-        Command::Attest { command } => cli::indexing::handle_attest(&ctx, command).await?,
-        Command::Moderation { command } => cli::indexing::handle_moderation(&ctx, command)?,
         Command::Start(_)
         | Command::Shutdown(_)
         | Command::Status
@@ -1835,7 +1830,8 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.path).await?;
+    let selector = command.namespace.map_or_else(|| command.path.clone(), PathBuf::from);
+    let folder = resolve_folder(&manager, &selector).await?;
     let checker = IntegrityChecker::new(node.blob_store().clone(), node.docs_engine().clone());
 
     let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
@@ -2443,39 +2439,11 @@ async fn resolve_folder(
     manager: &FolderManager,
     selector: &std::path::Path,
 ) -> Result<syncweb_core::folder::SyncwebFolder> {
-    if let Ok(namespace) = selector.to_string_lossy().parse() {
-        return Ok(manager.get(namespace).await?);
-    }
-    let folders = manager.list().await?;
-    match folders.as_slice() {
-        [folder] => Ok(folder.clone()),
-        [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-        _ => anyhow::bail!("folder path is not a namespace ID and more than one synchronized folder is available"),
-    }
-}
-
-async fn resolve_folder_selector(
-    manager: &FolderManager,
-    selector: &str,
-) -> Result<syncweb_core::folder::SyncwebFolder> {
-    resolve_folder(manager, Path::new(selector)).await
+    Ok(manager.resolve(selector).await?)
 }
 
 async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<iroh_docs::NamespaceId> {
-    if let Ok(namespace) = selector.parse() {
-        return Ok(namespace);
-    }
-    let path = std::path::Path::new(selector);
-    if path.exists() {
-        let folder = resolve_folder_selector(manager, selector).await?;
-        return Ok(folder.namespace_id());
-    }
-    let folders = manager.list().await?;
-    match folders.as_slice() {
-        [folder] => Ok(folder.namespace_id()),
-        [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-        _ => anyhow::bail!("'{selector}' is not a namespace ID and more than one folder is available"),
-    }
+    Ok(manager.resolve_namespace(selector).await?)
 }
 
 #[async_recursion]
@@ -2483,34 +2451,51 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    let do_share = !command.no_share;
+    let write = command.write;
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
     let do_import = command.import && !command.no_import;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+    let namespace = if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: command.path.clone(),
                 mode: command.mode.clone(),
             }))
             .await?;
+        let created_namespace = if let IpcResponse::Ok { message } = &response {
+            message
+                .lines()
+                .find_map(|l| l.strip_prefix("namespace: "))
+                .map(str::to_owned)
+        } else {
+            None
+        };
         if do_import && dir_has_entries(&command.path)? {
-            let created_namespace = if let IpcResponse::Ok { message } = &response {
-                message
-                    .lines()
-                    .find_map(|l| l.strip_prefix("namespace: "))
-                    .map(str::to_owned)
-            } else {
-                None
-            };
-            if let Some(namespace) = created_namespace {
+            if let Some(namespace) = created_namespace.clone() {
                 let import = client
                     .send(IpcRequest::new(IpcCommand::ImportFiles {
                         namespace: Some(namespace),
                         path: command.path.clone(),
                     }))
                     .await?;
-                let imported = match import {
-                    IpcResponse::ImportFilesComplete { entries } => Some(entries),
+                match import {
+                    IpcResponse::ImportFilesComplete { entries } => {
+                        if output_json {
+                            let mut json = if let IpcResponse::Ok { message } = &response {
+                                serde_json::json!({"status": "ok", "message": message})
+                            } else {
+                                serde_json::json!({})
+                            };
+                            if let serde_json::Value::Object(ref mut map) = json {
+                                map.insert("imported".to_owned(), serde_json::json!(entries));
+                            }
+                            println!("{}", serde_json::to_string_pretty(&json)?);
+                        } else {
+                            print_daemon_message(response, output_json)?;
+                            println!("imported: {entries}");
+                        }
+                    }
                     IpcResponse::Ok { .. }
                     | IpcResponse::Status(_)
                     | IpcResponse::FolderList(_)
@@ -2518,60 +2503,96 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                     | IpcResponse::ImportComplete(_)
                     | IpcResponse::ExportComplete(_)
                     | IpcResponse::Error { .. }
-                    | _ => None,
-                };
-                if let Some(entries) = imported {
-                    if output_json {
-                        let mut json = if let IpcResponse::Ok { message } = &response {
-                            serde_json::json!({"status": "ok", "message": message})
-                        } else {
-                            serde_json::json!({})
-                        };
-                        if let serde_json::Value::Object(ref mut map) = json {
-                            map.insert("imported".to_owned(), serde_json::json!(entries));
-                        }
-                        println!("{}", serde_json::to_string_pretty(&json)?);
-                    } else {
-                        print_daemon_message(response, output_json)?;
-                        println!("imported: {entries}");
-                    }
-                    return Ok(());
+                    | _ => return print_daemon_message(import, output_json),
                 }
-                return print_daemon_message(import, output_json);
+            } else {
+                return print_daemon_message(response, output_json);
             }
+        } else {
+            print_daemon_message(response, output_json)?;
         }
-        return print_daemon_message(response, output_json);
-    }
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
-    if let Some(network_name) = command.network {
-        add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
-    }
-    if output_json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "path": command.path,
-                "namespace": folder.namespace_id().to_string(),
-            }))?
-        );
+        if let Some(namespace) = created_namespace {
+            if do_share {
+                let share = client
+                    .send(IpcRequest::new(IpcCommand::Share {
+                        namespace: namespace.clone(),
+                        blob: None,
+                        writable: write,
+                        pin: true,
+                        persist: true,
+                    }))
+                    .await?;
+                print_daemon_message(share, output_json)?;
+            }
+            Some(namespace)
+        } else {
+            None
+        }
     } else {
-        println!("path: {}", command.path.display());
-        println!("namespace: {}", folder.namespace_id());
+        let node = open_node(data_dir).await?;
+        let manager = FolderManager::new(&node);
+        let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
+        if let Some(network_name) = command.network {
+            add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
+        }
+        if do_import && dir_has_entries(&command.path)? {
+            let importer = ParallelImporter::new(
+                node.blob_store().clone(),
+                node.docs_engine().clone(),
+                folder.doc().clone(),
+                folder.author(),
+            )
+            .with_root(command.path.clone())
+            .with_threads(0);
+            importer.import_path(&command.path).await?;
+        }
+        let namespace = folder.namespace_id().to_string();
+        if do_share {
+            let pinned = folder.pin_all_content().await?;
+            let ticket = folder.ticket(node.endpoint().addr(), write).await?;
+            let access = if write { "write" } else { "read" };
+            open_node_db(data_dir)?.add_share(&namespace, access, &ticket.to_string())?;
+            let url = format!("syncweb://folder/{namespace}?ticket={ticket}");
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "path": command.path,
+                        "namespace": namespace,
+                        "access": access,
+                        "ticket": ticket.to_string(),
+                        "url": url,
+                        "pinned": pinned,
+                    }))?
+                );
+            } else {
+                println!("path: {}", command.path.display());
+                println!("namespace: {namespace}");
+                println!("access: {access}");
+                println!("ticket: {ticket}");
+                println!("url: {url}");
+                if pinned > 0 {
+                    println!("pinned: {pinned} blobs");
+                }
+            }
+        } else if output_json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "path": command.path,
+                    "namespace": namespace,
+                }))?
+            );
+        } else {
+            println!("path: {}", command.path.display());
+            println!("namespace: {namespace}");
+        }
+        node.stop().await?;
+        Some(namespace)
+    };
+    if namespace.is_none() && do_share {
+        anyhow::bail!("create succeeded but no folder namespace was reported");
     }
-    if do_import && dir_has_entries(&command.path)? {
-        let importer = ParallelImporter::new(
-            node.blob_store().clone(),
-            node.docs_engine().clone(),
-            folder.doc().clone(),
-            folder.author(),
-        )
-        .with_root(command.path.clone())
-        .with_threads(0);
-        importer.import_path(&command.path).await?;
-    }
-    node.stop().await?;
     Ok(())
 }
 
@@ -2760,22 +2781,23 @@ async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result
 }
 
 async fn handle_share(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
-    match args.command {
-        Some(ShareCommand::List) => handle_share_list(ctx).await,
-        Some(ShareCommand::Remove(remove)) => handle_share_remove(ctx, remove).await,
-        None => handle_share_add(ctx, args).await,
+    if args.rm {
+        return handle_share_remove(ctx, &args).await;
     }
+    if args.list {
+        return handle_share_list(ctx, &args.selectors).await;
+    }
+    handle_share_add(ctx, &args).await
 }
 
-async fn handle_share_add(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
+async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    let selector = args.namespace.clone().unwrap_or_else(|| {
-        args.path
-            .as_ref()
-            .map_or_else(|| ".".to_owned(), |p| p.to_string_lossy().to_string())
-    });
+    let selector = args
+        .namespace
+        .clone()
+        .unwrap_or_else(|| args.selectors.first().cloned().unwrap_or_else(|| ".".to_owned()));
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
@@ -2793,7 +2815,7 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &selector).await?;
     let folder = manager.get(namespace).await?;
-    if let Some(blob) = args.blob {
+    if let Some(blob) = &args.blob {
         let hash = blob.parse()?;
         let ticket = folder.publish_blob(node.endpoint().addr(), hash).await?;
         if output_json {
@@ -2841,7 +2863,7 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
     Ok(())
 }
 
-async fn handle_share_list(ctx: &CliContext<'_>) -> Result<()> {
+async fn handle_share_list(ctx: &CliContext<'_>, filters: &[String]) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
@@ -2849,7 +2871,17 @@ async fn handle_share_list(ctx: &CliContext<'_>) -> Result<()> {
         let response = client.send(IpcRequest::new(IpcCommand::ShareList)).await?;
         return print_daemon_message(response, output_json);
     }
-    let shares = open_node_db(data_dir)?.list_shares()?;
+    let mut shares = open_node_db(data_dir)?.list_shares()?;
+    if !filters.is_empty() {
+        let node = open_node(data_dir).await?;
+        let manager = FolderManager::new(&node);
+        let mut wanted = Vec::new();
+        for selector in filters {
+            wanted.push(resolve_namespace(&manager, selector).await?.to_string());
+        }
+        shares.retain(|(namespace, _, _)| wanted.iter().any(|w| w == namespace));
+        node.stop().await?;
+    }
     if shares.is_empty() {
         println!("no shares");
     } else {
@@ -2870,20 +2902,21 @@ async fn handle_share_list(ctx: &CliContext<'_>) -> Result<()> {
     Ok(())
 }
 
-async fn handle_share_remove(ctx: &CliContext<'_>, remove: ShareRemoveArgs) -> Result<()> {
+async fn handle_share_remove(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    let selector = remove
+    let selector = args
         .namespace
-        .unwrap_or_else(|| remove.path.to_string_lossy().to_string());
+        .clone()
+        .unwrap_or_else(|| args.selectors.first().cloned().unwrap_or_else(|| ".".to_owned()));
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
             .send(IpcRequest::new(IpcCommand::Unshare {
                 namespace,
-                blob: remove.blob.clone(),
-                writable: remove.write,
+                blob: args.blob.clone(),
+                writable: args.write,
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -2891,7 +2924,7 @@ async fn handle_share_remove(ctx: &CliContext<'_>, remove: ShareRemoveArgs) -> R
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &selector).await?;
-    if let Some(blob) = remove.blob {
+    if let Some(blob) = &args.blob {
         let hash = blob.parse()?;
         let folder = manager.get(namespace).await?;
         folder.unpublish_blob(hash).await?;
@@ -2906,7 +2939,7 @@ async fn handle_share_remove(ctx: &CliContext<'_>, remove: ShareRemoveArgs) -> R
         node.stop().await?;
         return Ok(());
     }
-    let access = if remove.write { "write" } else { "read" };
+    let access = if args.write { "write" } else { "read" };
     open_node_db(data_dir)?.remove_share(&namespace.to_string(), access)?;
     if let Ok(folder) = manager.get(namespace).await {
         let _ = folder.unpin_all_content().await;
@@ -2924,7 +2957,7 @@ async fn handle_share_remove(ctx: &CliContext<'_>, remove: ShareRemoveArgs) -> R
 }
 
 #[async_recursion]
-async fn handle_package_init(
+async fn handle_package_add(
     ctx: &CliContext<'_>,
     node_db: &NodeDatabase,
     paths: Vec<PathBuf>,
@@ -2939,12 +2972,18 @@ async fn handle_package_init(
         }
     }
     let (root, entries) = scan_collection_entries(&paths, root_override)?;
-    let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), version);
-    if let Some(name) = package_name {
-        manifest.package = Some(syncweb_core::folder::PackageProfile::new(name));
-    }
-    manifest.entries = entries;
     let source = root.to_string_lossy();
+    let existing = node_db.load_workspace_manifest(&source)?;
+    let mut manifest = if let Some(bytes) = existing {
+        CollectionManifest::from_bytes(bytes)?
+    } else {
+        let mut created = CollectionManifest::new(uuid::Uuid::new_v4(), version);
+        if let Some(name) = package_name {
+            created.package = Some(syncweb_core::folder::PackageProfile::new(name));
+        }
+        created
+    };
+    manifest.entries = entries;
     node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
     if output_json {
         println!(
@@ -2958,29 +2997,6 @@ async fn handle_package_init(
     } else {
         println!("collection: {}", manifest.collection_id);
         println!("root: {source}");
-        println!("entries: {}", manifest.entries.len());
-    }
-    Ok(())
-}
-
-fn handle_package_add(
-    ctx: &CliContext<'_>,
-    node_db: &NodeDatabase,
-    paths: &[PathBuf],
-    root_override: Option<PathBuf>,
-) -> Result<()> {
-    let output_json = ctx.output_json;
-    let (root, entries) = scan_collection_entries(paths, root_override)?;
-    let source = root.to_string_lossy();
-    let manifest_bytes = node_db
-        .load_workspace_manifest(&source)?
-        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
-    let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
-    manifest.entries = entries;
-    node_db.save_workspace_manifest(&source, &manifest.to_bytes()?, &manifest.collection_id.to_string())?;
-    if output_json {
-        println!("{}", serde_json::json!({"entries": manifest.entries.len()}));
-    } else {
         println!("entries: {}", manifest.entries.len());
     }
     Ok(())
@@ -3118,13 +3134,12 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
     let node_db = open_node_db(data_dir)?;
     let packages = PackageManager::new(data_dir.join("packages"), node_db.clone());
     match command {
-        PackageCommand::Init {
+        PackageCommand::Add {
             paths,
             version,
             name,
             root,
-        } => handle_package_init(ctx, &node_db, paths, version, name, root).await?,
-        PackageCommand::Add { paths, root } => handle_package_add(ctx, &node_db, &paths, root)?,
+        } => handle_package_add(ctx, &node_db, paths, version, name, root).await?,
         PackageCommand::Bump {
             path,
             version,

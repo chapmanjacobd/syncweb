@@ -101,11 +101,6 @@ help_categories! {
     "Indexing" => [
         Command::Indexing { .. } => "indexing",
     ];
-    "Trust & Moderation" => [
-        Command::Trust { .. } => "trust",
-        Command::Attest { .. } => "attest",
-        Command::Moderation { .. } => "moderation",
-    ];
     "Tooling" => [
         Command::Version => "version",
         Command::Completions { .. } => "completions",

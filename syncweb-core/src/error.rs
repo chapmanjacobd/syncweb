@@ -12,6 +12,12 @@ pub enum SyncwebError {
     #[error("folder not found: {0}")]
     FolderNotFound(String),
 
+    #[error("no synchronized folders are available")]
+    NoFolders,
+
+    #[error("folder selector {0:?} is not a namespace ID and more than one synchronized folder is available")]
+    AmbiguousFolderSelector(String),
+
     #[error("folder already managed")]
     FolderAlreadyManaged,
 

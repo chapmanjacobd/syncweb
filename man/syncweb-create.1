@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH create 1  "create " 
 .SH NAME
-create \- Create a private synchronized folder and print a writable join ticket
+create \- Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
 .SH SYNOPSIS
-\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-import\fR] [\fB\-\-no\-import\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-import\fR] [\fB\-\-no\-import\fR] [\fB\-\-write\fR] [\fB\-\-no\-share\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
-Create a private synchronized folder and print a writable join ticket
+Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
 .SH OPTIONS
 .TP
 \fB\-\-mode\fR \fI<MODE>\fR [default: sendreceive]
@@ -23,6 +23,12 @@ Scan and import existing files in the directory
 .TP
 \fB\-\-no\-import\fR
 Skip scanning existing files in the directory
+.TP
+\fB\-\-write\fR
+Grant write access on the share ticket (default: read\-only)
+.TP
+\fB\-\-no\-share\fR
+Create the folder without sharing it (no ticket/URL printed)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

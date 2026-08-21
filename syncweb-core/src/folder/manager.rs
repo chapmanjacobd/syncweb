@@ -273,6 +273,50 @@ impl FolderManager {
             .ok_or_else(|| SyncwebError::FolderNotFound(namespace_id.to_string()))
     }
 
+    /// Resolve a folder selector (namespace ID, managed path, or the sole managed
+    /// folder) to a folder. Mirrors the CLI's path-or-namespace resolution so the
+    /// logic lives in one place.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when no folder matches the selector or the selector is
+    /// ambiguous.
+    pub async fn resolve(&self, selector: &std::path::Path) -> Result<SyncwebFolder> {
+        if let Ok(namespace_id) = selector.to_string_lossy().parse() {
+            return self.get(namespace_id).await;
+        }
+        let folders = self.list().await?;
+        match folders.as_slice() {
+            [folder] => Ok(folder.clone()),
+            [] => Err(SyncwebError::NoFolders),
+            _ => Err(SyncwebError::AmbiguousFolderSelector(
+                selector.to_string_lossy().into_owned(),
+            )),
+        }
+    }
+
+    /// Resolve a string selector to a folder namespace ID. Accepts a namespace ID,
+    /// an existing managed path, or falls back to the sole managed folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the selector cannot be resolved to a namespace.
+    pub async fn resolve_namespace(&self, selector: &str) -> Result<NamespaceId> {
+        if let Ok(namespace_id) = selector.parse() {
+            return Ok(namespace_id);
+        }
+        let path = std::path::Path::new(selector);
+        if path.exists() {
+            return Ok(self.resolve(path).await?.namespace_id());
+        }
+        let folders = self.list().await?;
+        match folders.as_slice() {
+            [folder] => Ok(folder.namespace_id()),
+            [] => Err(SyncwebError::NoFolders),
+            _ => Err(SyncwebError::AmbiguousFolderSelector(selector.to_owned())),
+        }
+    }
+
     /// # Errors
     ///
     /// Returns an error if the ticket cannot be generated.

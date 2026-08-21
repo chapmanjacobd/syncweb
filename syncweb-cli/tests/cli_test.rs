@@ -833,14 +833,81 @@ fn test_create_outputs_url() -> anyhow::Result<()> {
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("path:"), "should print path: {stdout}");
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
+    ensure!(stdout.contains("access: read"), "should print access: read: {stdout}");
+    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
+    ensure!(stdout.contains("url:"), "should print a share url: {stdout}");
+    Ok(())
+}
+
+#[test]
+fn test_create_no_share_skips_ticket() -> anyhow::Result<()> {
+    let directory = cli_test_dir("create-test-noshare");
+    let data_dir = cli_test_dir("create-data-noshare");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "create",
+            "--no-share",
+            "--no-import",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb create --no-share")?;
+
+    std::fs::remove_dir_all(&directory).context("cleanup folder")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+
+    ensure!(
+        output.status.success(),
+        "create --no-share should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(stdout.contains("path:"), "should print path: {stdout}");
+    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
     ensure!(
         !stdout.contains("ticket"),
-        "create should not print a ticket (sharing is `share`): {stdout}"
+        "create --no-share should not print a ticket: {stdout}"
     );
     ensure!(
-        !stdout.contains("share_url"),
-        "create should not print a share_url: {stdout}"
+        !stdout.contains("url:"),
+        "create --no-share should not print a url: {stdout}"
     );
+    Ok(())
+}
+
+#[test]
+fn test_create_write_shares_writable() -> anyhow::Result<()> {
+    let directory = cli_test_dir("create-test-write");
+    let data_dir = cli_test_dir("create-data-write");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "create",
+            "--write",
+            "--no-import",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb create --write")?;
+
+    std::fs::remove_dir_all(&directory).context("cleanup folder")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+
+    ensure!(
+        output.status.success(),
+        "create --write should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(stdout.contains("access: write"), "should print access: write: {stdout}");
+    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
     Ok(())
 }
 
@@ -904,15 +971,15 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            "list",
+            "--list",
         ])
         .output()
-        .context("run syncweb share list")?;
+        .context("run syncweb share --list")?;
     ensure!(list.status.success());
     let list_out = String::from_utf8(list.stdout).context("UTF-8 output")?;
     ensure!(
         list_out.contains("access: read") && list_out.contains("access: write"),
-        "share list should show both shares: {list_out}"
+        "share --list should show both shares: {list_out}"
     );
 
     let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -921,12 +988,12 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            "rm",
+            "--rm",
             "--write",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb share rm --write")?;
+        .context("run syncweb share --rm --write")?;
     ensure!(rm.status.success());
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
@@ -1428,139 +1495,6 @@ fn completions_generates_valid_powershell_output() -> anyhow::Result<()> {
 }
 
 #[test]
-fn trust_provider_list_outputs_empty_table() -> anyhow::Result<()> {
-    let directory = std::env::temp_dir().join(format!("syncweb-trust-{}", uuid::Uuid::new_v4()));
-    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "list",
-        ])
-        .output()
-        .context("run syncweb trust provider list")?;
-    let _ = std::fs::remove_dir_all(&directory);
-    ensure!(
-        output.status.success(),
-        "trust provider list should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-#[test]
-fn trust_provider_ban_and_unban() -> anyhow::Result<()> {
-    let directory = std::env::temp_dir().join(format!("syncweb-trust-ban-{}", uuid::Uuid::new_v4()));
-    let fake_key = "aabbccdd".repeat(8);
-    let ban = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "ban",
-            &fake_key,
-            "--reason",
-            "test ban",
-        ])
-        .output()
-        .context("run syncweb trust provider ban")?;
-    ensure!(
-        ban.status.success(),
-        "trust provider ban should succeed: {:?}",
-        String::from_utf8_lossy(&ban.stderr)
-    );
-    let unban = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "unban",
-            &fake_key,
-        ])
-        .output()
-        .context("run syncweb trust provider unban")?;
-    let _ = std::fs::remove_dir_all(&directory);
-    ensure!(
-        unban.status.success(),
-        "trust provider unban should succeed: {:?}",
-        String::from_utf8_lossy(&unban.stderr)
-    );
-    Ok(())
-}
-
-#[test]
-fn trust_provider_show_displays_output() -> anyhow::Result<()> {
-    let directory = std::env::temp_dir().join(format!("syncweb-trust-show-{}", uuid::Uuid::new_v4()));
-    let fake_key = "11223344".repeat(8);
-    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "show",
-            &fake_key,
-        ])
-        .output()
-        .context("run syncweb trust provider show")?;
-    let _ = std::fs::remove_dir_all(&directory);
-    ensure!(
-        output.status.success(),
-        "trust provider show should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-#[test]
-fn trust_provider_vouch_and_distrust() -> anyhow::Result<()> {
-    let directory = std::env::temp_dir().join(format!("syncweb-trust-vouch-{}", uuid::Uuid::new_v4()));
-    let key = iroh::SecretKey::generate();
-    let fake_key = hex::encode(key.public().as_bytes());
-    let vouch = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "vouch",
-            &fake_key,
-            "--reason",
-            "good provider",
-        ])
-        .output()
-        .context("run syncweb trust provider vouch")?;
-    ensure!(
-        vouch.status.success(),
-        "trust provider vouch should succeed: {:?}",
-        String::from_utf8_lossy(&vouch.stderr)
-    );
-    let distrust = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "distrust",
-            &fake_key,
-            "--reason",
-            "bad provider",
-        ])
-        .output()
-        .context("run syncweb trust provider distrust")?;
-    let _ = std::fs::remove_dir_all(&directory);
-    ensure!(
-        distrust.status.success(),
-        "trust provider distrust should succeed: {:?}",
-        String::from_utf8_lossy(&distrust.stderr)
-    );
-    Ok(())
-}
-
-#[test]
 fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("provider-add");
     let hash = Hash::from_bytes([2_u8; 32]);
@@ -1598,33 +1532,6 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
     };
     std::fs::remove_dir_all(&data_dir)?;
     result
-}
-
-#[test]
-fn trust_provider_vouch_without_broadcast_still_local() -> anyhow::Result<()> {
-    let directory = std::env::temp_dir().join(format!("syncweb-vouch-local-{}", uuid::Uuid::new_v4()));
-    let key = iroh::SecretKey::generate();
-    let fake_key = hex::encode(key.public().as_bytes());
-    let vouch = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args([
-            "--data-dir",
-            directory.to_str().context("UTF-8 path")?,
-            "trust",
-            "provider",
-            "vouch",
-            &fake_key,
-            "--reason",
-            "good provider",
-        ])
-        .output()
-        .context("run syncweb trust provider vouch (no broadcast)")?;
-    ensure!(
-        vouch.status.success(),
-        "trust provider vouch without --broadcast should succeed: {:?}",
-        String::from_utf8_lossy(&vouch.stderr)
-    );
-    let _ = std::fs::remove_dir_all(&directory);
-    Ok(())
 }
 
 #[test]

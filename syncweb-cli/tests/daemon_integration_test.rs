@@ -1013,3 +1013,214 @@ fn test_global_network_option_is_listed_in_help() -> anyhow::Result<()> {
     ensure!(help.contains("--network"), "--help should list the --network option");
     Ok(())
 }
+
+#[test]
+fn test_join_download_materializes_content() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("join-dl-alice")?;
+    let alice_folder = cli_test_dir("join-dl-alice-folder")?;
+    let bob_data = cli_test_dir("join-dl-bob")?;
+    let bob_folder = cli_test_dir("join-dl-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon start should succeed");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "create",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let ticket = create_out
+        .lines()
+        .find_map(|line| line.strip_prefix("ticket: "))
+        .map(str::trim)
+        .context("create should output a ticket")?
+        .to_owned();
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "--no-daemon",
+        "join",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+        "--download",
+    ])?;
+    ensure!(
+        join.status.success(),
+        "join --download should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+    let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
+    ensure!(
+        join_out.contains("downloaded:"),
+        "join should report a download count: {join_out}"
+    );
+
+    let content = std::fs::read_to_string(bob_folder.join("hello.txt")).context("read materialized file")?;
+    ensure!(
+        content == "hello world",
+        "materialized content should match source, got: {content:?}"
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&alice_folder);
+    let _ = std::fs::remove_dir_all(&alice_data);
+    let _ = std::fs::remove_dir_all(&bob_folder);
+    let _ = std::fs::remove_dir_all(&bob_data);
+    Ok(())
+}
+
+#[test]
+fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("create-import-dl")?;
+    let folder = cli_test_dir("create-import-dl-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    std::fs::write(folder.join("a.txt"), b"aaa").context("write source file")?;
+
+    // Daemon-mode create should ingest the non-empty directory in one shot.
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "create",
+        folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "daemon create --import should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = create_out
+        .lines()
+        .find_map(|line| line.strip_prefix("namespace: "))
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
+
+    let report = syncweb(&[
+        "--json",
+        "--data-dir",
+        data_dir_arg,
+        "stats",
+        "files",
+        "--folder",
+        &namespace,
+    ])?;
+    ensure!(
+        report.status.success(),
+        "stats files should succeed: {}",
+        String::from_utf8_lossy(&report.stderr)
+    );
+    let report_value: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(report.stdout).context("UTF-8 output")?)
+            .context("stats files should be JSON")?;
+    ensure!(
+        report_value.get("total_files") == Some(&serde_json::Value::from(1)),
+        "daemon create should have imported a.txt, got: {report_value}"
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&folder);
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("join-dl-daemon-alice")?;
+    let alice_folder = cli_test_dir("join-dl-daemon-alice-folder")?;
+    let bob_data = cli_test_dir("join-dl-daemon-bob")?;
+    let bob_folder = cli_test_dir("join-dl-daemon-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon start should succeed");
+    wait_for_daemon_ready(alice_data_arg)?;
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon start should succeed");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "create",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let ticket = create_out
+        .lines()
+        .find_map(|line| line.strip_prefix("ticket: "))
+        .map(str::trim)
+        .context("create should output a ticket")?
+        .to_owned();
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    // Daemon-mode join with --download routes through bob's daemon via IPC.
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "join",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+        "--download",
+    ])?;
+    ensure!(
+        join.status.success(),
+        "daemon join --download should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+    let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
+    ensure!(
+        join_out.contains("downloaded:"),
+        "join should report a download count: {join_out}"
+    );
+
+    let content = std::fs::read_to_string(bob_folder.join("hello.txt")).context("read materialized file")?;
+    ensure!(
+        content == "hello world",
+        "materialized content should match source, got: {content:?}"
+    );
+
+    let _ = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--force"]);
+    let _ = syncweb(&["--data-dir", bob_data_arg, "shutdown", "--force"]);
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&alice_folder);
+    let _ = std::fs::remove_dir_all(&alice_data);
+    let _ = std::fs::remove_dir_all(&bob_folder);
+    let _ = std::fs::remove_dir_all(&bob_data);
+    Ok(())
+}

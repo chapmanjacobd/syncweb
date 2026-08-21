@@ -4,7 +4,7 @@
 .SH NAME
 create \- Create a synchronized folder and print a shareable URL
 .SH SYNOPSIS
-\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-import\fR] [\fB\-\-no\-import\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Create a synchronized folder and print a shareable URL
 .SH OPTIONS
@@ -17,6 +17,12 @@ Enable Syncthing relay fallback for this folder
 .TP
 \fB\-\-network\fR \fI<NETWORK>\fR
 Add the created folder to a named network
+.TP
+\fB\-\-import\fR
+Scan and import existing files in the directory
+.TP
+\fB\-\-no\-import\fR
+Skip scanning existing files in the directory
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

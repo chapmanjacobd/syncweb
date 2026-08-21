@@ -35,7 +35,7 @@ use syncweb_core::{
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
-        DropImporter, FolderManager, PackageCatalog, PackageManager, SyncMode,
+        DropImporter, FolderLike, FolderManager, PackageCatalog, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::{InitResult, open_node},
@@ -56,7 +56,7 @@ use syncweb_core::{
         node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
         stats_db::StatsDatabase,
     },
-    sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
+    sync::{AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
     verify::IntegrityChecker,
 };
 
@@ -774,7 +774,10 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     let folder = if let Some(namespace) = command.folder {
         manager.get(namespace.parse()?).await?
     } else {
-        resolve_folder(&manager, &command.path).await?
+        match resolve_folder(&manager, &command.path).await {
+            Ok(folder) => folder,
+            Err(_) => manager.create(SyncMode::from_str("sendreceive")?).await?,
+        }
     };
     let root = if command.path.is_dir() {
         command.path.clone()
@@ -2447,13 +2450,20 @@ async fn resolve_folder(
     }
 }
 
+async fn resolve_folder_selector(
+    manager: &FolderManager,
+    selector: &str,
+) -> Result<syncweb_core::folder::SyncwebFolder> {
+    resolve_folder(manager, Path::new(selector)).await
+}
+
 async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<iroh_docs::NamespaceId> {
     if let Ok(namespace) = selector.parse() {
         return Ok(namespace);
     }
     let path = std::path::Path::new(selector);
     if path.exists() {
-        let folder = resolve_folder(manager, path).await?;
+        let folder = resolve_folder_selector(manager, selector).await?;
         return Ok(folder.namespace_id());
     }
     let folders = manager.list().await?;
@@ -2471,6 +2481,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     let no_daemon = ctx.no_daemon;
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
+    let do_import = command.import && !command.no_import;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CreateFolder {
@@ -2478,6 +2489,53 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                 mode: command.mode.clone(),
             }))
             .await?;
+        if do_import && dir_has_entries(&command.path)? {
+            let created_namespace = if let IpcResponse::Ok { message } = &response {
+                message
+                    .lines()
+                    .find_map(|l| l.strip_prefix("namespace: "))
+                    .map(str::to_owned)
+            } else {
+                None
+            };
+            if let Some(namespace) = created_namespace {
+                let import = client
+                    .send(IpcRequest::new(IpcCommand::ImportFiles {
+                        namespace: Some(namespace),
+                        path: command.path.clone(),
+                    }))
+                    .await?;
+                let imported = match import {
+                    IpcResponse::ImportFilesComplete { entries } => Some(entries),
+                    IpcResponse::Ok { .. }
+                    | IpcResponse::Status(_)
+                    | IpcResponse::FolderList(_)
+                    | IpcResponse::DownloadComplete { .. }
+                    | IpcResponse::ImportComplete(_)
+                    | IpcResponse::ExportComplete(_)
+                    | IpcResponse::Error { .. }
+                    | _ => None,
+                };
+                if let Some(entries) = imported {
+                    if output_json {
+                        let mut json = if let IpcResponse::Ok { message } = &response {
+                            serde_json::json!({"status": "ok", "message": message})
+                        } else {
+                            serde_json::json!({})
+                        };
+                        if let serde_json::Value::Object(ref mut map) = json {
+                            map.insert("imported".to_owned(), serde_json::json!(entries));
+                        }
+                        println!("{}", serde_json::to_string_pretty(&json)?);
+                    } else {
+                        print_daemon_message(response, output_json)?;
+                        println!("imported: {entries}");
+                    }
+                    return Ok(());
+                }
+                return print_daemon_message(import, output_json);
+            }
+        }
         return print_daemon_message(response, output_json);
     }
     let node = open_node(data_dir).await?;
@@ -2504,8 +2562,27 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
         println!("ticket: {}", result.ticket);
         println!("share_url: {}", result.share_url);
     }
+    if do_import && dir_has_entries(&command.path)? {
+        let importer = ParallelImporter::new(
+            node.blob_store().clone(),
+            node.docs_engine().clone(),
+            folder.doc().clone(),
+            folder.author(),
+        )
+        .with_root(command.path.clone())
+        .with_threads(0);
+        importer.import_path(&command.path).await?;
+    }
     node.stop().await?;
     Ok(())
+}
+
+fn dir_has_entries(path: &Path) -> Result<bool> {
+    match std::fs::read_dir(path) {
+        Ok(mut entries) => Ok(entries.next().is_some()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("failed to read folder path {}", path.display())),
+    }
 }
 
 #[async_recursion]
@@ -2538,6 +2615,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                 mode: SyncMode::from_str(&command.mode)?,
                 subscribe: command.subscribe,
                 filters: filters.clone(),
+                download: command.download,
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -2553,13 +2631,71 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let mut config = node_db.load_app_config()?;
     config.set_subscribe(&namespace, command.subscribe, &filters);
     node_db.save_app_config(&config)?;
+    let downloaded = if command.download {
+        download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
+    } else {
+        0
+    };
     if output_json {
-        println!("{}", serde_json::json!({"status": "joined", "namespace": namespace}));
+        println!(
+            "{}",
+            serde_json::json!({"status": "joined", "namespace": namespace, "downloaded": downloaded})
+        );
     } else {
         println!("joined: {namespace}");
+        if command.download {
+            println!("downloaded: {downloaded} files");
+        }
     }
     node.stop().await?;
     Ok(())
+}
+
+async fn download_joined_folder(
+    node: &IrohNode,
+    manager: FolderManager,
+    folder: &syncweb_core::folder::SyncwebFolder,
+    filters: &SubscribeFilters,
+    destination: &Path,
+) -> Result<usize> {
+    let sync = SyncEngine::from_node(node, manager);
+    let strategy =
+        FetchStrategy::Filter(FetchFilter::new().with_paths(filters.sync_prefix.clone().into_iter().collect()));
+    let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+    while let Some(event) = intent.next().await {
+        match event {
+            SyncEvent::Failed(message) => anyhow::bail!("join download failed: {message}"),
+            SyncEvent::Finished => break,
+            SyncEvent::Started
+            | SyncEvent::Progress { .. }
+            | SyncEvent::Stats(_)
+            | SyncEvent::Paused
+            | SyncEvent::Resumed
+            | SyncEvent::Cancelled
+            | _ => {}
+        }
+    }
+    let area = filters
+        .sync_prefix
+        .clone()
+        .map(AreaFilter::Prefix)
+        .or_else(|| filters.glob.clone().map(AreaFilter::Glob))
+        .unwrap_or(AreaFilter::All);
+    let entries = folder.list_entries().await?;
+    let mut count = 0_usize;
+    for entry in entries {
+        let rel = Path::new(&entry.path);
+        if !area.matches_path(rel) {
+            continue;
+        }
+        let dest = destination.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        node.blob_store().export_to_path(entry.hash, &dest).await?;
+        count = count.saturating_add(1);
+    }
+    Ok(count)
 }
 
 fn subscribe_filters_from(command: &crate::cli::commands::FolderJoin) -> SubscribeFilters {

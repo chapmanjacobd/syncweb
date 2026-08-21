@@ -114,6 +114,8 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l mode -d 'Sync
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l network -d 'Add the created folder to a named network' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l import -d 'Scan and import existing files in the directory'
+complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l no-import -d 'Skip scanning existing files in the directory'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand create" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -130,6 +132,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l relay-fallback 
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l subscribe -d 'Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ingest-only -d 'Only deliver entries ingested after live syncing is enabled'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ignore-self -d 'Ignore events emitted by this device\'s own writes'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l download -d 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

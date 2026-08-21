@@ -33,8 +33,8 @@ use crate::{
     storage::config::SubscribeFilters,
     storage::node_db::{NodeDatabase, TransferJobRecord},
     sync::{
-        ActiveSession, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams, SyncEngine,
-        SyncEvent, cancel_session,
+        ActiveSession, AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams,
+        SyncEngine, SyncEvent, cancel_session,
     },
     verify::IntegrityChecker,
 };
@@ -116,6 +116,8 @@ pub enum IpcCommand {
         subscribe: bool,
         #[serde(default)]
         filters: SubscribeFilters,
+        #[serde(default)]
+        download: bool,
     },
     Publish {
         namespace: String,
@@ -889,7 +891,8 @@ impl IpcServer {
                 mode,
                 subscribe,
                 filters,
-            } => self.handle_join(ticket, path, mode, subscribe, filters).await,
+                download,
+            } => self.handle_join(ticket, path, mode, subscribe, filters, download).await,
             C::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
             C::SetSubscribe {
                 namespace,
@@ -1424,6 +1427,7 @@ impl IpcServer {
         mode: SyncMode,
         subscribe: bool,
         filters: SubscribeFilters,
+        download: bool,
     ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -1457,7 +1461,7 @@ impl IpcServer {
                 }
                 if subscribe {
                     let sync = SyncEngine::new(
-                        manager,
+                        manager.clone(),
                         context.node.blob_store().clone(),
                         context.node.docs_engine().clone(),
                         Some(context.node.topic_tracker().clone()),
@@ -1470,12 +1474,71 @@ impl IpcServer {
                         return response_from_error(error);
                     }
                 }
+                let downloaded = if download {
+                    match self
+                        .materialize_folder(&context, &manager, &folder, &filters, &path)
+                        .await
+                    {
+                        Ok(count) => count,
+                        Err(error) => return response_from_error(error),
+                    }
+                } else {
+                    0
+                };
                 IpcResponse::Ok {
-                    message: format!("joined: {namespace}"),
+                    message: if download {
+                        format!("joined: {namespace}\ndownloaded: {downloaded} files")
+                    } else {
+                        format!("joined: {namespace}")
+                    },
                 }
             }
             Err(error) => response_from_error(error),
         }
+    }
+
+    async fn materialize_folder(
+        &self,
+        context: &ArchiveContext,
+        manager: &FolderManager,
+        folder: &crate::folder::SyncwebFolder,
+        filters: &SubscribeFilters,
+        destination: &Path,
+    ) -> Result<usize> {
+        let sync = SyncEngine::new(
+            manager.clone(),
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            Some(context.node.topic_tracker().clone()),
+        );
+        let strategy =
+            FetchStrategy::Filter(FetchFilter::new().with_paths(filters.sync_prefix.clone().into_iter().collect()));
+        let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+        self.run_download_loop_with_timeout(&mut intent, DOWNLOAD_TIMEOUT)
+            .await?;
+        let area = filters
+            .sync_prefix
+            .clone()
+            .map(AreaFilter::Prefix)
+            .or_else(|| filters.glob.clone().map(AreaFilter::Glob))
+            .unwrap_or(AreaFilter::All);
+        let entries = folder.list_entries().await?;
+        let mut count = 0_usize;
+        for entry in entries {
+            let rel = Path::new(&entry.path);
+            if !area.matches_path(rel) {
+                continue;
+            }
+            let dest = destination.join(rel);
+            if let Some(parent) = dest.parent()
+                && let Err(error) = tokio::fs::create_dir_all(parent).await
+            {
+                return Err(SyncwebError::operation("failed to create download directory", error));
+            }
+            context.node.blob_store().export_to_path(entry.hash, &dest).await?;
+            count = count.saturating_add(1);
+        }
+        Ok(count)
     }
 
     async fn handle_publish(&self, namespace: String, blob: Option<String>) -> IpcResponse {
@@ -3439,6 +3502,7 @@ mod tests {
                 mode: SyncMode::SendReceive,
                 subscribe: false,
                 filters: SubscribeFilters::default(),
+                download: false,
             }))
             .await;
         assert!(matches!(
@@ -3755,6 +3819,7 @@ mod tests {
                 mode: SyncMode::SendReceive,
                 subscribe: false,
                 filters: SubscribeFilters::default(),
+                download: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

@@ -353,6 +353,12 @@ syncweb create --network work ./documents
 
 # Create with relay fallback
 syncweb create --relay-fallback ./documents
+
+# Create and ingest an already-populated directory in one step (default; the
+# embedded mode scans and imports existing files automatically)
+syncweb create ./documents
+# Equivalent explicit flag; use --no-import to skip scanning:
+syncweb create --no-import ./documents
 ```
 
 ### Config Command
@@ -502,6 +508,11 @@ syncweb join <ticket> --subscribe /path/to/folder
 
 # Live-sync filters: only files ingested after enabling, and ignore our own writes
 syncweb join <ticket> --subscribe --ingest-only --ignore-self /path/to/folder
+
+# Join and download existing content in one step (receive-side symmetry to
+# `create --import`); honors the same prefix/glob/max filters
+syncweb join <ticket> --download /path/to/folder
+syncweb join <ticket> --download --glob '*.md' /path/to/folder
 
 # Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
 syncweb join <folder> --subscribe

@@ -264,7 +264,7 @@ fn help_subcommand_reports_specific_and_grouped_help() -> anyhow::Result<()> {
 #[test]
 fn create_folders_list_works() -> anyhow::Result<()> {
     let data_dir = test_dir("create-folders");
-    let output = run_with_data(&data_dir, &["--no-daemon", "create"])?;
+    let output = run_with_data(&data_dir, &["--no-daemon", "create", "--no-import"])?;
     assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");

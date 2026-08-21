@@ -684,3 +684,114 @@ fn stats_seeding_with_content_filter() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn create_imports_existing_content_one_shot() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("one-shot");
+    std::fs::create_dir_all(&folder_dir)?;
+    alice.write_file(&folder_dir.join("a.txt"), b"aaa")?;
+    alice.write_file(&folder_dir.join("sub/b.txt"), b"bbb")?;
+
+    let info = alice.create(&folder_dir)?;
+    ensure!(!info.namespace.is_empty(), "namespace should be set");
+
+    let ls = alice.ls(&folder_dir)?;
+    ensure!(
+        ls.iter().any(|f| f.contains("a.txt")),
+        "ls should find a.txt after one-shot create: {ls:?}"
+    );
+    ensure!(
+        ls.iter().any(|f| f.contains("b.txt")),
+        "ls should find b.txt after one-shot create: {ls:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn create_no_import_skips_scanning() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("no-import");
+    std::fs::create_dir_all(&folder_dir)?;
+    alice.write_file(&folder_dir.join("a.txt"), b"aaa")?;
+
+    let output = alice.run_ok(&[
+        "--no-daemon",
+        "create",
+        "--no-import",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
+    let info = TicketInfo::from_stdout(&output.stdout())?;
+
+    let report = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &info.namespace])?;
+    let value: serde_json::Value = serde_json::from_str(&report.stdout()).context("parse stats files JSON")?;
+    ensure!(
+        value.get("total_files") == Some(&serde_json::Value::from(0)),
+        "--no-import should skip indexing, got: {value}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn import_creates_folder_on_unknown_path() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("import-create");
+    std::fs::create_dir_all(&folder_dir)?;
+    alice.write_file(&folder_dir.join("x.txt"), b"x")?;
+
+    alice.import(&folder_dir)?;
+
+    let folders = alice.folders()?;
+    ensure!(
+        !folders.is_empty(),
+        "import on an unknown path should create a folder: {folders:?}"
+    );
+
+    let ls = alice.ls(&folder_dir)?;
+    ensure!(
+        ls.iter().any(|f| f.contains("x.txt")),
+        "ls should find x.txt after import-creates: {ls:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("selector-folder");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("small.txt"), b"s")?;
+    alice.import(&folder_dir)?;
+
+    let by_namespace = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &info.namespace])?;
+    let ns_value: serde_json::Value =
+        serde_json::from_str(&by_namespace.stdout()).context("parse stats files by namespace")?;
+
+    let by_path = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "stats",
+        "files",
+        "--folder",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
+    let path_value: serde_json::Value = serde_json::from_str(&by_path.stdout()).context("parse stats files by path")?;
+
+    ensure!(
+        ns_value.get("total_files") == path_value.get("total_files"),
+        "path selector should resolve to the same folder as namespace: ns={ns_value} path={path_value}"
+    );
+
+    Ok(())
+}

@@ -638,7 +638,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__create)
-            opts="-h --mode --relay-fallback --network --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --mode --relay-fallback --network --import --no-import --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1172,7 +1172,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__join)
-            opts="-h --mode --relay-fallback --network --subscribe --ingest-only --ignore-self --prefix --sync-prefix --glob --max-count --max-size --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --mode --relay-fallback --network --subscribe --ingest-only --ignore-self --prefix --sync-prefix --glob --max-count --max-size --download --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

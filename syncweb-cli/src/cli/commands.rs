@@ -265,6 +265,18 @@ pub struct FolderCreate {
     pub relay_fallback: bool,
     #[arg(long, help = "Add the created folder to a named network")]
     pub network: Option<String>,
+    #[arg(
+        long,
+        default_value_t = true,
+        help = "Scan and import existing files in the directory"
+    )]
+    pub import: bool,
+    #[arg(
+        long,
+        conflicts_with = "import",
+        help = "Skip scanning existing files in the directory"
+    )]
+    pub no_import: bool,
 }
 
 #[derive(Debug, Args)]
@@ -298,6 +310,11 @@ pub struct FolderJoin {
     pub max_count: Option<u64>,
     #[arg(long)]
     pub max_size: Option<u64>,
+    #[arg(
+        long,
+        help = "Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)"
+    )]
+    pub download: bool,
 }
 
 #[derive(Debug, Args)]

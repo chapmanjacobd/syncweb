@@ -153,6 +153,7 @@ fn test_create_command() -> anyhow::Result<()> {
             directory.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "create",
+            "--no-import",
         ])
         .output()
         .context("run syncweb create")?;
@@ -200,7 +201,7 @@ fn test_folders_command_lists_created() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--no-daemon", "create"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "create", "--no-import"])
         .output()
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
@@ -227,7 +228,7 @@ fn test_join_command() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--no-daemon", "create"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "create", "--no-import"])
         .output()
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
@@ -1118,7 +1119,15 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
     ensure!(net.status.success());
 
     let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "--no-daemon", "create", "--network", "team-net"])
+        .args([
+            "--data-dir",
+            data_dir,
+            "--no-daemon",
+            "create",
+            "--network",
+            "team-net",
+            "--no-import",
+        ])
         .output()
         .context("create with --network")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1145,7 +1154,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
     ensure!(net.status.success());
 
     let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "--no-daemon", "create"])
+        .args(["--data-dir", data_dir, "--no-daemon", "create", "--no-import"])
         .output()
         .context("create folder for ticket")?;
     ensure!(create.status.success());

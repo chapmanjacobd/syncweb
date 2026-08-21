@@ -117,6 +117,8 @@ _arguments "${_arguments_options[@]}" : \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
+'--import[Scan and import existing files in the directory]' \
+'(--import)--no-import[Skip scanning existing files in the directory]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -140,6 +142,7 @@ _arguments "${_arguments_options[@]}" : \
 '--subscribe[Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
+'--download[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

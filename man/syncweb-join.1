@@ -4,7 +4,7 @@
 .SH NAME
 join \- Join a folder from an Iroh document ticket
 .SH SYNOPSIS
-\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-subscribe\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-subscribe\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-\-download\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Join a folder from an Iroh document ticket
 .SH OPTIONS
@@ -41,6 +41,9 @@ Area prefix filter for subscription entries
 .TP
 \fB\-\-max\-size\fR \fI<MAX_SIZE>\fR
 
+.TP
+\fB\-\-download\fR
+Download matching existing content to the local folder after joining (one\-shot; uses the same prefix/glob/max filters)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

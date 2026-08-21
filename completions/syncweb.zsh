@@ -1381,6 +1381,18 @@ _arguments "${_arguments_options[@]}" : \
 ':value:_default' \
 && ret=0
 ;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':hash:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -1826,6 +1838,18 @@ _arguments "${_arguments_options[@]}" : \
 ':hash:_default' \
 && ret=0
 ;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':hash:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -1982,6 +2006,7 @@ _syncweb__subcmd__attest_commands() {
     local commands; commands=(
 'create:Sign and optionally broadcast a content attestation' \
 'verify:Verify attestations for content from the network' \
+'list:List local attestations for a content hash' \
     )
     _describe -t commands 'syncweb attest commands' commands "$@"
 }
@@ -1989,6 +2014,11 @@ _syncweb__subcmd__attest_commands() {
 _syncweb__subcmd__attest__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb attest create commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__attest__subcmd__list_commands] )) ||
+_syncweb__subcmd__attest__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb attest list commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__attest__subcmd__verify_commands] )) ||
 _syncweb__subcmd__attest__subcmd__verify_commands() {
@@ -2156,6 +2186,7 @@ _syncweb__subcmd__indexing__subcmd__health_commands() {
 _syncweb__subcmd__indexing__subcmd__meta_commands() {
     local commands; commands=(
 'add:Append signed metadata to a content hash' \
+'list:List signed metadata for a content hash' \
     )
     _describe -t commands 'syncweb indexing meta commands' commands "$@"
 }
@@ -2163,6 +2194,11 @@ _syncweb__subcmd__indexing__subcmd__meta_commands() {
 _syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing meta add commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__list_commands] )) ||
+_syncweb__subcmd__indexing__subcmd__meta__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb indexing meta list commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__indexing__subcmd__search_commands] )) ||
 _syncweb__subcmd__indexing__subcmd__search_commands() {

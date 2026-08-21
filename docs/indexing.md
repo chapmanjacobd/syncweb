@@ -125,22 +125,24 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 *   `syncweb publish catalog <folder> --catalog <name>` - Publish to a catalog.
 *   `syncweb indexing search "query"` - Search across known catalogs (FTS).
 *   `syncweb indexing health <hash>` - Check verified leases and availability.
-*   `syncweb indexing meta add <hash> <key> <value>` - Append WoT metadata to an entry.
-*   `syncweb indexing filter add <type> <value>` - Add a hash, device, or file to the local denylist.
-*   `syncweb indexing filter subscribe <url>` - Subscribe to a federated filter list.
-*   `syncweb link create <file-or-collection>` - Create a stable pinned or mutable link.
-*   `syncweb link resolve <url>` - Resolve a link to its manifest, sequence, and providers.
-*   `syncweb link revoke <link>` - Revoke a private link.
-*   `syncweb mirror add <collection> <provider>` - Register an alternate mirror provider.
-*   `syncweb trust show <content-or-publisher>` - Show trust, license, provenance, and moderation state.
-*   `syncweb trust delegate <publisher>` - Cryptographically delegate trust to another publisher (Web of Trust).
-*   `syncweb trust provider show <pubkey>` - Show provider reputation, bans, and trust records.
-*   `syncweb trust provider list` - List providers known to the local indexing state.
-*   `syncweb trust provider ban <pubkey>` / `unban <pubkey>` - Manage global or scoped provider bans.
-*   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
-*   `syncweb trust stream publish --provider <pubkey> --signal <kind>` - Publish a signed provider observation.
-*   `syncweb trust stream subscribe <ticket>` - Subscribe to a trust stream and ingest trusted signals.
-*   `syncweb attest <content> --license <license>` - Sign an attestation for content.
-*   `syncweb report <record> --reason <reason>` - Submit a moderation report.
-*   `syncweb moderation ls` - List moderation records and decisions.
-*   `syncweb moderation hide <record>` - Hide a record based on local or community policy.
+ *   `syncweb indexing meta add <hash> <key> <value>` - Append WoT metadata to an entry.
+ *   `syncweb indexing meta list <hash>` - List signed metadata for a content hash.
+ *   `syncweb indexing filter add <type> <value>` - Add a hash, device, or file to the local denylist.
+ *   `syncweb indexing filter subscribe <url>` - Subscribe to a federated filter list.
+ *   `syncweb link create <file-or-collection>` - Create a stable pinned or mutable link.
+ *   `syncweb link resolve <url>` - Resolve a link to its manifest, sequence, and providers.
+ *   `syncweb link revoke <link>` - Revoke a private link.
+ *   `syncweb mirror add <collection> <provider>` - Register an alternate mirror provider.
+ *   `syncweb trust show <content-or-publisher>` - Show trust, license, provenance, and moderation state.
+ *   `syncweb trust delegate <publisher>` - Cryptographically delegate trust to another publisher (Web of Trust).
+ *   `syncweb trust provider show <pubkey>` - Show provider reputation, bans, and trust records.
+ *   `syncweb trust provider list` - List providers known to the local indexing state.
+ *   `syncweb trust provider ban <pubkey>` / `unban <pubkey>` - Manage global or scoped provider bans.
+ *   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
+ *   `syncweb trust stream publish --provider <pubkey> --signal <kind>` - Publish a signed provider observation.
+ *   `syncweb trust stream subscribe <ticket>` - Subscribe to a trust stream and ingest trusted signals.
+ *   `syncweb attest <content> --license <license>` - Sign an attestation for content.
+ *   `syncweb attest list <hash>` - List local attestations for a content hash.
+ *   `syncweb report <record> --reason <reason>` - Submit a moderation report.
+ *   `syncweb moderation ls [<content>]` - List moderation records and decisions, optionally scoped to content.
+ *   `syncweb moderation hide <record>` - Hide a record based on local or community policy.

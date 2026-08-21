@@ -1090,9 +1090,19 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Append signed metadata to a content hash'
+            cand list 'List signed metadata for a content hash'
         }
         &'syncweb;indexing;meta;add'= {
             cand --sequence 'sequence'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;indexing;meta;list'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1380,6 +1390,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand create 'Sign and optionally broadcast a content attestation'
             cand verify 'Verify attestations for content from the network'
+            cand list 'List local attestations for a content hash'
         }
         &'syncweb;attest;create'= {
             cand --license 'license'
@@ -1397,6 +1408,15 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;attest;verify'= {
             cand --timeout 'Timeout in seconds for gossip collection'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;attest;list'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

@@ -980,6 +980,8 @@ pub enum MetaCommand {
         #[arg(long, default_value_t = 1)]
         sequence: u64,
     },
+    #[command(about = "List signed metadata for a content hash")]
+    List { hash: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1170,6 +1172,8 @@ pub enum AttestCommand {
         #[arg(long, help = "Timeout in seconds for gossip collection")]
         timeout: Option<u64>,
     },
+    #[command(about = "List local attestations for a content hash")]
+    List { hash: String },
 }
 
 #[derive(Debug, Subcommand)]

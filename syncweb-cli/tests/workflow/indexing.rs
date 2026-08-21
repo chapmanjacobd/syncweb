@@ -1130,3 +1130,90 @@ fn moderation_hide_with_reason_and_report_broadcast() -> Result<()> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Plan 012 — Metadata / moderation / attestation read-write symmetry
+// ---------------------------------------------------------------------------
+
+#[test]
+fn indexing_meta_list() -> Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let _added = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "title", "list me"])?;
+    let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
+
+    let listed = run(alice, &["--json", "indexing", "meta", "list", CONTENT_HASH])?;
+    let listed_json = json_output(&listed)?;
+    let entries = listed_json.as_array().context("meta list should be an array")?;
+    ensure!(entries.len() == 2, "meta list should return both metadata entries");
+
+    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_json = json_output(&trust_output)?;
+    let trust_metadata = trust_json
+        .get("metadata")
+        .and_then(Value::as_array)
+        .context("trust show metadata missing")?;
+    ensure!(
+        trust_metadata.len() == entries.len(),
+        "meta list should agree with trust show --content"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn attest_list_local() -> Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let _license = run(alice, &["attest", "create", CONTENT_HASH, "--license", "MIT"])?;
+    let _provenance = run(alice, &["attest", "create", CONTENT_HASH, "--provenance", "archive"])?;
+
+    let listed = run(alice, &["--json", "attest", "list", CONTENT_HASH])?;
+    let listed_json = json_output(&listed)?;
+    let attestations = listed_json.as_array().context("attest list should be an array")?;
+    ensure!(
+        attestations.len() == 2,
+        "attest list should return both local attestations"
+    );
+
+    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    let trust_json = json_output(&trust_output)?;
+    let trust_attestations = trust_json
+        .get("attestations")
+        .and_then(Value::as_array)
+        .context("trust show attestations missing")?;
+    ensure!(
+        trust_attestations.len() == attestations.len(),
+        "attest list should agree with trust show --content"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn moderation_list_content_scoped() -> Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let other_hash = "9b7d5d2e2f5f0d7b3e2d1b9d9b7d5d2e2f5f0d7b3e2d1b9d9b7d5d2e2f5f0d7b";
+
+    let _hidden = run(alice, &["moderation", "hide", CONTENT_HASH])?;
+    let _hidden_other = run(alice, &["moderation", "hide", other_hash])?;
+
+    let listed = run(alice, &["--json", "moderation", "ls", CONTENT_HASH])?;
+    let listed_json = json_output(&listed)?;
+    let records = listed_json.as_array().context("moderation ls should be an array")?;
+    ensure!(
+        records.len() == 1,
+        "content-scoped moderation ls should return only matching records"
+    );
+
+    let trust_output = run(alice, &["--json", "trust", "show", CONTENT_HASH, "--content"])?;
+    ensure!(
+        json_output(&trust_output)?.get("moderation") == Some(&Value::from("hide")),
+        "content-scoped moderation list should agree with trust show"
+    );
+
+    Ok(())
+}

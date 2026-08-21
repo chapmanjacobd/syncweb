@@ -1300,6 +1300,24 @@ pub async fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Resu
             )
         }
         AttestCommand::Verify { hash, timeout } => handle_attest_verify(data_dir, output_json, &hash, timeout).await,
+        AttestCommand::List { hash } => {
+            let content = parse_hash(&hash)?;
+            let (_, state) = open_indexing_state(data_dir)?;
+            let attestations = state
+                .attestations
+                .iter()
+                .filter(|entry| entry.content == content)
+                .cloned()
+                .collect::<Vec<_>>();
+            if output_json {
+                println!("{}", serde_json::to_string_pretty(&attestations)?);
+            } else {
+                for att in &attestations {
+                    println!("{}: {} (by {})", att.kind, att.value, att.issuer);
+                }
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1445,6 +1463,24 @@ fn handle_meta(ctx: &CliContext<'_>, command: MetaCommand) -> Result<()> {
                 }),
                 format!("metadata: {}\t{}\t{}", entry.content, entry.key, entry.value),
             )?;
+        }
+        MetaCommand::List { hash } => {
+            let content = parse_hash(&hash)?;
+            let (_, state) = open_indexing_state(data_dir)?;
+            let indexing = open_indexing(data_dir)?;
+            let wot = load_wot(&indexing, &state)?;
+            let entries = wot
+                .search("", 10_000)?
+                .into_iter()
+                .filter(|entry| entry.content == content)
+                .collect::<Vec<_>>();
+            if output_json {
+                println!("{}", serde_json::to_string_pretty(&entries)?);
+            } else {
+                for entry in entries {
+                    println!("{}\t{}\t{}", entry.key, entry.value, entry.sequence);
+                }
+            }
         }
     }
     Ok(())

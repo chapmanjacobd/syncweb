@@ -7,13 +7,10 @@ use anyhow::Context;
 use iroh::SecretKey;
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh_blobs::Hash;
-use n0_future::StreamExt;
 use syncweb_core::{
     folder::{FolderManager, SyncMode},
-    gossip::TopicChannel,
-    indexing::{ContentLink, Link, LinkResolution, LinkResolver, MutablePointer, PrivateLink, revocation_topic_id},
+    indexing::{ContentLink, Link, LinkResolution, LinkResolver, MutablePointer, PrivateLink},
     node::{
-        gossip_service::GossipService,
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
@@ -194,72 +191,6 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
 
     let entry = bob.docs_engine().get_any(bob_folder.doc(), &link_key).await?;
     anyhow::ensure!(entry.is_some(), "Bob should see the private link entry after sync");
-
-    alice.stop().await?;
-    bob.stop().await?;
-    Ok(())
-}
-
-/// Two-node gossip test: Alice publishes a revocation via gossip.
-/// Bob receives it after subscribing to the same topic.
-#[tokio::test]
-async fn test_link_revoke_propagates_via_gossip() -> anyhow::Result<()> {
-    let directory = test_utils::TestDirectory::new("link-revoke-gossip")?;
-    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
-    let memory_lookup = MemoryLookup::new();
-    let alice = test_node(
-        &directory,
-        "alice",
-        Some(relay_map.clone()),
-        Some(memory_lookup.clone()),
-    )
-    .await?;
-    let bob = test_node(&directory, "bob", Some(relay_map), Some(memory_lookup.clone())).await?;
-    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(alice.endpoint().id()).with_relay_url(relay_url.clone()));
-    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(bob.endpoint().id()).with_relay_url(relay_url));
-
-    let hash = alice.blob_store().add_bytes(b"shared").await?;
-    let link = PrivateLink::generate(hash, 4_000_000_000)?;
-
-    let topic_id = revocation_topic_id();
-
-    // Alice subscribes to the revocation topic
-    let alice_topic = alice.gossip_service().subscribe(topic_id, Vec::new()).await?;
-    let (alice_sender, _alice_receiver) = GossipService::split(alice_topic);
-    let alice_channel =
-        TopicChannel::<PrivateLink>::new(Arc::new(alice.gossip_service().inner().clone()), topic_id, alice_sender);
-
-    // Bob subscribes to receive revocations, bootstrapping to Alice
-    let mut bob_topic = bob
-        .gossip_service()
-        .subscribe(topic_id, vec![alice.endpoint().id()])
-        .await?;
-    tokio::time::timeout(Duration::from_secs(30), bob_topic.joined())
-        .await
-        .context("Bob's gossip join timed out")?
-        .context("Bob's gossip join failed")?;
-    let (bob_sender, bob_receiver) = GossipService::split(bob_topic);
-    let bob_channel =
-        TopicChannel::<PrivateLink>::new(Arc::new(bob.gossip_service().inner().clone()), topic_id, bob_sender);
-    let mut bob_stream = bob_channel.receive_from(bob_receiver);
-
-    // Alice publishes the revocation
-    alice_channel.publish(&link).await?;
-
-    // Bob should receive it within a timeout
-    let received = tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            if let Some(msg) = bob_stream.next().await {
-                return msg;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .context("Bob did not receive revocation via gossip")?;
-
-    anyhow::ensure!(received.manifest == link.manifest, "manifest mismatch");
-    anyhow::ensure!(received.capability == link.capability, "capability mismatch");
 
     alice.stop().await?;
     bob.stop().await?;

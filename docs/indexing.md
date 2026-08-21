@@ -57,9 +57,10 @@ and provider selection.
 `ProviderReputationStore` keeps longer-lived fetch history separate from
 leases. It applies minimum-sample scoring, time decay, failure weighting, and
 exponential temporary-ban backoff. `ProviderTrustSignal` carries a
-domain-separated reporter signature and can be coalesced into bounded trust
-stream batches; only reporters trusted through the local `TrustPolicy` affect
-reputation.
+domain-separated reporter signature and is broadcast alongside attestations
+and moderation reports on a single signed-signal gossip topic
+(`SignedSignal`); only reporters trusted through the local `TrustPolicy`
+affect reputation.
 
 ### 3. Web of Trust (WoT) Metadata
 Metadata extraction is crowdsourced to trusted entities.

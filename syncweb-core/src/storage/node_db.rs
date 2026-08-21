@@ -21,7 +21,7 @@ use crate::{
     },
     filter::{FilterAction, FilterEngine, FilterEntry, FilterRule},
     folder::{CollectionState, InstalledCollection},
-    net::network::{Network, NetworkId, network_topic, parse_public_key},
+    net::network::{Network, NetworkId, parse_public_key},
     storage::config::Config as AppConfig,
 };
 
@@ -908,7 +908,6 @@ impl NodeDatabase {
                 id: network_id,
                 name,
                 label,
-                topic: network_topic(network_id),
                 owner,
                 members,
                 folders,

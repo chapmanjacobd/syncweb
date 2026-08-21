@@ -11,20 +11,14 @@
 /// Public package catalog gossip topic seed.
 pub const CATALOG_TOPIC: &[u8] = b"syncweb/public-package-catalog/v1";
 
-/// Moderation report gossip topic seed.
-pub const REPORT_TOPIC: &[u8] = b"syncweb/reports/v1";
-
-/// Link revocation gossip topic seed.
-pub const REVOCATION_TOPIC: &[u8] = b"syncweb/link-revocations/v1";
-
-/// Provider trust stream gossip topic seed.
-pub const TRUST_STREAM_TOPIC: &[u8] = b"syncweb/provider-trust-stream/v1";
+/// Unified signed-signal gossip topic seed.
+///
+/// Attestations, moderation reports, and provider trust signals are all
+/// broadcast on this single topic, discriminated by [`crate::indexing::SignedSignal`].
+pub const SIGNAL_TOPIC: &[u8] = b"syncweb/signed-signals/v1";
 
 /// Provider lease gossip topic seed.
 pub const RESILIENCE_TOPIC: &[u8] = b"syncweb/provider-leases/v1";
-
-/// Attestation gossip topic seed.
-pub const ATTESTATION_TOPIC: &[u8] = b"syncweb/attestations/v1";
 
 // ---------------------------------------------------------------------------
 // Cryptographic signature contexts (Ed25519 domain separators)
@@ -108,11 +102,6 @@ pub const LINK_SCHEME: &str = "syncweb://";
 // ---------------------------------------------------------------------------
 // Dynamic topic seed format strings
 // ---------------------------------------------------------------------------
-
-/// Base prefix for per-network gossip topic seeds.
-///
-/// Use `format!("{}/{{id}}", NETWORK_TOPIC_PREFIX)`.
-pub const NETWORK_TOPIC_PREFIX: &str = "syncweb/net";
 
 /// Base prefix for per-channel gossip topic seeds.
 ///

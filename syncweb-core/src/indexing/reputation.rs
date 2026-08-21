@@ -12,10 +12,6 @@ use std::{
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::{PublicKey, SecretKey};
 use iroh_blobs::Hash;
-use iroh_gossip::{
-    TopicId,
-    api::{GossipSender, GossipTopic},
-};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -24,10 +20,9 @@ use super::{
     wot::{ProviderTrustAction, ProviderTrustRecord, TrustPolicy},
 };
 use crate::{
-    constants::{REPUTATION_SIGNAL_CONTEXT, TRUST_STREAM_TOPIC},
+    constants::REPUTATION_SIGNAL_CONTEXT,
     error::{Result, SyncwebError},
-    gossip::{SignedGossipMessage, gossip_topic_id},
-    node::gossip_service::GossipService,
+    gossip::SignedGossipMessage,
 };
 const DEFAULT_DECAY_HALF_LIFE: Duration = Duration::from_hours(24);
 const DEFAULT_TEMPORARY_BAN: Duration = Duration::from_hours(1);
@@ -501,35 +496,6 @@ impl ProviderReputationStore {
         Ok(true)
     }
 
-    /// Publish a signed signal to the provider-trust stream.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the signal is invalid or gossip rejects the
-    /// publication.
-    pub async fn publish_signal(
-        &self,
-        gossip: &GossipService,
-        sender: &GossipSender,
-        signal: &ProviderTrustSignal,
-    ) -> Result<()> {
-        signal.verify()?;
-        gossip.publish(sender, signal.to_bytes()?).await
-    }
-
-    /// Subscribe to the provider-trust stream.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the gossip subscription cannot be created.
-    pub async fn subscribe_trust_stream(
-        &self,
-        gossip: &GossipService,
-        bootstrap: Vec<PublicKey>,
-    ) -> Result<GossipTopic> {
-        gossip.subscribe(trust_stream_topic(), bootstrap).await
-    }
-
     fn apply_auto_ban(&mut self, provider: PublicKey, now: u64) {
         let previous_count = self.auto_bans.get(&provider).map_or(0, |ban| ban.count);
         let count = previous_count.saturating_add(1);
@@ -749,11 +715,6 @@ impl ProviderTrustSignal {
         bytes.extend_from_slice(&encoded);
         Ok(bytes)
     }
-}
-
-#[must_use]
-pub fn trust_stream_topic() -> TopicId {
-    gossip_topic_id(TRUST_STREAM_TOPIC)
 }
 
 fn xor_distance(hash: Hash, provider: PublicKey) -> [u8; 32] {

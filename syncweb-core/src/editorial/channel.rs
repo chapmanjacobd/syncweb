@@ -4,19 +4,18 @@ use crate::constants::CHANNEL_TOPIC_PREFIX;
 
 /// The transport backing a channel's content distribution.
 ///
-/// Gossip channels are ephemeral pub/sub — announcements are only
-/// visible to online subscribers.  Catalog channels are backed by
-/// iroh-docs and provide persistent, durable discovery with full-text
-/// search.
+/// Catalog channels are backed by iroh-docs and provide persistent, durable
+/// discovery with full-text search.  Gossip channels are ephemeral pub/sub —
+/// announcements are only visible to online subscribers.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelBackend {
-    /// Ephemeral gossip pub/sub (the default).
+    /// Persistent iroh-docs catalog with FTS indexing (the default).
     #[default]
-    Gossip,
-    /// Persistent iroh-docs catalog with FTS indexing.
     Catalog,
+    /// Ephemeral gossip pub/sub.
+    Gossip,
 }
 
 /// A named content stream for editorial distribution.
@@ -44,13 +43,13 @@ pub struct Channel {
 }
 
 impl Channel {
-    /// Create a new gossip-backed channel with an optional description.
+    /// Create a new catalog-backed channel with an optional description.
     #[must_use]
     pub fn new(name: impl Into<String>, description: Option<impl Into<String>>) -> Self {
         Self {
             name: name.into(),
             description: description.map(Into::into),
-            backend: ChannelBackend::Gossip,
+            backend: ChannelBackend::Catalog,
         }
     }
 

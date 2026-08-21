@@ -58,9 +58,4 @@ impl GossipService {
     pub fn split(topic: GossipTopic) -> (GossipSender, GossipReceiver) {
         topic.split()
     }
-
-    #[must_use]
-    pub const fn event_stream(topic: GossipTopic) -> GossipTopic {
-        topic
-    }
 }

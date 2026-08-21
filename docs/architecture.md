@@ -2,12 +2,18 @@
 
 ## Networks (Multi-Folder Groups)
 
-A Network is a named group of folders + devices under a common gossip topic.
-An explicit, shareable grouping abstraction.
+A Network is a named group of folders + devices. An explicit, shareable
+grouping abstraction.
 
-- Network Gossip Topic: `syncweb/net/<network_id>` (derived from network name)
-- Membership: All devices in the network subscribe to this topic
-- Folders: All folders in the network share the topic for discovery and auto-join
+- Membership: Enforced at the connection layer via a per-node allowlist
+  (`MembershipHook`) seeded from the locally persisted member list; no gossip
+  topic is involved.
+- Folders: Associated with a network via the node database (`NetworkTicket`
+  carries the folder namespaces); used for `create --network` /
+  `join --network` auto-join.
+- Membership docs: An optional iroh-docs ticket (`sys/network/members`) may
+  carry a signed member list for removal detection when invited via
+  `--doc-ticket`.
 
 ### Local (LAN) Discovery
 
@@ -24,9 +30,8 @@ iroh endpoint, both scoped by the first 16 bytes of the network id:
   not access control; membership is enforced by the connection-level peer
   allowlist (see `docs/security-model.md`).
 
-Both lookups are fallbacks for local discovery; the gossip topic above and the
-DHT remain available for remote peers. They can be disabled per daemon with
-`--no-mdns` / `--no-beacon`.
+Both lookups are fallbacks for local discovery; the DHT remains available for
+remote peers. They can be disabled per daemon with `--no-mdns` / `--no-beacon`.
 
 ```rust
 /// A named group of folders and devices sharing a gossip topic.

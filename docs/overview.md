@@ -162,9 +162,10 @@ Decision: Piggyback on Syncthing's relay network for CGNAT traversal, not protoc
 - Ed25519 key compatibility enables DeviceId ↔ NodeId conversion (zero-cost)
 
 ### 9. Networks
-Decision: Named multi-folder + multi-device groups under gossip topics
+Decision: Named multi-folder + multi-device groups with connection-level membership
 - Networks provide an explicit grouping abstraction for folders and devices
-- Each network has a gossip topic `syncweb/net/<id>` for discovery
+- Membership is enforced by a per-node allowlist seeded from the locally
+  persisted member list; there is no per-network gossip topic
 - Single-device users can ignore networks entirely
 - Optional shared secret for invite-only networks
 - Folder membership in a network enables auto-join

@@ -1042,11 +1042,7 @@ pub enum LinkCommand {
         version: Option<String>,
     },
     #[command(about = "Revoke a private capability link")]
-    Revoke {
-        link: String,
-        #[arg(long, help = "Broadcast revocation to peers via gossip")]
-        broadcast: bool,
-    },
+    Revoke { link: String },
 }
 
 #[derive(Debug, Subcommand)]

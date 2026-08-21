@@ -1356,7 +1356,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__link__subcmd__revoke)
-            opts="-h --broadcast --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

@@ -781,7 +781,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_su
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from resolve" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l broadcast -d 'Broadcast revocation to peers via gossip'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

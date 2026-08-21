@@ -11,6 +11,7 @@ use n0_future::{Stream, StreamExt};
 
 use crate::error::{Result, SyncwebError};
 use crate::gossip::signed_topic::SignedGossipMessage;
+use crate::node::gossip_service::GossipService;
 
 /// A typed gossip topic that can publish and subscribe to one message type.
 ///
@@ -35,6 +36,45 @@ impl<T: SignedGossipMessage + Send + Sync> TopicChannel<T> {
             sender,
             _phantom: PhantomData,
         }
+    }
+
+    /// Subscribe to a gossip topic and return a typed channel plus the raw
+    /// event receiver.
+    ///
+    /// This factors the repeated
+    /// `subscribe` → `GossipService::split` → `TopicChannel::new` dance into a
+    /// single call. The returned receiver can be passed to
+    /// [`Self::receive_from`] or [`Self::collect_for`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the gossip subscription cannot be created.
+    pub async fn open(
+        gossip: &GossipService,
+        topic_id: TopicId,
+        bootstrap: Vec<iroh::PublicKey>,
+    ) -> Result<(Self, iroh_gossip::api::GossipReceiver)> {
+        let topic = gossip.subscribe(topic_id, bootstrap).await?;
+        let (sender, receiver) = GossipService::split(topic);
+        Ok((Self::new(Arc::new(gossip.inner().clone()), topic_id, sender), receiver))
+    }
+
+    /// Subscribe and join a gossip topic, returning a typed channel plus the
+    /// raw event receiver.
+    ///
+    /// Waits for the bootstrap peers to join the topic before returning.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the gossip join cannot be created.
+    pub async fn open_and_join(
+        gossip: &GossipService,
+        topic_id: TopicId,
+        bootstrap: Vec<iroh::PublicKey>,
+    ) -> Result<(Self, iroh_gossip::api::GossipReceiver)> {
+        let topic = gossip.subscribe_and_join(topic_id, bootstrap).await?;
+        let (sender, receiver) = GossipService::split(topic);
+        Ok((Self::new(Arc::new(gossip.inner().clone()), topic_id, sender), receiver))
     }
 
     /// Publish a signed message to the topic. All subscribers receive it.

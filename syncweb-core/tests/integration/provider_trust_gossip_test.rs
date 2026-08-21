@@ -5,11 +5,11 @@ use ed25519_dalek::SigningKey;
 use iroh::SecretKey;
 use iroh::address_lookup::memory::MemoryLookup;
 use n0_future::StreamExt;
-use syncweb_core::constants::TRUST_STREAM_TOPIC;
-use syncweb_core::gossip::{TopicChannel, gossip_topic_id};
+use syncweb_core::constants::SIGNAL_TOPIC;
+use syncweb_core::gossip::{SignedGossipMessage, TopicChannel, gossip_topic_id};
 use syncweb_core::indexing::{
-    ProviderReputationStore, ProviderTrustAction, ProviderTrustRecord, ProviderTrustSignal, TrustSignalKind,
-    trust_stream_topic,
+    ProviderReputationStore, ProviderTrustAction, ProviderTrustRecord, ProviderTrustSignal, SignedSignal,
+    TrustSignalKind,
 };
 use syncweb_core::node::gossip_service::GossipService;
 use syncweb_core::node::identity::IdentityManager;
@@ -153,7 +153,7 @@ async fn test_vouch_signal_published_via_gossip_reaches_subscriber() -> anyhow::
     )?;
     let signal = ProviderTrustSignal::from_trust_record(&record, &alice_key)?;
 
-    let topic_id = trust_stream_topic();
+    let topic_id = gossip_topic_id(SIGNAL_TOPIC);
     let alice_topic = alice
         .gossip_service()
         .subscribe(topic_id, vec![])
@@ -161,9 +161,9 @@ async fn test_vouch_signal_published_via_gossip_reaches_subscriber() -> anyhow::
         .context("alice subscribe")?;
     let (alice_sender, _) = GossipService::split(alice_topic);
 
-    let channel = TopicChannel::<ProviderTrustSignal>::new(
+    let channel = TopicChannel::<SignedSignal>::new(
         std::sync::Arc::new(alice.gossip_service().inner().clone()),
-        gossip_topic_id(TRUST_STREAM_TOPIC),
+        topic_id,
         alice_sender,
     );
 
@@ -180,12 +180,15 @@ async fn test_vouch_signal_published_via_gossip_reaches_subscriber() -> anyhow::
 
     let (_bob_sender, mut bob_receiver) = GossipService::split(bob_topic);
 
-    channel.publish(&signal).await.context("alice publish")?;
+    channel
+        .publish(&SignedSignal::Trust(signal))
+        .await
+        .context("alice publish")?;
 
     let received = tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(event) = bob_receiver.next().await {
             if let Ok(iroh_gossip::api::Event::Received(msg)) = event
-                && let Ok(decoded) = ProviderTrustSignal::from_bytes(&msg.content)
+                && let Ok(SignedSignal::Trust(decoded)) = SignedSignal::from_wire_bytes(&msg.content)
             {
                 return Some(decoded);
             }
@@ -242,13 +245,13 @@ async fn test_incoming_trust_signal_applied_to_wot() -> anyhow::Result<()> {
     )?;
     let signal = ProviderTrustSignal::from_trust_record(&record, &alice_key)?;
 
-    let topic_id = trust_stream_topic();
+    let topic_id = gossip_topic_id(SIGNAL_TOPIC);
     let alice_topic = alice.gossip_service().subscribe(topic_id, vec![]).await?;
     let (alice_sender, _) = GossipService::split(alice_topic);
 
-    let channel = TopicChannel::<ProviderTrustSignal>::new(
+    let channel = TopicChannel::<SignedSignal>::new(
         std::sync::Arc::new(alice.gossip_service().inner().clone()),
-        gossip_topic_id(TRUST_STREAM_TOPIC),
+        topic_id,
         alice_sender,
     );
 
@@ -267,12 +270,12 @@ async fn test_incoming_trust_signal_applied_to_wot() -> anyhow::Result<()> {
     config.min_samples = 1;
     let mut reputation = ProviderReputationStore::new(config);
 
-    channel.publish(&signal).await?;
+    channel.publish(&SignedSignal::Trust(signal)).await?;
 
     let received = tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(event) = bob_receiver.next().await {
             if let Ok(iroh_gossip::api::Event::Received(msg)) = event
-                && let Ok(decoded) = ProviderTrustSignal::from_bytes(&msg.content)
+                && let Ok(SignedSignal::Trust(decoded)) = SignedSignal::from_wire_bytes(&msg.content)
             {
                 return Some(decoded);
             }

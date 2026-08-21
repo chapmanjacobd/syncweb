@@ -1518,7 +1518,6 @@ _arguments "${_arguments_options[@]}" : \
 (revoke)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--broadcast[Broadcast revocation to peers via gossip]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

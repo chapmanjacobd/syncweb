@@ -6,10 +6,9 @@ use std::{
 
 use iroh::PublicKey;
 use iroh_docs::NamespaceId;
-use iroh_gossip::TopicId;
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, SyncwebError, gossip::gossip_topic_id};
+use crate::{Result, SyncwebError};
 
 /// Stable identifier derived from a network name.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -78,7 +77,6 @@ pub struct Network {
     pub id: NetworkId,
     pub name: String,
     pub label: String,
-    pub topic: TopicId,
     pub owner: PublicKey,
     pub members: HashSet<PublicKey>,
     pub folders: HashSet<NamespaceId>,
@@ -91,14 +89,12 @@ impl Network {
     pub fn new(name_arg: impl Into<String>, owner: PublicKey, options: NetworkOptions) -> Self {
         let name = name_arg.into().trim().to_owned();
         let id = NetworkId::from_name(&name);
-        let topic = network_topic(id);
         let mut members = HashSet::new();
         members.insert(owner);
         Self {
             id,
             name,
             label: options.label,
-            topic,
             owner,
             members,
             folders: HashSet::new(),
@@ -110,11 +106,6 @@ impl Network {
     #[must_use]
     pub fn is_member(&self, node_id: &PublicKey) -> bool {
         self.members.contains(node_id)
-    }
-
-    #[must_use]
-    pub const fn topic(&self) -> TopicId {
-        self.topic
     }
 
     #[must_use]
@@ -250,11 +241,6 @@ impl TryFrom<TicketWire> for NetworkTicket {
             doc_ticket: wire.doc_ticket,
         })
     }
-}
-
-pub(crate) fn network_topic(id: NetworkId) -> TopicId {
-    let seed = format!("{}/{}", crate::constants::NETWORK_TOPIC_PREFIX, id);
-    gossip_topic_id(seed.as_bytes())
 }
 
 pub(crate) fn parse_public_key(value: &str) -> Result<PublicKey> {

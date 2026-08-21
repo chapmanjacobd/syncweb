@@ -1026,7 +1026,10 @@ async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
-    let resilience = ResilienceService::new(ResilienceConfig::new(ReplicationBudget::new(command.min_providers)));
+    let resilience = ResilienceService::with_database(
+        syncweb_core::indexing::IndexingDatabase::open(data_dir.join("indexing.sqlite"))?,
+        ResilienceConfig::new(ReplicationBudget::new(command.min_providers)),
+    );
     let options = MirrorOptions::new(command.min_providers)
         .with_dry_run(command.dry_run)
         .with_no_sharing(command.no_sharing);

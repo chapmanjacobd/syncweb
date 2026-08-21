@@ -1185,7 +1185,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;link;revoke'= {
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --broadcast 'Broadcast revocation to peers via gossip'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

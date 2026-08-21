@@ -652,7 +652,7 @@ fn link_resolve_with_version() -> Result<()> {
 }
 
 #[test]
-fn link_revoke_with_broadcast() -> Result<()> {
+fn link_revoke_persists_locally() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
@@ -663,7 +663,7 @@ fn link_revoke_with_broadcast() -> Result<()> {
         .context("link output missing link")?
         .to_owned();
 
-    let revoked = run(alice, &["link", "revoke", &link, "--broadcast"])?;
+    let revoked = run(alice, &["link", "revoke", &link])?;
     ensure!(
         revoked.stdout().contains("revoked:"),
         "revoke output should confirm revocation"
@@ -1092,8 +1092,8 @@ fn attest_verify_with_timeout() -> Result<()> {
     let results = json_output(&verified)?;
     ensure!(results.is_array(), "attest verify should emit a JSON array");
     ensure!(
-        results.as_array().is_some_and(Vec::is_empty),
-        "no peers should broadcast attestations for the hash"
+        results.as_array().is_some_and(|attestations| attestations.len() == 1),
+        "attest verify should read the locally persisted attestation even with no online peers"
     );
 
     Ok(())

@@ -27,7 +27,8 @@ use crate::{
         PackageCatalog, PublicSubscription, SyncMode,
     },
     fs::Importer,
-    indexing::{IndexingService, ProviderReputationStore, ProviderTrustSignal, resilience::ResilienceService},
+    gossip::{TopicChannel, gossip_topic_id},
+    indexing::{IndexingService, ProviderTrustSignal, SignedSignal, resilience::ResilienceService},
     node::{gossip_service::GossipService, iroh_node::IrohNode},
     snapshot::SnapshotStore,
     storage::config::SubscribeFilters,
@@ -2545,7 +2546,11 @@ impl IpcServer {
         let bootstrap: Vec<iroh::PublicKey> = Vec::new();
 
         let result = if let Some(channel_name) = &channel {
-            let channel_obj = crate::editorial::Channel::new(channel_name.as_str(), None::<String>);
+            let channel_obj = crate::editorial::Channel::with_backend(
+                channel_name.as_str(),
+                None::<String>,
+                crate::editorial::ChannelBackend::Gossip,
+            );
             let mut topic = match catalog.subscribe_channel_and_join(&channel_obj, bootstrap).await {
                 Ok(t) => t,
                 Err(error) => return response_from_error(error),
@@ -2845,14 +2850,13 @@ impl IpcServer {
                 "server has no node context",
             )
         })?;
-        let gossip_store = ProviderReputationStore::default();
-        let topic = gossip_store
-            .subscribe_trust_stream(context.node.gossip_service(), Vec::new())
-            .await?;
-        let (sender, _receiver) = GossipService::split(topic);
-        gossip_store
-            .publish_signal(context.node.gossip_service(), &sender, &signal)
-            .await
+        let (channel, _receiver) = TopicChannel::<SignedSignal>::open(
+            context.node.gossip_service(),
+            gossip_topic_id(crate::constants::SIGNAL_TOPIC),
+            Vec::new(),
+        )
+        .await?;
+        channel.publish(&SignedSignal::Trust(signal)).await
     }
 }
 

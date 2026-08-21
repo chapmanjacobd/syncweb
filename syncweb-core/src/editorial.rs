@@ -28,7 +28,7 @@ pub mod role;
 pub mod state;
 pub mod workflow;
 
-pub use channel::Channel;
+pub use channel::{Channel, ChannelBackend};
 pub use content_type::ContentType;
 pub use role::EditorialRole;
 pub use state::EditorialState;

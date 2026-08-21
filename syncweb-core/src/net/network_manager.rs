@@ -3,13 +3,11 @@ use std::sync::{Arc, RwLock};
 
 use iroh::PublicKey;
 use iroh_docs::NamespaceId;
-use iroh_gossip::{TopicId, api::GossipTopic};
 
-use crate::node::gossip_service::GossipService;
 use crate::storage::node_db::NodeDatabase;
 use crate::{Result, SyncwebError};
 
-use super::network::{Network, NetworkId, NetworkOptions, NetworkTicket, network_topic};
+use super::network::{Network, NetworkId, NetworkOptions, NetworkTicket};
 use super::network_log::{NetworkEventType, NetworkLogger};
 
 /// Persistent manager for network membership and folder associations.
@@ -167,7 +165,6 @@ impl NetworkManager {
             id: ticket.network_id,
             name: ticket.name,
             label: ticket.label,
-            topic: network_topic(ticket.network_id),
             owner: ticket.owner,
             members,
             folders: ticket.folders,
@@ -317,47 +314,6 @@ impl NetworkManager {
             Some(&format!("folder {folder}")),
         );
         self.db.remove_folder_from_network(id, folder)
-    }
-
-    /// Subscribe to the network's deterministic gossip topic.
-    ///
-    /// The returned topic must be retained by the caller for membership to
-    /// remain active.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the network does not exist or gossip rejects the
-    /// subscription.
-    pub async fn subscribe(&self, id: NetworkId, gossip: &GossipService) -> Result<GossipTopic> {
-        let network = self
-            .networks
-            .get(&id)
-            .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))?;
-        if !network.is_member(&self.local_node) {
-            return Err(SyncwebError::InvalidConfig(
-                "local device is not a member of this network".to_owned(),
-            ));
-        }
-        let mut bootstrap = network
-            .members
-            .iter()
-            .copied()
-            .filter(|member| *member != self.local_node)
-            .collect::<Vec<_>>();
-        bootstrap.sort_unstable();
-        gossip.subscribe(network.topic, bootstrap).await
-    }
-
-    /// Return the gossip topic associated with a network.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the network does not exist.
-    pub fn topic(&self, id: NetworkId) -> Result<TopicId> {
-        self.networks
-            .get(&id)
-            .map(|network| network.topic)
-            .ok_or_else(|| SyncwebError::FolderNotFound(format!("network {id}")))
     }
 
     #[must_use]

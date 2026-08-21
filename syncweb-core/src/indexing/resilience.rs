@@ -16,25 +16,21 @@ use std::{
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::{Endpoint, PublicKey, SecretKey};
 use iroh_blobs::{Hash, ticket::BlobTicket};
-use iroh_gossip::{
-    TopicId,
-    api::{Event, GossipSender, GossipTopic},
-};
-use n0_future::StreamExt;
+use iroh_gossip::TopicId;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt};
-use tokio::{sync::watch, task::JoinHandle};
+use tokio::sync::watch;
 
 use crate::{
     constants::{PROVIDER_LEASE_SIGNATURE_CONTEXT, REPLICATION_PIN_PREFIX, RESILIENCE_TOPIC},
     error::{Result, SyncwebError},
-    gossip::gossip_topic_id,
+    gossip::{SignedGossipMessage, gossip_topic_id},
     indexing::{
         IndexingDatabase,
         reputation::{ProviderReputationStore, ReputationConfig},
         wot::{ProviderTrustDecision, WotService},
     },
-    node::{blob_store::BlobStore, gossip_service::GossipService},
+    node::blob_store::BlobStore,
 };
 const DEFAULT_OBSERVATION_TTL: Duration = Duration::from_mins(5);
 const DEFAULT_MAX_JITTER: Duration = Duration::from_secs(30);
@@ -522,6 +518,12 @@ impl ProviderLease {
         signed_bytes.extend_from_slice(PROVIDER_LEASE_SIGNATURE_CONTEXT);
         signed_bytes.extend_from_slice(&encoded);
         Ok(signed_bytes)
+    }
+}
+
+impl SignedGossipMessage for ProviderLease {
+    fn verify_signature(&self) -> Result<()> {
+        self.verify_signature()
     }
 }
 
@@ -2013,60 +2015,6 @@ impl ResilienceService {
     /// Returns an error if the repair fetch fails.
     pub async fn replicate(&self, endpoint: &Endpoint, blobs: &BlobStore, hash: Hash) -> Result<ReplicationResult> {
         self.ensure_replication(endpoint, blobs, hash).await
-    }
-
-    /// Subscribe to the provider-lease gossip topic.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the gossip subscription cannot be created.
-    pub async fn subscribe(&self, gossip: &GossipService, bootstrap: Vec<PublicKey>) -> Result<GossipTopic> {
-        gossip.subscribe(resilience_topic(), bootstrap).await
-    }
-
-    /// Publish a signed provider lease to gossip.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the lease is unsigned, invalid, or cannot be sent.
-    pub async fn announce(&self, gossip: &GossipService, sender: &GossipSender, lease: &ProviderLease) -> Result<()> {
-        lease.verify_at(current_epoch_seconds())?;
-        gossip.publish(sender, lease.to_bytes()?).await
-    }
-
-    /// Consume provider leases until the topic closes or `timeout` expires.
-    ///
-    /// A timeout is a normal end condition because gossip has no finite
-    /// response boundary.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a gossip event or lease is malformed.
-    pub async fn consume_gossip(&self, topic: &mut GossipTopic, timeout: Duration) -> Result<usize> {
-        let mut tracked = 0_usize;
-        let receive = async {
-            while let Some(event) = topic.next().await {
-                if let Event::Received(message) =
-                    event.map_err(|error| SyncwebError::operation("provider lease gossip event failed", error))?
-                {
-                    let lease = ProviderLease::from_bytes(message.content)?;
-                    self.record_lease(&lease)?;
-                    tracked = tracked.saturating_add(1);
-                }
-            }
-            Ok::<(), SyncwebError>(())
-        };
-        if let Ok(result) = tokio::time::timeout(timeout, receive).await {
-            result?;
-        }
-        Ok(tracked)
-    }
-
-    /// Spawn a background provider-lease gossip consumer.
-    #[must_use]
-    pub fn spawn_gossip_listener(&self, mut topic: GossipTopic) -> JoinHandle<Result<usize>> {
-        let service = self.clone();
-        tokio::spawn(async move { service.consume_gossip(&mut topic, Duration::MAX).await })
     }
 
     fn generation_receiver(&self, hash: Hash) -> Result<watch::Receiver<u64>> {

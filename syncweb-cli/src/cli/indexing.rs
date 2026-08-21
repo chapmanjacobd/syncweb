@@ -3,7 +3,6 @@ use std::{
     io::IsTerminal,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
-    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -18,7 +17,7 @@ use super::commands::{
     ProviderTrustCommand, PublishCatalogArgs, TrustCommand, TrustStreamCommand,
 };
 use syncweb_core::{
-    constants::{ATTESTATION_TOPIC, DOWNLOAD_PIN_PREFIX, REPORT_TOPIC, REVOCATION_TOPIC},
+    constants::{DOWNLOAD_PIN_PREFIX, SIGNAL_TOPIC},
     folder::{FolderManager, SyncwebFolder},
     gossip::gossip_topic_id,
     indexing::{
@@ -26,8 +25,8 @@ use syncweb_core::{
         IndexingDatabase, IndexingService, Link, LinkResolver, MetadataEntry, ModerationAction, ModerationContext,
         ModerationRecord, MutablePointer, NameLink, PrivateLink, ProviderLease, ProviderReputationStore,
         ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord, ProviderTrustSignal, ReplicationBudget,
-        ReportRecord, ReputationConfig, ResilienceConfig, ResilienceService, TrustDecision, TrustDelegation,
-        TrustPolicy, TrustSignalKind, WotService,
+        ReportRecord, ReputationConfig, ResilienceConfig, ResilienceService, SignedSignal, TrustDecision,
+        TrustDelegation, TrustPolicy, TrustSignalKind, WotService,
     },
     node::identity::IdentityManager,
 };
@@ -42,9 +41,7 @@ use iroh_blobs::{
     ticket::BlobTicket,
 };
 use iroh_docs::NamespaceId;
-use iroh_gossip::api::Event;
-use n0_future::StreamExt;
-use syncweb_core::{gossip::TopicChannel, init::open_node, node::gossip_service::GossipService};
+use syncweb_core::{gossip::TopicChannel, init::open_node};
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
 const TRUST_SIGNAL_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
@@ -302,7 +299,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
                 ),
             )?;
         }
-        LinkCommand::Revoke { link, broadcast } => {
+        LinkCommand::Revoke { link } => {
             if !confirm_destructive("revoke this link", output_json)? {
                 println!("aborted");
                 return Ok(());
@@ -312,21 +309,9 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             let resolver = load_resolver(&state)?;
             resolver.revoke(&parsed)?;
             if !state.links.revoked.contains(&parsed) {
-                state.links.revoked.push(parsed.clone());
+                state.links.revoked.push(parsed);
             }
             db.save_links(&state.links.pointers, &state.links.mirrors, &state.links.revoked)?;
-
-            if broadcast {
-                let node = open_node(data_dir).await?;
-                let topic_id = gossip_topic_id(REVOCATION_TOPIC);
-                let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
-                let (sender, _receiver) = GossipService::split(topic);
-                let topic_channel =
-                    TopicChannel::<PrivateLink>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
-                topic_channel.publish(&parsed).await?;
-                tracing::info!(manifest = %parsed.manifest, "revocation broadcast via gossip");
-                node.stop().await?;
-            }
 
             print_status(
                 output_json,
@@ -1059,20 +1044,7 @@ async fn handle_provider_trust_record(
 
     if broadcast {
         let signal = ProviderTrustSignal::from_trust_record(&record, &signing)?;
-        let node = open_node(data_dir).await?;
-        let result = async {
-            let gossip_store = ProviderReputationStore::default();
-            let topic = gossip_store
-                .subscribe_trust_stream(node.gossip_service(), Vec::new())
-                .await?;
-            let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-            gossip_store
-                .publish_signal(node.gossip_service(), &sender, &signal)
-                .await
-        }
-        .await;
-        node.stop().await?;
-        result?;
+        let _ = publish_signed_signal(data_dir, &SignedSignal::Trust(signal)).await?;
     }
 
     print_status(
@@ -1119,20 +1091,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
             let trust_signal =
                 ProviderTrustSignal::new_with_time(provider_key, signal_kind, scope, next_sequence, &signing)?;
 
-            let node = open_node(data_dir).await?;
-            let gossip_store = ProviderReputationStore::default();
-            let result = async {
-                let topic = gossip_store
-                    .subscribe_trust_stream(node.gossip_service(), Vec::new())
-                    .await?;
-                let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-                gossip_store
-                    .publish_signal(node.gossip_service(), &sender, &trust_signal)
-                    .await
-            }
-            .await;
-            node.stop().await?;
-            result?;
+            let bootstrap = publish_signed_signal(data_dir, &SignedSignal::Trust(trust_signal.clone())).await?;
 
             if !state.trust_signals.contains(&trust_signal) {
                 state.trust_signals.push(trust_signal.clone());
@@ -1148,7 +1107,7 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
                     "signal": trust_signal_label(signal_kind),
                     "sequence": trust_signal.sequence,
                     "ticket": format!("file://{}", stream_path.display()),
-                    "bootstrap": node.endpoint().addr().id,
+                    "bootstrap": bootstrap,
                 }),
                 format!(
                     "published: {}\nprovider: {provider_key}\nticket: file://{}",
@@ -1200,30 +1159,20 @@ async fn handle_trust_stream(ctx: &CliContext<'_>, command: TrustStreamCommand) 
 }
 
 async fn receive_trust_signals(data_dir: &Path, bootstrap: PublicKey) -> Result<Vec<ProviderTrustSignal>> {
-    let (_, state) = open_indexing_state(data_dir)?;
-    let indexing = open_indexing(data_dir)?;
-    let wot = load_wot(&indexing, &state)?;
-    let reputation = load_reputation(&wot, &state)?;
-    let node = open_node(data_dir).await?;
-    let mut topic = reputation
-        .subscribe_trust_stream(node.gossip_service(), vec![bootstrap])
-        .await?;
-    let mut signals = Vec::new();
-    loop {
-        let timed_event = tokio::time::timeout(Duration::from_millis(250), topic.next()).await;
-        let Ok(Some(event)) = timed_event else {
-            break;
-        };
-        if let Event::Received(message) =
-            event.map_err(|error| anyhow::anyhow!("trust stream event failed: {error}"))?
-        {
-            let signal = ProviderTrustSignal::from_bytes(message.content)?;
-            signal.verify()?;
-            signals.push(signal);
-        }
-    }
-    node.stop().await?;
-    Ok(signals)
+    let signals = collect_signed_signals(
+        data_dir,
+        vec![bootstrap],
+        |signal| matches!(signal, SignedSignal::Trust(_)),
+        Duration::from_millis(250),
+    )
+    .await?;
+    Ok(signals
+        .into_iter()
+        .filter_map(|signal| match signal {
+            SignedSignal::Trust(inner) => Some(inner),
+            SignedSignal::Attestation(_) | SignedSignal::Report(_) | _ => None,
+        })
+        .collect())
 }
 
 fn parse_trust_signals(bytes: &[u8]) -> Result<Vec<ProviderTrustSignal>> {
@@ -1324,7 +1273,18 @@ pub async fn handle_attest(ctx: &CliContext<'_>, command: AttestCommand) -> Resu
 async fn handle_attest_verify(data_dir: &Path, output_json: bool, hash: &str, timeout: Option<u64>) -> Result<()> {
     let content_hash = parse_hash(hash)?;
     let timeout_duration = Duration::from_secs(timeout.unwrap_or(5));
-    let attestations: Vec<Attestation> = collect_attestations(data_dir, content_hash, timeout_duration).await?;
+    let (_, state) = open_indexing_state(data_dir)?;
+    let mut attestations: Vec<Attestation> = state
+        .attestations
+        .iter()
+        .filter(|entry| entry.content == content_hash)
+        .cloned()
+        .collect();
+    for remote in collect_attestations(data_dir, content_hash, timeout_duration).await? {
+        if !attestations.contains(&remote) {
+            attestations.push(remote);
+        }
+    }
 
     if output_json {
         println!("{}", serde_json::to_string_pretty(&attestations)?);
@@ -1416,14 +1376,7 @@ async fn handle_moderation_report(ctx: &CliContext<'_>, record: &str, reason: &s
     db.save_content_reports(&state.reports)?;
 
     if broadcast {
-        let node = open_node(data_dir).await?;
-        let topic_id = gossip_topic_id(REPORT_TOPIC);
-        let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
-        let (sender, _receiver) = GossipService::split(topic);
-        let topic_channel =
-            TopicChannel::<ReportRecord>::new(Arc::new(node.gossip_service().inner().clone()), topic_id, sender);
-        topic_channel.publish(&report).await?;
-        node.stop().await?;
+        let _ = publish_signed_signal(data_dir, &SignedSignal::Report(report.clone())).await?;
     }
 
     print_status(
@@ -1943,18 +1896,40 @@ const fn moderation_label(action: &ModerationAction) -> &'static str {
     }
 }
 
-async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {
+async fn publish_signed_signal(data_dir: &Path, signal: &SignedSignal) -> Result<iroh::PublicKey> {
     let node = open_node(data_dir).await?;
-    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
-    let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
-    let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-    let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
-        Arc::new(node.gossip_service().inner().clone()),
-        topic_id,
-        sender,
-    );
-    topic_channel.publish(attestation).await?;
+    let bootstrap = node.endpoint().addr().id;
+    let result = async {
+        let (channel, _receiver) =
+            TopicChannel::<SignedSignal>::open(node.gossip_service(), gossip_topic_id(SIGNAL_TOPIC), Vec::new())
+                .await?;
+        channel.publish(signal).await
+    }
+    .await;
     node.stop().await?;
+    result?;
+    Ok(bootstrap)
+}
+
+async fn collect_signed_signals(
+    data_dir: &Path,
+    bootstrap: Vec<iroh::PublicKey>,
+    filter: impl Fn(&SignedSignal) -> bool + Send + Sync + 'static,
+    timeout_duration: Duration,
+) -> Result<Vec<SignedSignal>> {
+    let node = open_node(data_dir).await?;
+    let result = async {
+        let (channel, receiver) =
+            TopicChannel::<SignedSignal>::open(node.gossip_service(), gossip_topic_id(SIGNAL_TOPIC), bootstrap).await?;
+        channel.collect_for(receiver, filter, timeout_duration).await
+    }
+    .await;
+    node.stop().await?;
+    Ok(result?)
+}
+
+async fn publish_attestation(data_dir: &Path, attestation: &Attestation) -> Result<()> {
+    let _ = publish_signed_signal(data_dir, &SignedSignal::Attestation(attestation.clone())).await?;
     Ok(())
 }
 
@@ -1963,22 +1938,18 @@ async fn collect_attestations(
     content_hash: Hash,
     timeout_duration: Duration,
 ) -> Result<Vec<Attestation>> {
-    let node = open_node(data_dir).await?;
-    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
-    let topic = node.gossip_service().subscribe(topic_id, Vec::new()).await?;
-    let (sender, receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-    let topic_channel = syncweb_core::gossip::TopicChannel::<Attestation>::new(
-        Arc::new(node.gossip_service().inner().clone()),
-        topic_id,
-        sender,
-    );
-    let result = topic_channel
-        .collect_for(
-            receiver,
-            move |a: &Attestation| a.content == content_hash,
-            timeout_duration,
-        )
-        .await?;
-    node.stop().await?;
-    Ok(result)
+    let signals = collect_signed_signals(
+        data_dir,
+        Vec::new(),
+        move |signal| matches!(signal, SignedSignal::Attestation(att) if att.content == content_hash),
+        timeout_duration,
+    )
+    .await?;
+    Ok(signals
+        .into_iter()
+        .filter_map(|signal| match signal {
+            SignedSignal::Attestation(att) => Some(att),
+            SignedSignal::Report(_) | SignedSignal::Trust(_) | _ => None,
+        })
+        .collect())
 }

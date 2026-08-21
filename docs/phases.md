@@ -62,7 +62,7 @@ Sync engine, rules-based watch, and networks abstraction:
 - `DeletedTracker` for tracking deleted-but-previously-seen files
 - `AreaOfInterest` with limits (max_size, max_count)
 - `Network` struct and `NetworkManager` for create, join, leave, invite, kick
-- Network gossip topics (`syncweb/net/<id>`)
+- Connection-level membership allowlists (no per-network gossip topic)
 - `syncweb watch` with filter engine (`--filters`, `--dry-run`, `--show-filters`)
 - `syncweb join --subscribe` with SubscribeParams
 - `syncweb network create`, `syncweb network ls`, `syncweb network join`

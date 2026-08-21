@@ -9,18 +9,18 @@ pub mod links;
 pub mod parallel;
 pub mod reputation;
 pub mod resilience;
+pub mod signals;
 pub mod wot;
 pub use catalog::{Catalog, CatalogMetadata, CatalogRecord, CatalogService};
 pub use denylist::{Denied, DenyReason, Denylist, DenylistRule, DenylistService, FilterContext, FilterList};
 pub use links::{
     CapabilityLink, ContentLink, ImmutableLink, Link, LinkResolution, LinkResolver, Mirror, MutableLink,
     MutablePointer, NameLink, PrivateLink, ProviderFetch, ResolveOptions, ResolvedLink, SignedMutablePointer,
-    current_epoch_seconds, fetch_from_mirrors, revocation_topic_id,
+    current_epoch_seconds, fetch_from_mirrors,
 };
 pub use parallel::{ParallelDownloadConfig, TryParallelResult};
 pub use reputation::{
     ProviderReputation, ProviderReputationStore, ProviderTrustSignal, ReputationConfig, TrustSignalKind,
-    trust_stream_topic,
 };
 pub use resilience::{
     AvailabilityHealth, BanRecord, BanSource, FailureRecord, FetchFailure, FetchFailureKind, FetchWait, LeaseUpdate,
@@ -28,6 +28,7 @@ pub use resilience::{
     consistent_hashing_selection, jitter_delay, resilience_topic, validate_bounded_fetch, validate_bounded_stream,
     validate_fetch_stream, xor_distance,
 };
+pub use signals::SignedSignal;
 pub use wot::{
     Attestation, AttestationKind, MetadataEntry, ModerationAction, ModerationContext, ModerationDecision,
     ModerationRecord, ModerationScope, ProviderTrustAction, ProviderTrustDecision, ProviderTrustRecord,

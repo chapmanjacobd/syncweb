@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use super::IndexingDatabase;
 use crate::{
-    constants::{LINK_SCHEME, LINK_SIGNATURE_CONTEXT, REVOCATION_TOPIC},
+    constants::{LINK_SCHEME, LINK_SIGNATURE_CONTEXT},
     error::{Result, SyncwebError},
     gossip::{SignedGossipMessage, gossip_topic_id},
     indexing::ProviderLease,
@@ -1334,9 +1334,10 @@ impl SignedGossipMessage for PrivateLink {
 }
 
 /// Deterministic gossip topic ID for link revocations.
+#[deprecated(note = "link revocations are no longer broadcast via gossip")]
 #[must_use]
 pub fn revocation_topic_id() -> iroh_gossip::TopicId {
-    gossip_topic_id(REVOCATION_TOPIC)
+    gossip_topic_id(b"syncweb/link-revocations/v1")
 }
 
 #[cfg(test)]

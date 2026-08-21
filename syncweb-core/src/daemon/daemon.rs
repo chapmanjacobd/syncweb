@@ -14,20 +14,19 @@ use tokio::{
 };
 
 use crate::{
-    constants::{ATTESTATION_TOPIC, REPORT_TOPIC, REVOCATION_TOPIC},
+    constants::SIGNAL_TOPIC,
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
-    gossip::{TopicChannel, gossip_topic_id},
+    gossip::{gossip_topic_id, spawn_topic_listener},
     indexing::{
-        IndexingDatabase, IndexingService, ReportRecord,
-        links::{MutablePointer, PrivateLink},
-        resilience::{ReplicationBudget, ResilienceConfig},
+        IndexingDatabase, IndexingService, ProviderTrustSignal, ReportRecord, SignedSignal,
+        resilience::{ProviderLease, ReplicationBudget, ResilienceConfig},
         wot::Attestation,
     },
     net::{NetworkLogger, NetworkManager},
-    node::{gossip_service::GossipService, identity::IdentityManager, iroh_node::IrohNode},
+    node::{identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
     storage::{config::SubscribeFilters, node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
@@ -119,9 +118,8 @@ pub struct Daemon {
     archive_pool: Arc<ManagedPool>,
     network_logger: NetworkLogger,
     network_manager: tokio::sync::RwLock<NetworkManager>,
-    attestation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
-    report_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
-    revocation_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    signal_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    lease_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     maintenance_task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     indexing: Option<IndexingService>,
 }
@@ -371,9 +369,8 @@ impl Daemon {
             archive_pool,
             network_logger,
             network_manager: tokio::sync::RwLock::new(network_manager),
-            attestation_listener: tokio::sync::Mutex::new(None),
-            report_listener: tokio::sync::Mutex::new(None),
-            revocation_listener: tokio::sync::Mutex::new(None),
+            signal_listener: tokio::sync::Mutex::new(None),
+            lease_listener: tokio::sync::Mutex::new(None),
             maintenance_task: tokio::sync::Mutex::new(None),
             indexing,
         })
@@ -469,7 +466,6 @@ impl Daemon {
         self.reannounce_folders().await;
         self.load_subscriptions().await?;
         self.start_watching().await?;
-        self.subscribe_network_gossip().await;
         self.spawn_membership_listeners().await;
         self.subscribe_channels().await;
         Ok(())
@@ -494,9 +490,8 @@ impl Daemon {
     }
 
     async fn spawn_listeners(&self) {
-        self.spawn_attestation_listener().await;
-        self.spawn_report_listener().await;
-        self.spawn_revocation_listener().await;
+        self.spawn_signal_listener().await;
+        self.spawn_lease_listener().await;
         self.spawn_maintenance_task().await;
     }
 
@@ -1159,16 +1154,12 @@ impl Daemon {
     }
 
     async fn abort_listeners(&self) {
-        let attestation_handle = self.attestation_listener.lock().await.take();
-        if let Some(inner) = attestation_handle {
+        let signal_handle = self.signal_listener.lock().await.take();
+        if let Some(inner) = signal_handle {
             inner.abort();
         }
-        let report_handle = self.report_listener.lock().await.take();
-        if let Some(inner) = report_handle {
-            inner.abort();
-        }
-        let revocation_handle = self.revocation_listener.lock().await.take();
-        if let Some(inner) = revocation_handle {
+        let lease_handle = self.lease_listener.lock().await.take();
+        if let Some(inner) = lease_handle {
             inner.abort();
         }
         let maintenance_handle = self.maintenance_task.lock().await.take();
@@ -1194,40 +1185,49 @@ impl Daemon {
         Ok(())
     }
 
-    async fn spawn_attestation_listener(&self) {
+    async fn spawn_signal_listener(&self) {
         let gossip_service = self.node.gossip_service().clone();
         let data_dir = self.config.data_dir.clone();
         let shutdown = self.handle.shutdown_sender.subscribe();
-        let handle = tokio::spawn(async move {
-            if let Err(error) = listen_for_attestations(gossip_service, data_dir, shutdown).await {
-                tracing::error!(%error, "attestation gossip listener failed");
-            }
-        });
-        *self.attestation_listener.lock().await = Some(handle);
+        let mut pending: Option<IncomingSignals> = None;
+        let handle = spawn_topic_listener::<SignedSignal, _>(
+            gossip_service,
+            gossip_topic_id(SIGNAL_TOPIC),
+            shutdown,
+            "signed-signals",
+            move |signal| {
+                let state = if let Some(state) = &mut pending {
+                    state
+                } else {
+                    pending.insert(IncomingSignals::open(&data_dir)?)
+                };
+                state.persist(&signal)
+            },
+        );
+        *self.signal_listener.lock().await = Some(handle);
     }
 
-    async fn spawn_report_listener(&self) {
+    async fn spawn_lease_listener(&self) {
+        let Some(ref indexing) = self.indexing else {
+            tracing::debug!("indexing unavailable; skipping provider lease gossip listener");
+            return;
+        };
+        let resilience = indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default()));
         let gossip_service = self.node.gossip_service().clone();
-        let data_dir = self.config.data_dir.clone();
         let shutdown = self.handle.shutdown_sender.subscribe();
-        let handle = tokio::spawn(async move {
-            if let Err(error) = listen_for_reports(gossip_service, data_dir, shutdown).await {
-                tracing::error!(%error, "report gossip listener failed");
-            }
-        });
-        *self.report_listener.lock().await = Some(handle);
-    }
-
-    async fn spawn_revocation_listener(&self) {
-        let gossip_service = self.node.gossip_service().clone();
-        let data_dir = self.config.data_dir.clone();
-        let shutdown = self.handle.shutdown_sender.subscribe();
-        let handle = tokio::spawn(async move {
-            if let Err(error) = listen_for_revocations(gossip_service, data_dir, shutdown).await {
-                tracing::error!(%error, "revocation gossip listener failed");
-            }
-        });
-        *self.revocation_listener.lock().await = Some(handle);
+        let handle = spawn_topic_listener::<ProviderLease, _>(
+            gossip_service,
+            gossip_topic_id(crate::constants::RESILIENCE_TOPIC),
+            shutdown,
+            "provider-leases",
+            move |lease| {
+                if let Err(error) = resilience.record_lease(&lease) {
+                    tracing::warn!(%error, "ignoring invalid incoming provider lease");
+                }
+                Ok(true)
+            },
+        );
+        *self.lease_listener.lock().await = Some(handle);
     }
 
     /// Spawn a background task that periodically vacuums databases with
@@ -1263,31 +1263,6 @@ impl Daemon {
             }
         });
         *self.maintenance_task.lock().await = Some(handle);
-    }
-
-    async fn subscribe_network_gossip(&self) {
-        let networks: Vec<_> = {
-            let guard = self.network_manager.read().await;
-            guard.list().into_iter().cloned().collect::<Vec<_>>()
-        };
-        for network in &networks {
-            let network_id = network.id;
-            let topic = network.topic;
-            let members: Vec<_> = network
-                .members
-                .iter()
-                .copied()
-                .filter(|m| *m != self.node.endpoint().id())
-                .collect();
-            match self.node.gossip_service().subscribe(topic, members).await {
-                Ok(_topic) => {
-                    tracing::debug!(%network_id, "subscribed to network gossip topic");
-                }
-                Err(error) => {
-                    tracing::warn!(%network_id, %error, "failed to subscribe to network gossip topic");
-                }
-            }
-        }
     }
 
     async fn subscribe_channels(&self) {
@@ -1482,141 +1457,61 @@ fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
     message.contains("file changed during import") || message.contains("input path does not exist")
 }
 
-fn persist_incoming_attestation(att: &Attestation, db: &IndexingDatabase, existing: &mut Vec<Attestation>) {
-    if existing.contains(att) {
-        return;
-    }
-    existing.push(att.clone());
-    if let Err(error) = db.save_attestations(existing) {
-        tracing::warn!(%error, "failed to persist incoming attestation");
-    }
-    tracing::debug!(
-        content = %att.content,
-        issuer = %att.issuer,
-        kind = %att.kind,
-        "attestation received via gossip"
-    );
+/// Durable state for incoming signed-signal gossip.
+///
+/// Each signal kind is persisted to its own table on receipt so that
+/// `attest verify`, `moderation ls`, and reputation hydration work without any
+/// peer being online at query time.
+struct IncomingSignals {
+    db: IndexingDatabase,
+    attestations: Vec<Attestation>,
+    reports: Vec<ReportRecord>,
+    signals: Vec<ProviderTrustSignal>,
 }
 
-async fn listen_for_attestations(
-    gossip_service: GossipService,
-    data_dir: PathBuf,
-    mut shutdown: broadcast::Receiver<()>,
-) -> Result<()> {
-    let topic_id = gossip_topic_id(ATTESTATION_TOPIC);
-    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
-    let (sender, receiver) = GossipService::split(topic);
-    let topic_channel = TopicChannel::<Attestation>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
-    let mut stream = topic_channel.receive_from(receiver);
-    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-    let mut existing = db.load_attestations()?;
-
-    loop {
-        tokio::select! {
-            _ = shutdown.recv() => {
-                tracing::info!("attestation listener shutting down");
-                break Ok(());
-            }
-            msg = stream.next() => {
-                let Some(att) = msg else {
-                    break Ok(());
-                };
-                persist_incoming_attestation(&att, &db, &mut existing);
-            }
-        }
+impl IncomingSignals {
+    fn open(data_dir: &Path) -> Result<Self> {
+        let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
+        let attestations = db.load_attestations()?;
+        let reports = db.load_content_reports()?;
+        let signals = db.load_provider_trust_signals()?;
+        Ok(Self {
+            db,
+            attestations,
+            reports,
+            signals,
+        })
     }
-}
 
-async fn listen_for_revocations(
-    gossip_service: GossipService,
-    data_dir: PathBuf,
-    mut shutdown: broadcast::Receiver<()>,
-) -> Result<()> {
-    let topic_id = gossip_topic_id(REVOCATION_TOPIC);
-    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
-    let (sender, receiver) = GossipService::split(topic);
-    let topic_channel = TopicChannel::<PrivateLink>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
-    let mut stream = topic_channel.receive_from(receiver);
-    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-    let (pointers, mirrors, mut revoked) = db.load_links()?;
-
-    loop {
-        tokio::select! {
-            _ = shutdown.recv() => {
-                tracing::info!("revocation listener shutting down");
-                break Ok(());
-            }
-            msg = stream.next() => {
-                handle_revocation_message(msg, &mut revoked, &pointers, &mirrors, &db);
-            }
-        }
-    }
-}
-
-fn handle_revocation_message(
-    msg: Option<PrivateLink>,
-    revoked: &mut Vec<PrivateLink>,
-    pointers: &[MutablePointer],
-    mirrors: &[String],
-    db: &IndexingDatabase,
-) {
-    let Some(revocation) = msg else {
-        return;
-    };
-    if !revoked.contains(&revocation) {
-        revoked.push(revocation.clone());
-        tracing::debug!(
-            manifest = %revocation.manifest,
-            "revocation received via gossip"
-        );
-        if let Err(error) = db.save_links(pointers, mirrors, revoked) {
-            tracing::warn!(%error, "failed to persist incoming revocation");
-        }
-    }
-}
-
-async fn listen_for_reports(
-    gossip_service: GossipService,
-    data_dir: PathBuf,
-    mut shutdown: broadcast::Receiver<()>,
-) -> Result<()> {
-    let topic_id = gossip_topic_id(REPORT_TOPIC);
-    let topic = gossip_service.subscribe_and_join(topic_id, Vec::new()).await?;
-    let (sender, receiver) = GossipService::split(topic);
-    let topic_channel = TopicChannel::<ReportRecord>::new(Arc::new(gossip_service.inner().clone()), topic_id, sender);
-    let mut stream = topic_channel.receive_from(receiver);
-    let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-    let mut existing = db.load_content_reports()?;
-
-    loop {
-        tokio::select! {
-            _ = shutdown.recv() => {
-                tracing::info!("report listener shutting down");
-                break Ok(());
-            }
-            msg = stream.next() => {
-                if !handle_report_message(msg, &mut existing, &db) {
-                    break Ok(());
+    /// Persist a verified signal, skipping duplicates. Returns `false` to stop
+    /// the listener if persistence fails.
+    fn persist(&mut self, signal: &SignedSignal) -> Result<bool> {
+        match signal {
+            SignedSignal::Attestation(att) => {
+                if self.attestations.contains(att) {
+                    return Ok(true);
                 }
+                tracing::debug!(content = %att.content, issuer = %att.issuer, kind = %att.kind, "attestation received via gossip");
+                self.attestations.push(att.clone());
+                self.db.save_attestations(&self.attestations)?;
+            }
+            SignedSignal::Report(report) => {
+                if self.reports.contains(report) {
+                    return Ok(true);
+                }
+                tracing::debug!(content = %report.content, reason = %report.reason, "report received via gossip");
+                self.reports.push(report.clone());
+                self.db.save_content_reports(&self.reports)?;
+            }
+            SignedSignal::Trust(trust) => {
+                if self.signals.contains(trust) {
+                    return Ok(true);
+                }
+                tracing::debug!(provider = %trust.provider, kind = ?trust.signal, "trust signal received via gossip");
+                self.signals.push(trust.clone());
+                self.db.save_provider_trust_signals(&self.signals)?;
             }
         }
+        Ok(true)
     }
-}
-
-fn handle_report_message(msg: Option<ReportRecord>, existing: &mut Vec<ReportRecord>, db: &IndexingDatabase) -> bool {
-    let Some(report) = msg else {
-        return false;
-    };
-    tracing::debug!(
-        content = %report.content,
-        reason = %report.reason,
-        "report received via gossip"
-    );
-    if !existing.contains(&report) {
-        existing.push(report);
-        if let Err(error) = db.save_content_reports(existing) {
-            tracing::warn!(%error, "failed to persist incoming report");
-        }
-    }
-    true
 }

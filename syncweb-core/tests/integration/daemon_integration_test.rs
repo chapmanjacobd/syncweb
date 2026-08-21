@@ -768,21 +768,39 @@ impl TwoDaemons {
     }
 }
 
-fn parse_namespace_and_ticket(message: &str) -> Result<(String, String)> {
-    let mut namespace = None;
-    let mut ticket = None;
-    for line in message.lines() {
-        if let Some(value) = line.strip_prefix("namespace: ") {
-            namespace = Some(value.trim().to_owned());
-        }
-        if let Some(value) = line.strip_prefix("ticket: ") {
-            ticket = Some(value.trim().to_owned());
-        }
-    }
-    Ok((
-        namespace.context("no namespace in create-folder response")?,
-        ticket.context("no ticket in create-folder response")?,
-    ))
+fn parse_namespace(message: &str) -> Result<String> {
+    message
+        .lines()
+        .find_map(|line| line.strip_prefix("namespace: "))
+        .map(|value| value.trim().to_owned())
+        .context("no namespace in response")
+}
+
+fn parse_ticket(message: &str) -> Result<String> {
+    message
+        .lines()
+        .find_map(|line| line.strip_prefix("ticket: "))
+        .map(|value| value.trim().to_owned())
+        .context("no ticket in response")
+}
+
+/// Share a folder on daemon A and return a writable ticket for joining on B.
+async fn share_ticket(
+    client: &IpcClient,
+    namespace: &str,
+) -> Result<String> {
+    let share = client
+        .send(IpcRequest::new(IpcCommand::Share {
+            namespace: namespace.to_owned(),
+            writable: true,
+            pin: false,
+            persist: false,
+        }))
+        .await?;
+    let IpcResponse::Ok { message } = &share else {
+        anyhow::bail!("unexpected share response: {share:?}");
+    };
+    parse_ticket(message)
 }
 
 /// Create a folder on daemon A and join it on daemon B with live syncing and
@@ -807,7 +825,8 @@ async fn assert_join_subscribe_filters(
         let IpcResponse::Ok { message } = &create else {
             anyhow::bail!("unexpected create-folder response: {create:?}");
         };
-        let (namespace, ticket) = parse_namespace_and_ticket(message)?;
+        let namespace = parse_namespace(message)?;
+        let ticket = share_ticket(&daemons.client_a, &namespace).await?;
 
         let join_path = dir_b.path().join("joined");
         let join = daemons
@@ -886,7 +905,8 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
         let IpcResponse::Ok { message } = &create else {
             anyhow::bail!("unexpected create-folder response: {create:?}");
         };
-        let (namespace, ticket) = parse_namespace_and_ticket(message)?;
+        let namespace = parse_namespace(message)?;
+        let ticket = share_ticket(&daemons.client_a, &namespace).await?;
 
         let file_path = folder_path.join("hello.txt");
         fs::write(&file_path, b"hello from A")?;

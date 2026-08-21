@@ -173,6 +173,19 @@ pub enum IpcCommand {
         namespace: String,
         blob: String,
     },
+    Share {
+        namespace: String,
+        writable: bool,
+        #[serde(default)]
+        pin: bool,
+        #[serde(default)]
+        persist: bool,
+    },
+    ShareList,
+    Unshare {
+        namespace: String,
+        writable: bool,
+    },
     SnapshotCreate {
         path: PathBuf,
         description: Option<String>,
@@ -925,6 +938,9 @@ impl IpcServer {
                 delete_files,
             } => self.handle_leave_folder(namespace, delete_files).await,
             C::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
+            C::Share { .. } | C::ShareList | C::Unshare { .. } => {
+                self.handle_share_group(request.command).await
+            }
             C::SnapshotCreate {
                 path,
                 description,
@@ -1738,8 +1754,8 @@ impl IpcServer {
                     tracing::warn!(%namespace, "folder already in daemon registry");
                 }
                 match folder.ticket(context.node.endpoint().addr(), true).await {
-                    Ok(ticket) => IpcResponse::Ok {
-                        message: format!("namespace: {namespace}\nticket: {ticket}"),
+                    Ok(_ticket) => IpcResponse::Ok {
+                        message: format!("namespace: {namespace}"),
                     },
                     Err(error) => response_from_error(error),
                 }
@@ -2092,6 +2108,132 @@ impl IpcServer {
                 message: format!("unpublished: {blob}"),
             },
             Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_share_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if let IpcCommand::Share {
+            namespace,
+            writable,
+            pin,
+            persist,
+        } = cmd
+        {
+            return self.handle_share(namespace, writable, ShareOptions { pin, persist }).await;
+        }
+        if matches!(cmd, IpcCommand::ShareList) {
+            return self.handle_share_list();
+        }
+        if let IpcCommand::Unshare { namespace, writable } = cmd {
+            return self.handle_unshare(namespace, writable).await;
+        }
+        IpcResponse::Error {
+            message: format!("unhandled share command: {cmd:?}"),
+        }
+    }
+
+    async fn handle_share(
+        &self,
+        namespace: String,
+        writable: bool,
+        options: ShareOptions,
+    ) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon share IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(f) => f,
+            Err(error) => return response_from_error(error),
+        };
+        if options.pin
+            && let Err(error) = folder.pin_all_content().await
+        {
+            return response_from_error(error);
+        }
+        let ticket = match folder.ticket(context.node.endpoint().addr(), writable).await {
+            Ok(t) => t,
+            Err(error) => return response_from_error(error),
+        };
+        let access = if writable { "write" } else { "read" };
+        if options.persist
+            && let Some(node_db) = &self.node_db
+            && let Err(error) = node_db.add_share(&namespace_id.to_string(), access, &ticket.to_string())
+        {
+            return response_from_error(error);
+        }
+        IpcResponse::Ok {
+            message: format!("namespace: {namespace_id}\naccess: {access}\nticket: {ticket}"),
+        }
+    }
+
+    fn handle_share_list(&self) -> IpcResponse {
+        let Some(node_db) = &self.node_db else {
+            return IpcResponse::Error {
+                message: "daemon share-list IPC is unavailable: no node database".to_owned(),
+            };
+        };
+        match node_db.list_shares() {
+            Ok(shares) => {
+                if shares.is_empty() {
+                    return IpcResponse::Ok {
+                        message: "no shares".to_owned(),
+                    };
+                }
+                let mut lines = Vec::new();
+                for (namespace, access, ticket) in shares {
+                    lines.push(format!("namespace: {namespace}\naccess: {access}\nticket: {ticket}"));
+                }
+                IpcResponse::Ok {
+                    message: lines.join("\n\n"),
+                }
+            }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_unshare(&self, namespace: String, writable: bool) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon unshare IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let access = if writable { "write" } else { "read" };
+        if let Some(node_db) = &self.node_db
+            && let Err(error) = node_db.remove_share(&namespace_id.to_string(), access)
+        {
+            return response_from_error(error);
+        }
+        let manager = FolderManager::new(&context.node);
+        if let Ok(folder) = manager.get(namespace_id).await {
+            let _ = folder.unpin_all_content().await;
+        }
+        IpcResponse::Ok {
+            message: format!("unshared: {namespace_id} ({access})"),
         }
     }
 
@@ -2894,6 +3036,15 @@ async fn resolve_folder_for_daemon(
 #[derive(Clone, Debug)]
 pub struct IpcClient {
     socket_path: PathBuf,
+}
+
+/// Options controlling how a folder is shared.
+#[derive(Clone, Copy, Debug, Default)]
+struct ShareOptions {
+    /// Pin the folder's blobs so shared content is retained.
+    pin: bool,
+    /// Persist the share record so it can be listed and unshared later.
+    persist: bool,
 }
 
 impl IpcClient {

@@ -17,10 +17,10 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand, PublishBlobArgs,
-        PublishCommand, PublishFolderArgs, ScheduleCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        PublishCommand, ScheduleCommand, ShareArgs, ShareCommand, ShareRemoveArgs, ShutdownArgs, SnapshotCommand,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
+        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
+        TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -38,7 +38,7 @@ use syncweb_core::{
         DropImporter, FolderLike, FolderManager, PackageCatalog, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
-    init::{InitResult, open_node},
+    init::open_node,
     mirror::{MirrorContext, MirrorEvent, MirrorOptions, mirror_network, mirror_provider},
     net::{NetworkLogger, NetworkManager, NetworkOptions, TransportFallback},
     node::{
@@ -217,6 +217,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Publish { command } => handle_publish(&ctx, command).await?,
+        Command::Share(args) => handle_share(&ctx, args).await?,
         Command::Unpublish(command) => handle_unpublish(&ctx, command).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
@@ -2544,23 +2545,17 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
-    let ticket = folder.ticket(node.endpoint().addr(), true).await?;
-    let result = InitResult::new(&command.path, folder.namespace_id(), ticket);
     if output_json {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "path": command.path,
                 "namespace": folder.namespace_id().to_string(),
-                "ticket": result.ticket.to_string(),
-                "share_url": result.share_url,
             }))?
         );
     } else {
-        println!("path: {}", result.path.display());
-        println!("namespace: {}", result.namespace);
-        println!("ticket: {}", result.ticket);
-        println!("share_url: {}", result.share_url);
+        println!("path: {}", command.path.display());
+        println!("namespace: {}", folder.namespace_id());
     }
     if do_import && dir_has_entries(&command.path)? {
         let importer = ParallelImporter::new(
@@ -2757,23 +2752,40 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
 
 async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result<()> {
     match command {
-        PublishCommand::Folder(args) => handle_publish_folder(ctx, args).await,
         PublishCommand::Blob(args) => handle_publish_blob(ctx, args).await,
         PublishCommand::Catalog(args) => cli::indexing::handle_catalog_publish(ctx, args).await,
     }
 }
 
-async fn handle_publish_folder(ctx: &CliContext<'_>, args: PublishFolderArgs) -> Result<()> {
+async fn handle_share(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
+    match args.command {
+        Some(ShareCommand::List) => handle_share_list(ctx).await,
+        Some(ShareCommand::Remove(remove)) => handle_share_remove(ctx, remove).await,
+        None => handle_share_add(ctx, args).await,
+    }
+}
+
+async fn handle_share_add(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     let selector = args
         .namespace
-        .unwrap_or_else(|| args.path.to_string_lossy().to_string());
+        .clone()
+        .unwrap_or_else(|| {
+            args.path
+                .as_ref()
+                .map_or_else(|| ".".to_owned(), |p| p.to_string_lossy().to_string())
+        });
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
-            .send(IpcRequest::new(IpcCommand::Publish { namespace, blob: None }))
+            .send(IpcRequest::new(IpcCommand::Share {
+                namespace,
+                writable: args.write,
+                pin: !args.no_pin,
+                persist: !args.no_persist,
+            }))
             .await?;
         return print_daemon_message(response, output_json);
     }
@@ -2781,11 +2793,92 @@ async fn handle_publish_folder(ctx: &CliContext<'_>, args: PublishFolderArgs) ->
     let manager = FolderManager::new(&node);
     let namespace = resolve_namespace(&manager, &selector).await?;
     let folder = manager.get(namespace).await?;
-    let ticket = folder.ticket(node.endpoint().addr(), false).await?;
+    let pinned = if args.no_pin { 0 } else { folder.pin_all_content().await? };
+    let ticket = folder.ticket(node.endpoint().addr(), args.write).await?;
+    let access = if args.write { "write" } else { "read" };
+    if !args.no_persist {
+        open_node_db(data_dir)?.add_share(&namespace.to_string(), access, &ticket.to_string())?;
+    }
     if output_json {
-        println!("{}", serde_json::json!({"ticket": ticket.to_string()}));
+        println!(
+            "{}",
+            serde_json::json!({
+                "namespace": namespace,
+                "access": access,
+                "ticket": ticket.to_string(),
+                "pinned": pinned,
+            })
+        );
     } else {
+        println!("namespace: {namespace}");
+        println!("access: {access}");
         println!("ticket: {ticket}");
+        if pinned > 0 {
+            println!("pinned: {pinned} blobs");
+        }
+    }
+    node.stop().await?;
+    Ok(())
+}
+
+async fn handle_share_list(ctx: &CliContext<'_>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let response = client.send(IpcRequest::new(IpcCommand::ShareList)).await?;
+        return print_daemon_message(response, output_json);
+    }
+    let shares = open_node_db(data_dir)?.list_shares()?;
+    if shares.is_empty() {
+        println!("no shares");
+    } else {
+        for (namespace, access, ticket) in shares {
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({"namespace": namespace, "access": access, "ticket": ticket})
+                );
+            } else {
+                println!("namespace: {namespace}");
+                println!("access: {access}");
+                println!("ticket: {ticket}");
+                println!();
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_share_remove(ctx: &CliContext<'_>, remove: ShareRemoveArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+    let selector = remove
+        .namespace
+        .unwrap_or_else(|| remove.path.to_string_lossy().to_string());
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
+        let response = client
+            .send(IpcRequest::new(IpcCommand::Unshare {
+                namespace,
+                writable: remove.write,
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = resolve_namespace(&manager, &selector).await?;
+    let access = if remove.write { "write" } else { "read" };
+    open_node_db(data_dir)?.remove_share(&namespace.to_string(), access)?;
+    if let Ok(folder) = manager.get(namespace).await {
+        let _ = folder.unpin_all_content().await;
+    }
+    if output_json {
+        println!("{}", serde_json::json!({"status": "unshared", "namespace": namespace, "access": access}));
+    } else {
+        println!("unshared: {namespace} ({access})");
     }
     node.stop().await?;
     Ok(())

@@ -472,7 +472,6 @@ fn create_with_relay_fallback() -> anyhow::Result<()> {
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(info.stdout().contains("namespace:"));
-    ensure!(info.stdout().contains("ticket:"));
 
     Ok(())
 }
@@ -726,9 +725,15 @@ fn create_no_import_skips_scanning() -> anyhow::Result<()> {
         "--no-import",
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
-    let info = TicketInfo::from_stdout(&output.stdout())?;
+    let namespace = output
+        .stdout()
+        .lines()
+        .find_map(|line| line.strip_prefix("namespace: "))
+        .map(str::trim)
+        .context("create should print a namespace")?
+        .to_owned();
 
-    let report = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &info.namespace])?;
+    let report = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &namespace])?;
     let value: serde_json::Value = serde_json::from_str(&report.stdout()).context("parse stats files JSON")?;
     ensure!(
         value.get("total_files") == Some(&serde_json::Value::from(0)),

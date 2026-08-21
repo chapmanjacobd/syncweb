@@ -16,7 +16,7 @@ pub enum Command {
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
     DaemonSync(DaemonSyncArgs),
-    #[command(about = "Create a synchronized folder and print a shareable URL")]
+    #[command(about = "Create a private synchronized folder and print a writable join ticket")]
     Create(FolderCreate),
     #[command(about = "Join a folder from an Iroh document ticket")]
     Join(FolderJoin),
@@ -62,11 +62,13 @@ pub enum Command {
     },
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
-    #[command(about = "Publish a folder, blob, or catalog")]
+    #[command(about = "Publish a blob or catalog for public access")]
     Publish {
         #[command(subcommand)]
         command: PublishCommand,
     },
+    #[command(about = "Share a folder, printing a ticket (read-only by default, --write for write access)")]
+    Share(ShareArgs),
     #[command(about = "Remove a public blob pin")]
     Unpublish(UnpublishArgs),
     #[command(about = "Create, version, publish, and manage collection packages")]
@@ -743,20 +745,10 @@ pub enum ScheduleCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PublishCommand {
-    #[command(about = "Publish a folder ticket for public read access")]
-    Folder(PublishFolderArgs),
     #[command(about = "Publish a content hash as an unauthenticated blob ticket")]
     Blob(PublishBlobArgs),
     #[command(about = "Publish folder metadata to a catalog")]
     Catalog(PublishCatalogArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct PublishFolderArgs {
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
-    #[arg(long, help = "Namespace ID or managed folder path")]
-    pub namespace: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -782,6 +774,44 @@ pub struct UnpublishArgs {
     pub namespace: String,
     #[arg(long, help = "Blob content hash to unpublish")]
     pub blob: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ShareArgs {
+    #[arg(default_value = ".", value_name = "PATH", help = "Folder path or namespace to share")]
+    pub path: Option<PathBuf>,
+    #[arg(long, help = "Namespace ID or managed folder path")]
+    pub namespace: Option<String>,
+    #[arg(
+        long = "write",
+        alias = "writable",
+        help = "Grant write access (default: read-only)"
+    )]
+    pub write: bool,
+    #[arg(long, help = "Skip pinning the shared folder's blobs")]
+    pub no_pin: bool,
+    #[arg(long, help = "Skip persisting the share record")]
+    pub no_persist: bool,
+    #[command(subcommand)]
+    pub command: Option<ShareCommand>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ShareCommand {
+    #[command(about = "List persisted folder shares")]
+    List,
+    #[command(name = "rm", alias = "remove", about = "Stop sharing a folder")]
+    Remove(ShareRemoveArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ShareRemoveArgs {
+    #[arg(default_value = ".", value_name = "PATH", help = "Folder path or namespace to stop sharing")]
+    pub path: PathBuf,
+    #[arg(long, help = "Namespace ID or managed folder path")]
+    pub namespace: Option<String>,
+    #[arg(long = "write", alias = "writable", help = "Remove the write-access share (default: read-only)")]
+    pub write: bool,
 }
 
 #[derive(Debug, Subcommand)]

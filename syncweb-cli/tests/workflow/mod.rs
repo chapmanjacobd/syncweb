@@ -95,7 +95,15 @@ impl Device {
 
     pub fn create(&self, path: &Path) -> anyhow::Result<TicketInfo> {
         let output = self.run_ok(&["--no-daemon", "create", path.to_str().context("UTF-8 path")?])?;
-        TicketInfo::from_stdout(&output.stdout())
+        let namespace = output
+            .stdout()
+            .lines()
+            .find_map(|line| line.strip_prefix("namespace: "))
+            .map(str::trim)
+            .context("create should print a namespace")?
+            .to_owned();
+        let share = self.run_ok(&["--no-daemon", "share", "--namespace", &namespace, "--write"])?;
+        TicketInfo::from_stdout(&share.stdout())
     }
 
     pub fn join(&self, ticket: &str, path: &Path) -> anyhow::Result<CmdOutput> {

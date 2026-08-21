@@ -87,7 +87,6 @@ fn test_no_daemon_create_routes_embedded() -> anyhow::Result<()> {
     ensure!(output.status.success());
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("namespace:"));
-    ensure!(stdout.contains("ticket:"));
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
@@ -277,7 +276,6 @@ fn test_daemon_create_via_ipc() -> anyhow::Result<()> {
     ensure!(create.status.success(), "create should succeed via daemon");
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("namespace:"));
-    ensure!(stdout.contains("ticket:"));
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
     ensure!(shutdown.status.success());
@@ -463,8 +461,8 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
         .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
 
     if let Some(ns) = namespace {
-        let publish = syncweb(&["--data-dir", data_dir_arg, "publish", "folder", "--namespace", ns])?;
-        ensure!(publish.status.success(), "publish should succeed via daemon");
+        let publish = syncweb(&["--data-dir", data_dir_arg, "share", "--namespace", ns])?;
+        ensure!(publish.status.success(), "share should succeed via daemon");
         let pub_stdout = String::from_utf8(publish.stdout).context("UTF-8 output")?;
         ensure!(pub_stdout.contains("ticket:"));
     }
@@ -828,7 +826,6 @@ fn test_cli_no_daemon_flag_bypasses_daemon() -> anyhow::Result<()> {
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("namespace:"));
-    ensure!(stdout.contains("ticket:"));
 
     let folders = syncweb(&["--data-dir", data_dir_arg, "status"])?;
     let status_stdout = String::from_utf8(folders.stdout).context("UTF-8 output")?;
@@ -1034,11 +1031,20 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let ticket = create_out
+    let namespace = create_out
+        .lines()
+        .find_map(|line| line.strip_prefix("namespace: "))
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", "--namespace", &namespace, "--write"])?;
+    ensure!(share.status.success(), "share should succeed");
+    let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
+    let ticket = share_out
         .lines()
         .find_map(|line| line.strip_prefix("ticket: "))
         .map(str::trim)
-        .context("create should output a ticket")?
+        .context("share should output a ticket")?
         .to_owned();
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
@@ -1173,11 +1179,20 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let ticket = create_out
+    let namespace = create_out
+        .lines()
+        .find_map(|line| line.strip_prefix("namespace: "))
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", "--namespace", &namespace, "--write"])?;
+    ensure!(share.status.success(), "share should succeed");
+    let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
+    let ticket = share_out
         .lines()
         .find_map(|line| line.strip_prefix("ticket: "))
         .map(str::trim)
-        .context("create should output a ticket")?
+        .context("share should output a ticket")?
         .to_owned();
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;

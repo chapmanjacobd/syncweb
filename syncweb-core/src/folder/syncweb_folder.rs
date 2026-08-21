@@ -301,6 +301,44 @@ impl SyncwebFolder {
     pub async fn unpublish_blob(&self, hash: Hash) -> Result<()> {
         self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await
     }
+
+    /// Pin every blob currently referenced by the folder's document so the
+    /// shared content is retained (not evicted by garbage collection).
+    ///
+    /// Returns the number of distinct blobs pinned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder's entries cannot be read or a pin fails.
+    pub async fn pin_all_content(&self) -> Result<usize> {
+        let entries = self.docs_engine.list_latest(&self.doc).await?;
+        let mut pinned = 0_usize;
+        for entry in entries {
+            let hash = entry.content_hash();
+            self.blob_store.pin(public_pin_name(self.namespace_id, hash), hash).await?;
+            pinned = pinned.saturating_add(1);
+        }
+        Ok(pinned)
+    }
+
+    /// Remove the retention pins placed by [`pin_all_content`](Self::pin_all_content)
+    /// for every blob currently referenced by the folder's document.
+    ///
+    /// Returns the number of pins removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder's entries cannot be read or an unpin fails.
+    pub async fn unpin_all_content(&self) -> Result<usize> {
+        let entries = self.docs_engine.list_latest(&self.doc).await?;
+        let mut unpinned = 0_usize;
+        for entry in entries {
+            let hash = entry.content_hash();
+            self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await?;
+            unpinned = unpinned.saturating_add(1);
+        }
+        Ok(unpinned)
+    }
 }
 
 #[async_trait]

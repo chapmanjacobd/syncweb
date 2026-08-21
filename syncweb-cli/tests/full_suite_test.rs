@@ -268,7 +268,6 @@ fn create_folders_list_works() -> anyhow::Result<()> {
     assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print ticket: {stdout}");
 
     let folders = run_with_data(&data_dir, &["--no-daemon", "folders"])?;
     assert_success(&folders, "folders")?;
@@ -953,8 +952,10 @@ fn create_outputs_all_fields() -> anyhow::Result<()> {
     let stdout = stdout_string(&output)?;
     ensure!(stdout.contains("path:"), "should print path: {stdout}");
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print ticket: {stdout}");
-    ensure!(stdout.contains("share_url:"), "should print share_url: {stdout}");
+    ensure!(
+        !stdout.contains("ticket"),
+        "create should not print a ticket (use share): {stdout}"
+    );
     Ok(())
 }
 

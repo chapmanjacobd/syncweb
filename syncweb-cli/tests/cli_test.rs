@@ -167,7 +167,6 @@ fn test_create_command() -> anyhow::Result<()> {
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("namespace: "), "should print namespace: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print ticket: {stdout}");
     Ok(())
 }
 
@@ -232,8 +231,13 @@ fn test_join_command() -> anyhow::Result<()> {
         .output()
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
-    let create_stdout = String::from_utf8(create_output.stdout).context("UTF-8 output")?;
-    let ticket = create_stdout
+    let share_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", &data_dir, "--no-daemon", "share", "--write"])
+        .output()
+        .context("run syncweb share")?;
+    ensure!(share_output.status.success());
+    let share_stdout = String::from_utf8(share_output.stdout).context("UTF-8 output")?;
+    let ticket = share_stdout
         .lines()
         .find(|line| line.starts_with("ticket: "))
         .context("should have ticket line")?
@@ -829,8 +833,104 @@ fn test_create_outputs_url() -> anyhow::Result<()> {
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("path:"), "should print path: {stdout}");
     ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print ticket: {stdout}");
-    ensure!(stdout.contains("share_url:"), "should print share_url: {stdout}");
+    ensure!(
+        !stdout.contains("ticket"),
+        "create should not print a ticket (sharing is `share`): {stdout}"
+    );
+    ensure!(
+        !stdout.contains("share_url"),
+        "create should not print a share_url: {stdout}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_share_read_only_and_write() -> anyhow::Result<()> {
+    let directory = cli_test_dir("share-test");
+    let data_dir = cli_test_dir("share-data");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "create",
+            "--no-import",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb create")?;
+    ensure!(create.status.success());
+
+    let read = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb share (read-only)")?;
+    ensure!(read.status.success());
+    let read_out = String::from_utf8(read.stdout).context("UTF-8 output")?;
+    ensure!(
+        read_out.contains("access: read"),
+        "default share should be read-only: {read_out}"
+    );
+    ensure!(read_out.contains("ticket:"), "should print ticket: {read_out}");
+
+    let write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            directory.to_str().context("UTF-8 path")?,
+            "--write",
+        ])
+        .output()
+        .context("run syncweb share --write")?;
+    ensure!(write.status.success());
+    let write_out = String::from_utf8(write.stdout).context("UTF-8 output")?;
+    ensure!(
+        write_out.contains("access: write"),
+        "share --write should be write access: {write_out}"
+    );
+
+    let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            "list",
+        ])
+        .output()
+        .context("run syncweb share list")?;
+    ensure!(list.status.success());
+    let list_out = String::from_utf8(list.stdout).context("UTF-8 output")?;
+    ensure!(
+        list_out.contains("access: read") && list_out.contains("access: write"),
+        "share list should show both shares: {list_out}"
+    );
+
+    let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            "rm",
+            directory.to_str().context("UTF-8 path")?,
+            "--write",
+        ])
+        .output()
+        .context("run syncweb share rm --write")?;
+    ensure!(rm.status.success());
+
+    std::fs::remove_dir_all(&directory).context("cleanup folder")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
     Ok(())
 }
 
@@ -1158,7 +1258,12 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
         .output()
         .context("create folder for ticket")?;
     ensure!(create.status.success());
-    let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let share = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "--no-daemon", "share", "--write"])
+        .output()
+        .context("share folder for ticket")?;
+    ensure!(share.status.success());
+    let stdout = String::from_utf8(share.stdout).context("UTF-8 output")?;
     let ticket = stdout
         .lines()
         .find(|l| l.starts_with("ticket: "))

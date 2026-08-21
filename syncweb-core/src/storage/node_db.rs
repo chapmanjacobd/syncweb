@@ -266,6 +266,13 @@ impl NodeDatabase {
             size INTEGER NOT NULL,
             subscribed_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS shares (
+            namespace_id TEXT NOT NULL,
+            access TEXT NOT NULL CHECK(access IN ('read','write')),
+            ticket TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY(namespace_id, access)
+        );
         CREATE TABLE IF NOT EXISTS workspace_manifests (
             source_path TEXT NOT NULL,
             manifest_bytes BLOB NOT NULL,
@@ -1350,6 +1357,83 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to remove subscription", error))?;
         drop(connection);
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Share registry methods
+    // ------------------------------------------------------------------
+
+    /// Persist a folder share record (upsert by namespace + access).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn add_share(&self, namespace_id: &str, access: &str, ticket: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "INSERT INTO shares (namespace_id, access, ticket, created_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(namespace_id, access)
+                 DO UPDATE SET ticket = excluded.ticket",
+                params![
+                    namespace_id,
+                    access,
+                    ticket,
+                    current_timestamp().cast_signed()
+                ],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save share record", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Remove a persisted folder share record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn remove_share(&self, namespace_id: &str, access: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM shares WHERE namespace_id = ?1 AND access = ?2",
+                params![namespace_id, access],
+            )
+            .map_err(|error| SyncwebError::operation("failed to remove share record", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load all persisted folder share records as `(namespace_id, access, ticket)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn list_shares(&self) -> Result<Vec<(String, String, String)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT namespace_id, access, ticket FROM shares ORDER BY created_at")
+            .map_err(|error| SyncwebError::operation("failed to prepare share query", error))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query shares", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read share rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(rows)
     }
 
     // ------------------------------------------------------------------

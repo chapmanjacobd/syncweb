@@ -1,5 +1,27 @@
 # Command Designs
 
+## Sharing model
+
+syncweb separates "creating" from "sharing/publishing". `create` provisions a local
+namespace; `share`/`publish` make something discoverable/fetchable by others.
+
+| Level | Command | Access | What you get |
+|-------|---------|--------|--------------|
+| Create | `create <path>` | Local | Prints only `path` and `namespace`. Content is private until you share or publish it. |
+| Share | `share <path>` | Public, read-only access (default) | A read-only access folder `ticket` anyone can use to fetch content. Persisted + pins folder blobs. |
+| Share | `share <path> --write` | Public, write access | A write-access folder `ticket`; holders can edit. Persisted + pins folder blobs. |
+| Share | `share list` / `share rm <path>` | — | List or remove persisted shares (rm unpins folder blobs). |
+| Publish | `publish blob <ns> <hash>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. |
+| Publish | `publish catalog <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
+| Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
+| Unpublish | `unpublish <ns> --blob <hash>` | — | Removes a public blob pin. |
+
+Key distinction: `create` provisions a folder and prints only its identity; `share` derives a
+read-only access ticket by default, or a write-access ticket with `--write`. Hand a
+`--write` ticket only to collaborators you trust to edit; hand a read-only ticket to anyone
+who may fetch the content. `share` persists the record (see `share list` / `share rm`) and
+pins the folder's blobs by default (`--no-pin` to skip, `--no-persist` to avoid saving).
+
 ## `find` Command Design
 
 Full-text search across folder entries with regex, glob, or exact substring matching,
@@ -319,31 +341,31 @@ syncweb sort --sort niche music/ | syncweb download -
 
 ## `create`/`config` Command Design
 
-The `create` command creates a folder and outputs a shareable URL (namespace, ticket,
-and `syncweb://` share URL). The `config` command manages local configuration (data dir,
+The `create` command provisions a local folder and prints only its `path` and `namespace`.
+It does not emit a ticket or URL — sharing is a separate step via `share` (see the
+sharing-model section above). The `config` command manages local configuration (data dir,
 default paths, sync modes, filters).
 
 ### Create Command
 
 ```rust
 struct InitResult {
-    folder_id: String,
-    share_url: String,
     path: PathBuf,
     namespace_id: NamespaceId,
 }
 
 impl IrohNode {
-    /// Create a folder: create dir, set up namespace, output URL
+    /// Create a folder: create dir, set up namespace
     async fn create_folder(&self, path: &Path, opts: CreateOptions) -> Result<InitResult>;
 }
 ```
 
 CLI:
 ```bash
-# Create folder + output URL
+# Create folder (prints only path + namespace)
 syncweb create ./documents
-# Output: syncweb://<namespace>?ticket=<ticket>
+# Output: path: ./documents
+#         namespace: <ns>
 
 # Create with sync mode
 syncweb create --mode sendreceive ./documents
@@ -359,6 +381,29 @@ syncweb create --relay-fallback ./documents
 syncweb create ./documents
 # Equivalent explicit flag; use --no-import to skip scanning:
 syncweb create --no-import ./documents
+```
+
+### Share Command
+
+```bash
+# Share a folder with public read-only access (default) + persist + pin
+syncweb share ./documents
+# Output: namespace: <ns>
+#         access: read
+#         ticket: <read-only ticket>
+
+# Share with write access
+syncweb share ./documents --write
+
+# Skip pinning and/or persistence
+syncweb share ./documents --no-pin --no-persist
+
+# Share by namespace directly
+syncweb share --namespace <ns> --write
+
+# List and remove persisted shares
+syncweb share list
+syncweb share rm ./documents --write
 ```
 
 ### Config Command
@@ -406,7 +451,7 @@ syncweb config set discovery.interface eth0
 
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
-| `create` | `create` | Create folder + doc + blob store + shareable URL |
+| `create` | `create` | Create folder + doc + blob store + write-access ticket |
 | `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
 | `accept` | `accept` | Grant capability to peer |
 | `drop` | `drop` | Revoke capability, remove peer |
@@ -427,7 +472,9 @@ syncweb config set discovery.interface eth0
 | (implicit) | `import` | Import local files to blob store + doc entries |
 | | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
 | | `public list` | List announced public folders |
-| | `publish folder` | Publish a folder ticket for public read access |
+| | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
+| | `share list` | List persisted folder shares |
+| | `share rm` | Stop sharing a folder (unpins folder blobs) |
 | | `publish blob` | Publish a content hash as an unauthenticated blob ticket |
 | | `publish catalog` | Publish folder metadata to a catalog |
 | | `unpublish` | Remove a public blob pin |
@@ -519,11 +566,17 @@ syncweb join <folder> --subscribe
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
-# Publish a folder, a blob, or folder metadata to a catalog
-syncweb publish folder /path/to/folder
-syncweb publish folder . --namespace <namespace-id>
+# Share a folder (read-only by default, --write for write access), publish a blob,
+# or publish folder metadata to a catalog
+syncweb share /path/to/folder
+syncweb share /path/to/folder --write
+syncweb share . --namespace <namespace-id>
 syncweb publish blob <namespace-id> <hash>
 syncweb publish catalog /path/to/folder --catalog <name> --tag music
+
+# List and remove persisted shares
+syncweb share list
+syncweb share rm /path/to/folder --write
 
 # Unpublish a public blob pin
 syncweb unpublish <namespace-id> --blob <hash>

@@ -315,7 +315,9 @@ impl SyncwebFolder {
         let mut pinned = 0_usize;
         for entry in entries {
             let hash = entry.content_hash();
-            self.blob_store.pin(public_pin_name(self.namespace_id, hash), hash).await?;
+            self.blob_store
+                .pin(public_pin_name(self.namespace_id, hash), hash)
+                .await?;
             pinned = pinned.saturating_add(1);
         }
         Ok(pinned)

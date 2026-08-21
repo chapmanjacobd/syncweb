@@ -793,33 +793,7 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-publish-command-$line[1]:"
         case $line[1] in
-            (folder)
-_arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path:_files' \
-&& ret=0
-;;
-(blob)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':namespace -- Namespace ID or managed folder path:_default' \
-':hash -- Content hash to publish as an unauthenticated blob ticket:_default' \
-&& ret=0
-;;
-(catalog)
+            (catalog)
 _arguments "${_arguments_options[@]}" : \
 '--catalog=[]:CATALOG:_default' \
 '*--tag=[]:TAGS:_default' \
@@ -837,9 +811,33 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(unpublish)
+(share)
 _arguments "${_arguments_options[@]}" : \
-'--blob=[Blob content hash to unpublish]:BLOB:_default' \
+'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
+'--blob=[Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--write[Grant write access (default\: read-only)]' \
+'--no-pin[Skip pinning the shared folder'\''s blobs]' \
+'--no-persist[Skip persisting the share record]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Folder path or namespace to share:_files' \
+":: :_syncweb__subcmd__share_commands" \
+"*::: :->share" \
+&& ret=0
+
+    case $state in
+    (share)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-share-command-$line[2]:"
+        case $line[2] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -847,8 +845,26 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':namespace -- Namespace ID or managed folder path:_default' \
 && ret=0
+;;
+(rm)
+_arguments "${_arguments_options[@]}" : \
+'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
+'--blob=[Remove a shared blob pin]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--write[Remove the write-access share (default\: read-only)]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Folder path or namespace to stop sharing:_files' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (package)
 _arguments "${_arguments_options[@]}" : \
@@ -1966,7 +1982,7 @@ _syncweb_commands() {
 'status:Show the local daemon status' \
 'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
-'create:Create a synchronized folder and print a shareable URL' \
+'create:Create a private synchronized folder and print a writable join ticket' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave a synchronized folder, optionally deleting its local files' \
 'folders:List managed folders' \
@@ -1983,8 +1999,8 @@ _syncweb_commands() {
 'watch:Watch a folder and import filesystem changes' \
 'stats:Show statistics for folders, files, and seeding status' \
 'verify:Re-check local folder blob integrity' \
-'publish:Publish a folder, blob, or catalog' \
-'unpublish:Remove a public blob pin' \
+'publish:Publish folder metadata to a catalog' \
+'share:Share a folder, printing a ticket (read-only by default, --write for write access)' \
 'package:Create, version, publish, and manage collection packages' \
 'network:Network connectivity utilities' \
 'db:Database maintenance\: check, vacuum, stats, backup' \
@@ -2449,31 +2465,37 @@ _syncweb__subcmd__provider__subcmd__add_commands() {
 (( $+functions[_syncweb__subcmd__publish_commands] )) ||
 _syncweb__subcmd__publish_commands() {
     local commands; commands=(
-'folder:Publish a folder ticket for public read access' \
-'blob:Publish a content hash as an unauthenticated blob ticket' \
 'catalog:Publish folder metadata to a catalog' \
     )
     _describe -t commands 'syncweb publish commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__publish__subcmd__blob_commands] )) ||
-_syncweb__subcmd__publish__subcmd__blob_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb publish blob commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__publish__subcmd__catalog_commands] )) ||
 _syncweb__subcmd__publish__subcmd__catalog_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb publish catalog commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__publish__subcmd__folder_commands] )) ||
-_syncweb__subcmd__publish__subcmd__folder_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb publish folder commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__reload_commands] )) ||
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__share_commands] )) ||
+_syncweb__subcmd__share_commands() {
+    local commands; commands=(
+'list:List persisted folder shares' \
+'rm:Stop sharing a folder or blob' \
+    )
+    _describe -t commands 'syncweb share commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__share__subcmd__list_commands] )) ||
+_syncweb__subcmd__share__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb share list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__share__subcmd__rm_commands] )) ||
+_syncweb__subcmd__share__subcmd__rm_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb share rm commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__shutdown_commands] )) ||
 _syncweb__subcmd__shutdown_commands() {
@@ -2711,11 +2733,6 @@ _syncweb__subcmd__trust__subcmd__stream__subcmd__publish_commands() {
 _syncweb__subcmd__trust__subcmd__stream__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb trust stream subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__unpublish_commands] )) ||
-_syncweb__subcmd__unpublish_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb unpublish commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

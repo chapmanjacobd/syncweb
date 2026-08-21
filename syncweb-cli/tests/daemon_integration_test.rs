@@ -1037,7 +1037,14 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         .map(str::trim)
         .context("create should output a namespace")?
         .to_owned();
-    let share = syncweb(&["--data-dir", alice_data_arg, "share", "--namespace", &namespace, "--write"])?;
+    let share = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "share",
+        "--namespace",
+        &namespace,
+        "--write",
+    ])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
     let ticket = share_out
@@ -1185,7 +1192,14 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
         .map(str::trim)
         .context("create should output a namespace")?
         .to_owned();
-    let share = syncweb(&["--data-dir", alice_data_arg, "share", "--namespace", &namespace, "--write"])?;
+    let share = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "share",
+        "--namespace",
+        &namespace,
+        "--write",
+    ])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
     let ticket = share_out

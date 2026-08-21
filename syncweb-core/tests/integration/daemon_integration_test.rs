@@ -785,13 +785,11 @@ fn parse_ticket(message: &str) -> Result<String> {
 }
 
 /// Share a folder on daemon A and return a writable ticket for joining on B.
-async fn share_ticket(
-    client: &IpcClient,
-    namespace: &str,
-) -> Result<String> {
+async fn share_ticket(client: &IpcClient, namespace: &str) -> Result<String> {
     let share = client
         .send(IpcRequest::new(IpcCommand::Share {
             namespace: namespace.to_owned(),
+            blob: None,
             writable: true,
             pin: false,
             persist: false,

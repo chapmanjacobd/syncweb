@@ -62,15 +62,13 @@ pub enum Command {
     },
     #[command(about = "Re-check local folder blob integrity")]
     Verify(VerifyArgs),
-    #[command(about = "Publish a blob or catalog for public access")]
+    #[command(about = "Publish folder metadata to a catalog")]
     Publish {
         #[command(subcommand)]
         command: PublishCommand,
     },
     #[command(about = "Share a folder, printing a ticket (read-only by default, --write for write access)")]
     Share(ShareArgs),
-    #[command(about = "Remove a public blob pin")]
-    Unpublish(UnpublishArgs),
     #[command(about = "Create, version, publish, and manage collection packages")]
     Package {
         #[command(subcommand)]
@@ -745,18 +743,8 @@ pub enum ScheduleCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PublishCommand {
-    #[command(about = "Publish a content hash as an unauthenticated blob ticket")]
-    Blob(PublishBlobArgs),
     #[command(about = "Publish folder metadata to a catalog")]
     Catalog(PublishCatalogArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct PublishBlobArgs {
-    #[arg(help = "Namespace ID or managed folder path")]
-    pub namespace: String,
-    #[arg(help = "Content hash to publish as an unauthenticated blob ticket")]
-    pub hash: String,
 }
 
 #[derive(Debug, Args)]
@@ -769,24 +757,17 @@ pub struct PublishCatalogArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct UnpublishArgs {
-    #[arg(help = "Namespace ID or managed folder path")]
-    pub namespace: String,
-    #[arg(long, help = "Blob content hash to unpublish")]
-    pub blob: String,
-}
-
-#[derive(Debug, Args)]
 pub struct ShareArgs {
     #[arg(default_value = ".", value_name = "PATH", help = "Folder path or namespace to share")]
     pub path: Option<PathBuf>,
     #[arg(long, help = "Namespace ID or managed folder path")]
     pub namespace: Option<String>,
     #[arg(
-        long = "write",
-        alias = "writable",
-        help = "Grant write access (default: read-only)"
+        long,
+        help = "Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)"
     )]
+    pub blob: Option<String>,
+    #[arg(long = "write", alias = "writable", help = "Grant write access (default: read-only)")]
     pub write: bool,
     #[arg(long, help = "Skip pinning the shared folder's blobs")]
     pub no_pin: bool,
@@ -800,17 +781,27 @@ pub struct ShareArgs {
 pub enum ShareCommand {
     #[command(about = "List persisted folder shares")]
     List,
-    #[command(name = "rm", alias = "remove", about = "Stop sharing a folder")]
+    #[command(name = "rm", alias = "remove", about = "Stop sharing a folder or blob")]
     Remove(ShareRemoveArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct ShareRemoveArgs {
-    #[arg(default_value = ".", value_name = "PATH", help = "Folder path or namespace to stop sharing")]
+    #[arg(
+        default_value = ".",
+        value_name = "PATH",
+        help = "Folder path or namespace to stop sharing"
+    )]
     pub path: PathBuf,
     #[arg(long, help = "Namespace ID or managed folder path")]
     pub namespace: Option<String>,
-    #[arg(long = "write", alias = "writable", help = "Remove the write-access share (default: read-only)")]
+    #[arg(long, help = "Remove a shared blob pin")]
+    pub blob: Option<String>,
+    #[arg(
+        long = "write",
+        alias = "writable",
+        help = "Remove the write-access share (default: read-only)"
+    )]
     pub write: bool,
 }
 

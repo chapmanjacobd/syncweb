@@ -119,10 +119,6 @@ pub enum IpcCommand {
         #[serde(default)]
         download: bool,
     },
-    Publish {
-        namespace: String,
-        blob: Option<String>,
-    },
     SetSubscribe {
         namespace: String,
         enabled: bool,
@@ -169,12 +165,10 @@ pub enum IpcCommand {
         #[serde(default)]
         delete_files: bool,
     },
-    Unpublish {
-        namespace: String,
-        blob: String,
-    },
     Share {
         namespace: String,
+        #[serde(default)]
+        blob: Option<String>,
         writable: bool,
         #[serde(default)]
         pin: bool,
@@ -184,6 +178,8 @@ pub enum IpcCommand {
     ShareList,
     Unshare {
         namespace: String,
+        #[serde(default)]
+        blob: Option<String>,
         writable: bool,
     },
     SnapshotCreate {
@@ -906,7 +902,6 @@ impl IpcServer {
                 filters,
                 download,
             } => self.handle_join(ticket, path, mode, subscribe, filters, download).await,
-            C::Publish { namespace, blob } => self.handle_publish(namespace, blob).await,
             C::SetSubscribe {
                 namespace,
                 enabled,
@@ -937,10 +932,7 @@ impl IpcServer {
                 namespace,
                 delete_files,
             } => self.handle_leave_folder(namespace, delete_files).await,
-            C::Unpublish { namespace, blob } => self.handle_unpublish(namespace, blob).await,
-            C::Share { .. } | C::ShareList | C::Unshare { .. } => {
-                self.handle_share_group(request.command).await
-            }
+            C::Share { .. } | C::ShareList | C::Unshare { .. } => self.handle_share_group(request.command).await,
             C::SnapshotCreate {
                 path,
                 description,
@@ -1557,54 +1549,6 @@ impl IpcServer {
         Ok(count)
     }
 
-    async fn handle_publish(&self, namespace: String, blob: Option<String>) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon publish IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
-            Ok(id) => id,
-            Err(error) => {
-                return IpcResponse::Error {
-                    message: format!("invalid namespace: {error}"),
-                };
-            }
-        };
-        let manager = FolderManager::new(&context.node);
-        let folder = match manager.get(namespace_id).await {
-            Ok(f) => f,
-            Err(error) => return response_from_error(error),
-        };
-        match blob {
-            Some(blob_hash) => {
-                let hash = match blob_hash.parse::<iroh_blobs::Hash>() {
-                    Ok(h) => h,
-                    Err(error) => {
-                        return IpcResponse::Error {
-                            message: format!("invalid blob hash: {error}"),
-                        };
-                    }
-                };
-                match folder.publish_blob(context.node.endpoint().addr(), hash).await {
-                    Ok(ticket) => IpcResponse::Ok {
-                        message: format!("blob_ticket: {ticket}"),
-                    },
-                    Err(error) => response_from_error(error),
-                }
-            }
-            None => match folder.ticket(context.node.endpoint().addr(), false).await {
-                Ok(ticket) => IpcResponse::Ok {
-                    message: format!("ticket: {ticket}"),
-                },
-                Err(error) => response_from_error(error),
-            },
-        }
-    }
-
     async fn handle_set_subscribe(
         &self,
         namespace: String,
@@ -2073,59 +2017,28 @@ impl IpcServer {
         }
     }
 
-    async fn handle_unpublish(&self, namespace: String, blob: String) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon unpublish IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
-            Ok(id) => id,
-            Err(error) => {
-                return IpcResponse::Error {
-                    message: format!("invalid namespace: {error}"),
-                };
-            }
-        };
-        let hash = match blob.parse::<iroh_blobs::Hash>() {
-            Ok(h) => h,
-            Err(error) => {
-                return IpcResponse::Error {
-                    message: format!("invalid blob hash: {error}"),
-                };
-            }
-        };
-        let manager = FolderManager::new(&context.node);
-        let folder = match manager.get(namespace_id).await {
-            Ok(f) => f,
-            Err(error) => return response_from_error(error),
-        };
-        match folder.unpublish_blob(hash).await {
-            Ok(()) => IpcResponse::Ok {
-                message: format!("unpublished: {blob}"),
-            },
-            Err(error) => response_from_error(error),
-        }
-    }
-
     async fn handle_share_group(&self, cmd: IpcCommand) -> IpcResponse {
         if let IpcCommand::Share {
             namespace,
+            blob,
             writable,
             pin,
             persist,
         } = cmd
         {
-            return self.handle_share(namespace, writable, ShareOptions { pin, persist }).await;
+            let options = ShareOptions { pin, persist };
+            return self.handle_share(namespace, blob, writable, options).await;
         }
         if matches!(cmd, IpcCommand::ShareList) {
             return self.handle_share_list();
         }
-        if let IpcCommand::Unshare { namespace, writable } = cmd {
-            return self.handle_unshare(namespace, writable).await;
+        if let IpcCommand::Unshare {
+            namespace,
+            blob,
+            writable,
+        } = cmd
+        {
+            return self.handle_unshare(namespace, blob, writable).await;
         }
         IpcResponse::Error {
             message: format!("unhandled share command: {cmd:?}"),
@@ -2135,6 +2048,7 @@ impl IpcServer {
     async fn handle_share(
         &self,
         namespace: String,
+        blob: Option<String>,
         writable: bool,
         options: ShareOptions,
     ) -> IpcResponse {
@@ -2159,6 +2073,22 @@ impl IpcServer {
             Ok(f) => f,
             Err(error) => return response_from_error(error),
         };
+        if let Some(hash_str) = blob {
+            let hash = match hash_str.parse::<iroh_blobs::Hash>() {
+                Ok(h) => h,
+                Err(error) => {
+                    return IpcResponse::Error {
+                        message: format!("invalid blob hash: {error}"),
+                    };
+                }
+            };
+            return match folder.publish_blob(context.node.endpoint().addr(), hash).await {
+                Ok(ticket) => IpcResponse::Ok {
+                    message: format!("namespace: {namespace_id}\nblob: {hash_str}\nticket: {ticket}"),
+                },
+                Err(error) => response_from_error(error),
+            };
+        }
         if options.pin
             && let Err(error) = folder.pin_all_content().await
         {
@@ -2205,7 +2135,7 @@ impl IpcServer {
         }
     }
 
-    async fn handle_unshare(&self, namespace: String, writable: bool) -> IpcResponse {
+    async fn handle_unshare(&self, namespace: String, blob: Option<String>, writable: bool) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -2222,13 +2152,33 @@ impl IpcServer {
                 };
             }
         };
+        let manager = FolderManager::new(&context.node);
+        if let Some(hash_str) = blob {
+            let hash = match hash_str.parse::<iroh_blobs::Hash>() {
+                Ok(h) => h,
+                Err(error) => {
+                    return IpcResponse::Error {
+                        message: format!("invalid blob hash: {error}"),
+                    };
+                }
+            };
+            let folder = match manager.get(namespace_id).await {
+                Ok(f) => f,
+                Err(error) => return response_from_error(error),
+            };
+            return match folder.unpublish_blob(hash).await {
+                Ok(()) => IpcResponse::Ok {
+                    message: format!("unshared: {namespace_id} (blob {hash_str})"),
+                },
+                Err(error) => response_from_error(error),
+            };
+        }
         let access = if writable { "write" } else { "read" };
         if let Some(node_db) = &self.node_db
             && let Err(error) = node_db.remove_share(&namespace_id.to_string(), access)
         {
             return response_from_error(error);
         }
-        let manager = FolderManager::new(&context.node);
         if let Ok(folder) = manager.get(namespace_id).await {
             let _ = folder.unpin_all_content().await;
         }
@@ -3365,13 +3315,16 @@ mod tests {
             }
         ));
 
-        let req3 = IpcRequest::new(IpcCommand::Unpublish {
+        let req3 = IpcRequest::new(IpcCommand::Share {
             namespace: "ns".to_owned(),
-            blob: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+            blob: Some("baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned()),
+            writable: false,
+            pin: false,
+            persist: false,
         });
         let enc3 = serde_json::to_vec(&req3).expect("serialize");
         let dec3: IpcRequest = serde_json::from_slice(&enc3).expect("deserialize");
-        assert!(matches!(dec3.command, IpcCommand::Unpublish { .. }));
+        assert!(matches!(dec3.command, IpcCommand::Share { .. }));
 
         let req4 = IpcRequest::new(IpcCommand::SnapshotCreate {
             path: PathBuf::from("."),
@@ -3463,13 +3416,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_unpublish_no_context() {
+    async fn test_ipc_share_no_context() {
         let handle = DaemonHandle::new(state());
         let server = IpcServer::new(socket_path(), handle);
         let response = server
-            .handle_request(IpcRequest::new(IpcCommand::Unpublish {
+            .handle_request(IpcRequest::new(IpcCommand::Share {
                 namespace: "ns".to_owned(),
-                blob: "baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned(),
+                blob: Some("baead9a5c1f7b3d2e4f60897c5a1b3d8e2f40796a8c0b5d3e7f10829c4a6b0d".to_owned()),
+                writable: false,
+                pin: false,
+                persist: false,
             }))
             .await;
         assert!(matches!(
@@ -3663,13 +3619,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_publish_no_context() {
+    async fn test_ipc_unshare_no_context() {
         let handle = DaemonHandle::new(state());
         let server = IpcServer::new(socket_path(), handle);
         let response = server
-            .handle_request(IpcRequest::new(IpcCommand::Publish {
+            .handle_request(IpcRequest::new(IpcCommand::Unshare {
                 namespace: "ns".to_owned(),
                 blob: None,
+                writable: false,
             }))
             .await;
         assert!(matches!(
@@ -3761,7 +3718,7 @@ mod tests {
         assert!(matches!(response, IpcResponse::Ok { .. }));
         if let IpcResponse::Ok { message } = response {
             assert!(message.contains("namespace:"));
-            assert!(message.contains("ticket:"));
+            assert!(!message.contains("ticket:"));
         }
         cleanup_ipc_test(fixture).await;
         let _ = std::fs::remove_dir_all(&test_dir);
@@ -3978,9 +3935,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_publish_folder_ticket() {
+    async fn test_ipc_share_folder_ticket() {
         let fixture = setup_ipc_test().await;
-        let test_dir = fixture.directory.join("publish-test");
+        let test_dir = fixture.directory.join("share-test");
         std::fs::create_dir_all(&test_dir).expect("test dir should be created");
 
         let response1 = fixture
@@ -4002,9 +3959,12 @@ mod tests {
         if let Some(ns) = namespace {
             let response2 = fixture
                 .server
-                .handle_request(IpcRequest::new(IpcCommand::Publish {
+                .handle_request(IpcRequest::new(IpcCommand::Share {
                     namespace: ns.clone(),
                     blob: None,
+                    writable: false,
+                    pin: false,
+                    persist: false,
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -4018,13 +3978,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_publish_invalid_namespace() {
+    async fn test_ipc_share_invalid_namespace() {
         let fixture = setup_ipc_test().await;
         let response = fixture
             .server
-            .handle_request(IpcRequest::new(IpcCommand::Publish {
+            .handle_request(IpcRequest::new(IpcCommand::Share {
                 namespace: "not-a-namespace".to_owned(),
                 blob: None,
+                writable: false,
+                pin: false,
+                persist: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));
@@ -4182,14 +4145,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_unpublish_invalid_hash() {
+    async fn test_ipc_unshare_invalid_hash() {
         let fixture = setup_ipc_test().await;
         let fake_ns = iroh_docs::NamespaceSecret::from_bytes(&[88; 32]).id().to_string();
         let response = fixture
             .server
-            .handle_request(IpcRequest::new(IpcCommand::Unpublish {
+            .handle_request(IpcRequest::new(IpcCommand::Unshare {
                 namespace: fake_ns,
-                blob: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_owned(),
+                blob: Some("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_owned()),
+                writable: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

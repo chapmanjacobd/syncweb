@@ -344,17 +344,23 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
     let hash = Hash::from_bytes(*blake3::hash(b"hello publish blob").as_bytes());
     let hash_str = hash.to_string();
 
-    let published = run(alice, &["--json", "publish", "blob", &namespace, &hash_str])?;
+    let published = run(
+        alice,
+        &["--json", "share", "--namespace", &namespace, "--blob", &hash_str],
+    )?;
     let published_json = json_output(&published)?;
     ensure!(
-        published_json.get("blob_ticket").is_some(),
-        "publish blob should emit a blob ticket"
+        published_json.get("ticket").is_some(),
+        "share --blob should emit a blob ticket"
     );
 
-    let unpublished = run(alice, &["--json", "unpublish", &namespace, "--blob", &hash_str])?;
+    let unpublished = run(
+        alice,
+        &["--json", "share", "rm", "--namespace", &namespace, "--blob", &hash_str],
+    )?;
     ensure!(
-        json_output(&unpublished)?.get("status") == Some(&Value::from("unpublished")),
-        "unpublish should confirm the pin was removed"
+        json_output(&unpublished)?.get("status") == Some(&Value::from("unshared")),
+        "share rm --blob should confirm the pin was removed"
     );
 
     Ok(())

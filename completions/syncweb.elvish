@@ -32,7 +32,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand status 'Show the local daemon status'
             cand reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
-            cand create 'Create a synchronized folder and print a shareable URL'
+            cand create 'Create a private synchronized folder and print a writable join ticket'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave a synchronized folder, optionally deleting its local files'
             cand folders 'List managed folders'
@@ -49,8 +49,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand watch 'Watch a folder and import filesystem changes'
             cand stats 'Show statistics for folders, files, and seeding status'
             cand verify 'Re-check local folder blob integrity'
-            cand publish 'Publish a folder, blob, or catalog'
-            cand unpublish 'Remove a public blob pin'
+            cand publish 'Publish folder metadata to a catalog'
+            cand share 'Share a folder, printing a ticket (read-only by default, --write for write access)'
             cand package 'Create, version, publish, and manage collection packages'
             cand network 'Network connectivity utilities'
             cand db 'Database maintenance: check, vacuum, stats, backup'
@@ -651,28 +651,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand folder 'Publish a folder ticket for public read access'
-            cand blob 'Publish a content hash as an unauthenticated blob ticket'
             cand catalog 'Publish folder metadata to a catalog'
-        }
-        &'syncweb;publish;folder'= {
-            cand --namespace 'Namespace ID or managed folder path'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;publish;blob'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
         }
         &'syncweb;publish;catalog'= {
             cand --catalog 'catalog'
@@ -685,9 +664,36 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;unpublish'= {
-            cand --blob 'Blob content hash to unpublish'
+        &'syncweb;share'= {
+            cand --namespace 'Namespace ID or managed folder path'
+            cand --blob 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --write 'Grant write access (default: read-only)'
+            cand --no-pin 'Skip pinning the shared folder''s blobs'
+            cand --no-persist 'Skip persisting the share record'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand list 'List persisted folder shares'
+            cand rm 'Stop sharing a folder or blob'
+        }
+        &'syncweb;share;list'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;share;rm'= {
+            cand --namespace 'Namespace ID or managed folder path'
+            cand --blob 'Remove a shared blob pin'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --write 'Remove the write-access share (default: read-only)'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'

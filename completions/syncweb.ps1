@@ -35,7 +35,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Show the local daemon status')
             [CompletionResult]::new('reload', 'reload', [CompletionResultType]::ParameterValue, 'Ask the local daemon to reload configuration')
             [CompletionResult]::new('daemon-sync', 'daemon-sync', [CompletionResultType]::ParameterValue, 'Ask the local daemon to trigger synchronization')
-            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a synchronized folder and print a shareable URL')
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create a private synchronized folder and print a writable join ticket')
             [CompletionResult]::new('join', 'join', [CompletionResultType]::ParameterValue, 'Join a folder from an Iroh document ticket')
             [CompletionResult]::new('leave', 'leave', [CompletionResultType]::ParameterValue, 'Leave a synchronized folder, optionally deleting its local files')
             [CompletionResult]::new('folders', 'folders', [CompletionResultType]::ParameterValue, 'List managed folders')
@@ -52,8 +52,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Watch a folder and import filesystem changes')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show statistics for folders, files, and seeding status')
             [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Re-check local folder blob integrity')
-            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a folder, blob, or catalog')
-            [CompletionResult]::new('unpublish', 'unpublish', [CompletionResultType]::ParameterValue, 'Remove a public blob pin')
+            [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
+            [CompletionResult]::new('share', 'share', [CompletionResultType]::ParameterValue, 'Share a folder, printing a ticket (read-only by default, --write for write access)')
             [CompletionResult]::new('package', 'package', [CompletionResultType]::ParameterValue, 'Create, version, publish, and manage collection packages')
             [CompletionResult]::new('network', 'network', [CompletionResultType]::ParameterValue, 'Network connectivity utilities')
             [CompletionResult]::new('db', 'db', [CompletionResultType]::ParameterValue, 'Database maintenance: check, vacuum, stats, backup')
@@ -701,30 +701,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('folder', 'folder', [CompletionResultType]::ParameterValue, 'Publish a folder ticket for public read access')
-            [CompletionResult]::new('blob', 'blob', [CompletionResultType]::ParameterValue, 'Publish a content hash as an unauthenticated blob ticket')
             [CompletionResult]::new('catalog', 'catalog', [CompletionResultType]::ParameterValue, 'Publish folder metadata to a catalog')
-            break
-        }
-        'syncweb;publish;folder' {
-            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Namespace ID or managed folder path')
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'syncweb;publish;blob' {
-            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
-            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'syncweb;publish;catalog' {
@@ -739,9 +716,38 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'syncweb;unpublish' {
-            [CompletionResult]::new('--blob', '--blob', [CompletionResultType]::ParameterName, 'Blob content hash to unpublish')
+        'syncweb;share' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Namespace ID or managed folder path')
+            [CompletionResult]::new('--blob', '--blob', [CompletionResultType]::ParameterName, 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--write', '--write', [CompletionResultType]::ParameterName, 'Grant write access (default: read-only)')
+            [CompletionResult]::new('--no-pin', '--no-pin', [CompletionResultType]::ParameterName, 'Skip pinning the shared folder''s blobs')
+            [CompletionResult]::new('--no-persist', '--no-persist', [CompletionResultType]::ParameterName, 'Skip persisting the share record')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List persisted folder shares')
+            [CompletionResult]::new('rm', 'rm', [CompletionResultType]::ParameterValue, 'Stop sharing a folder or blob')
+            break
+        }
+        'syncweb;share;list' {
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
+            [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('--embedded', '--embedded', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'syncweb;share;rm' {
+            [CompletionResult]::new('--namespace', '--namespace', [CompletionResultType]::ParameterName, 'Namespace ID or managed folder path')
+            [CompletionResult]::new('--blob', '--blob', [CompletionResultType]::ParameterName, 'Remove a shared blob pin')
+            [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--write', '--write', [CompletionResultType]::ParameterName, 'Remove the write-access share (default: read-only)')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON where supported')
             [CompletionResult]::new('--no-daemon', '--no-daemon', [CompletionResultType]::ParameterName, 'Bypass the daemon and use an embedded node for supported commands')

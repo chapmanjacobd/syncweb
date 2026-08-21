@@ -47,7 +47,7 @@ syncweb\-daemon\-sync(1)
 Ask the local daemon to trigger synchronization
 .TP
 syncweb\-create(1)
-Create a synchronized folder and print a shareable URL
+Create a private synchronized folder and print a writable join ticket
 .TP
 syncweb\-join(1)
 Join a folder from an Iroh document ticket
@@ -98,10 +98,10 @@ syncweb\-verify(1)
 Re\-check local folder blob integrity
 .TP
 syncweb\-publish(1)
-Publish a folder, blob, or catalog
+Publish folder metadata to a catalog
 .TP
-syncweb\-unpublish(1)
-Remove a public blob pin
+syncweb\-share(1)
+Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .TP
 syncweb\-package(1)
 Create, version, publish, and manage collection packages

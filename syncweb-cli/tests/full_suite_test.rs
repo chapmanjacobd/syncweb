@@ -76,7 +76,7 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "stats",
         "verify",
         "publish",
-        "unpublish",
+        "share",
         "package",
         "network",
         "indexing",

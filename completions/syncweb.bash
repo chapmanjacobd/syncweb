@@ -91,6 +91,9 @@ _syncweb() {
             syncweb,reload)
                 cmd="syncweb__subcmd__reload"
                 ;;
+            syncweb,share)
+                cmd="syncweb__subcmd__share"
+                ;;
             syncweb,shutdown)
                 cmd="syncweb__subcmd__shutdown"
                 ;;
@@ -117,9 +120,6 @@ _syncweb() {
                 ;;
             syncweb,trust)
                 cmd="syncweb__subcmd__trust"
-                ;;
-            syncweb,unpublish)
-                cmd="syncweb__subcmd__unpublish"
                 ;;
             syncweb,verify)
                 cmd="syncweb__subcmd__verify"
@@ -289,14 +289,14 @@ _syncweb() {
             syncweb__subcmd__provider,add)
                 cmd="syncweb__subcmd__provider__subcmd__add"
                 ;;
-            syncweb__subcmd__publish,blob)
-                cmd="syncweb__subcmd__publish__subcmd__blob"
-                ;;
             syncweb__subcmd__publish,catalog)
                 cmd="syncweb__subcmd__publish__subcmd__catalog"
                 ;;
-            syncweb__subcmd__publish,folder)
-                cmd="syncweb__subcmd__publish__subcmd__folder"
+            syncweb__subcmd__share,list)
+                cmd="syncweb__subcmd__share__subcmd__list"
+                ;;
+            syncweb__subcmd__share,rm)
+                cmd="syncweb__subcmd__share__subcmd__rm"
                 ;;
             syncweb__subcmd__snapshot,create)
                 cmd="syncweb__subcmd__snapshot__subcmd__create"
@@ -398,7 +398,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot transfer watch stats verify publish unpublish package network db indexing link mirror provider trust attest moderation completions manpages help"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --network --help version start shutdown status reload daemon-sync create join leave folders devices config ls find sort stat download import snapshot transfer watch stats verify publish share package network db indexing link mirror provider trust attest moderation completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2128,26 +2128,8 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__publish)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help folder blob catalog"
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help catalog"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__publish__subcmd__blob)
-            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -2189,14 +2171,36 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        syncweb__subcmd__publish__subcmd__folder)
-            opts="-h --namespace --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+        syncweb__subcmd__reload)
+            opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__share)
+            opts="-h --namespace --blob --write --no-pin --no-persist --verbose --json --embedded --no-daemon --data-dir --help list rm"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --namespace)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --blob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -2211,13 +2215,39 @@ _syncweb() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        syncweb__subcmd__reload)
+        syncweb__subcmd__share__subcmd__list)
             opts="-h --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__share__subcmd__rm)
+            opts="-h --namespace --blob --write --verbose --json --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --namespace)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --blob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -3186,28 +3216,6 @@ _syncweb() {
                 return 0
             fi
             case "${prev}" in
-                --data-dir)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        syncweb__subcmd__unpublish)
-            opts="-h --blob --verbose --json --embedded --no-daemon --data-dir --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --blob)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

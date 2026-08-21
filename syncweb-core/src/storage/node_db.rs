@@ -1379,12 +1379,7 @@ impl NodeDatabase {
                  VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(namespace_id, access)
                  DO UPDATE SET ticket = excluded.ticket",
-                params![
-                    namespace_id,
-                    access,
-                    ticket,
-                    current_timestamp().cast_signed()
-                ],
+                params![namespace_id, access, ticket, current_timestamp().cast_signed()],
             )
             .map_err(|error| SyncwebError::operation("failed to save share record", error))?;
         drop(connection);
@@ -1426,7 +1421,11 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to prepare share query", error))?;
         let rows = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
             })
             .map_err(|error| SyncwebError::operation("failed to query shares", error))?
             .collect::<std::result::Result<Vec<_>, _>>()

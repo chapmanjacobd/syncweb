@@ -1,0 +1,41 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH share 1  "share " 
+.SH NAME
+share \- Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
+.SH SYNOPSIS
+\fBshare\fR [\fB\-\-namespace\fR] [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
+.SH OPTIONS
+.TP
+\fB\-\-namespace\fR \fI<NAMESPACE>\fR
+Namespace ID or managed folder path
+.TP
+\fB\-\-blob\fR \fI<BLOB>\fR
+Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)
+.TP
+\fB\-\-write\fR
+Grant write access (default: read\-only)
+.TP
+\fB\-\-no\-pin\fR
+Skip pinning the shared folder\*(Aqs blobs
+.TP
+\fB\-\-no\-persist\fR
+Skip persisting the share record
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+Folder path or namespace to share
+.SH SUBCOMMANDS
+.TP
+share\-list(1)
+List persisted folder shares
+.TP
+share\-rm(1)
+Stop sharing a folder or blob
+.TP
+share\-help(1)
+Print this message or the help of the given subcommand(s)

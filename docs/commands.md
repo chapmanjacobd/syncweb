@@ -10,17 +10,18 @@ namespace; `share`/`publish` make something discoverable/fetchable by others.
 | Create | `create <path>` | Local | Prints only `path` and `namespace`. Content is private until you share or publish it. |
 | Share | `share <path>` | Public, read-only access (default) | A read-only access folder `ticket` anyone can use to fetch content. Persisted + pins folder blobs. |
 | Share | `share <path> --write` | Public, write access | A write-access folder `ticket`; holders can edit. Persisted + pins folder blobs. |
-| Share | `share list` / `share rm <path>` | — | List or remove persisted shares (rm unpins folder blobs). |
-| Publish | `publish blob <ns> <hash>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. |
+| Share | `share --blob <hash> --namespace <ns>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
+| Share | `share list` / `share rm <path>` | — | List or remove persisted folder shares (rm unpins folder blobs). |
+| Share | `share rm --blob <hash> --namespace <ns>` | — | Removes a shared blob pin. |
 | Publish | `publish catalog <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
-| Unpublish | `unpublish <ns> --blob <hash>` | — | Removes a public blob pin. |
 
 Key distinction: `create` provisions a folder and prints only its identity; `share` derives a
 read-only access ticket by default, or a write-access ticket with `--write`. Hand a
 `--write` ticket only to collaborators you trust to edit; hand a read-only ticket to anyone
 who may fetch the content. `share` persists the record (see `share list` / `share rm`) and
 pins the folder's blobs by default (`--no-pin` to skip, `--no-persist` to avoid saving).
+`share --blob` publishes a single immutable content hash (always pinned, never persisted).
 
 ## `find` Command Design
 
@@ -401,9 +402,13 @@ syncweb share ./documents --no-pin --no-persist
 # Share by namespace directly
 syncweb share --namespace <ns> --write
 
-# List and remove persisted shares
+# Share a single content hash as an unauthenticated blob ticket
+syncweb share --blob <hash> --namespace <ns>
+
+# List and remove persisted shares; remove a shared blob pin
 syncweb share list
 syncweb share rm ./documents --write
+syncweb share rm --blob <hash> --namespace <ns>
 ```
 
 ### Config Command
@@ -475,9 +480,9 @@ syncweb config set discovery.interface eth0
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
 | | `share list` | List persisted folder shares |
 | | `share rm` | Stop sharing a folder (unpins folder blobs) |
-| | `publish blob` | Publish a content hash as an unauthenticated blob ticket |
+| | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
+| | `share rm --blob` | Remove a shared blob pin |
 | | `publish catalog` | Publish folder metadata to a catalog |
-| | `unpublish` | Remove a public blob pin |
 | | `package init` | Initialize one or more paths as a versioned package (scans in one shot) |
 | | `package add` | Re-scan paths and update the manifest |
 | | `package bump` | Create a new package version with changelog |
@@ -566,20 +571,18 @@ syncweb join <folder> --subscribe
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
-# Share a folder (read-only by default, --write for write access), publish a blob,
+# Share a folder (read-only by default, --write for write access), a single blob,
 # or publish folder metadata to a catalog
 syncweb share /path/to/folder
 syncweb share /path/to/folder --write
 syncweb share . --namespace <namespace-id>
-syncweb publish blob <namespace-id> <hash>
+syncweb share --blob <hash> --namespace <namespace-id>
 syncweb publish catalog /path/to/folder --catalog <name> --tag music
 
-# List and remove persisted shares
+# List and remove persisted shares; remove a shared blob pin
 syncweb share list
 syncweb share rm /path/to/folder --write
-
-# Unpublish a public blob pin
-syncweb unpublish <namespace-id> --blob <hash>
+syncweb share rm --blob <hash> --namespace <namespace-id>
 
 # Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
 # (size/limit filters live on `syncweb download`, not `publish`)

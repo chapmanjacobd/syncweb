@@ -10,6 +10,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     future::Future,
+    path::{Path, PathBuf},
     pin::Pin,
     str::{FromStr, Split},
     sync::{Arc, Mutex},
@@ -19,14 +20,18 @@ use std::{
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use iroh::{PublicKey, SecretKey};
 use iroh_blobs::{Hash, ticket::BlobTicket};
+use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
 use super::IndexingDatabase;
 use crate::{
     constants::{LINK_SCHEME, LINK_SIGNATURE_CONTEXT},
     error::{Result, SyncwebError},
-    indexing::ProviderLease,
+    folder::FolderManager,
+    node::{identity::IdentityManager, iroh_node::IrohNode},
 };
+
+const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
 
 /// Return the current Unix epoch in seconds.
 #[must_use]
@@ -227,45 +232,26 @@ pub struct MutablePointer {
     /// Optional semantic version used for version pinning.
     #[serde(default)]
     pub version: Option<String>,
-    /// Signed provider leases for the manifest.
-    #[serde(default)]
-    pub providers: Vec<ProviderLease>,
     /// Hex-encoded Ed25519 signature over the pointer without this field.
     #[serde(default)]
     pub signature: Option<String>,
 }
 
 impl MutablePointer {
-    /// Create an unsigned pointer without provider leases.
+    /// Create an unsigned pointer.
     ///
     /// Call [`Self::sign`] before registering it with a resolver.
     ///
     /// # Errors
     ///
-    /// Returns an error if the alias, sequence, or provider data is invalid.
+    /// Returns an error if the alias or sequence is invalid.
     pub fn new(publisher: PublicKey, alias: impl Into<String>, manifest: Hash, sequence: u64) -> Result<Self> {
-        Self::new_with_providers(publisher, alias, manifest, sequence, Vec::new())
-    }
-
-    /// Create an unsigned pointer with provider leases.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the alias, sequence, or provider data is invalid.
-    pub fn new_with_providers(
-        publisher: PublicKey,
-        alias: impl Into<String>,
-        manifest: Hash,
-        sequence: u64,
-        providers: Vec<ProviderLease>,
-    ) -> Result<Self> {
         let pointer = Self {
             publisher,
             alias: alias.into(),
             sequence,
             manifest,
             version: None,
-            providers,
             signature: None,
         };
         pointer.validate()?;
@@ -311,22 +297,6 @@ impl MutablePointer {
     #[must_use]
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = Some(version.into());
-        self.signature = None;
-        self
-    }
-
-    /// Add a provider lease to this pointer.
-    #[must_use]
-    pub fn with_provider(mut self, provider: ProviderLease) -> Self {
-        self.providers.push(provider);
-        self.signature = None;
-        self
-    }
-
-    /// Add several provider leases to this pointer.
-    #[must_use]
-    pub fn with_providers(mut self, providers: impl IntoIterator<Item = ProviderLease>) -> Self {
-        self.providers.extend(providers);
         self.signature = None;
         self
     }
@@ -399,9 +369,6 @@ impl MutablePointer {
             .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid mutable link publisher: {error}")))?;
         key.verify(&self.unsigned_bytes()?, &signature)
             .map_err(|error| SyncwebError::InvalidConfig(format!("mutable link signature is invalid: {error}")))?;
-        for provider in &self.providers {
-            provider.verify_signature()?;
-        }
         Ok(())
     }
 
@@ -423,14 +390,6 @@ impl MutablePointer {
             return Err(SyncwebError::InvalidConfig(
                 "mutable link version cannot be empty".to_owned(),
             ));
-        }
-        for provider in &self.providers {
-            provider.validate()?;
-            if provider.hash != self.manifest {
-                return Err(SyncwebError::InvalidTicket(
-                    "mutable link provider lease does not match its manifest".to_owned(),
-                ));
-            }
         }
         Ok(())
     }
@@ -654,9 +613,7 @@ pub struct LinkResolution {
     pub version: Option<String>,
     /// Mutable pointer sequence, if the link is mutable.
     pub sequence: Option<u64>,
-    /// Signed provider leases advertised by the pointer or resolver.
-    pub providers: Vec<ProviderLease>,
-    /// Direct blob tickets in provider/mirror fallback order.
+    /// Direct blob tickets in mirror fallback order.
     pub tickets: Vec<BlobTicket>,
 }
 
@@ -668,7 +625,6 @@ impl LinkResolution {
             manifest,
             version: None,
             sequence: None,
-            providers: Vec::new(),
             tickets: Vec::new(),
         }
     }
@@ -969,27 +925,6 @@ impl LinkResolver {
         self.register_mirror(ticket)
     }
 
-    /// Register a signed provider lease for a hash.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the lease signature, expiry, or ticket is invalid.
-    pub fn register_provider_lease(&self, lease: ProviderLease) -> Result<()> {
-        let now = current_epoch_seconds();
-        let validated_lease = checked_lease(lease, now)?;
-        let ticket = lease_ticket(&validated_lease)?;
-        let mut state = self.lock_state()?;
-        let mirrors = state.mirrors.entry(validated_lease.hash).or_default();
-        if !mirrors.iter().any(|existing| existing.ticket == ticket) {
-            mirrors.push(Mirror {
-                hash: validated_lease.hash,
-                ticket,
-            });
-        }
-        drop(state);
-        Ok(())
-    }
-
     /// Return registered direct mirror tickets in registration order.
     ///
     /// # Errors
@@ -1146,7 +1081,7 @@ impl LinkResolver {
         let resolution = match link {
             Link::Content(content) => {
                 content.validate()?;
-                resolution_for_hash(content.hash, None, None, Vec::new(), &state, now)
+                resolution_for_hash(content.hash, None, None, &state)
             }
             Link::Private(private) => {
                 private.validate()?;
@@ -1156,7 +1091,7 @@ impl LinkResolver {
                 if state.revoked.contains(&private.revocation_key()) {
                     return Err(SyncwebError::InvalidConfig("private link has been revoked".to_owned()));
                 }
-                resolution_for_hash(private.manifest, None, None, Vec::new(), &state, now)
+                resolution_for_hash(private.manifest, None, None, &state)
             }
             Link::Name(name) => {
                 name.validate()?;
@@ -1178,14 +1113,12 @@ impl LinkResolver {
                     pointer.manifest,
                     pointer.version.clone(),
                     Some(pointer.sequence),
-                    pointer.providers.clone(),
                     &state,
-                    now,
                 )
             }
         };
         drop(state);
-        resolution
+        Ok(resolution)
     }
 
     /// Parse and resolve a link URI.
@@ -1219,6 +1152,273 @@ impl LinkResolver {
     }
 }
 
+/// A persisted link pointer, mirror, and revocation store.
+///
+/// Owns the stable-link rows of an [`IndexingDatabase`] and keeps a hydrated
+/// [`LinkResolver`] in sync so CLI handlers only render results.
+#[derive(Clone)]
+pub struct LinkStore {
+    database: IndexingDatabase,
+    resolver: LinkResolver,
+}
+
+impl LinkStore {
+    /// Open a link store backed by an existing indexing database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the persisted links cannot be read.
+    pub fn with_database(database: IndexingDatabase) -> Result<Self> {
+        let resolver = LinkResolver::with_database(database.clone())?;
+        Ok(Self { database, resolver })
+    }
+
+    /// Open a link store backed by the database at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or its links read.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Self::with_database(IndexingDatabase::open(path)?)
+    }
+
+    /// Return the underlying indexing database.
+    #[must_use]
+    pub const fn database(&self) -> &IndexingDatabase {
+        &self.database
+    }
+
+    /// Return the hydrated resolver.
+    #[must_use]
+    pub const fn resolver(&self) -> &LinkResolver {
+        &self.resolver
+    }
+
+    /// Create an immutable content link.
+    #[must_use]
+    pub const fn create_content_link(&self, hash: Hash) -> Link {
+        Link::Content(ContentLink::new(hash))
+    }
+
+    /// Create a private capability link and clear any stale revocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the capability cannot be generated or persisted.
+    pub fn create_private_link(&self, hash: Hash, expires: Option<u64>) -> Result<Link> {
+        let expires_at = expires.unwrap_or_else(|| current_epoch_seconds().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
+        let link = PrivateLink::generate(hash, expires_at)?;
+        let (pointers, mirrors, revoked) = self.database.load_links()?;
+        let retained = revoked
+            .iter()
+            .filter(|existing| **existing != link)
+            .cloned()
+            .collect::<Vec<_>>();
+        if retained.len() != revoked.len() {
+            self.database.save_links(&pointers, &mirrors, &retained)?;
+        }
+        Ok(Link::Private(link))
+    }
+
+    /// Create and sign a mutable name link, advancing the pointer sequence.
+    ///
+    /// With `sequence == 0` the next sequence is derived from the persisted
+    /// pointer history for the same publisher and alias.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pointer is invalid, cannot be signed, or is not
+    /// monotonically newer than the current pointer.
+    pub fn create_named_link(
+        &self,
+        identity: &IdentityManager,
+        alias_input: impl Into<String>,
+        hash: Hash,
+        version: Option<String>,
+        sequence: u64,
+    ) -> Result<Link> {
+        let alias = alias_input.into();
+        let (pointers, _, _) = self.database.load_links()?;
+        let pointer_sequence = if sequence == 0 {
+            pointers
+                .iter()
+                .filter(|pointer| pointer.publisher == identity.node_id() && pointer.alias == alias)
+                .map(|pointer| pointer.sequence)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1)
+        } else {
+            sequence
+        };
+        let signing_key = SigningKey::from_bytes(&identity.secret_key().to_bytes());
+        let mut pointer = MutablePointer::signed_with_secret_key(
+            identity.node_id(),
+            alias,
+            hash,
+            pointer_sequence,
+            identity.secret_key(),
+        )?;
+        if let Some(version_value) = version {
+            pointer = pointer.with_version(version_value);
+            pointer.sign(&signing_key)?;
+        }
+        let link = pointer.link()?;
+        self.resolver.publish(&pointer)?;
+        Ok(Link::Name(link))
+    }
+
+    /// Revoke a private capability and persist the revocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the link is invalid or cannot be persisted.
+    pub fn revoke(&self, private: &PrivateLink) -> Result<()> {
+        self.resolver.revoke(private)?;
+        let (pointers, mirrors, revoked) = self.database.load_links()?;
+        if !revoked.contains(private) {
+            let mut updated = revoked;
+            updated.push(private.clone());
+            self.database.save_links(&pointers, &mirrors, &updated)?;
+        }
+        Ok(())
+    }
+
+    /// Register a provider ticket as a mirror for its content hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ticket is malformed or cannot be persisted.
+    pub fn register_mirror(&self, ticket: BlobTicket) -> Result<()> {
+        self.resolver.register_mirror(ticket)
+    }
+
+    /// Publish a link into a managed folder document under `sys/links/`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder cannot be opened or the link payload
+    /// cannot be serialized or written.
+    pub async fn publish_link(&self, node: &IrohNode, namespace: &str, link: &Link) -> Result<()> {
+        let namespace_id = namespace
+            .parse::<NamespaceId>()
+            .map_err(|error| SyncwebError::operation("invalid publish namespace", error))?;
+        let folder = FolderManager::new(node).get(namespace_id).await?;
+        match link {
+            Link::Name(name_link) => {
+                let (pointers, _, _) = self.database.load_links()?;
+                if let Some(pointer) = pointers
+                    .iter()
+                    .find(|p| p.publisher == name_link.publisher && p.alias == name_link.alias)
+                {
+                    let payload = serde_json::to_vec(pointer)
+                        .map_err(|error| SyncwebError::operation("failed to serialize mutable pointer", error))?;
+                    folder
+                        .set_blob(format!("sys/links/mutable/{}", pointer.alias), payload)
+                        .await?;
+                    tracing::info!(alias = %pointer.alias, namespace = %namespace_id, "published mutable pointer to folder");
+                }
+            }
+            Link::Private(private_link) => {
+                let payload = serde_json::to_vec(private_link)
+                    .map_err(|error| SyncwebError::operation("failed to serialize private link", error))?;
+                folder
+                    .set_blob(
+                        format!("sys/links/private/{}", hex::encode(private_link.capability)),
+                        payload,
+                    )
+                    .await?;
+                tracing::info!(namespace = %namespace_id, "published private link to folder");
+            }
+            Link::Content(_) => {
+                tracing::warn!("--publish has no effect on immutable content links");
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolve a collection selector to its content hash.
+    ///
+    /// Accepts a raw hash, a stable link, or a local file/directory path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the selector is a link that cannot be resolved.
+    pub fn collection_hash(&self, collection: &str) -> Result<Option<Hash>> {
+        if let Ok(hash) = collection.parse() {
+            return Ok(Some(hash));
+        }
+        if let Ok(parsed_link) = collection.parse::<Link>() {
+            return Ok(Some(match parsed_link {
+                Link::Content(content_link) => content_link.hash,
+                Link::Private(private_link) => private_link.manifest,
+                Link::Name(_) => self.resolver.resolve(&parsed_link)?.manifest,
+            }));
+        }
+        if Path::new(collection).exists() {
+            return Ok(Some(hash_source(Path::new(collection))?));
+        }
+        Ok(None)
+    }
+}
+
+/// Hash a file or directory tree with a stable, content-addressed scheme.
+///
+/// # Errors
+///
+/// Returns an error if the source does not exist, is neither a file nor a
+/// directory, or cannot be read.
+pub fn hash_source(source: &Path) -> Result<Hash> {
+    if source.is_file() {
+        let bytes = std::fs::read(source)?;
+        return Ok(Hash::from_bytes(*blake3::hash(&bytes).as_bytes()));
+    }
+    if let Ok(hash) = source.to_string_lossy().parse() {
+        return Ok(hash);
+    }
+    if !source.is_dir() {
+        return Err(SyncwebError::InvalidConfig(format!(
+            "link source does not exist or is not a file/directory: {}",
+            source.display()
+        )));
+    }
+    let mut files = Vec::new();
+    collect_files(source, source, &mut files)?;
+    files.sort();
+    let mut hasher = blake3::Hasher::new();
+    for relative in files {
+        let bytes = std::fs::read(source.join(&relative))?;
+        hasher.update(relative.to_string_lossy().as_bytes());
+        hasher.update(&[0]);
+        hasher.update(&bytes);
+        hasher.update(&[0]);
+    }
+    Ok(Hash::from_bytes(*hasher.finalize().as_bytes()))
+}
+
+/// Collect the relative paths of every regular file under `current`.
+///
+/// # Errors
+///
+/// Returns an error if a directory cannot be read.
+pub fn collect_files(root: &Path, current: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
+    for directory_entry_result in std::fs::read_dir(current)? {
+        let directory_entry = directory_entry_result?;
+        let path = directory_entry.path();
+        if path.is_dir() {
+            collect_files(root, &path, output)?;
+        } else if path.is_file() {
+            output.push(
+                path.strip_prefix(root)
+                    .map_err(|error| SyncwebError::operation("failed to relativize source path", error))?
+                    .to_path_buf(),
+            );
+        } else {
+            // ignore symlinks and other non-file entries
+        }
+    }
+    Ok(())
+}
+
 /// Try provider tickets in order until one succeeds.
 ///
 /// # Errors
@@ -1248,23 +1448,9 @@ fn resolution_for_hash(
     manifest: Hash,
     version: Option<String>,
     sequence: Option<u64>,
-    providers: Vec<ProviderLease>,
     state: &ResolverState,
-    now: u64,
-) -> Result<LinkResolution> {
+) -> LinkResolution {
     let mut tickets = Vec::new();
-    let mut active_providers = Vec::new();
-    for provider in providers {
-        if provider.expires_at <= now {
-            continue;
-        }
-        provider.verify_at(now)?;
-        let ticket = lease_ticket(&provider)?;
-        if !tickets.contains(&ticket) {
-            tickets.push(ticket);
-        }
-        active_providers.push(provider);
-    }
     if let Some(mirrors) = state.mirrors.get(&manifest) {
         for mirror in mirrors {
             if !tickets.contains(&mirror.ticket) {
@@ -1272,25 +1458,12 @@ fn resolution_for_hash(
             }
         }
     }
-    Ok(LinkResolution {
+    LinkResolution {
         manifest,
         version,
         sequence,
-        providers: active_providers,
         tickets,
-    })
-}
-
-fn lease_ticket(lease: &ProviderLease) -> Result<BlobTicket> {
-    lease
-        .ticket
-        .parse::<BlobTicket>()
-        .map_err(|error| SyncwebError::InvalidTicket(format!("invalid provider ticket: {error}")))
-}
-
-fn checked_lease(lease: ProviderLease, now: u64) -> Result<ProviderLease> {
-    lease.verify_at(now)?;
-    Ok(lease)
+    }
 }
 
 fn validate_path_segment(value: &str, field: &str) -> Result<()> {
@@ -1389,35 +1562,6 @@ mod tests {
                 .manifest,
             hash_one
         );
-    }
-
-    #[test]
-    fn mutable_resolution_includes_verified_provider_tickets() {
-        let hash = Hash::from_bytes([8; 32]);
-        let provider_secret = SecretKey::from_bytes(&[8; 32]);
-        let provider_ticket = ticket(8, hash);
-        let mut lease = ProviderLease::new_with_times(hash, provider_ticket.to_string(), 1, 0, u64::MAX)
-            .expect("provider lease should build");
-        lease
-            .sign_with_secret_key(&provider_secret)
-            .expect("provider lease should sign");
-
-        let publisher_secret = SecretKey::from_bytes(&[9; 32]);
-        let mut pointer =
-            MutablePointer::new_with_providers(publisher_secret.public(), "dataset", hash, 1, vec![lease])
-                .expect("pointer should build")
-                .with_version("1.0.0");
-        pointer
-            .sign(&SigningKey::from_bytes(&publisher_secret.to_bytes()))
-            .expect("pointer should sign");
-
-        let resolver = LinkResolver::new();
-        let name = pointer.link().expect("pointer should have a link");
-        resolver.publish(&pointer).expect("pointer should publish");
-        let resolution = resolver.resolve(&Link::Name(name)).expect("name should resolve");
-        assert_eq!(resolution.manifest_hash(), hash);
-        assert_eq!(resolution.providers.len(), 1);
-        assert_eq!(resolution.provider_tickets(), &[provider_ticket]);
     }
 
     #[test]

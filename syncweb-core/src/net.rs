@@ -1,3 +1,4 @@
+pub mod membership;
 pub mod membership_doc;
 pub mod neighbor_map;
 pub mod network;

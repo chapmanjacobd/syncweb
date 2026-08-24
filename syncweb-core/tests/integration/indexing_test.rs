@@ -3,12 +3,8 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Context;
 use iroh_blobs::Hash;
 use syncweb_core::{
-    constants::REPLICATION_PIN_PREFIX,
     folder::{FolderManager, SyncMode},
-    indexing::{
-        IndexingDatabase, IndexingEvent, IndexingService, ProviderLease, ReplicationBudget, ResilienceConfig,
-        SCHEMA_VERSION,
-    },
+    indexing::{IndexingDatabase, IndexingEvent, IndexingService, SCHEMA_VERSION},
     node::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
@@ -235,68 +231,6 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
         .clone();
     anyhow::ensure!(result.key == b"catalog/readme.md");
     anyhow::ensure!(result.folder_namespace_id == folder.namespace_id());
-
-    publisher.stop().await?;
-    subscriber.stop().await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn resilience_fetches_and_pins_when_verified_availability_is_low() -> anyhow::Result<()> {
-    let directory = TestDirectory::new("syncweb-indexing-test")?;
-    let (relay_map, _relay_url, _relay_server) = iroh::test_utils::run_relay_server().await?;
-    let publisher_root = directory.path().join("resilience-publisher");
-    let publisher_identity = IdentityManager::new(publisher_root.join("identity.key"))?;
-    let publisher = IrohNode::new(
-        publisher_identity,
-        publisher_root.join("data"),
-        RelayMode::Custom {
-            map: relay_map.clone(),
-            insecure: true,
-        },
-        crate::test_utils::empty_member_keys(),
-        DiscoveryConfig::disabled(),
-    )
-    .await?;
-    let subscriber_root = directory.path().join("resilience-subscriber");
-    let subscriber_identity = IdentityManager::new(subscriber_root.join("identity.key"))?;
-    let subscriber = IrohNode::new(
-        subscriber_identity,
-        subscriber_root.join("data"),
-        RelayMode::Custom {
-            map: relay_map,
-            insecure: true,
-        },
-        crate::test_utils::empty_member_keys(),
-        DiscoveryConfig::disabled(),
-    )
-    .await?;
-
-    let hash = publisher.blob_store().add_bytes(b"resilient content").await?;
-    let ticket = publisher.blob_store().ticket(publisher.endpoint(), hash);
-    let mut lease = ProviderLease::new_with_times(hash, ticket.to_string(), 1, 0, u64::MAX)?;
-    lease.sign_with_secret_key(publisher.endpoint().secret_key())?;
-
-    let indexing = IndexingService::in_memory()?;
-    let resilience = indexing.resilience_service(ResilienceConfig::new(
-        ReplicationBudget::new(2).with_max_jitter(Duration::ZERO),
-    ));
-    resilience.record_lease(&lease)?;
-    let result = resilience
-        .ensure_replication(subscriber.endpoint(), subscriber.blob_store(), hash)
-        .await?;
-
-    anyhow::ensure!(result.pinned);
-    anyhow::ensure!(result.fetched_from == vec![publisher.endpoint().id()]);
-    anyhow::ensure!(subscriber.blob_store().has(hash).await?);
-    anyhow::ensure!(
-        subscriber
-            .blob_store()
-            .list_pins(REPLICATION_PIN_PREFIX)
-            .await?
-            .iter()
-            .any(|(_, pinned_hash)| *pinned_hash == hash)
-    );
 
     publisher.stop().await?;
     subscriber.stop().await?;

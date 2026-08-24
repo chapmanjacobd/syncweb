@@ -61,7 +61,7 @@ fn mutable_links_advance_sequences_across_processes() -> Result<()> {
 
     let _second = run(alice, &["link", "create", "--name", "latest", CONTENT_HASH])?;
 
-    let resolved = run(alice, &["--json", "link", "resolve", &link])?;
+    let resolved = run(alice, &["--json", "link", "resolve", "--no-fetch", &link])?;
     ensure!(json_output(&resolved)?.get("sequence") == Some(&Value::from(2)));
 
     Ok(())
@@ -92,22 +92,6 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
     );
 
     let _searched = run(alice, &["search", "--kind", "catalog", "test"])?;
-
-    Ok(())
-}
-
-#[test]
-fn indexing_health_checks_verified_providers() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let output = run(alice, &["--json", "indexing", "health", CONTENT_HASH])?;
-    let health = json_output(&output)?;
-    ensure!(health.get("hash").is_some(), "health should report hash");
-    ensure!(
-        health.get("verified").and_then(Value::as_i64) == Some(0),
-        "new hash should have zero verified providers"
-    );
 
     Ok(())
 }
@@ -147,27 +131,6 @@ fn link_create_private_and_revoke() -> Result<()> {
         revoked.stdout().contains("revoked:"),
         "revoke output should confirm revocation"
     );
-
-    Ok(())
-}
-
-#[test]
-fn indexing_meta_add_persists_metadata() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let added = run(
-        alice,
-        &["indexing", "meta", "add", CONTENT_HASH, "title", "test content"],
-    )?;
-    ensure!(added.stdout().contains("metadata:"), "meta add should confirm metadata");
-
-    let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
-
-    let shown = run(alice, &["--json", "indexing", "meta", "list", CONTENT_HASH])?;
-    let shown_json = json_output(&shown)?;
-    let entries = shown_json.as_array().context("meta list should be an array")?;
-    ensure!(entries.len() == 2, "meta list should list two metadata entries");
 
     Ok(())
 }
@@ -336,83 +299,6 @@ fn publish_catalog_with_tags() -> Result<()> {
 }
 
 #[test]
-fn mirror_from_provider_and_network() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-    let content = alice.data_dir().join("content");
-    fs::create_dir_all(&content)?;
-    fs::write(content.join("hello.txt"), b"hello mirror")?;
-    let content_path = content.to_str().context("content path is not UTF-8")?;
-
-    let _net = run(alice, &["network", "create", "mirror-net"])?;
-
-    let created = run(alice, &["--json", "create", "--network", "mirror-net", content_path])?;
-    let namespace = json_output(&created)?
-        .get("namespace")
-        .context("create output missing namespace")?
-        .as_str()
-        .context("namespace is not a string")?
-        .to_owned();
-
-    let _imported = run(
-        alice,
-        &[
-            "import",
-            "--folder",
-            &namespace,
-            content.join("hello.txt").to_str().context("file is not UTF-8")?,
-        ],
-    )?;
-
-    let dry = run(alice, &["--json", "mirror", "--network", "mirror-net", "--dry-run"])?;
-    let dry_json = json_output(&dry)?;
-    ensure!(
-        dry_json.get("dry_run") == Some(&Value::from(true)),
-        "dry-run should report without fetching"
-    );
-    let total = dry_json
-        .get("total_blobs")
-        .and_then(Value::as_u64)
-        .context("mirror result missing total_blobs")?;
-    ensure!(total >= 1, "network mirror should discover at least one blob");
-
-    let real = run(
-        alice,
-        &[
-            "--json",
-            "mirror",
-            "--network",
-            "mirror-net",
-            "--min-providers",
-            "2",
-            "--no-sharing",
-        ],
-    )?;
-    let real_json = json_output(&real)?;
-    ensure!(
-        real_json.get("total_blobs") == Some(&Value::from(total)),
-        "real mirror should discover the same blobs"
-    );
-    ensure!(
-        real_json.get("skipped") == Some(&Value::from(total)),
-        "already-local blobs should be skipped"
-    );
-    ensure!(
-        real_json.get("failed") == Some(&Value::from(0)),
-        "no remote fetch should fail for local blobs"
-    );
-
-    let provider = iroh::SecretKey::generate().public().to_string();
-    let provider_mirror = run(alice, &["--json", "mirror", &provider])?;
-    ensure!(
-        json_output(&provider_mirror)?.get("total_blobs") == Some(&Value::from(0)),
-        "unknown provider should expose no blobs to mirror"
-    );
-
-    Ok(())
-}
-
-#[test]
 fn link_create_version_sequence_expires_publish() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -508,7 +394,10 @@ fn link_resolve_with_version() -> Result<()> {
         .context("link output missing link")?
         .to_owned();
 
-    let resolved = run(alice, &["--json", "link", "resolve", "--version", "2", &link])?;
+    let resolved = run(
+        alice,
+        &["--json", "link", "resolve", "--no-fetch", "--version", "2", &link],
+    )?;
     let resolved_json = json_output(&resolved)?;
     ensure!(
         resolved_json.get("version") == Some(&Value::from("2")),
@@ -517,6 +406,40 @@ fn link_resolve_with_version() -> Result<()> {
     ensure!(
         resolved_json.get("manifest").is_some(),
         "resolution should include a manifest"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn link_resolve_fetches_local_content_by_default() -> Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder = alice.data_dir().join("content");
+    fs::create_dir_all(&folder)?;
+    alice.write_file(&folder.join("payload.txt"), b"link resolve content")?;
+    alice.import(&folder)?;
+
+    let content = alice.file_content(&folder.join("payload.txt"))?;
+    let hash = iroh_blobs::Hash::from_bytes(*blake3::hash(&content).as_bytes()).to_string();
+
+    let created = run(alice, &["--json", "link", "create", &hash])?;
+    let link = json_output(&created)?
+        .get("link")
+        .and_then(Value::as_str)
+        .context("link output missing link")?
+        .to_owned();
+
+    let resolved = run(alice, &["--json", "link", "resolve", &link])?;
+    let resolved_json = json_output(&resolved)?;
+    ensure!(
+        resolved_json.get("fetched") == Some(&Value::from(true)),
+        "default resolve should fetch and pin the content: {resolved_json}"
+    );
+    ensure!(
+        resolved_json.get("manifest") == Some(&Value::from(hash.as_str())),
+        "resolution should report the content hash"
     );
 
     Ok(())
@@ -588,35 +511,6 @@ fn indexing_search_with_limit() -> Result<()> {
 }
 
 #[test]
-fn indexing_meta_add_with_sequence() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let added = run(
-        alice,
-        &[
-            "--json",
-            "indexing",
-            "meta",
-            "add",
-            "--sequence",
-            "7",
-            CONTENT_HASH,
-            "category",
-            "test",
-        ],
-    )?;
-    let meta = json_output(&added)?;
-    ensure!(meta.get("status") == Some(&Value::from("added")));
-    ensure!(
-        meta.get("sequence") == Some(&Value::from(7)),
-        "meta add should record the requested sequence"
-    );
-
-    Ok(())
-}
-
-#[test]
 fn indexing_filter_add_device_and_subscribe() -> Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
@@ -651,22 +545,6 @@ fn indexing_filter_add_device_and_subscribe() -> Result<()> {
     ensure!(status.get("status") == Some(&Value::from("subscribed")));
     ensure!(status.get("sequence") == Some(&Value::from(1)));
     ensure!(status.get("entries") == Some(&Value::from(1)));
-
-    Ok(())
-}
-
-#[test]
-fn indexing_meta_list() -> Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let _added = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "title", "list me"])?;
-    let _added_second = run(alice, &["indexing", "meta", "add", CONTENT_HASH, "author", "tester"])?;
-
-    let listed = run(alice, &["--json", "indexing", "meta", "list", CONTENT_HASH])?;
-    let listed_json = json_output(&listed)?;
-    let entries = listed_json.as_array().context("meta list should be an array")?;
-    ensure!(entries.len() == 2, "meta list should return both metadata entries");
 
     Ok(())
 }

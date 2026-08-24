@@ -865,48 +865,6 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
 }
 
 #[test]
-fn package_search_channel_and_bootstrap() -> anyhow::Result<()> {
-    let data_dir = test_dir("package-search-opts");
-
-    // An unconfigured channel falls back to a local gossip search that
-    // completes quickly with no results.
-    let search = run_with_data(
-        &data_dir,
-        &[
-            "--json",
-            "search",
-            "--channel",
-            "unconfigured",
-            "--timeout-ms",
-            "100",
-            "example",
-        ],
-    )?;
-    assert_success(&search, "search --channel --timeout-ms")?;
-    let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
-    ensure!(search_json.is_array(), "search should produce an array: {search_json}");
-
-    // --bootstrap is accepted; a malformed node id fails fast with a parse
-    // error instead of hanging on a connection attempt.
-    let invalid = run_with_data(
-        &data_dir,
-        &["--json", "search", "--bootstrap", "not-a-valid-node", "example"],
-    )?;
-    ensure!(
-        !invalid.status.success(),
-        "--bootstrap with an invalid node id should fail"
-    );
-    let stderr = String::from_utf8_lossy(&invalid.stderr);
-    ensure!(
-        stderr.contains("invalid") || stderr.contains("public key"),
-        "expected a key parse error, got: {stderr}"
-    );
-
-    fs::remove_dir_all(data_dir)?;
-    Ok(())
-}
-
-#[test]
 fn schedule_and_stats_persist() -> anyhow::Result<()> {
     let data_dir = test_dir("sched-stats");
     let sched = run_with_data(&data_dir, &["config", "schedule", "set", "--active", "22:00-06:00"])?;

@@ -5,9 +5,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use iroh_blobs::Hash;
 use syncweb_core::{
-    folder::{
-        CollectionEntry, CollectionManifest, PackageAnnouncement, PackageDependency, PackageManager, PackageProfile,
-    },
+    folder::{CollectionEntry, CollectionManifest, PackageDependency, PackageManager, PackageProfile},
     storage::node_db::NodeDatabase,
 };
 use uuid::Uuid;
@@ -117,24 +115,5 @@ fn package_install_switch_and_verify_are_atomic() -> anyhow::Result<()> {
 fn manifests_reject_paths_that_escape_the_package_root() -> anyhow::Result<()> {
     let result = CollectionEntry::new(Hash::EMPTY, "../outside", 0);
     ensure!(result.is_err());
-    Ok(())
-}
-
-#[test]
-fn announcement_round_trip_validates_manifest_ticket() -> anyhow::Result<()> {
-    let endpoint = iroh::SecretKey::generate().public();
-    let hash = Hash::new(b"manifest");
-    let ticket =
-        iroh_blobs::ticket::BlobTicket::new(iroh::EndpointAddr::new(endpoint), hash, iroh_blobs::BlobFormat::Raw);
-    let announcement = PackageAnnouncement::new(
-        Uuid::new_v4(),
-        "example",
-        "1.0.0",
-        1,
-        hash,
-        ticket.to_string(),
-        endpoint,
-    )?;
-    anyhow::ensure!(PackageAnnouncement::from_bytes(announcement.to_bytes()?)? == announcement);
     Ok(())
 }

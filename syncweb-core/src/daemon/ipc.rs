@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
-    fs,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
@@ -13,25 +12,22 @@ use std::{
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
-use uuid::Uuid;
 
 use crate::{
-    allocation::{AllocationCandidate, StorageRoot, materialization_path},
     bandwidth_stats::{FileStatsCollector, FileStatsReport},
     daemon::state::FolderStatusReport,
     error::{Result, SyncwebError},
     filter::{FilterConfig, FilterEngine},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PackageAnnouncement,
-        PackageCatalog, PublicSubscription, SyncMode,
+        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, SyncMode,
     },
     fs::Importer,
-    indexing::{IndexingService, resilience::ResilienceService},
-    node::{gossip_service::GossipService, iroh_node::IrohNode},
+    indexing::IndexingService,
+    node::iroh_node::IrohNode,
     snapshot::SnapshotStore,
     storage::config::SubscribeFilters,
-    storage::node_db::{NodeDatabase, TransferJobRecord},
+    storage::node_db::NodeDatabase,
     sync::{
         ActiveSession, AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams,
         SyncEngine, SyncEvent, cancel_session,
@@ -49,8 +45,6 @@ use std::time::Duration;
 const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
-
-const TRANSFER_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -224,42 +218,6 @@ pub enum IpcCommand {
     NetworkJoin {
         ticket: String,
     },
-
-    /// Search for packages on a gossip channel.
-    PackageSearch {
-        /// Optional search query (name substring).
-        #[serde(default)]
-        query: Option<String>,
-        /// Optional channel name (defaults to the public catalog).
-        #[serde(default)]
-        channel: Option<String>,
-        /// Timeout in seconds for gossip collection.
-        #[serde(default = "default_search_timeout")]
-        timeout_secs: u64,
-    },
-    /// Install a package from a manifest blob ticket.
-    PackageInstall {
-        /// Blob ticket for the package manifest.
-        ticket: String,
-        /// Target directory for installed files.
-        target_dir: PathBuf,
-    },
-    /// Upgrade an installed package to its latest announced version.
-    PackageUpgrade {
-        /// Collection UUID of the package to upgrade.
-        collection_id: String,
-    },
-    /// Remove an installed package.
-    PackageRemove {
-        /// Collection UUID of the package to remove.
-        collection_id: String,
-    },
-    /// List locally installed packages.
-    PackageList,
-    /// Get detailed info about an installed package.
-    PackageInfo {
-        collection_id: String,
-    },
 }
 
 /// A response returned by the daemon control channel.
@@ -267,61 +225,17 @@ pub enum IpcCommand {
 #[serde(tag = "response", content = "data", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum IpcResponse {
-    Ok {
-        message: String,
-    },
+    Ok { message: String },
     Status(DaemonStatus),
     FolderList(Vec<FolderStatus>),
-    DownloadComplete {
-        bytes_transferred: u64,
-    },
-    TransferJobsProcessed {
-        completed: u64,
-        failed: u64,
-    },
-    ImportFilesComplete {
-        entries: u64,
-    },
+    DownloadComplete { bytes_transferred: u64 },
+    TransferJobsProcessed { completed: u64, failed: u64 },
+    ImportFilesComplete { entries: u64 },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
     EnrichData(HashMap<String, usize>),
     FileStats(Box<FileStatsReport>),
-    Error {
-        message: String,
-    },
-    PackageSearchResult {
-        packages: Vec<PackageAnnouncement>,
-    },
-    PackageInstalled {
-        collection_id: String,
-        name: String,
-        version: String,
-        installed_path: PathBuf,
-        manifest_hash: String,
-    },
-    PackageRemoved {
-        collection_id: String,
-    },
-    PackageListResult {
-        packages: Vec<InstalledPackageInfo>,
-    },
-    PackageInfoResult {
-        info: InstalledPackageInfo,
-    },
-}
-
-/// Summary of a locally installed package.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct InstalledPackageInfo {
-    pub collection_id: String,
-    pub name: String,
-    pub version: String,
-    pub installed_path: PathBuf,
-    pub manifest_hash: String,
-    pub installed_at: String,
-    pub file_count: usize,
-    pub total_size: u64,
+    Error { message: String },
 }
 
 /// A managed folder summary returned by the daemon.
@@ -623,7 +537,6 @@ pub struct IpcServer {
     archive_context: Option<Arc<ArchiveContext>>,
     folder_manager: Option<FolderManager>,
     node_db: Option<NodeDatabase>,
-    resilience: Option<ResilienceService>,
     network_manager: Option<std::sync::Arc<tokio::sync::RwLock<crate::net::NetworkManager>>>,
 }
 
@@ -631,20 +544,6 @@ pub struct IpcServer {
 struct ArchiveContext {
     node: Arc<IrohNode>,
     pool: Arc<ManagedPool>,
-    indexing: Option<IndexingService>,
-}
-
-#[derive(Clone, Copy)]
-enum TransferJobOutcome {
-    Completed,
-    Failed,
-    Skipped,
-}
-
-enum TransferPreparation {
-    Ready,
-    Failed,
-    Skipped,
 }
 
 impl IpcServer {
@@ -656,7 +555,6 @@ impl IpcServer {
             archive_context: None,
             folder_manager: None,
             node_db: None,
-            resilience: None,
             network_manager: None,
         }
     }
@@ -668,15 +566,14 @@ impl IpcServer {
         daemon_handle: DaemonHandle,
         node: Arc<IrohNode>,
         pool: Arc<ManagedPool>,
-        indexing: Option<IndexingService>,
+        _indexing: Option<IndexingService>,
     ) -> Self {
         Self {
             listener: IpcListener::new(socket_path),
             daemon_handle,
-            archive_context: Some(Arc::new(ArchiveContext { node, pool, indexing })),
+            archive_context: Some(Arc::new(ArchiveContext { node, pool })),
             folder_manager: None,
             node_db: None,
-            resilience: None,
             network_manager: None,
         }
     }
@@ -692,13 +589,6 @@ impl IpcServer {
     #[must_use]
     pub fn with_node_db(mut self, node_db: NodeDatabase) -> Self {
         self.node_db = Some(node_db);
-        self
-    }
-
-    /// Attach a resilience service for live peer-count queries.
-    #[must_use]
-    pub fn with_resilience(mut self, resilience: ResilienceService) -> Self {
-        self.resilience = Some(resilience);
         self
     }
 
@@ -841,35 +731,6 @@ impl IpcServer {
         }
     }
 
-    async fn handle_package_group(&self, cmd: IpcCommand) -> IpcResponse {
-        if let IpcCommand::PackageSearch {
-            query,
-            channel,
-            timeout_secs,
-        } = cmd
-        {
-            return self.handle_package_search(query, channel, timeout_secs).await;
-        }
-        if let IpcCommand::PackageInstall { ticket, target_dir } = cmd {
-            return self.handle_package_install(ticket, target_dir).await;
-        }
-        if let IpcCommand::PackageUpgrade { collection_id } = cmd {
-            return self.handle_package_upgrade(collection_id).await;
-        }
-        if let IpcCommand::PackageRemove { collection_id } = cmd {
-            return self.handle_package_remove(collection_id);
-        }
-        if matches!(cmd, IpcCommand::PackageList) {
-            return self.handle_package_list();
-        }
-        if let IpcCommand::PackageInfo { collection_id } = cmd {
-            return self.handle_package_info(collection_id);
-        }
-        IpcResponse::Error {
-            message: format!("unhandled package command: {cmd:?}"),
-        }
-    }
-
     /// Handle one decoded request without requiring a socket.
     pub async fn handle_request(&self, request: IpcRequest) -> IpcResponse {
         use IpcCommand as C;
@@ -947,12 +808,6 @@ impl IpcServer {
                     .await
             }
             C::EnrichSort { path } => self.handle_enrich_sort(path).await,
-            C::PackageSearch { .. }
-            | C::PackageInstall { .. }
-            | C::PackageUpgrade { .. }
-            | C::PackageRemove { .. }
-            | C::PackageList
-            | C::PackageInfo { .. } => self.handle_package_group(request.command).await,
             C::NetworkInvite { .. }
             | C::NetworkKick { .. }
             | C::NetworkLeave { .. }
@@ -1073,167 +928,20 @@ impl IpcServer {
                 message: "transfer materialization requires node database".to_owned(),
             };
         };
-        let jobs = match node_db.list_transfer_jobs(namespace.as_deref(), Some("queued")) {
-            Ok(jobs) => jobs,
+        let summary = match super::transfers::process_transfer_jobs(
+            context.node.as_ref(),
+            &node_db,
+            namespace.as_deref(),
+        )
+        .await
+        {
+            Ok(summary) => summary,
             Err(error) => return response_from_error(error),
         };
-        let mut completed = 0_u64;
-        let mut failed = 0_u64;
-        for job in jobs {
-            match self.process_transfer_job(&context, &node_db, job).await {
-                TransferJobOutcome::Completed => completed = completed.saturating_add(1),
-                TransferJobOutcome::Failed => failed = failed.saturating_add(1),
-                TransferJobOutcome::Skipped => {}
-            }
+        IpcResponse::TransferJobsProcessed {
+            completed: summary.completed,
+            failed: summary.failed,
         }
-        IpcResponse::TransferJobsProcessed { completed, failed }
-    }
-
-    async fn process_transfer_job(
-        &self,
-        context: &ArchiveContext,
-        node_db: &NodeDatabase,
-        job: TransferJobRecord,
-    ) -> TransferJobOutcome {
-        let Some(destination) = job.destination.as_ref() else {
-            mark_transfer_job_failed(
-                node_db,
-                &job.id,
-                &"job has no allocated destination",
-                "missing transfer destination",
-            );
-            return TransferJobOutcome::Failed;
-        };
-        let hash = iroh_blobs::Hash::from(job.hash);
-        if let Err(error) = Self::validate_transfer_job(node_db, &job, destination, hash) {
-            mark_transfer_job_failed(node_db, &job.id, &error, "transfer path validation error");
-            return TransferJobOutcome::Failed;
-        }
-        match self.prepare_transfer_job(context, node_db, &job, hash).await {
-            TransferPreparation::Ready => {}
-            TransferPreparation::Failed => return TransferJobOutcome::Failed,
-            TransferPreparation::Skipped => return TransferJobOutcome::Skipped,
-        }
-        match materialize_transfer(context, destination, hash).await {
-            Ok(size) => complete_transfer_job(node_db, &job, size),
-            Err(error) => {
-                mark_transfer_job_failed(node_db, &job.id, &error, "transfer materialization error");
-                TransferJobOutcome::Failed
-            }
-        }
-    }
-
-    async fn prepare_transfer_job(
-        &self,
-        context: &ArchiveContext,
-        node_db: &NodeDatabase,
-        job: &TransferJobRecord,
-        hash: iroh_blobs::Hash,
-    ) -> TransferPreparation {
-        let fetch_claimed = match node_db.transition_transfer_job_state(&job.id, "queued", "fetching", None) {
-            Ok(claimed) => claimed,
-            Err(error) => {
-                tracing::error!(%error, job_id = %job.id, "failed to mark transfer job fetching");
-                return TransferPreparation::Failed;
-            }
-        };
-        if !fetch_claimed {
-            return TransferPreparation::Skipped;
-        }
-
-        let has_blob = match context.node.blob_store().has(hash).await {
-            Ok(has_blob) => has_blob,
-            Err(error) => {
-                mark_transfer_job_failed(node_db, &job.id, &error, "blob lookup error");
-                return TransferPreparation::Failed;
-            }
-        };
-        if !has_blob {
-            let path = match String::from_utf8(job.entry_key.clone()) {
-                Ok(path) => path,
-                Err(error) => {
-                    mark_transfer_job_failed(
-                        node_db,
-                        &job.id,
-                        &format!("job entry path is not UTF-8: {error}"),
-                        "invalid transfer path",
-                    );
-                    return TransferPreparation::Failed;
-                }
-            };
-            let filter = FetchFilter::new().with_paths(vec![PathBuf::from(path)]);
-            if let Err(error) = self
-                .handle_download_with_timeout(
-                    job.namespace_id.clone(),
-                    FetchStrategy::filter(filter),
-                    TRANSFER_TIMEOUT,
-                )
-                .await
-            {
-                mark_transfer_job_failed(node_db, &job.id, &error, "transfer fetch error");
-                return TransferPreparation::Failed;
-            }
-        }
-
-        let materialization_claimed =
-            match node_db.transition_transfer_job_state(&job.id, "fetching", "materializing", None) {
-                Ok(claimed) => claimed,
-                Err(error) => {
-                    tracing::error!(%error, job_id = %job.id, "failed to mark transfer job materializing");
-                    return TransferPreparation::Failed;
-                }
-            };
-        if materialization_claimed {
-            TransferPreparation::Ready
-        } else {
-            TransferPreparation::Skipped
-        }
-    }
-
-    /// Validate that a queued job still points at its allocated root and path.
-    fn validate_transfer_job(
-        node_db: &NodeDatabase,
-        job: &TransferJobRecord,
-        destination: &Path,
-        hash: iroh_blobs::Hash,
-    ) -> Result<()> {
-        let root_id = job
-            .root_id
-            .as_deref()
-            .ok_or_else(|| SyncwebError::InvalidConfig("job has no storage root".to_owned()))?;
-        let root = node_db
-            .list_storage_roots()?
-            .into_iter()
-            .find(|root| root.id == root_id)
-            .ok_or_else(|| SyncwebError::InvalidConfig(format!("storage root not found: {root_id}")))?;
-        let job_namespace = iroh_docs::NamespaceId::from_str(&job.namespace_id)
-            .map_err(|error| SyncwebError::operation("job has invalid namespace", error))?;
-        let path = String::from_utf8(job.entry_key.clone())
-            .map_err(|error| SyncwebError::operation("job entry path is not UTF-8", error))?;
-        let root_path = root.path.clone();
-        let candidate = AllocationCandidate::new(
-            job_namespace,
-            PathBuf::from(path),
-            hash,
-            job.size,
-            usize::try_from(job.peer_count).unwrap_or(usize::MAX),
-            false,
-        );
-        let expected = materialization_path(
-            &StorageRoot::new(root.id, &root_path, root.min_free).with_enabled(root.enabled),
-            &candidate,
-        )?;
-        if expected != destination {
-            return Err(SyncwebError::InvalidConfig(format!(
-                "job destination does not match its allocated root: {}",
-                destination.display()
-            )));
-        }
-        reject_symlink_components(
-            expected.strip_prefix(&root_path).unwrap_or_else(|_| Path::new("")),
-            &root_path,
-        )?;
-        Ok(())
     }
 
     async fn handle_import_files_response(&self, namespace: Option<String>, path: PathBuf) -> IpcResponse {
@@ -1722,7 +1430,6 @@ impl IpcServer {
             Err(error) => return response_from_error(error),
         };
         let mut candidates = Vec::new();
-        let mut hashes = Vec::new();
         for entry in entries {
             if entry.key().starts_with(b"sys/") {
                 continue;
@@ -1747,18 +1454,9 @@ impl IpcServer {
                 Err(error) => return response_from_error(error),
             };
             candidates.push(FetchCandidate::new(path_str, hash, entry.content_len(), 0, local));
-            hashes.push(hash);
         }
 
-        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> = match &self.resilience {
-            Some(resilience) => match resilience.health_batch(&hashes) {
-                Ok(health_map) => health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
-                Err(error) => {
-                    return response_from_error(error);
-                }
-            },
-            None => HashMap::new(),
-        };
+        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> = HashMap::new();
 
         let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
         IpcResponse::Ok {
@@ -1808,7 +1506,6 @@ impl IpcServer {
         let Ok(entries) = context.node.docs_engine().list_latest(folder.doc()).await else {
             return IpcResponse::EnrichData(HashMap::new());
         };
-        let mut hashes = Vec::new();
         let mut path_map: Vec<(String, iroh_blobs::Hash)> = Vec::new();
         for entry in entries {
             if entry.key().starts_with(b"sys/") {
@@ -1819,16 +1516,9 @@ impl IpcServer {
             };
             let hash = entry.content_hash();
             path_map.push((path_str, hash));
-            hashes.push(hash);
         }
 
-        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> =
-            self.resilience.as_ref().map_or_else(HashMap::new, |resilience| {
-                resilience.health_batch(&hashes).map_or_else(
-                    |_| HashMap::new(),
-                    |health_map| health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
-                )
-            });
+        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> = HashMap::new();
 
         let result: HashMap<String, usize> = path_map
             .into_iter()
@@ -2378,7 +2068,7 @@ impl IpcServer {
         path: PathBuf,
         namespace: String,
         sequence: u64,
-        bootstrap: Vec<String>,
+        _bootstrap: Vec<String>,
         manifest_bytes: Option<Vec<u8>>,
     ) -> IpcResponse {
         let context = match &self.archive_context {
@@ -2439,337 +2129,12 @@ impl IpcServer {
             Ok(h) => h,
             Err(error) => return response_from_error(error),
         };
-        let name = manifest
-            .package
-            .as_ref()
-            .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
         let ticket = context.node.blob_store().ticket(context.node.endpoint(), head.manifest);
-        let announcement = match PackageAnnouncement::new(
-            manifest.collection_id,
-            name,
-            manifest.version.clone(),
-            head.sequence,
-            head.manifest,
-            ticket.to_string(),
-            context.node.endpoint().id(),
-        ) {
-            Ok(a) => a,
-            Err(error) => return response_from_error(error),
-        };
-        let bootstrap_nodes: Vec<_> = bootstrap
-            .into_iter()
-            .filter_map(|b| b.parse::<iroh::PublicKey>().ok())
-            .collect();
-        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
-        let topic = if bootstrap_nodes.is_empty() {
-            match catalog.subscribe(bootstrap_nodes).await {
-                Ok(t) => t,
-                Err(error) => return response_from_error(error),
-            }
-        } else {
-            match catalog.subscribe_and_join(bootstrap_nodes).await {
-                Ok(t) => t,
-                Err(error) => return response_from_error(error),
-            }
-        };
-        let (sender, _receiver) = GossipService::split(topic);
-        if let Err(error) = catalog.announce(&sender, &announcement).await {
-            return response_from_error(error);
-        }
         IpcResponse::Ok {
             message: format!(
                 "manifest: {}\nmanifest_ticket: {}\nsequence: {}",
-                head.manifest, announcement.manifest_ticket, head.sequence,
+                head.manifest, ticket, head.sequence,
             ),
-        }
-    }
-
-    async fn handle_package_search(
-        &self,
-        query: Option<String>,
-        channel: Option<String>,
-        timeout_secs: u64,
-    ) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon package-search IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-
-        // If a channel is specified, check for a catalog-backed namespace first.
-        if let Some(ref channel_name) = channel
-            && let Some(ref indexing) = context.indexing
-            && let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name)
-        {
-            let author = match context.node.docs_engine().author().await {
-                Ok(a) => a,
-                Err(error) => return response_from_error(error),
-            };
-            let catalog_service =
-                indexing.catalog_service(context.node.docs_engine(), context.node.blob_store(), author);
-            let query_str = query.as_deref().unwrap_or("");
-            let limit = 100;
-            return match catalog_service.search(query_str, limit) {
-                Ok(records) => {
-                    let packages: Vec<_> = records
-                        .into_iter()
-                        .filter(|r| r.catalog_namespace_id == namespace_id)
-                        .map(|r| r.to_package_announcement())
-                        .collect();
-                    IpcResponse::PackageSearchResult { packages }
-                }
-                Err(error) => response_from_error(error),
-            };
-        }
-
-        // Fall back to gossip-based search.
-        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
-        let timeout = Duration::from_secs(timeout_secs);
-        let bootstrap: Vec<iroh::PublicKey> = Vec::new();
-
-        let result = if let Some(channel_name) = &channel {
-            let channel_obj = crate::editorial::Channel::with_backend(
-                channel_name.as_str(),
-                None::<String>,
-                crate::editorial::ChannelBackend::Gossip,
-            );
-            let mut topic = match catalog.subscribe_channel_and_join(&channel_obj, bootstrap).await {
-                Ok(t) => t,
-                Err(error) => return response_from_error(error),
-            };
-            catalog.search_channel(&mut topic, query.as_deref(), timeout).await
-        } else {
-            let mut topic = match catalog.subscribe_and_join(bootstrap).await {
-                Ok(t) => t,
-                Err(error) => return response_from_error(error),
-            };
-            catalog.search(&mut topic, query.as_deref(), timeout).await
-        };
-
-        match result {
-            Ok(packages) => IpcResponse::PackageSearchResult { packages },
-            Err(error) => response_from_error(error),
-        }
-    }
-
-    async fn handle_package_install(&self, ticket: String, target_dir: PathBuf) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon package-install IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let manifest_ticket = match ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
-            Ok(t) => t,
-            Err(error) => return response_from_error(error),
-        };
-        let pkg_root = target_dir.join(crate::constants::PACKAGES_DIR_NAME);
-        let Some(node_db) = self.node_db.clone() else {
-            return IpcResponse::Error {
-                message: "daemon package-install IPC is unavailable: no node database".to_owned(),
-            };
-        };
-        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
-        match pkg_manager
-            .install_from_ticket(&manifest_ticket, context.node.endpoint(), context.node.blob_store())
-            .await
-        {
-            Ok(manifest) => {
-                let installed_path = pkg_root
-                    .join(manifest.collection_id.to_string())
-                    .join(&manifest.version);
-                let manifest_hash = manifest.blob_id().map_or_else(|_| String::new(), |h| h.to_string());
-                IpcResponse::PackageInstalled {
-                    collection_id: manifest.collection_id.to_string(),
-                    name: manifest
-                        .package
-                        .as_ref()
-                        .map_or_else(|| manifest.collection_id.to_string(), |p| p.name.clone()),
-                    version: manifest.version,
-                    installed_path,
-                    manifest_hash,
-                }
-            }
-            Err(error) => response_from_error(error),
-        }
-    }
-
-    async fn handle_package_upgrade(&self, collection_id: String) -> IpcResponse {
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon package-upgrade IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let catalog = PackageCatalog::new(context.node.gossip_service(), context.node.endpoint());
-        let bootstrap: Vec<iroh::PublicKey> = Vec::new();
-        let mut topic = match catalog.subscribe_and_join(bootstrap).await {
-            Ok(t) => t,
-            Err(error) => return response_from_error(error),
-        };
-        let announcements = match catalog
-            .search(&mut topic, Some(&collection_id.clone()), Duration::from_secs(10))
-            .await
-        {
-            Ok(a) => a,
-            Err(error) => return response_from_error(error),
-        };
-        let latest = announcements.iter().max_by(|a, b| a.version.cmp(&b.version));
-        let Some(announcement) = latest else {
-            return IpcResponse::Error {
-                message: format!("no announcement found for collection {collection_id}"),
-            };
-        };
-        let manifest_ticket = match announcement.ticket() {
-            Ok(t) => t,
-            Err(error) => return response_from_error(error),
-        };
-        let Some(node_db) = self.node_db.clone() else {
-            return IpcResponse::Error {
-                message: "daemon package-upgrade IPC is unavailable: no node database".to_owned(),
-            };
-        };
-        let pkg_root = std::env::temp_dir().join("syncweb-packages");
-        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
-        match pkg_manager
-            .install_from_ticket(&manifest_ticket, context.node.endpoint(), context.node.blob_store())
-            .await
-        {
-            Ok(manifest) => {
-                let manifest_hash = manifest.blob_id().map_or_else(|_| String::new(), |h| h.to_string());
-                let version = manifest.version;
-                let installed_path = pkg_root.join(manifest.collection_id.to_string()).join(&version);
-                IpcResponse::PackageInstalled {
-                    collection_id: manifest.collection_id.to_string(),
-                    name: manifest
-                        .package
-                        .as_ref()
-                        .map_or_else(|| manifest.collection_id.to_string(), |p| p.name.clone()),
-                    version,
-                    installed_path,
-                    manifest_hash,
-                }
-            }
-            Err(error) => response_from_error(error),
-        }
-    }
-
-    fn handle_package_remove(&self, collection_id: String) -> IpcResponse {
-        let collection_uuid = match collection_id.parse::<Uuid>() {
-            Ok(id) => id,
-            Err(error) => return response_from_error(error),
-        };
-        let Some(node_db) = self.node_db.clone() else {
-            return IpcResponse::Error {
-                message: "daemon package-remove IPC is unavailable: no node database".to_owned(),
-            };
-        };
-        let pkg_root = std::env::temp_dir().join("syncweb-packages");
-        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
-        let state = match pkg_manager.state() {
-            Ok(s) => s,
-            Err(error) => return response_from_error(error),
-        };
-        let installed = match state.installed.get(&collection_uuid) {
-            Some(i) => i.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: format!("package {collection_id} is not installed"),
-                };
-            }
-        };
-        // Remove all versions except the current one by switching first
-        let versions: Vec<String> = installed.versions.keys().cloned().collect();
-        for version in &versions {
-            if *version != installed.current
-                && let Err(error) = pkg_manager.remove(collection_uuid, version)
-            {
-                return response_from_error(error);
-            }
-        }
-        // For the current version, we still remove the directory directly
-        if let Some(path) = installed.versions.get(&installed.current)
-            && let Err(error) = fs::remove_dir_all(path)
-        {
-            return response_from_error(error);
-        }
-        IpcResponse::PackageRemoved { collection_id }
-    }
-
-    fn handle_package_list(&self) -> IpcResponse {
-        let Some(node_db) = self.node_db.clone() else {
-            return IpcResponse::Error {
-                message: "daemon package-list IPC is unavailable: no node database".to_owned(),
-            };
-        };
-        let pkg_root = std::env::temp_dir().join("syncweb-packages");
-        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
-        let state = match pkg_manager.state() {
-            Ok(s) => s,
-            Err(error) => return response_from_error(error),
-        };
-        let mut packages = Vec::new();
-        for (collection_id, installed) in &state.installed {
-            let path = installed.versions.get(&installed.current);
-            let (file_count, total_size) = path.map_or((0, 0), |p| count_dir_files(p));
-            packages.push(InstalledPackageInfo {
-                collection_id: collection_id.to_string(),
-                name: collection_id.to_string(),
-                version: installed.current.clone(),
-                installed_path: path.cloned().unwrap_or_default(),
-                manifest_hash: installed.manifest.to_string(),
-                installed_at: String::new(),
-                file_count,
-                total_size,
-            });
-        }
-        IpcResponse::PackageListResult { packages }
-    }
-
-    fn handle_package_info(&self, collection_id: String) -> IpcResponse {
-        let collection_uuid = match collection_id.parse::<Uuid>() {
-            Ok(id) => id,
-            Err(error) => return response_from_error(error),
-        };
-        let Some(node_db) = self.node_db.clone() else {
-            return IpcResponse::Error {
-                message: "daemon package-info IPC is unavailable: no node database".to_owned(),
-            };
-        };
-        let pkg_root = std::env::temp_dir().join("syncweb-packages");
-        let pkg_manager = crate::folder::PackageManager::new(&pkg_root, node_db);
-        let state = match pkg_manager.state() {
-            Ok(s) => s,
-            Err(error) => return response_from_error(error),
-        };
-        let installed = match state.installed.get(&collection_uuid) {
-            Some(i) => i.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: format!("package {collection_id} is not installed"),
-                };
-            }
-        };
-        let path = installed.versions.get(&installed.current);
-        let (file_count, total_size) = path.map_or((0, 0), |p| count_dir_files(p));
-        IpcResponse::PackageInfoResult {
-            info: InstalledPackageInfo {
-                collection_id: collection_id.clone(),
-                name: collection_id,
-                version: installed.current.clone(),
-                installed_path: path.cloned().unwrap_or_default(),
-                manifest_hash: installed.manifest.to_string(),
-                installed_at: String::new(),
-                file_count,
-                total_size,
-            },
         }
     }
 
@@ -2827,78 +2192,6 @@ impl IpcServer {
         }
         Ok(manifests)
     }
-}
-
-fn mark_transfer_job_failed(node_db: &NodeDatabase, job_id: &str, message: &dyn std::fmt::Display, context: &str) {
-    let rendered_message = message.to_string();
-    if let Err(error) = node_db.update_transfer_job_state(job_id, "failed", Some(&rendered_message)) {
-        tracing::error!(%error, %job_id, context, "failed to record transfer job failure");
-    }
-}
-
-async fn materialize_transfer(context: &ArchiveContext, destination: &Path, hash: iroh_blobs::Hash) -> Result<u64> {
-    if let Ok(metadata) = std::fs::symlink_metadata(destination) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(SyncwebError::InvalidConfig(format!(
-                "materialization destination is not a regular file: {}",
-                destination.display()
-            )));
-        }
-        let existing = std::fs::read(destination)?;
-        if blake3::hash(&existing).as_bytes() != hash.as_bytes() {
-            return Err(SyncwebError::InvalidConfig(format!(
-                "materialization destination has a different blob: {}",
-                destination.display()
-            )));
-        }
-    }
-    if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    context.node.blob_store().export_to_path(hash, destination).await?;
-    let bytes = std::fs::read(destination)?;
-    if blake3::hash(&bytes).as_bytes() != hash.as_bytes() {
-        return Err(SyncwebError::operation(
-            "materialized transfer hash does not match",
-            destination.display(),
-        ));
-    }
-    u64::try_from(bytes.len()).map_err(|error| SyncwebError::operation("materialized transfer size is invalid", error))
-}
-
-fn complete_transfer_job(node_db: &NodeDatabase, job: &TransferJobRecord, size: u64) -> TransferJobOutcome {
-    if let Err(error) = node_db.update_transfer_job_progress(&job.id, size, job.peer_count, None, job.retries) {
-        tracing::error!(%error, job_id = %job.id, "failed to record transfer completion progress");
-        return TransferJobOutcome::Failed;
-    }
-    match node_db.transition_transfer_job_state(&job.id, "materializing", "completed", None) {
-        Ok(true) => TransferJobOutcome::Completed,
-        Ok(false) => TransferJobOutcome::Skipped,
-        Err(error) => {
-            tracing::error!(%error, job_id = %job.id, "failed to record transfer completion");
-            TransferJobOutcome::Failed
-        }
-    }
-}
-
-const fn default_search_timeout() -> u64 {
-    10
-}
-
-fn count_dir_files(dir: &Path) -> (usize, u64) {
-    let mut count = 0_usize;
-    let mut total = 0_u64;
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if let Ok(meta) = entry.metadata()
-                && meta.is_file()
-            {
-                count = count.saturating_add(1);
-                total = total.saturating_add(meta.len());
-            }
-        }
-    }
-    (count, total)
 }
 
 fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
@@ -3079,12 +2372,7 @@ impl IpcClient {
                 | IpcResponse::ExportComplete(_)
                 | IpcResponse::EnrichData(_)
                 | IpcResponse::FileStats(_)
-                | IpcResponse::TransferJobsProcessed { .. }
-                | IpcResponse::PackageSearchResult { .. }
-                | IpcResponse::PackageInstalled { .. }
-                | IpcResponse::PackageRemoved { .. }
-                | IpcResponse::PackageListResult { .. }
-                | IpcResponse::PackageInfoResult { .. } => Err(SyncwebError::operation(
+                | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),
@@ -3098,25 +2386,6 @@ impl IpcClient {
             ))
         }
     }
-}
-
-fn reject_symlink_components(relative: &Path, root: &Path) -> Result<()> {
-    let mut current = root.to_path_buf();
-    for component in relative.components() {
-        current.push(component.as_os_str());
-        let metadata = match std::fs::symlink_metadata(&current) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error.into()),
-        };
-        if metadata.file_type().is_symlink() {
-            return Err(SyncwebError::InvalidConfig(format!(
-                "materialization path contains a symlink: {}",
-                current.display()
-            )));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(unix)]

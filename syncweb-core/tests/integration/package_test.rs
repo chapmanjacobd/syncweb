@@ -1,43 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use anyhow::Context;
-use iroh::address_lookup::memory::MemoryLookup;
 use syncweb_core::{
-    folder::{CollectionEntry, CollectionManifest, PackageAnnouncement, PackageCatalog, PackageManager},
-    node::{
-        identity::IdentityManager,
-        iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
-    },
+    folder::{CollectionEntry, CollectionManifest, PackageManager},
     storage::node_db::NodeDatabase,
 };
 
 use crate::test_utils::TestDirectory;
-
-async fn relay_node(
-    directory: &TestDirectory,
-    name: &str,
-    relay_map: iroh::RelayMap,
-    relay_url: iroh::RelayUrl,
-    memory_lookup: MemoryLookup,
-) -> anyhow::Result<IrohNode> {
-    let root = directory.path().join(name);
-    let identity = IdentityManager::new(root.join("identity.key"))?;
-    let node = IrohNode::new_with_address_lookup(
-        identity,
-        root.join("data"),
-        RelayMode::Custom {
-            map: relay_map,
-            insecure: true,
-        },
-        memory_lookup.clone(),
-        DiscoveryConfig::disabled(),
-        crate::test_utils::empty_member_keys(),
-    )
-    .await?;
-    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node.endpoint().id()).with_relay_url(relay_url));
-    Ok(node)
-}
 
 fn make_source(dir: &Path, name: &str, data: &[u8]) -> anyhow::Result<PathBuf> {
     let path = dir.join(name);
@@ -291,82 +260,5 @@ fn test_package_integrity() -> anyhow::Result<()> {
     let missing_manifest = make_manifest(uuid::Uuid::new_v4(), "1.0.0", files)?;
     anyhow::ensure!(packages.verify(&missing_manifest).is_err());
 
-    Ok(())
-}
-
-/// 5.3 Integration Test: Publish -> search -> info across nodes
-#[tokio::test]
-async fn test_package_discovery() -> anyhow::Result<()> {
-    let directory = TestDirectory::new("syncweb-package-test")?;
-    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
-    let memory_lookup = MemoryLookup::new();
-
-    let publisher = relay_node(
-        &directory,
-        "publisher",
-        relay_map.clone(),
-        relay_url.clone(),
-        memory_lookup.clone(),
-    )
-    .await?;
-    let searcher = relay_node(&directory, "searcher", relay_map, relay_url, memory_lookup.clone()).await?;
-
-    // Publisher subscribes to catalog (no bootstrap, it's the first peer)
-    let pub_catalog = PackageCatalog::new(publisher.gossip_service(), publisher.endpoint());
-    let pub_topic = pub_catalog.subscribe(vec![]).await?;
-    let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(pub_topic);
-
-    // Searcher subscribes with publisher as bootstrap and waits for join
-    let search_catalog = PackageCatalog::new(searcher.gossip_service(), searcher.endpoint());
-    let mut search_topic = search_catalog.subscribe(vec![publisher.endpoint().id()]).await?;
-    tokio::time::timeout(Duration::from_secs(30), search_topic.joined())
-        .await
-        .context("gossip join timed out")?
-        .context("gossip join failed")?;
-
-    // Create a manifest for the announcement
-    let collection_id = uuid::Uuid::new_v4();
-    let manifest_hash = publisher.blob_store().add_bytes(b"fake-manifest-data").await?;
-    let ticket = publisher.blob_store().ticket(publisher.endpoint(), manifest_hash);
-
-    let pkg_announcement = PackageAnnouncement::new(
-        collection_id,
-        "example-pkg",
-        "1.0.0",
-        1,
-        manifest_hash,
-        ticket.to_string(),
-        publisher.endpoint().id(),
-    )?;
-
-    // Announce repeatedly so the searcher has time to receive
-    let announce_task = tokio::spawn({
-        let catalog_clone = pub_catalog.clone();
-        let announcement_clone = pkg_announcement.clone();
-        async move {
-            loop {
-                let _ = catalog_clone.announce(&sender, &announcement_clone).await;
-                tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-        }
-    });
-
-    let results = search_catalog
-        .search(&mut search_topic, Some("example"), Duration::from_secs(10))
-        .await?;
-    announce_task.abort();
-
-    anyhow::ensure!(!results.is_empty(), "searcher should discover the published package");
-    let found = results.first().context("should have first result")?;
-    anyhow::ensure!(found.collection_id == collection_id);
-    anyhow::ensure!(found.name == "example-pkg");
-    anyhow::ensure!(found.version == "1.0.0");
-    anyhow::ensure!(found.manifest == manifest_hash);
-
-    // Register the ticket endpoint so searcher can fetch
-    PackageCatalog::register_ticket_endpoint(&memory_lookup, found)?;
-
-    publisher.stop().await?;
-    searcher.stop().await?;
     Ok(())
 }

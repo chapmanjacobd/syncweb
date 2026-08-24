@@ -98,8 +98,6 @@ pub enum Command {
         #[command(subcommand)]
         command: LinkCommand,
     },
-    #[command(about = "Mirror all blobs from a provider or network")]
-    Mirror(MirrorArgs),
     #[command(about = "Manage blob provider registrations")]
     Provider {
         #[command(subcommand)]
@@ -198,6 +196,11 @@ pub struct TransferEnqueueArgs {
     #[arg(long, help = "32-byte blob hash in hexadecimal")]
     pub hash: String,
     pub size: u64,
+    #[arg(
+        long,
+        help = "Allocate and materialize the job immediately instead of leaving it queued"
+    )]
+    pub now: bool,
 }
 
 #[derive(Debug, Args)]
@@ -270,6 +273,11 @@ pub struct FolderCreate {
     pub write: bool,
     #[arg(long, help = "Create the folder without sharing it (no ticket/URL printed)")]
     pub no_share: bool,
+    #[arg(
+        long,
+        help = "Do not opt the folder into local indexing (indexing is enabled by default)"
+    )]
+    pub no_indexing: bool,
 }
 
 #[derive(Debug, Args)]
@@ -351,10 +359,6 @@ pub struct SearchArgs {
     pub channel: Option<String>,
     #[arg(long, default_value_t = 20, help = "Maximum number of results")]
     pub limit: usize,
-    #[arg(long, default_value_t = 250, help = "Gossip search timeout in milliseconds")]
-    pub timeout_ms: u64,
-    #[arg(long, value_name = "NODE_ID", help = "Bootstrap gossip search with a node ID")]
-    pub bootstrap: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -551,24 +555,6 @@ pub struct DownloadArgs {
         help = "Copy threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
-}
-
-#[derive(Debug, Args)]
-pub struct MirrorArgs {
-    #[arg(help = "Provider ID (PublicKey hex) to mirror blobs from")]
-    pub provider: Option<String>,
-    #[arg(long, help = "Network name or ID to mirror all blobs across")]
-    pub network: Option<String>,
-    #[arg(long, default_value_t = 3, help = "Minimum replication budget per blob (default 3)")]
-    pub min_providers: usize,
-    #[arg(
-        long,
-        visible_alias = "no-seeding",
-        help = "Skip lease announcements after mirroring"
-    )]
-    pub no_sharing: bool,
-    #[arg(long, help = "Report what would be mirrored without fetching")]
-    pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]
@@ -993,32 +979,11 @@ pub enum IndexingCommand {
         )]
         namespace: Option<String>,
     },
-    #[command(about = "Show verified provider health for a content hash")]
-    Health { hash: String },
-    #[command(about = "Manage signed metadata")]
-    Meta {
-        #[command(subcommand)]
-        command: MetaCommand,
-    },
     #[command(about = "Manage local and federated denylists")]
     Filter {
         #[command(subcommand)]
         command: FilterCommand,
     },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum MetaCommand {
-    #[command(about = "Append signed metadata to a content hash")]
-    Add {
-        hash: String,
-        key: String,
-        value: String,
-        #[arg(long, default_value_t = 1)]
-        sequence: u64,
-    },
-    #[command(about = "List signed metadata for a content hash")]
-    List { hash: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1056,6 +1021,8 @@ pub enum LinkCommand {
         link: String,
         #[arg(long)]
         version: Option<String>,
+        #[arg(long, help = "Print the resolution without fetching or pinning the resolved content")]
+        no_fetch: bool,
     },
     #[command(about = "Revoke a private capability link")]
     Revoke { link: String },

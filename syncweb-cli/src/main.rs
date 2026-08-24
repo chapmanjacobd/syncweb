@@ -16,11 +16,11 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        Command, ConfigCommand, ImportArgs, MirrorArgs, NetworkCommand, PackageCommand, PublishCommand,
-        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        Command, ConfigCommand, ImportArgs, NetworkCommand, PackageCommand, PublishCommand, ScheduleCommand,
+        SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs,
+        StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs,
+        TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs,
+        TransferRootArgs, VerifyArgs, WatchArgs,
     },
     output::{init_tracing, print_version},
 };
@@ -29,17 +29,16 @@ use indicatif::{ProgressBar, ProgressStyle};
 use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
-    allocation::{AllocationCandidate, RootCapacity, StorageRoot, allocate},
+    allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
     cancel_session,
     daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
-        DropImporter, FolderLike, FolderManager, PackageCatalog, PackageManager, SyncMode,
+        DropImporter, FolderLike, FolderManager, PackageManager, SyncMode,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::open_node,
-    mirror::{MirrorContext, MirrorEvent, MirrorOptions, mirror_network, mirror_provider},
     net::{NetworkLogger, NetworkManager, NetworkOptions, TransportFallback},
     node::{
         identity::{DeviceId, IdentityManager},
@@ -224,8 +223,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Stats { command } => handle_stats(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
-        Command::Mirror(command) => handle_mirror(&ctx, command).await?,
-        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command).await?,
+        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Start(_)
         | Command::Shutdown(_)
         | Command::Status
@@ -1014,113 +1012,6 @@ async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::Do
     download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, ctx.network, &command).await
 }
 
-async fn handle_mirror(ctx: &CliContext<'_>, command: MirrorArgs) -> Result<()> {
-    use syncweb_core::indexing::{ReplicationBudget, ResilienceConfig, ResilienceService};
-
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let node = open_node(data_dir).await?;
-    let resilience = ResilienceService::with_database(
-        syncweb_core::indexing::IndexingDatabase::open(data_dir.join("indexing.sqlite"))?,
-        ResilienceConfig::new(ReplicationBudget::new(command.min_providers)),
-    );
-    let options = MirrorOptions::new(command.min_providers)
-        .with_dry_run(command.dry_run)
-        .with_no_sharing(command.no_sharing);
-
-    let provider = match command.provider.as_deref() {
-        Some(p) => Some(
-            p.parse::<iroh::PublicKey>()
-                .map_err(|e| anyhow::anyhow!("invalid provider ID: {e}"))?,
-        ),
-        None => None,
-    };
-
-    let result = if let Some(ref network_str) = command.network {
-        let empty_keys = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
-        let network_mgr = syncweb_core::net::NetworkManager::new(
-            open_node_db(data_dir)?,
-            node.endpoint().secret_key().public(),
-            empty_keys,
-        )?;
-        let network = network_mgr
-            .get_by_name(network_str)
-            .or_else(|| {
-                network_str
-                    .parse::<syncweb_core::net::NetworkId>()
-                    .ok()
-                    .and_then(|id| network_mgr.get(&id))
-            })
-            .ok_or_else(|| anyhow::anyhow!("network {network_str:?} not found"))?;
-        let ns_ids: Vec<iroh_docs::NamespaceId> = network.folders.iter().copied().collect();
-        if ns_ids.is_empty() {
-            anyhow::bail!("network {network_str:?} has no folders to mirror");
-        }
-        let mctx = MirrorContext::new(
-            node.endpoint(),
-            node.blob_store(),
-            &resilience,
-            Some((node.docs_engine(), &ns_ids)),
-            provider,
-            &options,
-            Some(tx),
-        );
-        mirror_network(mctx).await?
-    } else if let Some(ref prov) = provider {
-        mirror_provider(
-            node.endpoint(),
-            node.blob_store(),
-            &resilience,
-            prov,
-            &options,
-            Some(tx),
-        )
-        .await?
-    } else {
-        anyhow::bail!("either a provider ID or --network is required");
-    };
-
-    if output_json {
-        println!("{}", serde_json::json!(&result));
-    } else {
-        let pb = ProgressBar::new(u64::try_from(result.total_blobs).unwrap_or(u64::MAX));
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner} {msg} {bar} {pos}/{len} ({eta})")?
-                .progress_chars("=> "),
-        );
-        pb.set_message("mirroring...");
-        while let Some(event) = rx.recv().await {
-            match event {
-                MirrorEvent::Discovered { total } => {
-                    pb.set_length(u64::try_from(total).unwrap_or(u64::MAX));
-                }
-                MirrorEvent::Fetching { hash, index, .. } => {
-                    pb.set_position(u64::try_from(index).unwrap_or(0));
-                    pb.set_message(format!("fetching {hash}"));
-                }
-                MirrorEvent::Pinned { .. } => {
-                    pb.inc(1);
-                }
-                MirrorEvent::Failed { hash, error } => {
-                    pb.println(format!("failed: {hash}: {error}"));
-                }
-                MirrorEvent::Skipped { .. } | _ => {}
-            }
-        }
-        pb.finish_and_clear();
-        println!(
-            "mirror complete: {} total, {} pinned, {} skipped, {} failed",
-            result.total_blobs, result.pinned, result.skipped, result.failed
-        );
-    }
-
-    let _ = node.stop().await;
-    Ok(())
-}
-
 #[async_recursion]
 async fn handle_snapshot_create(ctx: &CliContext<'_>, command: SnapshotCreateArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -1358,7 +1249,7 @@ async fn handle_transfer(ctx: &CliContext<'_>, command: TransferCommand) -> Resu
         TransferCommand::Info(args) => handle_transfer_info(ctx, &args),
         TransferCommand::Remaining => handle_transfer_remaining(ctx),
         TransferCommand::Root(args) => handle_transfer_root(ctx, args),
-        TransferCommand::Enqueue(args) => handle_transfer_enqueue(ctx, args),
+        TransferCommand::Enqueue(args) => handle_transfer_enqueue(ctx, args).await,
         TransferCommand::Allocate(args) => handle_transfer_allocate(ctx, &args),
         TransferCommand::Materialize(args) => handle_transfer_materialize(ctx, args).await,
         TransferCommand::Pause(args) => handle_transfer_state(ctx, &args, "paused", "paused"),
@@ -1533,7 +1424,7 @@ fn handle_transfer_root(ctx: &CliContext<'_>, args: TransferRootArgs) -> Result<
     Ok(())
 }
 
-fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> Result<()> {
+async fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> Result<()> {
     let namespace = iroh_docs::NamespaceId::from_str(&args.namespace)
         .with_context(|| format!("invalid namespace: {}", args.namespace))?;
     let hash = iroh_blobs::Hash::from_str(&args.hash).with_context(|| format!("invalid blob hash: {}", args.hash))?;
@@ -1549,6 +1440,9 @@ fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> R
         None,
         None,
     ))?;
+    if args.now {
+        return handle_transfer_enqueue_now(ctx, &db, &namespace_id).await;
+    }
     if ctx.output_json {
         println!("{}", serde_json::json!({"status": "queued", "id": job_id}));
     } else {
@@ -1557,75 +1451,61 @@ fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> R
     Ok(())
 }
 
+async fn handle_transfer_enqueue_now(ctx: &CliContext<'_>, db: &NodeDatabase, namespace_id: &str) -> Result<()> {
+    let (decisions, _unallocated) = run_transfer_allocation(db, Some(namespace_id), None, None, None, false)?;
+    if decisions.is_empty() {
+        anyhow::bail!("no storage root could accommodate the queued job");
+    }
+    let summary = materialize_transfer_jobs(ctx, namespace_id).await?;
+    if ctx.output_json {
+        println!(
+            "{}",
+            serde_json::json!({"status": "now", "completed": summary.completed, "failed": summary.failed})
+        );
+    } else {
+        println!(
+            "fetched and materialized {} transfer jobs ({} failed)",
+            summary.completed, summary.failed
+        );
+    }
+    Ok(())
+}
+
+async fn materialize_transfer_jobs(
+    ctx: &CliContext<'_>,
+    namespace_id: &str,
+) -> Result<syncweb_core::daemon::TransferJobSummary> {
+    if let Some(client) = daemon_client_or_start(ctx.data_dir, ctx.no_daemon, ctx.network).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::MaterializeTransfers {
+                namespace: Some(namespace_id.to_owned()),
+            }))
+            .await?;
+        if let IpcResponse::TransferJobsProcessed { completed, failed } = response {
+            return Ok(syncweb_core::daemon::TransferJobSummary::new(completed, failed));
+        }
+        print_daemon_message(response, ctx.output_json)?;
+        anyhow::bail!("daemon returned an unexpected response while materializing transfers");
+    }
+    let node = open_node(ctx.data_dir).await?;
+    let db = open_node_db(ctx.data_dir)?;
+    let summary = syncweb_core::daemon::process_transfer_jobs(&node, &db, Some(namespace_id))
+        .await
+        .map_err(anyhow::Error::from);
+    node.stop().await?;
+    summary
+}
+
 fn handle_transfer_allocate(ctx: &CliContext<'_>, args: &TransferAllocateArgs) -> Result<()> {
     let db = open_node_db(ctx.data_dir)?;
-    let roots = db.list_storage_roots()?;
-    let mut root_inputs = Vec::new();
-    for root in roots {
-        let capacity = transfer_root_capacity(&db, &root)?;
-        root_inputs.push((
-            StorageRoot::new(&root.id, &root.path, root.min_free).with_enabled(root.enabled),
-            capacity,
-        ));
-    }
-    let jobs = db.list_transfer_jobs(None, Some("queued"))?;
-    let mut candidates = Vec::new();
-    for job in &jobs {
-        if job.root_id.is_some() {
-            continue;
-        }
-        let path = PathBuf::from(
-            String::from_utf8(job.entry_key.clone())
-                .with_context(|| format!("job {} has a non-UTF-8 entry path", job.id))?,
-        );
-        if args
-            .namespace
-            .as_deref()
-            .is_some_and(|namespace| namespace != job.namespace_id)
-            || args.min_size.is_some_and(|size| job.size < size)
-            || args.max_size.is_some_and(|size| job.size > size)
-            || args
-                .path_prefix
-                .as_ref()
-                .is_some_and(|prefix| !path.starts_with(prefix))
-        {
-            continue;
-        }
-        let namespace = iroh_docs::NamespaceId::from_str(&job.namespace_id)
-            .with_context(|| format!("job {} has an invalid namespace", job.id))?;
-        candidates.push(AllocationCandidate::new(
-            namespace,
-            path,
-            iroh_blobs::Hash::from(job.hash),
-            job.size,
-            usize::try_from(job.peer_count).unwrap_or(usize::MAX),
-            job.state == "completed",
-        ));
-    }
-    let (decisions, unallocated) = allocate(&root_inputs, &candidates);
-    if !args.dry_run {
-        let mut assignments = Vec::new();
-        for decision in &decisions {
-            if let Some(job) = jobs.iter().find(|job| {
-                job.root_id.is_none()
-                    && job.namespace_id == decision.candidate.namespace.to_string()
-                    && job.entry_key == decision.candidate.path.to_string_lossy().as_bytes()
-                    && job.hash == *decision.candidate.hash.as_bytes()
-            }) {
-                let existing_size =
-                    existing_destination_size(&decision.destination, decision.candidate.hash.as_bytes())?;
-                assignments.push((job.id.clone(), decision, existing_size));
-            }
-        }
-        for (job_id, decision, existing_size) in assignments {
-            db.assign_transfer_job(&job_id, &decision.root_id, &decision.destination)?;
-            if let Some(size) = existing_size {
-                let peer_count = u64::try_from(decision.candidate.peer_count).context("peer count exceeds u64")?;
-                db.update_transfer_job_progress(&job_id, size, peer_count, None, 0)?;
-                db.update_transfer_job_state(&job_id, "completed", None)?;
-            }
-        }
-    }
+    let (decisions, unallocated) = run_transfer_allocation(
+        &db,
+        args.namespace.as_deref(),
+        args.path_prefix.as_ref(),
+        args.min_size,
+        args.max_size,
+        args.dry_run,
+    )?;
     let result = serde_json::json!({
         "dry_run": args.dry_run,
         "allocated": decisions,
@@ -1649,6 +1529,78 @@ fn handle_transfer_allocate(ctx: &CliContext<'_>, args: &TransferAllocateArgs) -
         }
     }
     Ok(())
+}
+
+fn run_transfer_allocation(
+    db: &NodeDatabase,
+    namespace: Option<&str>,
+    path_prefix: Option<&PathBuf>,
+    min_size: Option<u64>,
+    max_size: Option<u64>,
+    dry_run: bool,
+) -> Result<(Vec<AllocationDecision>, Vec<AllocationCandidate>)> {
+    let roots = db.list_storage_roots()?;
+    let mut root_inputs = Vec::new();
+    for root in roots {
+        let capacity = transfer_root_capacity(db, &root)?;
+        root_inputs.push((
+            StorageRoot::new(&root.id, &root.path, root.min_free).with_enabled(root.enabled),
+            capacity,
+        ));
+    }
+    let jobs = db.list_transfer_jobs(None, Some("queued"))?;
+    let mut candidates = Vec::new();
+    for job in &jobs {
+        if job.root_id.is_some() {
+            continue;
+        }
+        let path = PathBuf::from(
+            String::from_utf8(job.entry_key.clone())
+                .with_context(|| format!("job {} has a non-UTF-8 entry path", job.id))?,
+        );
+        if namespace.is_some_and(|ns| ns != job.namespace_id)
+            || min_size.is_some_and(|size| job.size < size)
+            || max_size.is_some_and(|size| job.size > size)
+            || path_prefix.as_ref().is_some_and(|prefix| !path.starts_with(prefix))
+        {
+            continue;
+        }
+        let job_namespace = iroh_docs::NamespaceId::from_str(&job.namespace_id)
+            .with_context(|| format!("job {} has an invalid namespace", job.id))?;
+        candidates.push(AllocationCandidate::new(
+            job_namespace,
+            path,
+            iroh_blobs::Hash::from(job.hash),
+            job.size,
+            usize::try_from(job.peer_count).unwrap_or(usize::MAX),
+            job.state == "completed",
+        ));
+    }
+    let (decisions, unallocated) = allocate(&root_inputs, &candidates);
+    if !dry_run {
+        let mut assignments = Vec::new();
+        for decision in &decisions {
+            if let Some(job) = jobs.iter().find(|job| {
+                job.root_id.is_none()
+                    && job.namespace_id == decision.candidate.namespace.to_string()
+                    && job.entry_key == decision.candidate.path.to_string_lossy().as_bytes()
+                    && job.hash == *decision.candidate.hash.as_bytes()
+            }) {
+                let existing_size =
+                    existing_destination_size(&decision.destination, decision.candidate.hash.as_bytes())?;
+                assignments.push((job.id.clone(), decision, existing_size));
+            }
+        }
+        for (job_id, decision, existing_size) in assignments {
+            db.assign_transfer_job(&job_id, &decision.root_id, &decision.destination)?;
+            if let Some(size) = existing_size {
+                let peer_count = u64::try_from(decision.candidate.peer_count).context("peer count exceeds u64")?;
+                db.update_transfer_job_progress(&job_id, size, peer_count, None, 0)?;
+                db.update_transfer_job_state(&job_id, "completed", None)?;
+            }
+        }
+    }
+    Ok((decisions, unallocated))
 }
 
 async fn handle_transfer_materialize(ctx: &CliContext<'_>, args: TransferMaterializeArgs) -> Result<()> {
@@ -1734,7 +1686,6 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: StatsSeedingArgs) -
 
     let entries = node.docs_engine().list_latest(folder.doc()).await?;
     let mut candidates = Vec::new();
-    let mut hashes = Vec::new();
     for entry in entries {
         if entry.key().starts_with(b"sys/") {
             continue;
@@ -1754,21 +1705,9 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: StatsSeedingArgs) -
             0,
             folder.has_local(hash).await?,
         ));
-        hashes.push(hash);
     }
 
-    let peers_per_hash = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite")).map_or_else(
-        |_| std::collections::HashMap::new(),
-        |indexing| {
-            let resilience = indexing.resilience_service(syncweb_core::indexing::ResilienceConfig::new(
-                syncweb_core::indexing::ReplicationBudget::default(),
-            ));
-            resilience.health_batch(&hashes).map_or_else(
-                |_| std::collections::HashMap::new(),
-                |health_map| health_map.into_iter().map(|(h, health)| (h, health.verified)).collect(),
-            )
-        },
-    );
+    let peers_per_hash: std::collections::HashMap<iroh_blobs::Hash, usize> = std::collections::HashMap::new();
     let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
     if output_json {
         println!(
@@ -2535,6 +2474,12 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
         if let Some(network_name) = command.network {
             add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
         }
+        if !command.no_indexing
+            && let Ok(indexing) = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite"))
+            && let Err(error) = indexing.enable_folder(&folder).await
+        {
+            tracing::warn!(%error, "failed to enable indexing for new folder");
+        }
         if do_import && dir_has_entries(&command.path)? {
             let importer = ParallelImporter::new(
                 node.blob_store().clone(),
@@ -3048,7 +2993,7 @@ async fn handle_collection_publish(
     root: std::path::PathBuf,
     namespace: String,
     sequence: u64,
-    bootstrap: Vec<String>,
+    _bootstrap: Vec<String>,
 ) -> Result<()> {
     let (data_dir, output_json, no_daemon) = (ctx.data_dir, ctx.output_json, ctx.no_daemon);
     let source = root.to_string_lossy();
@@ -3061,7 +3006,7 @@ async fn handle_collection_publish(
                 path: root,
                 namespace,
                 sequence,
-                bootstrap,
+                bootstrap: Vec::new(),
                 manifest_bytes: Some(manifest_bytes.clone()),
             }))
             .await?;
@@ -3087,40 +3032,19 @@ async fn handle_collection_publish(
         node.docs_engine().clone(),
     );
     let head = store.publish(&manifest, sequence).await?;
-    let name = manifest
-        .package
-        .as_ref()
-        .map_or_else(|| manifest.collection_id.to_string(), |profile| profile.name.clone());
-    let announcement = syncweb_core::folder::PackageAnnouncement::new(
-        manifest.collection_id,
-        name,
-        manifest.version.clone(),
-        head.sequence,
-        head.manifest,
-        node.blob_store().ticket(node.endpoint(), head.manifest).to_string(),
-        node.endpoint().id(),
-    )?;
-    let bootstrap_nodes = crate::parse_bootstrap(bootstrap)?;
-    let catalog = syncweb_core::folder::PackageCatalog::new(node.gossip_service(), node.endpoint());
-    let topic = if bootstrap_nodes.is_empty() {
-        catalog.subscribe(bootstrap_nodes).await?
-    } else {
-        catalog.subscribe_and_join(bootstrap_nodes).await?
-    };
-    let (sender, _receiver) = syncweb_core::node::gossip_service::GossipService::split(topic);
-    catalog.announce(&sender, &announcement).await?;
+    let manifest_ticket = node.blob_store().ticket(node.endpoint(), head.manifest);
     if output_json {
         println!(
             "{}",
             serde_json::json!({
                 "manifest": head.manifest.to_string(),
-                "manifest_ticket": announcement.manifest_ticket,
+                "manifest_ticket": manifest_ticket.to_string(),
                 "sequence": head.sequence,
             })
         );
     } else {
         println!("manifest: {}", head.manifest);
-        println!("manifest_ticket: {}", announcement.manifest_ticket);
+        println!("manifest_ticket: {manifest_ticket}");
         println!("sequence: {}", head.sequence);
     }
     node.stop().await?;
@@ -3725,9 +3649,7 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
     }
 
     let needs_node = matches!(args.kind, SearchKind::All | SearchKind::Package | SearchKind::Channel)
-        && (!args.bootstrap.is_empty()
-            || matches!(args.kind, SearchKind::Package | SearchKind::Channel)
-            || args.channel.is_some());
+        && (matches!(args.kind, SearchKind::Package | SearchKind::Channel) || args.channel.is_some());
 
     if needs_node {
         let node = open_node(data_dir).await?;
@@ -3745,37 +3667,13 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
                 && let Ok(Some(namespace_id)) = indexing.database().get_channel_namespace(channel_name)
             {
                 for record in records.into_iter().filter(|r| r.catalog_namespace_id == namespace_id) {
-                    let announcement = record.to_package_announcement();
                     all_results.push(SearchResult::package(
-                        &announcement.name,
-                        &announcement.version,
-                        &announcement.collection_id.to_string(),
-                        &announcement.manifest.to_string(),
+                        &record.title,
+                        "",
+                        &record.folder_name,
+                        &record.hash.to_string(),
                     ));
                 }
-            }
-        }
-
-        // Gossip search when explicitly requested (--bootstrap or --kind package/channel).
-        let gossip = !args.bootstrap.is_empty() || matches!(args.kind, SearchKind::Package | SearchKind::Channel);
-        if gossip {
-            let bootstrap = parse_bootstrap(args.bootstrap.clone())?;
-            let catalog = PackageCatalog::new(node.gossip_service(), node.endpoint());
-            let mut topic = if bootstrap.is_empty() {
-                catalog.subscribe(bootstrap).await?
-            } else {
-                catalog.subscribe_and_join(bootstrap).await?
-            };
-            for announcement in catalog
-                .search(&mut topic, Some(query), Duration::from_millis(args.timeout_ms))
-                .await?
-            {
-                all_results.push(SearchResult::package(
-                    &announcement.name,
-                    &announcement.version,
-                    &announcement.collection_id.to_string(),
-                    &announcement.manifest.to_string(),
-                ));
             }
         }
         node.stop().await?;
@@ -4006,13 +3904,6 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
-fn parse_bootstrap(values: Vec<String>) -> Result<Vec<iroh::PublicKey>> {
-    values
-        .into_iter()
-        .map(|value| value.parse().map_err(anyhow::Error::from))
-        .collect()
-}
-
 fn scan_single_root_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
     ParallelScanner::new(path, vec![], 0)
         .scan()?
@@ -4121,7 +4012,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             options.invite_only = invite_only;
             let id = manager.create(&name, options)?;
             if let Some(network) = manager.get(&id).cloned()
-                && let Err(error) = provision_network_doc(data_dir, &network, &mut manager).await
+                && let Err(error) = syncweb_core::net::membership::provision(data_dir, &network, &mut manager).await
             {
                 tracing::warn!(%error, "network created without a membership doc (doc_ticket)");
             }
@@ -4166,7 +4057,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             };
             if let Some(network) = manager.get(&id).cloned()
                 && network.doc_ticket.is_some()
-                && let Err(error) = refresh_network_doc(data_dir, &network).await
+                && let Err(error) = syncweb_core::net::membership::refresh(data_dir, &network).await
             {
                 tracing::warn!(%error, "failed to refresh network membership doc");
             }
@@ -4185,7 +4076,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             manager.kick(id, &device.parse()?)?;
             if let Some(network) = manager.get(&id).cloned()
                 && network.doc_ticket.is_some()
-                && let Err(error) = refresh_network_doc(data_dir, &network).await
+                && let Err(error) = syncweb_core::net::membership::refresh(data_dir, &network).await
             {
                 tracing::warn!(%error, "failed to refresh network membership doc");
             }
@@ -4397,44 +4288,6 @@ fn add_folder_to_network(
     let mut networks = open_network_manager(data_dir)?;
     let id = network_id_by_name(&networks, network_name)?;
     networks.add_folder(id, namespace)?;
-    Ok(())
-}
-
-/// Create the owner-signed membership doc for a network and persist its
-/// read-only ticket on the network so members can import it for removal
-/// detection.
-async fn provision_network_doc(
-    data_dir: &Path,
-    network: &syncweb_core::net::Network,
-    manager: &mut NetworkManager,
-) -> Result<()> {
-    let node = open_node(data_dir).await?;
-    let docs = node.docs_engine();
-    let (doc, _write_ticket) = docs.create_or_open_namespace(None).await?;
-    let author = docs.author().await?;
-    let signing = ed25519_dalek::SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
-    syncweb_core::net::membership_doc::write_member_list(docs, node.blob_store(), &doc, author, &signing, network)
-        .await?;
-    let read_ticket = docs.share_ticket(&doc, false).await?;
-    node.stop().await?;
-    manager.set_doc_ticket(network.id, &Some(read_ticket.to_string()))?;
-    Ok(())
-}
-
-/// Re-sign and re-publish the member list after a membership change
-/// (invite/kick) by the owner.
-async fn refresh_network_doc(data_dir: &Path, network: &syncweb_core::net::Network) -> Result<()> {
-    let Some(ref doc_ticket) = network.doc_ticket else {
-        return Ok(());
-    };
-    let node = open_node(data_dir).await?;
-    let docs = node.docs_engine();
-    let doc = docs.import_ticket(doc_ticket.parse()?).await?;
-    let author = docs.author().await?;
-    let signing = ed25519_dalek::SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
-    syncweb_core::net::membership_doc::write_member_list(docs, node.blob_store(), &doc, author, &signing, network)
-        .await?;
-    node.stop().await?;
     Ok(())
 }
 

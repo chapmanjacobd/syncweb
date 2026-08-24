@@ -14,17 +14,12 @@ use tokio::{
 };
 
 use crate::{
-    constants::{NETWORK_MEMBERS_KEY, SIGNAL_TOPIC},
+    constants::NETWORK_MEMBERS_KEY,
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
     folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
-    gossip::{gossip_topic_id, spawn_topic_listener},
-    indexing::{
-        IndexingDatabase, IndexingService, SignedSignal,
-        resilience::{ProviderLease, ReplicationBudget, ResilienceConfig},
-        wot::Attestation,
-    },
+    indexing::IndexingService,
     net::{NetworkLogger, NetworkManager},
     node::{identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
@@ -118,8 +113,6 @@ pub struct Daemon {
     archive_pool: Arc<ManagedPool>,
     network_logger: NetworkLogger,
     network_manager: tokio::sync::RwLock<NetworkManager>,
-    signal_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
-    lease_listener: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     maintenance_task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
     indexing: Option<IndexingService>,
 }
@@ -314,13 +307,10 @@ impl Daemon {
         let indexing = match IndexingService::new(config.data_dir.join("indexing.sqlite")) {
             Ok(indexing) => Some(indexing),
             Err(error) => {
-                tracing::warn!(%error, "failed to open indexing database; resilience and catalog channels disabled");
+                tracing::warn!(%error, "failed to open indexing database; catalog channels disabled");
                 None
             }
         };
-        let resilience = indexing
-            .as_ref()
-            .map(|idx| idx.resilience_service(ResilienceConfig::new(ReplicationBudget::default())));
         let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
         let network_logger = NetworkLogger::new(stats_db.clone());
         let local_node_id = node.endpoint().id();
@@ -342,10 +332,6 @@ impl Daemon {
             &node_db,
             indexing.clone(),
         );
-        ipc_server = match resilience {
-            Some(service) => ipc_server.with_resilience(service),
-            None => ipc_server,
-        };
         ipc_server = ipc_server.with_network_manager(Arc::new(tokio::sync::RwLock::new(network_manager.clone())));
 
         Ok(Self {
@@ -369,8 +355,6 @@ impl Daemon {
             archive_pool,
             network_logger,
             network_manager: tokio::sync::RwLock::new(network_manager),
-            signal_listener: tokio::sync::Mutex::new(None),
-            lease_listener: tokio::sync::Mutex::new(None),
             maintenance_task: tokio::sync::Mutex::new(None),
             indexing,
         })
@@ -490,8 +474,6 @@ impl Daemon {
     }
 
     async fn spawn_listeners(&self) {
-        self.spawn_signal_listener().await;
-        self.spawn_lease_listener().await;
         self.spawn_maintenance_task().await;
     }
 
@@ -1154,14 +1136,6 @@ impl Daemon {
     }
 
     async fn abort_listeners(&self) {
-        let signal_handle = self.signal_listener.lock().await.take();
-        if let Some(inner) = signal_handle {
-            inner.abort();
-        }
-        let lease_handle = self.lease_listener.lock().await.take();
-        if let Some(inner) = lease_handle {
-            inner.abort();
-        }
         let maintenance_handle = self.maintenance_task.lock().await.take();
         if let Some(inner) = maintenance_handle {
             inner.abort();
@@ -1183,51 +1157,6 @@ impl Daemon {
         remove_status_result?;
         release_result?;
         Ok(())
-    }
-
-    async fn spawn_signal_listener(&self) {
-        let gossip_service = self.node.gossip_service().clone();
-        let data_dir = self.config.data_dir.clone();
-        let shutdown = self.handle.shutdown_sender.subscribe();
-        let mut pending: Option<IncomingSignals> = None;
-        let handle = spawn_topic_listener::<SignedSignal, _>(
-            gossip_service,
-            gossip_topic_id(SIGNAL_TOPIC),
-            shutdown,
-            "signed-signals",
-            move |signal| {
-                let state = if let Some(state) = &mut pending {
-                    state
-                } else {
-                    pending.insert(IncomingSignals::open(&data_dir)?)
-                };
-                state.persist(&signal)
-            },
-        );
-        *self.signal_listener.lock().await = Some(handle);
-    }
-
-    async fn spawn_lease_listener(&self) {
-        let Some(ref indexing) = self.indexing else {
-            tracing::debug!("indexing unavailable; skipping provider lease gossip listener");
-            return;
-        };
-        let resilience = indexing.resilience_service(ResilienceConfig::new(ReplicationBudget::default()));
-        let gossip_service = self.node.gossip_service().clone();
-        let shutdown = self.handle.shutdown_sender.subscribe();
-        let handle = spawn_topic_listener::<ProviderLease, _>(
-            gossip_service,
-            gossip_topic_id(crate::constants::RESILIENCE_TOPIC),
-            shutdown,
-            "provider-leases",
-            move |lease| {
-                if let Err(error) = resilience.record_lease(&lease) {
-                    tracing::warn!(%error, "ignoring invalid incoming provider lease");
-                }
-                Ok(true)
-            },
-        );
-        *self.lease_listener.lock().await = Some(handle);
     }
 
     /// Spawn a background task that periodically vacuums databases with
@@ -1455,37 +1384,4 @@ fn send_shutdown(sender: &broadcast::Sender<()>) {
 fn is_recoverable_watch_error(error: &SyncwebError) -> bool {
     let message = error.to_string();
     message.contains("file changed during import") || message.contains("input path does not exist")
-}
-
-/// Durable state for incoming signed-signal gossip.
-///
-/// Attestations are persisted on receipt so that `attest verify` works without
-/// any peer being online at query time.
-struct IncomingSignals {
-    db: IndexingDatabase,
-    attestations: Vec<Attestation>,
-}
-
-impl IncomingSignals {
-    fn open(data_dir: &Path) -> Result<Self> {
-        let db = IndexingDatabase::open(data_dir.join("indexing.sqlite"))?;
-        let attestations = db.load_attestations()?;
-        Ok(Self { db, attestations })
-    }
-
-    /// Persist a verified signal, skipping duplicates. Returns `false` to stop
-    /// the listener if persistence fails.
-    fn persist(&mut self, signal: &SignedSignal) -> Result<bool> {
-        match signal {
-            SignedSignal::Attestation(att) => {
-                if self.attestations.contains(att) {
-                    return Ok(true);
-                }
-                tracing::debug!(content = %att.content, issuer = %att.issuer, kind = %att.kind, "attestation received via gossip");
-                self.attestations.push(att.clone());
-                self.db.save_attestations(&self.attestations)?;
-            }
-        }
-        Ok(true)
-    }
 }

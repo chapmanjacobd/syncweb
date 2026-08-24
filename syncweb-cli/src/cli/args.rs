@@ -76,7 +76,6 @@ help_categories! {
     "Sharing & Publishing" => [
         Command::Publish { .. } => "publish",
         Command::Share(_) => "share",
-        Command::Mirror(_) => "mirror",
         Command::Provider { .. } => "provider",
         Command::Link { .. } => "link",
     ];

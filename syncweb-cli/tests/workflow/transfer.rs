@@ -121,3 +121,75 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn transfer_enqueue_now_materializes_immediately() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let root_dir = alice.data_dir().join("storage");
+    let _root = run(
+        alice,
+        &[
+            "transfer",
+            "root",
+            "--min-free",
+            "0",
+            "root-a",
+            root_dir.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+
+    let folder_dir = alice.data_dir().join("folder");
+    let info = alice.create(&folder_dir)?;
+    let file_path = folder_dir.join("media/clip.mp4");
+    alice.write_file(&file_path, b"clip data")?;
+    alice.import(&folder_dir)?;
+
+    let content = alice.file_content(&file_path)?;
+    let hash = iroh_blobs::Hash::from_bytes(*blake3::hash(&content).as_bytes()).to_string();
+    let size = content.len().to_string();
+
+    let enqueue = run(
+        alice,
+        &[
+            "--json",
+            "transfer",
+            "enqueue",
+            "--now",
+            "--namespace",
+            &info.namespace,
+            "--path",
+            "media/clip.mp4",
+            "--hash",
+            &hash,
+            &size,
+        ],
+    )?;
+    let enqueue_json = json(&enqueue)?;
+    ensure!(
+        enqueue_json.get("status") == Some(&serde_json::Value::from("now")),
+        "enqueue --now should report status 'now': {enqueue_json}"
+    );
+    ensure!(
+        enqueue_json.get("completed") == Some(&serde_json::Value::from(1_u64)),
+        "enqueue --now should complete one job: {enqueue_json}"
+    );
+
+    let materialized = root_dir.join(&info.namespace).join("media/clip.mp4");
+    ensure!(
+        materialized.is_file(),
+        "materialized file should exist: {}",
+        materialized.display()
+    );
+    ensure!(
+        alice.file_content(&materialized)? == content,
+        "materialized content should match the source file"
+    );
+
+    let info_output = run(alice, &["--json", "transfer", "info"])?;
+    let info_json = json(&info_output)?;
+    let job = first(&info_json, "transfer info after --now")?;
+    ensure!(job.get("state") == Some(&serde_json::Value::from("completed")));
+
+    Ok(())
+}

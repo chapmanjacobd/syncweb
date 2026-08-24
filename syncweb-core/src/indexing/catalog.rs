@@ -1,8 +1,8 @@
 //! Public metadata catalogs for the opt-in indexing service.
 //!
 //! Catalogs are iroh-docs namespaces provisioned exactly like folders (via
-//! [`crate::node::docs_engine::DocsEngine::create_or_open_namespace`]): a
-//! catalog is a folder whose entries are [`CatalogRecord`] metadata, plus an
+//! [`crate::node::docs_engine::DocsEngine::provision`]): a catalog is a folder
+//! whose entries are [`CatalogRecord`] metadata, plus an
 //! [`IndexingDatabase::enable_catalog`] registration. The catalog contains
 //! metadata only; the synchronized folder remains the source of the actual
 //! content.
@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
-    constants::CATALOG_METADATA_KEY,
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
     indexing::{IndexingDatabase, IndexingService},
@@ -164,29 +163,6 @@ impl CatalogRecord {
         record.validate()?;
         Ok(record)
     }
-
-    /// Convert this catalog record into a gossip-compatible package
-    /// announcement.
-    ///
-    /// The `manifest_ticket` field is left empty because catalog records
-    /// do not carry blob tickets.  Callers that need to resolve the
-    /// manifest should use the `folder_namespace_id` directly.
-    #[must_use]
-    pub fn to_package_announcement(&self) -> crate::folder::catalog::PackageAnnouncement {
-        let hash = blake3::hash(self.folder_namespace_id.as_bytes());
-        let mut uuid_bytes = [0_u8; 16];
-        uuid_bytes.copy_from_slice(&hash.as_bytes()[..16]);
-        let collection_id = uuid::Uuid::from_bytes(uuid_bytes);
-        crate::folder::catalog::PackageAnnouncement {
-            collection_id,
-            name: self.title.clone(),
-            version: String::from("0.0.0"),
-            sequence: 1,
-            manifest: self.hash,
-            manifest_ticket: String::new(),
-            publisher: self.publisher.clone(),
-        }
-    }
 }
 
 /// A local handle to an iroh-docs catalog namespace.
@@ -277,8 +253,8 @@ impl CatalogService {
     ///
     /// Catalogs are folders that store indexable [`CatalogRecord`] entries:
     /// provisioning is unified with folder creation through
-    /// [`DocsEngine::create_or_open_namespace`], and the catalog metadata lives
-    /// under the `sys/` key namespace like folder metadata.
+    /// [`DocsEngine::provision`], and the catalog metadata lives under the
+    /// `sys/` key namespace like folder metadata.
     ///
     /// # Errors
     ///
@@ -286,13 +262,33 @@ impl CatalogService {
     pub async fn create_catalog(&self, name: impl Into<String>) -> Result<Catalog> {
         let metadata = CatalogMetadata::new(name, self.author.to_string());
         metadata.validate()?;
-        let (doc, _ticket) = self.docs.create_or_open_namespace(None).await?;
-        let catalog = Catalog::new(doc, metadata.name.clone());
-        self.docs
-            .set(&catalog.doc, self.author, CATALOG_METADATA_KEY, metadata.to_bytes()?)
+        let provisioned = self
+            .docs
+            .provision(
+                crate::node::docs_engine::ProvisionKind::Catalog,
+                None,
+                metadata.to_bytes()?,
+            )
             .await?;
+        let catalog = Catalog::new(provisioned.doc, metadata.name.clone());
         self.database().enable_catalog(catalog.namespace_id, catalog.name())?;
         Ok(catalog)
+    }
+
+    /// Return the registered catalog with `name`, creating it when needed.
+    ///
+    /// An existing registered catalog is opened and subscribed to; otherwise a
+    /// fresh catalog namespace is provisioned and registered.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be created or opened.
+    pub async fn get_or_create_catalog(&self, name: &str) -> Result<Catalog> {
+        let registered = self.database().load_catalogs()?;
+        if let Some((namespace_id, _)) = registered.into_iter().find(|(_, label)| label == name) {
+            return self.subscribe_namespace(namespace_id).await;
+        }
+        self.create_catalog(name).await
     }
 
     /// Create a catalog namespace. Alias for [`Self::create_catalog`].

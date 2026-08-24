@@ -4,7 +4,7 @@
 .SH NAME
 create \- Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
 .SH SYNOPSIS
-\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-import\fR] [\fB\-\-no\-import\fR] [\fB\-\-write\fR] [\fB\-\-no\-share\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBcreate\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-import\fR] [\fB\-\-no\-import\fR] [\fB\-\-write\fR] [\fB\-\-no\-share\fR] [\fB\-\-no\-indexing\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
 .SH OPTIONS
@@ -29,6 +29,9 @@ Grant write access on the share ticket (default: read\-only)
 .TP
 \fB\-\-no\-share\fR
 Create the folder without sharing it (no ticket/URL printed)
+.TP
+\fB\-\-no\-indexing\fR
+Do not opt the folder into local indexing (indexing is enabled by default)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

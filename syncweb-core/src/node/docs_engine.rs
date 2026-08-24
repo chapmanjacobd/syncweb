@@ -12,7 +12,40 @@ use iroh_docs::{
 };
 use n0_future::StreamExt;
 
-use crate::error::{Result, SyncwebError};
+use crate::{
+    constants::{CATALOG_METADATA_KEY, MODE_KEY, NETWORK_MEMBERS_KEY},
+    error::{Result, SyncwebError},
+};
+
+/// The kind of namespace being provisioned. Picks the `sys/` metadata key
+/// stamped on a freshly created namespace so folder, catalog, and membership
+/// provisioning share one code path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ProvisionKind {
+    Folder,
+    Catalog,
+    NetworkMembership,
+}
+
+impl ProvisionKind {
+    const fn metadata_key(self) -> &'static [u8] {
+        match self {
+            Self::Folder => MODE_KEY,
+            Self::Catalog => CATALOG_METADATA_KEY,
+            Self::NetworkMembership => NETWORK_MEMBERS_KEY,
+        }
+    }
+}
+
+/// A provisioned namespace and its shareable write ticket.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ProvisionedDoc {
+    pub doc: Doc,
+    pub ticket: DocTicket,
+    pub namespace_id: NamespaceId,
+}
 
 #[derive(Clone)]
 pub struct DocsEngine {
@@ -61,6 +94,33 @@ impl DocsEngine {
         };
         let ticket = self.share_ticket(&doc, true).await?;
         Ok((doc, ticket))
+    }
+
+    /// Provision a namespace of the given kind and stamp its `sys/` metadata.
+    ///
+    /// Unifies folder, catalog, and network-membership namespace creation:
+    /// every kind funnels through [`Self::create_or_open_namespace`] and writes
+    /// its kind-specific metadata key under `sys/`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the namespace cannot be created, opened, shared, or
+    /// stamped.
+    pub async fn provision(
+        &self,
+        kind: ProvisionKind,
+        existing: Option<NamespaceId>,
+        metadata: impl AsRef<[u8]>,
+    ) -> Result<ProvisionedDoc> {
+        let (doc, ticket) = self.create_or_open_namespace(existing).await?;
+        let author = self.author().await?;
+        self.set(&doc, author, kind.metadata_key(), metadata).await?;
+        let namespace_id = self.namespace_id(&doc);
+        Ok(ProvisionedDoc {
+            doc,
+            ticket,
+            namespace_id,
+        })
     }
 
     /// # Errors

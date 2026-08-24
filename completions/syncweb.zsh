@@ -121,6 +121,7 @@ _arguments "${_arguments_options[@]}" : \
 '(--import)--no-import[Skip scanning existing files in the directory]' \
 '--write[Grant write access on the share ticket (default\: read-only)]' \
 '--no-share[Create the folder without sharing it (no ticket/URL printed)]' \
+'--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -353,8 +354,6 @@ package\:"Search installed packages and, when requested, the gossip package cata
 channel\:"Search only an editorial channel"))' \
 '--channel=[Restrict results to an editorial channel]:CHANNEL:_default' \
 '--limit=[Maximum number of results]:LIMIT:_default' \
-'--timeout-ms=[Gossip search timeout in milliseconds]:TIMEOUT_MS:_default' \
-'*--bootstrap=[Bootstrap gossip search with a node ID]:NODE_ID:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -601,6 +600,7 @@ _arguments "${_arguments_options[@]}" : \
 '--path=[Relative materialization path]:PATH:_files' \
 '--hash=[32-byte blob hash in hexadecimal]:HASH:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--now[Allocate and materialize the job immediately instead of leaving it queued]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1303,68 +1303,6 @@ _arguments "${_arguments_options[@]}" : \
 ':folder:_files' \
 && ret=0
 ;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':hash:_default' \
-&& ret=0
-;;
-(meta)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__indexing__subcmd__meta_commands" \
-"*::: :->meta" \
-&& ret=0
-
-    case $state in
-    (meta)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-indexing-meta-command-$line[1]:"
-        case $line[1] in
-            (add)
-_arguments "${_arguments_options[@]}" : \
-'--sequence=[]:SEQUENCE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':hash:_default' \
-':key:_default' \
-':value:_default' \
-&& ret=0
-;;
-(list)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':hash:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
 (filter)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1458,6 +1396,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--no-fetch[Print the resolution without fetching or pinning the resolved content]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -1482,23 +1421,6 @@ _arguments "${_arguments_options[@]}" : \
         esac
     ;;
 esac
-;;
-(mirror)
-_arguments "${_arguments_options[@]}" : \
-'--network=[Network name or ID to mirror all blobs across]:NETWORK:_default' \
-'--min-providers=[Minimum replication budget per blob (default 3)]:MIN_PROVIDERS:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--no-sharing[Skip lease announcements after mirroring]' \
-'--no-seeding[Skip lease announcements after mirroring]' \
-'--dry-run[Report what would be mirrored without fetching]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::provider -- Provider ID (PublicKey hex) to mirror blobs from:_default' \
-&& ret=0
 ;;
 (provider)
 _arguments "${_arguments_options[@]}" : \
@@ -1611,7 +1533,6 @@ _syncweb_commands() {
 'db:Database maintenance\: check, vacuum, stats, backup' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'link:Create and resolve stable syncweb links' \
-'mirror:Mirror all blobs from a provider or network' \
 'provider:Manage blob provider registrations' \
 'completions:Generate shell completions' \
 'manpages:Generate manpages' \
@@ -1736,8 +1657,6 @@ _syncweb__subcmd__indexing_commands() {
     local commands; commands=(
 'enable:Opt a synchronized folder into indexing' \
 'disable:Remove a folder from the local index' \
-'health:Show verified provider health for a content hash' \
-'meta:Manage signed metadata' \
 'filter:Manage local and federated denylists' \
     )
     _describe -t commands 'syncweb indexing commands' commands "$@"
@@ -1769,29 +1688,6 @@ _syncweb__subcmd__indexing__subcmd__filter__subcmd__add_commands() {
 _syncweb__subcmd__indexing__subcmd__filter__subcmd__subscribe_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb indexing filter subscribe commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__health_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing health commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta_commands() {
-    local commands; commands=(
-'add:Append signed metadata to a content hash' \
-'list:List signed metadata for a content hash' \
-    )
-    _describe -t commands 'syncweb indexing meta commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta__subcmd__add_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing meta add commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__indexing__subcmd__meta__subcmd__list_commands] )) ||
-_syncweb__subcmd__indexing__subcmd__meta__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb indexing meta list commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__join_commands] )) ||
 _syncweb__subcmd__join_commands() {
@@ -1836,11 +1732,6 @@ _syncweb__subcmd__ls_commands() {
 _syncweb__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb manpages commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__mirror_commands] )) ||
-_syncweb__subcmd__mirror_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb mirror commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network_commands] )) ||
 _syncweb__subcmd__network_commands() {

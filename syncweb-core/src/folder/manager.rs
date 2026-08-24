@@ -50,10 +50,18 @@ impl FolderManager {
     ///
     /// Returns an error if the folder namespace cannot be created or initialized.
     pub async fn create(&self, mode: SyncMode) -> Result<SyncwebFolder> {
-        let (doc, _ticket) = self.docs_engine.create_or_open_namespace(None).await?;
+        let provisioned = self
+            .docs_engine
+            .provision(crate::node::docs_engine::ProvisionKind::Folder, None, mode.to_string())
+            .await?;
         let author = self.docs_engine.author().await?;
-        self.docs_engine.set(&doc, author, MODE_KEY, mode.to_string()).await?;
-        let folder = SyncwebFolder::new(doc, author, self.blob_store.clone(), self.docs_engine.clone(), mode);
+        let folder = SyncwebFolder::new(
+            provisioned.doc,
+            author,
+            self.blob_store.clone(),
+            self.docs_engine.clone(),
+            mode,
+        );
         folder.grant(self.node_id, Capability::Admin).await;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         self.announce_namespace(folder.namespace_id()).await;

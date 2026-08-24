@@ -125,7 +125,7 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
     folder_a.set_blob("file_b.txt", b"content_b").await?;
 
     node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
-    let ticket = folder_a.ticket(node_a.endpoint().addr(), true).await?;
+    let ticket = folder_a.ticket(true).await?;
 
     let manager_b = FolderManager::new(&node_b);
     let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;

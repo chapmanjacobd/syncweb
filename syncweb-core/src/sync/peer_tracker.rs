@@ -67,24 +67,8 @@ impl PeerTracker {
         self.evict_to_limit();
     }
 
-    /// Record a peer observed during a blob transfer.
-    pub fn on_blob_fetched(&mut self, blob_hash: Hash, node_id: PublicKey) {
-        self.record_peer(blob_hash, node_id);
-    }
-
     #[must_use]
     pub fn get_peers(&mut self, blob_hash: &Hash) -> Vec<PublicKey> {
-        self.clock = self.clock.saturating_add(1);
-        self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
-            if self.strategy == EvictionStrategy::Lru {
-                entry.accessed_at = self.clock;
-            }
-            entry.peers.iter().copied().collect()
-        })
-    }
-
-    #[must_use]
-    pub fn peers(&mut self, blob_hash: &Hash) -> Vec<PublicKey> {
         self.clock = self.clock.saturating_add(1);
         self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
             if self.strategy == EvictionStrategy::Lru {

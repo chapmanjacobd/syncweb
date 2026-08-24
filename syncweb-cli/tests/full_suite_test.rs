@@ -63,7 +63,7 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
         "join",
         "leave",
         "folders",
-        "devices",
+        "status",
         "config",
         "ls",
         "find",
@@ -261,10 +261,11 @@ fn help_subcommand_reports_specific_and_grouped_help() -> anyhow::Result<()> {
 #[test]
 fn create_folders_list_works() -> anyhow::Result<()> {
     let data_dir = test_dir("create-folders");
-    let output = run_with_data(&data_dir, &["--no-daemon", "create", "--no-import"])?;
+    let output = run_with_data(&data_dir, &["--no-daemon", "--json", "create", "--no-import"])?;
     assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
-    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout)?;
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
 
     let folders = run_with_data(&data_dir, &["--no-daemon", "folders"])?;
     assert_success(&folders, "folders")?;
@@ -369,11 +370,6 @@ fn package_archive_export_cli() -> anyhow::Result<()> {
         ],
     )?;
     assert_success(&init, "package add")?;
-    let add = run_with_data(
-        &data_dir,
-        &["package", "add", package_dir.to_str().context("UTF-8 package path")?],
-    )?;
-    assert_success(&add, "package add")?;
 
     let output = package_dir.join("example.car.zst");
     let export = run_with_data(
@@ -631,8 +627,6 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
 
     let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
     assert_success(&init, "package add")?;
-    let add = run_with_data(&data_dir, &["package", "add", package_path])?;
-    assert_success(&add, "package add")?;
 
     let ticket1 = publish_manifest_ticket(&data_dir, namespace, package_path, "1")?;
     let collection = install_package(&data_dir, &ticket1)?;
@@ -790,8 +784,6 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
 
     let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
     assert_success(&init, "package add")?;
-    let add = run_with_data(&data_dir, &["package", "add", package_path])?;
-    assert_success(&add, "package add")?;
 
     let publish = run_with_data(
         &data_dir,
@@ -888,6 +880,7 @@ fn create_outputs_all_fields() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "create",
             folder_dir.to_str().context("UTF-8 path")?,
         ])
@@ -897,10 +890,11 @@ fn create_outputs_all_fields() -> anyhow::Result<()> {
     let _ = fs::remove_dir_all(&data_dir);
     assert_success(&output, "create")?;
     let stdout = stdout_string(&output)?;
-    ensure!(stdout.contains("path:"), "should print path: {stdout}");
-    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
-    ensure!(stdout.contains("url:"), "should print a share url: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout)?;
+    ensure!(value.get("path").is_some(), "should print path: {stdout}");
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
+    ensure!(value.get("ticket").is_some(), "should print a share ticket: {stdout}");
+    ensure!(value.get("url").is_some(), "should print a share url: {stdout}");
     Ok(())
 }
 
@@ -913,8 +907,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let create_out = stdout_string(&create)?;
     ensure!(create_out.contains("created:"), "should print created: {create_out}");
 
-    let list = run_with_data(&data_dir, &["network", "ls"])?;
-    assert_success(&list, "network ls")?;
+    let list = run_with_data(&data_dir, &["networks"])?;
+    assert_success(&list, "networks")?;
     let list_out = stdout_string(&list)?;
     ensure!(list_out.contains("team"), "should list team: {list_out}");
 
@@ -929,8 +923,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let leave = run_with_data(&data_dir, &["network", "leave", "team"])?;
     assert_success(&leave, "network leave")?;
 
-    let list_after = run_with_data(&data_dir, &["network", "ls"])?;
-    assert_success(&list_after, "network ls after leave")?;
+    let list_after = run_with_data(&data_dir, &["networks"])?;
+    assert_success(&list_after, "networks after leave")?;
     let list_after_out = stdout_string(&list_after)?;
     ensure!(
         !list_after_out.contains("team"),

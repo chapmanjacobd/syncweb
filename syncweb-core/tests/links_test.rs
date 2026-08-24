@@ -125,7 +125,7 @@ async fn test_link_publish_mutable_to_folder_doc() -> anyhow::Result<()> {
     let payload = serde_json::to_vec(&pointer)?;
     folder.set_blob("sys/links/mutable/docs", payload).await?;
 
-    let ticket = folder.ticket(alice.endpoint().addr(), true).await?;
+    let ticket = folder.ticket(true).await?;
     let bob_manager = FolderManager::new(&bob);
     let bob_folder = bob_manager.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
 
@@ -176,7 +176,7 @@ async fn test_link_publish_private_to_folder_doc() -> anyhow::Result<()> {
     let link_key = format!("sys/links/private/{}", hex::encode(link.capability));
     folder.set_blob(&link_key, payload).await?;
 
-    let ticket = folder.ticket(alice.endpoint().addr(), true).await?;
+    let ticket = folder.ticket(true).await?;
     let bob_manager = FolderManager::new(&bob);
     let bob_folder = bob_manager.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
 

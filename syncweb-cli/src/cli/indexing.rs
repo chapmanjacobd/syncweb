@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io::IsTerminal,
     path::{Path, PathBuf},
     process::Command as ProcessCommand,
 };
@@ -12,40 +11,25 @@ use serde::Serialize;
 use super::args::CliContext;
 use super::commands::{FilterCommand, IndexingCommand, LinkCommand, ProviderCommand, PublishCatalogArgs};
 use syncweb_core::{
-    constants::DOWNLOAD_PIN_PREFIX,
     folder::FolderManager,
     indexing::{DenylistRule, FilterList, IndexingService, Link, LinkResolver, LinkStore, PrivateLink},
     node::identity::IdentityManager,
 };
 
-use dialoguer::Confirm;
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use syncweb_core::init::open_node;
 
-fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
-    if output_json {
-        return Ok(true);
-    }
-    if !std::io::stdin().is_terminal() {
-        return Ok(true);
-    }
-    Ok(Confirm::new()
-        .with_prompt(format!("Are you sure you want to {operation}?"))
-        .default(false)
-        .show_default(true)
-        .interact()?)
-}
+use super::output::confirm_destructive;
 
 #[async_recursion]
 pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
-        IndexingCommand::Enable { folder, namespace } => {
+        IndexingCommand::Enable { folder } => {
             let node = open_node(data_dir).await?;
             let manager = FolderManager::new(&node);
-            let selector = namespace.map_or(folder, PathBuf::from);
-            let selected = manager.resolve(&selector).await?;
+            let selected = manager.resolve(&folder).await?;
             let indexing = open_indexing(data_dir)?;
             let handle = indexing.enable_folder(&selected).await?;
             print_status(
@@ -58,11 +42,10 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             )?;
             node.stop().await?;
         }
-        IndexingCommand::Disable { folder, namespace } => {
+        IndexingCommand::Disable { folder } => {
             let node = open_node(data_dir).await?;
             let manager = FolderManager::new(&node);
-            let selector = namespace.map_or(folder, PathBuf::from);
-            let selected = manager.resolve(&selector).await?;
+            let selected = manager.resolve(&folder).await?;
             let selected_namespace = selected.namespace_id();
             open_indexing(data_dir)?.disable_folder(selected_namespace).await?;
             print_status(
@@ -82,16 +65,10 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
 pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let PublishCatalogArgs {
-        folder,
-        namespace,
-        catalog,
-        tags,
-    } = args;
+    let PublishCatalogArgs { folder, catalog, tags } = args;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let selector = namespace.map_or_else(|| folder.clone(), PathBuf::from);
-    let selected = manager.resolve(&selector).await?;
+    let selected = manager.resolve(&folder).await?;
     let indexing = open_indexing(data_dir)?;
     indexing.enable_folder(&selected).await?;
     let catalog_service = indexing.catalog_service(
@@ -103,9 +80,7 @@ pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogAr
     let published = catalog_service
         .publish_folder_with_metadata(&catalog_handle, &selected, selected.namespace_id().to_string(), &tags)
         .await?;
-    let ticket = catalog_service
-        .ticket(&catalog_handle, node.endpoint().addr(), false)
-        .await?;
+    let ticket = catalog_service.ticket(&catalog_handle, false).await?;
     print_status(
         output_json,
         serde_json::json!({
@@ -319,25 +294,10 @@ pub async fn fetch_and_pin_blob(
     content_hash: Hash,
     tickets: &[BlobTicket],
 ) -> Result<()> {
-    if !node.blob_store().has(content_hash).await? {
-        let mut fetched = false;
-        let mut last_error: Option<anyhow::Error> = None;
-        for ticket in tickets {
-            match node.blob_store().fetch(node.endpoint(), ticket).await {
-                Ok(()) => {
-                    fetched = true;
-                    break;
-                }
-                Err(error) => last_error = Some(error.into()),
-            }
-        }
-        if !fetched {
-            return Err(last_error.unwrap_or_else(|| anyhow::anyhow!("failed to fetch blob")));
-        }
-    }
-    let pin_name = format!("{DOWNLOAD_PIN_PREFIX}{content_hash}");
-    node.blob_store().pin(&pin_name, content_hash).await?;
-    Ok(())
+    node.blob_store()
+        .fetch_and_pin(node.endpoint(), content_hash, tickets)
+        .await
+        .map_err(anyhow::Error::from)
 }
 
 fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
@@ -359,7 +319,7 @@ fn handle_filter(ctx: &CliContext<'_>, command: FilterCommand) -> Result<()> {
             let list = FilterList::from_bytes(bytes)?;
             list.verify_signature()?;
             let indexing = open_indexing(data_dir)?;
-            let changed = indexing.denylist_service().subscribe(&list)?;
+            let changed = indexing.denylist_service().sync_filter_list(&list)?;
             print_status(
                 output_json,
                 serde_json::json!({

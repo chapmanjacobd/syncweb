@@ -37,7 +37,6 @@ mod exporter_test;
 mod filter_test;
 mod find_test;
 mod folder_test;
-mod gossip_service_test;
 mod identity_test;
 mod importer_test;
 mod indexing_test;

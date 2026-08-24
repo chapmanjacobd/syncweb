@@ -36,7 +36,7 @@ async fn create_join_list_and_drop_folder() -> anyhow::Result<()> {
     let second = node(&directory, "second").await?;
     let first_manager = FolderManager::new(&first);
     let folder = first_manager.create(SyncMode::SendReceive).await?;
-    let ticket = folder.ticket(first.endpoint().addr(), true).await?;
+    let ticket = folder.ticket(true).await?;
 
     let second_manager = FolderManager::new(&second);
     let joined = second_manager.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
@@ -302,7 +302,7 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
 
     node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
 
-    let ticket = folder_a.ticket(node_a.endpoint().addr(), true).await?;
+    let ticket = folder_a.ticket(true).await?;
 
     let manager_b = FolderManager::new(&node_b);
     let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
@@ -382,7 +382,7 @@ async fn test_sendonly_receiveonly_sync() -> anyhow::Result<()> {
 
     node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
 
-    let ticket = folder_a.ticket(node_a.endpoint().addr(), true).await?;
+    let ticket = folder_a.ticket(true).await?;
 
     let manager_b = FolderManager::new(&node_b);
     let folder_b = manager_b.join(ticket.to_string(), SyncMode::ReceiveOnly).await?;
@@ -454,7 +454,7 @@ async fn workflow_two_nodes_sync() -> anyhow::Result<()> {
     let folder_a = alice.create_folder(SyncMode::SendReceive).await?;
     let hash = alice.write(&folder_a, "hello.txt", b"hello from alice").await?;
 
-    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+    let ticket = folder_a.folder.ticket(true).await?;
 
     let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
 
@@ -478,7 +478,7 @@ async fn workflow_bidirectional_sync() -> anyhow::Result<()> {
     let folder_a = alice.create_folder(SyncMode::SendReceive).await?;
     alice.write(&folder_a, "from-alice.txt", b"alice's file").await?;
 
-    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+    let ticket = folder_a.folder.ticket(true).await?;
 
     let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::SendReceive).await?;
     bob.write(&folder_b, "from-bob.txt", b"bob's file").await?;
@@ -507,7 +507,7 @@ async fn workflow_sendonly_receiveonly() -> anyhow::Result<()> {
     let folder_s = sender.create_folder(SyncMode::SendOnly).await?;
     let hash = sender.write(&folder_s, "data.bin", b"binary data").await?;
 
-    let ticket = folder_s.folder.ticket(sender.endpoint().addr(), false).await?;
+    let ticket = folder_s.folder.ticket(false).await?;
 
     let folder_r = receiver.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
 
@@ -552,7 +552,7 @@ async fn workflow_list_entries_after_sync() -> anyhow::Result<()> {
     alice.write(&folder_a, "file1.txt", b"content1").await?;
     alice.write(&folder_a, "file2.txt", b"content2").await?;
 
-    let ticket = folder_a.folder.ticket(alice.endpoint().addr(), true).await?;
+    let ticket = folder_a.folder.ticket(true).await?;
 
     let folder_b = bob.join_folder(&ticket.to_string(), SyncMode::ReceiveOnly).await?;
     bob.wait_entry(folder_b.namespace, "file1.txt").await?;
@@ -619,7 +619,7 @@ async fn workflow_iiab_publish_share_after_disconnect() -> anyhow::Result<()> {
     let third_party = world.device("third_party")?;
 
     let folder = publisher.create_folder(SyncMode::SendReceive).await?;
-    let ticket = folder.folder.ticket(publisher.endpoint().addr(), true).await?;
+    let ticket = folder.folder.ticket(true).await?;
     let ns = folder.namespace;
 
     let mut manifest = CollectionManifest::new(uuid::Uuid::new_v4(), "1.0.0");
@@ -695,7 +695,7 @@ async fn workflow_iiab_update_same_paths() -> anyhow::Result<()> {
     let consumer = world.device("consumer")?;
 
     let folder = publisher.create_folder(SyncMode::SendReceive).await?;
-    let ticket = folder.folder.ticket(publisher.endpoint().addr(), true).await?;
+    let ticket = folder.folder.ticket(true).await?;
     let ns = folder.namespace;
     let collection_id = uuid::Uuid::new_v4();
 

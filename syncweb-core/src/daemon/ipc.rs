@@ -20,7 +20,8 @@ use crate::{
     filter::{FilterConfig, FilterEngine},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, SyncMode,
+        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, ShareOptions,
+        SyncMode, share_folder,
     },
     fs::Importer,
     indexing::IndexingService,
@@ -29,8 +30,7 @@ use crate::{
     storage::config::SubscribeFilters,
     storage::node_db::NodeDatabase,
     sync::{
-        ActiveSession, AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SubscribeParams,
-        SyncEngine, SyncEvent, cancel_session,
+        ActiveSession, AreaFilter, FetchFilter, FetchStrategy, SubscribeParams, SyncEngine, SyncEvent, cancel_session,
     },
     verify::IntegrityChecker,
 };
@@ -112,6 +112,8 @@ pub enum IpcCommand {
         filters: SubscribeFilters,
         #[serde(default)]
         download: bool,
+        #[serde(default)]
+        indexing: bool,
     },
     SetSubscribe {
         namespace: String,
@@ -125,15 +127,8 @@ pub enum IpcCommand {
     CreateFolder {
         path: PathBuf,
         mode: String,
-    },
-    HealthCheck {
-        path: PathBuf,
         #[serde(default)]
-        hash: Vec<String>,
-        #[serde(default)]
-        path_prefix: Option<String>,
-        #[serde(default)]
-        glob: Option<String>,
+        indexing: bool,
     },
     StatsFiles {
         folder: PathBuf,
@@ -544,6 +539,16 @@ pub struct IpcServer {
 struct ArchiveContext {
     node: Arc<IrohNode>,
     pool: Arc<ManagedPool>,
+    indexing: Option<IndexingService>,
+}
+
+/// Boolean toggles for the join workflow, bundled to keep the handler signature
+/// small and free of excessive boolean parameters.
+#[derive(Clone, Copy, Debug, Default)]
+struct JoinOptions {
+    subscribe: bool,
+    download: bool,
+    indexing: bool,
 }
 
 impl IpcServer {
@@ -566,12 +571,12 @@ impl IpcServer {
         daemon_handle: DaemonHandle,
         node: Arc<IrohNode>,
         pool: Arc<ManagedPool>,
-        _indexing: Option<IndexingService>,
+        indexing: Option<IndexingService>,
     ) -> Self {
         Self {
             listener: IpcListener::new(socket_path),
             daemon_handle,
-            archive_context: Some(Arc::new(ArchiveContext { node, pool })),
+            archive_context: Some(Arc::new(ArchiveContext { node, pool, indexing })),
             folder_manager: None,
             node_db: None,
             network_manager: None,
@@ -758,20 +763,22 @@ impl IpcServer {
                 subscribe,
                 filters,
                 download,
-            } => self.handle_join(ticket, path, mode, subscribe, filters, download).await,
+                indexing,
+            } => {
+                let options = JoinOptions {
+                    subscribe,
+                    download,
+                    indexing,
+                };
+                self.handle_join(ticket, path, mode, filters, options).await
+            }
             C::SetSubscribe {
                 namespace,
                 enabled,
                 filters,
             } => self.handle_set_subscribe(namespace, enabled, filters).await,
             C::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
-            C::CreateFolder { path, mode } => self.handle_create_folder(path, mode).await,
-            C::HealthCheck {
-                path,
-                hash: filter_hashes,
-                path_prefix,
-                glob,
-            } => self.handle_health_check(path, filter_hashes, path_prefix, glob).await,
+            C::CreateFolder { path, mode, indexing } => self.handle_create_folder(path, mode, indexing).await,
             C::StatsFiles { folder } => self.handle_stats_files(folder).await,
             C::VerifyIntegrity {
                 path,
@@ -1089,13 +1096,9 @@ impl IpcServer {
             .await?;
         importer.materialize(&result, &target).await?;
         let folder = FolderManager::new(&context.node).create(SyncMode::SendReceive).await?;
-        let store = CollectionStore::new(
-            folder.doc().clone(),
-            folder.author(),
-            context.node.blob_store().clone(),
-            context.node.docs_engine().clone(),
-        );
-        store.publish(&result.collection_manifest, 1).await?;
+        CollectionStore::for_node(&context.node, &folder)
+            .publish(&result.collection_manifest, 1)
+            .await?;
         result.namespace_id = Some(folder.namespace_id());
         Ok(result)
     }
@@ -1127,9 +1130,8 @@ impl IpcServer {
         ticket: String,
         path: PathBuf,
         mode: SyncMode,
-        subscribe: bool,
         filters: SubscribeFilters,
-        download: bool,
+        options: JoinOptions,
     ) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -1151,17 +1153,23 @@ impl IpcServer {
         match manager.join(ticket, mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
+                if options.indexing
+                    && let Some(indexing_service) = &context.indexing
+                    && let Err(error) = indexing_service.enable_folder(&folder).await
+                {
+                    tracing::warn!(%error, %namespace, "failed to enable indexing for joined folder");
+                }
                 if let Some(ref node_db) = self.node_db {
                     let mut config = match node_db.load_app_config() {
                         Ok(config) => config,
                         Err(error) => return response_from_error(error),
                     };
-                    config.set_subscribe(&namespace, subscribe, &filters);
+                    config.set_subscribe(&namespace, options.subscribe, &filters);
                     if let Err(error) = node_db.save_app_config(&config) {
                         return response_from_error(error);
                     }
                 }
-                if subscribe {
+                if options.subscribe {
                     let sync = SyncEngine::new(
                         manager.clone(),
                         context.node.blob_store().clone(),
@@ -1176,7 +1184,7 @@ impl IpcServer {
                         return response_from_error(error);
                     }
                 }
-                let downloaded = if download {
+                let downloaded = if options.download {
                     match self
                         .materialize_folder(&context, &manager, &folder, &filters, &path)
                         .await
@@ -1188,7 +1196,7 @@ impl IpcServer {
                     0
                 };
                 IpcResponse::Ok {
-                    message: if download {
+                    message: if options.download {
                         format!("joined: {namespace}\ndownloaded: {downloaded} files")
                     } else {
                         format!("joined: {namespace}")
@@ -1351,7 +1359,7 @@ impl IpcServer {
         }
     }
 
-    async fn handle_create_folder(&self, path: PathBuf, mode: String) -> IpcResponse {
+    async fn handle_create_folder(&self, path: PathBuf, mode: String, indexing: bool) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -1381,6 +1389,12 @@ impl IpcServer {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
                 let namespace_id = folder.namespace_id();
+                if indexing
+                    && let Some(indexing_service) = &context.indexing
+                    && let Err(error) = indexing_service.enable_folder(&folder).await
+                {
+                    tracing::warn!(%error, %namespace, "failed to enable indexing for new folder");
+                }
                 if self
                     .daemon_handle
                     .folder_registry
@@ -1391,7 +1405,7 @@ impl IpcServer {
                 {
                     tracing::warn!(%namespace, "folder already in daemon registry");
                 }
-                match folder.ticket(context.node.endpoint().addr(), true).await {
+                match folder.ticket(true).await {
                     Ok(_ticket) => IpcResponse::Ok {
                         message: format!("namespace: {namespace}"),
                     },
@@ -1399,71 +1413,6 @@ impl IpcServer {
                 }
             }
             Err(error) => response_from_error(error),
-        }
-    }
-
-    async fn handle_health_check(
-        &self,
-        path: PathBuf,
-        filter_hashes: Vec<String>,
-        path_prefix: Option<String>,
-        glob: Option<String>,
-    ) -> IpcResponse {
-        use std::collections::HashMap;
-
-        let context = match &self.archive_context {
-            Some(ctx) => ctx.clone(),
-            None => {
-                return IpcResponse::Error {
-                    message: "daemon health IPC is unavailable: server has no node context".to_owned(),
-                };
-            }
-        };
-        let manager = FolderManager::new(&context.node);
-        let folder = match resolve_folder_for_daemon(&manager, &path).await {
-            Ok(f) => f,
-            Err(error) => return error,
-        };
-        let filter = build_ipc_verify_filter(&filter_hashes, path_prefix.as_ref(), glob.as_ref());
-        let entries = match context.node.docs_engine().list_latest(folder.doc()).await {
-            Ok(e) => e,
-            Err(error) => return response_from_error(error),
-        };
-        let mut candidates = Vec::new();
-        for entry in entries {
-            if entry.key().starts_with(b"sys/") {
-                continue;
-            }
-            let entry_hash = entry.content_hash();
-            if let Some(ref f) = filter
-                && !f.matches(entry.key(), &entry_hash)
-            {
-                continue;
-            }
-            let path_str = match String::from_utf8(entry.key().to_vec()) {
-                Ok(s) => s,
-                Err(error) => {
-                    return IpcResponse::Error {
-                        message: format!("folder entry path is not UTF-8: {error}"),
-                    };
-                }
-            };
-            let hash = entry.content_hash();
-            let local = match folder.has_local(hash).await {
-                Ok(l) => l,
-                Err(error) => return response_from_error(error),
-            };
-            candidates.push(FetchCandidate::new(path_str, hash, entry.content_len(), 0, local));
-        }
-
-        let peers_per_hash: HashMap<iroh_blobs::Hash, usize> = HashMap::new();
-
-        let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
-        IpcResponse::Ok {
-            message: format!(
-                "total: {}, well-seeded: {}, under-seeded: {}, unseeded: {}",
-                report.total, report.well_seeded, report.under_seeded, report.unseeded,
-            ),
         }
     }
 
@@ -1481,15 +1430,12 @@ impl IpcServer {
             Ok(f) => f,
             Err(error) => return error,
         };
-        let entries = match context.node.docs_engine().list_latest(folder.doc()).await {
+        let entries = match folder.content_entries().await {
             Ok(e) => e,
             Err(error) => return response_from_error(error),
         };
         let mut collector = FileStatsCollector::new();
         for entry in entries {
-            if entry.key().starts_with(b"sys/") {
-                continue;
-            }
             collector.add_entry_bytes_with_time(entry.key(), entry.content_len(), Some(entry.timestamp()));
         }
         IpcResponse::FileStats(Box::new(collector.report()))
@@ -1614,42 +1560,28 @@ impl IpcServer {
         for item in corrupted {
             result.attempted = result.attempted.saturating_add(1);
             let hash = item.expected_hash;
-            let mut repaired = false;
 
-            // Try --from tickets first
-            for (ticket_hash, ticket) in &provider_tickets {
-                if *ticket_hash != hash {
-                    continue;
-                }
-                if context
-                    .node
-                    .blob_store()
-                    .force_fetch(context.node.endpoint(), ticket)
-                    .await
-                    .is_ok()
-                {
-                    repaired = true;
-                    break;
-                }
-            }
-            if repaired {
-                result.repaired = result.repaired.saturating_add(1);
-                continue;
-            }
-
-            // Try namespace peers
-            for peer in &namespace_peers {
-                if context
-                    .node
-                    .blob_store()
-                    .force_fetch_from_peer(context.node.endpoint(), peer, hash)
-                    .await
-                    .is_ok()
-                {
-                    repaired = true;
-                    break;
-                }
-            }
+            // Try --from tickets first, then namespace peers.
+            let candidate_tickets: Vec<iroh_blobs::ticket::BlobTicket> = provider_tickets
+                .iter()
+                .filter(|(ticket_hash, _)| *ticket_hash == hash)
+                .map(|(_, ticket)| ticket.clone())
+                .collect();
+            let repaired = crate::node::blob_store::try_fetch_first_working(
+                &candidate_tickets,
+                |ticket| context.node.blob_store().force_fetch(context.node.endpoint(), ticket),
+            )
+            .await
+            .is_ok()
+                || crate::node::blob_store::try_fetch_first_working(&namespace_peers, |peer| async {
+                    context
+                        .node
+                        .blob_store()
+                        .force_fetch_from_peer(context.node.endpoint(), peer, hash)
+                        .await
+                })
+                .await
+                .is_ok();
             if repaired {
                 result.repaired = result.repaired.saturating_add(1);
             } else {
@@ -1702,8 +1634,8 @@ impl IpcServer {
             persist,
         } = cmd
         {
-            let options = ShareOptions { pin, persist };
-            return self.handle_share(namespace, blob, writable, options).await;
+            let options = ShareOptions { writable, pin, persist };
+            return self.handle_share(namespace, blob, options).await;
         }
         if matches!(cmd, IpcCommand::ShareList) {
             return self.handle_share_list();
@@ -1721,13 +1653,7 @@ impl IpcServer {
         }
     }
 
-    async fn handle_share(
-        &self,
-        namespace: String,
-        blob: Option<String>,
-        writable: bool,
-        options: ShareOptions,
-    ) -> IpcResponse {
+    async fn handle_share(&self, namespace: String, blob: Option<String>, options: ShareOptions) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -1760,30 +1686,27 @@ impl IpcServer {
             };
             return match folder.publish_blob(context.node.endpoint().addr(), hash).await {
                 Ok(ticket) => IpcResponse::Ok {
-                    message: format!("namespace: {namespace_id}\nblob: {hash_str}\nticket: {ticket}"),
+                    message: ticket.to_string(),
                 },
                 Err(error) => response_from_error(error),
             };
         }
-        if options.pin
-            && let Err(error) = folder.pin_all_content().await
+        let result = match share_folder(
+            &folder,
+            options,
+            |ns, access, ticket| {
+                if let Some(node_db) = &self.node_db {
+                    node_db.add_share(&ns.to_string(), access, &ticket.to_string())?;
+                }
+                Ok(())
+            },
+        )
+        .await
         {
-            return response_from_error(error);
-        }
-        let ticket = match folder.ticket(context.node.endpoint().addr(), writable).await {
-            Ok(t) => t,
+            Ok(result) => result,
             Err(error) => return response_from_error(error),
         };
-        let access = if writable { "write" } else { "read" };
-        if options.persist
-            && let Some(node_db) = &self.node_db
-            && let Err(error) = node_db.add_share(&namespace_id.to_string(), access, &ticket.to_string())
-        {
-            return response_from_error(error);
-        }
-        IpcResponse::Ok {
-            message: format!("namespace: {namespace_id}\naccess: {access}\nticket: {ticket}"),
-        }
+        IpcResponse::Ok { message: result.url }
     }
 
     fn handle_share_list(&self) -> IpcResponse {
@@ -1885,10 +1808,7 @@ impl IpcServer {
         };
         match result {
             Ok(snapshot) => IpcResponse::Ok {
-                message: format!(
-                    "snapshot: {}\nroot_hash: {}\nfiles: {}\nsize: {}",
-                    snapshot.id, snapshot.root_hash, snapshot.file_count, snapshot.total_size,
-                ),
+                message: snapshot.id.to_string(),
             },
             Err(error) => response_from_error(error),
         }
@@ -2119,12 +2039,7 @@ impl IpcServer {
             Ok(f) => f,
             Err(error) => return response_from_error(error),
         };
-        let store = CollectionStore::new(
-            folder.doc().clone(),
-            folder.author(),
-            context.node.blob_store().clone(),
-            context.node.docs_engine().clone(),
-        );
+        let store = CollectionStore::for_node(&context.node, &folder);
         let head = match store.publish(&manifest, sequence).await {
             Ok(h) => h,
             Err(error) => return response_from_error(error),
@@ -2229,38 +2144,15 @@ async fn resolve_folder_for_daemon(
     manager: &FolderManager,
     selector: &Path,
 ) -> std::result::Result<crate::folder::SyncwebFolder, IpcResponse> {
-    if let Ok(namespace) = selector.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
-        return manager.get(namespace).await.map_err(|error| IpcResponse::Error {
-            message: format!("folder not found: {error}"),
-        });
-    }
-    let folders = manager.list().await.map_err(|error| IpcResponse::Error {
-        message: format!("failed to list folders: {error}"),
-    })?;
-    match folders.as_slice() {
-        [folder] => Ok(folder.clone()),
-        [] => Err(IpcResponse::Error {
-            message: "no synchronized folders are available".to_owned(),
-        }),
-        _ => Err(IpcResponse::Error {
-            message: "folder path is not a namespace ID and more than one synchronized folder is available".to_owned(),
-        }),
-    }
+    manager.resolve(selector).await.map_err(|error| IpcResponse::Error {
+        message: error.to_string(),
+    })
 }
 
 /// A client for sending requests to the daemon.
 #[derive(Clone, Debug)]
 pub struct IpcClient {
     socket_path: PathBuf,
-}
-
-/// Options controlling how a folder is shared.
-#[derive(Clone, Copy, Debug, Default)]
-struct ShareOptions {
-    /// Pin the folder's blobs so shared content is retained.
-    pin: bool,
-    /// Persist the share record so it can be listed and unshared later.
-    persist: bool,
 }
 
 impl IpcClient {
@@ -2750,6 +2642,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: PathBuf::from("."),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         assert!(matches!(
@@ -2766,24 +2659,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: PathBuf::from("/tmp/test-create-folder"),
                 mode: "invalid".to_owned(),
-            }))
-            .await;
-        assert!(matches!(
-            response,
-            IpcResponse::Error { message } if message.contains("no node context")
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_ipc_health_check_no_context() {
-        let handle = DaemonHandle::new(state());
-        let server = IpcServer::new(socket_path(), handle);
-        let response = server
-            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
-                path: PathBuf::from("."),
-                hash: Vec::new(),
-                path_prefix: None,
-                glob: None,
+                indexing: false,
             }))
             .await;
         assert!(matches!(
@@ -2852,6 +2728,7 @@ mod tests {
                 subscribe: false,
                 filters: SubscribeFilters::default(),
                 download: false,
+                indexing: false,
             }))
             .await;
         assert!(matches!(
@@ -2955,6 +2832,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Ok { .. }));
@@ -2975,6 +2853,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "invalid-mode".to_owned(),
+                indexing: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));
@@ -2995,6 +2874,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir1.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         assert!(matches!(response1, IpcResponse::Ok { .. }));
@@ -3013,6 +2893,7 @@ mod tests {
                 .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                     path: test_dir2.clone(),
                     mode: "sendreceive".to_owned(),
+                    indexing: false,
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -3033,9 +2914,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_health_check_returns_report() {
+    async fn test_ipc_stats_files_returns_report() {
         let fixture = setup_ipc_test().await;
-        let test_dir = fixture.directory.join("health-test");
+        let test_dir = fixture.directory.join("stats-files-test");
         std::fs::create_dir_all(&test_dir).expect("test dir should be created");
 
         let response1 = fixture
@@ -3043,6 +2924,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response1 {
@@ -3057,18 +2939,11 @@ mod tests {
         if let Some(ns) = namespace {
             let response2 = fixture
                 .server
-                .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
-                    path: PathBuf::from(&ns),
-                    hash: Vec::new(),
-                    path_prefix: None,
-                    glob: None,
+                .handle_request(IpcRequest::new(IpcCommand::StatsFiles {
+                    folder: PathBuf::from(&ns),
                 }))
                 .await;
-            assert!(matches!(response2, IpcResponse::Ok { .. }));
-            if let IpcResponse::Ok { message } = response2 {
-                assert!(message.contains("total:"));
-                assert!(message.contains("well-seeded:"));
-            }
+            assert!(matches!(response2, IpcResponse::FileStats(_)));
         }
 
         cleanup_ipc_test(fixture).await;
@@ -3076,15 +2951,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ipc_health_check_unknown_folder() {
+    async fn test_ipc_stats_files_unknown_folder() {
         let fixture = setup_ipc_test().await;
         let response = fixture
             .server
-            .handle_request(IpcRequest::new(IpcCommand::HealthCheck {
-                path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
-                hash: Vec::new(),
-                path_prefix: None,
-                glob: None,
+            .handle_request(IpcRequest::new(IpcCommand::StatsFiles {
+                folder: PathBuf::from("/nonexistent/path/that/does/not/exist"),
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));
@@ -3102,6 +2974,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response1 {
@@ -3170,6 +3043,7 @@ mod tests {
                 subscribe: false,
                 filters: SubscribeFilters::default(),
                 download: false,
+                indexing: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));
@@ -3187,6 +3061,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response1 {
@@ -3211,7 +3086,10 @@ mod tests {
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
             if let IpcResponse::Ok { message } = response2 {
-                assert!(message.contains("ticket:"));
+                assert!(
+                    crate::uri::is_folder_url(&message),
+                    "share should emit a URL: {message}"
+                );
             }
         }
 
@@ -3250,6 +3128,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response1 {
@@ -3294,6 +3173,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response1 {
@@ -3336,6 +3216,7 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                 path: test_dir.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await;
         let namespace = if let IpcResponse::Ok { message } = &response {

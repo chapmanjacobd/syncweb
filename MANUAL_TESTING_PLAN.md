@@ -363,11 +363,11 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb schedule` | Shows current global schedule | |
-| 2 | `syncweb schedule set --active "22:00-06:00"` | Sets active hours | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM app_config WHERE key LIKE 'schedule%';"` |
-| 3 | `syncweb schedule set --bandwidth "5MB/s" --period "08:00-18:00"` | Time-based bandwidth limit | |
-| 4 | `syncweb schedule folder media --active "01:00-05:00"` | Per-folder override | |
-| 5 | `syncweb schedule` (check) | Shows updated schedule | |
+| 1 | `syncweb config schedule` | Shows current global schedule | |
+| 2 | `syncweb config schedule set --active "22:00-06:00"` | Sets active hours | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM app_config WHERE key LIKE 'schedule%';"` |
+| 3 | `syncweb config schedule set --bandwidth "5MB/s" --period "08:00-18:00"` | Time-based bandwidth limit | |
+| 4 | `syncweb config schedule folder media --active "01:00-05:00"` | Per-folder override | |
+| 5 | `syncweb config schedule` (check) | Shows updated schedule | |
 
 ### 14.2 Bandwidth Verification
 

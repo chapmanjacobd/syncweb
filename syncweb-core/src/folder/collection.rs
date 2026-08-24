@@ -4,7 +4,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use iroh_blobs::Hash;
 use iroh_docs::{AuthorId, api::Doc};
 use semver::{Version, VersionReq};
@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{Result, SyncwebError},
+    folder::SyncwebFolder,
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
 
@@ -291,7 +292,7 @@ impl CollectionManifest {
         unsigned.signature = None;
         unsigned.validate_content()?;
         if let Some(public_key) = &unsigned.public_key {
-            decode_public_key(public_key)?;
+            crate::signature::decode_verifying_key(public_key)?;
         }
         serde_json::to_vec(&unsigned)
             .map_err(|error| SyncwebError::operation("failed to serialize unsigned collection manifest", error))
@@ -307,10 +308,10 @@ impl CollectionManifest {
     pub fn sign(&mut self, signing_key: &SigningKey) -> Result<()> {
         let mut unsigned = self.clone();
         unsigned.signature = None;
-        unsigned.public_key = Some(hex::encode(signing_key.verifying_key().to_bytes()));
-        let signature = signing_key.sign(&unsigned.unsigned_bytes()?);
+        unsigned.public_key = Some(crate::signature::public_key_hex(signing_key));
+        let signature = crate::signature::sign_hex(signing_key, &unsigned.unsigned_bytes()?);
         self.public_key = unsigned.public_key;
-        self.signature = Some(hex::encode(signature.to_bytes()));
+        self.signature = Some(signature);
         Ok(())
     }
 
@@ -332,11 +333,7 @@ impl CollectionManifest {
                 "manifest signature and public key must be provided together".to_owned(),
             ));
         };
-        let verifying_key = decode_public_key(public_key)?;
-        let signature = decode_signature(signature_text)?;
-        verifying_key
-            .verify(&self.unsigned_bytes()?, &signature)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("manifest signature is invalid: {error}")))
+        crate::signature::verify_hex(public_key, &self.unsigned_bytes()?, signature_text)
     }
 
     /// Compare this manifest's semver version with another manifest.
@@ -396,31 +393,14 @@ fn validate_signature_metadata(manifest: &CollectionManifest) -> Result<()> {
     match (&manifest.signature, &manifest.public_key) {
         (None, None) => Ok(()),
         (Some(signature), Some(public_key)) => {
-            decode_signature(signature)?;
-            decode_public_key(public_key)?;
+            crate::signature::decode_signature(signature)?;
+            crate::signature::decode_verifying_key(public_key)?;
             Ok(())
         }
         _ => Err(SyncwebError::InvalidConfig(
             "manifest signature and public key must be provided together".to_owned(),
         )),
     }
-}
-
-fn decode_signature(encoded: &str) -> Result<Signature> {
-    let bytes = hex::decode(encoded)
-        .map_err(|error| SyncwebError::InvalidConfig(format!("invalid manifest signature encoding: {error}")))?;
-    Signature::from_slice(&bytes)
-        .map_err(|error| SyncwebError::InvalidConfig(format!("invalid manifest signature: {error}")))
-}
-
-fn decode_public_key(encoded: &str) -> Result<VerifyingKey> {
-    let decoded_bytes = hex::decode(encoded)
-        .map_err(|error| SyncwebError::InvalidConfig(format!("invalid manifest public key encoding: {error}")))?;
-    let key_bytes: [u8; 32] = decoded_bytes.try_into().map_err(|error: Vec<u8>| {
-        SyncwebError::InvalidConfig(format!("manifest public key must be 32 bytes, got {}", error.len()))
-    })?;
-    VerifyingKey::from_bytes(&key_bytes)
-        .map_err(|error| SyncwebError::InvalidConfig(format!("invalid manifest public key: {error}")))
 }
 
 /// Mutable pointer to the current immutable manifest for a collection.
@@ -475,6 +455,17 @@ impl CollectionStore {
         }
     }
 
+    /// Build a collection store bound to a folder already managed by `node`.
+    #[must_use]
+    pub fn for_node(node: &crate::node::iroh_node::IrohNode, folder: &SyncwebFolder) -> Self {
+        Self::new(
+            folder.doc().clone(),
+            folder.author(),
+            node.blob_store().clone(),
+            node.docs_engine().clone(),
+        )
+    }
+
     /// # Errors
     ///
     /// Returns an error if manifest storage or head publication fails.
@@ -503,13 +494,15 @@ impl CollectionStore {
             }
             self.blobs
                 .pin(
-                    content_pin_name(manifest.collection_id, entry.content_id),
+                    crate::pins::collection_content_pin(manifest.collection_id, entry.content_id),
                     entry.content_id,
                 )
                 .await?;
         }
         let hash = self.blobs.add_bytes(&bytes).await?;
-        self.blobs.pin(manifest_pin_name(hash), hash).await?;
+        self.blobs
+            .pin(crate::pins::collection_manifest_pin(hash), hash)
+            .await?;
         self.docs
             .set_blob(
                 &self.doc,
@@ -584,12 +577,4 @@ fn manifest_key(collection_id: Uuid, version: &str) -> String {
 
 fn head_key(collection_id: Uuid) -> String {
     format!("collections/{collection_id}/head")
-}
-
-fn manifest_pin_name(hash: Hash) -> String {
-    format!("{}{hash}", crate::constants::COLLECTION_MANIFEST_PIN_PREFIX)
-}
-
-fn content_pin_name(collection_id: Uuid, hash: Hash) -> String {
-    format!("{}{collection_id}/{hash}", crate::constants::COLLECTION_PIN_PREFIX)
 }

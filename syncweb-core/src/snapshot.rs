@@ -6,7 +6,7 @@ use std::{
 };
 
 use iroh::Endpoint;
-use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
+use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
 
@@ -387,7 +387,7 @@ impl SnapshotStore {
     ///
     /// Returns an error if the snapshot is not pinned or cannot be decoded.
     pub async fn load(&self, id: SnapshotId) -> Result<Snapshot> {
-        let prefix = format!("{SNAPSHOT_PIN_PREFIX}{id}/manifest");
+        let prefix = crate::pins::snapshot_manifest_pin(id);
         let hash = self
             .blobs
             .list_pins(prefix.as_bytes())
@@ -404,7 +404,7 @@ impl SnapshotStore {
     ///
     /// Returns an error if the snapshot cannot be found or pins cannot be removed.
     pub async fn delete(&self, id: SnapshotId) -> Result<()> {
-        let manifest_name = manifest_pin_name(id);
+        let manifest_name = crate::pins::snapshot_manifest_pin(id);
         let manifest_hash = self
             .blobs
             .list_pins(manifest_name.as_bytes())
@@ -415,7 +415,9 @@ impl SnapshotStore {
         let snapshot = self.load_manifest(manifest_hash).await?;
         self.blobs.unpin(manifest_name).await?;
         for entry in &snapshot.entries {
-            self.blobs.unpin(content_pin_name(id, entry.hash)).await?;
+            self.blobs
+                .unpin(crate::pins::snapshot_content_pin(id, entry.hash))
+                .await?;
         }
         Ok(())
     }
@@ -447,7 +449,7 @@ impl SnapshotStore {
         let snapshot = self.load_manifest(ticket.hash()).await?;
         for entry in &snapshot.entries {
             if !self.blobs.has(entry.hash).await? {
-                let content_ticket = BlobTicket::new(ticket.addr().clone(), entry.hash, BlobFormat::Raw);
+                let content_ticket = self.blobs.ticket_for_addr(ticket.addr().clone(), entry.hash);
                 self.blobs.fetch(endpoint, &content_ticket).await?;
             }
         }
@@ -465,12 +467,14 @@ impl SnapshotStore {
                 )));
             }
             self.blobs
-                .pin(content_pin_name(snapshot.id, entry.hash), entry.hash)
+                .pin(crate::pins::snapshot_content_pin(snapshot.id, entry.hash), entry.hash)
                 .await?;
         }
         let bytes = snapshot.to_bytes()?;
         let manifest_hash = self.blobs.add_bytes(&bytes).await?;
-        self.blobs.pin(manifest_pin_name(snapshot.id), manifest_hash).await?;
+        self.blobs
+            .pin(crate::pins::snapshot_manifest_pin(snapshot.id), manifest_hash)
+            .await?;
         Ok(())
     }
 
@@ -518,12 +522,4 @@ fn validate_path(path: &Path) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-fn manifest_pin_name(id: Hash) -> String {
-    format!("{SNAPSHOT_PIN_PREFIX}{id}/manifest")
-}
-
-fn content_pin_name(id: Hash, hash: Hash) -> String {
-    format!("{SNAPSHOT_PIN_PREFIX}{id}/blob/{hash}")
 }

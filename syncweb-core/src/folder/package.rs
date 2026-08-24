@@ -5,7 +5,7 @@ use std::{
 };
 
 use iroh::Endpoint;
-use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
+use iroh_blobs::{Hash, ticket::BlobTicket};
 use semver::Version;
 use uuid::Uuid;
 
@@ -128,7 +128,7 @@ impl PackageManager {
             .map_err(|error| SyncwebError::operation("failed to create package source directory", error))?;
         for entry in &manifest.entries {
             if !blobs.has(entry.content_id).await? {
-                let ticket = BlobTicket::new(manifest_ticket.addr().clone(), entry.content_id, BlobFormat::Raw);
+                let ticket = blobs.ticket_for_addr(manifest_ticket.addr().clone(), entry.content_id);
                 blobs.fetch(endpoint, &ticket).await?;
             }
             let bytes = blobs.get(entry.content_id).await?;

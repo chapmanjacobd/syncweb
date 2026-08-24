@@ -145,7 +145,12 @@ async fn catalog_publish_and_search_uses_global_fts() -> anyhow::Result<()> {
         node.docs_engine().author().await?,
     );
     let namespace = catalog.create_catalog("public files").await?;
-    anyhow::ensure!(catalog.publish_folder(&namespace, &folder).await? == 1);
+    anyhow::ensure!(
+        catalog
+            .publish_folder_with_metadata(&namespace, &folder, folder.namespace_id().to_string(), &[])
+            .await?
+            == 1
+    );
 
     anyhow::ensure!(indexing.search_local("readme", 10)?.is_empty());
     let results = catalog.search("readme", 10)?;
@@ -200,10 +205,10 @@ async fn catalog_subscription_syncs_records_over_iroh_docs() -> anyhow::Result<(
         publisher.docs_engine().author().await?,
     );
     let catalog = publisher_catalog.create_catalog("shared catalog").await?;
-    publisher_catalog.publish_folder(&catalog, &folder).await?;
-    let ticket = publisher_catalog
-        .ticket(&catalog, publisher.endpoint().addr(), false)
+    publisher_catalog
+        .publish_folder_with_metadata(&catalog, &folder, folder.namespace_id().to_string(), &[])
         .await?;
+    let ticket = publisher_catalog.ticket(&catalog, false).await?;
 
     let subscriber_indexing = IndexingService::in_memory()?;
     let subscriber_catalog = subscriber_indexing.catalog_service(

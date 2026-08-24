@@ -86,7 +86,7 @@ fn test_no_daemon_create_routes_embedded() -> anyhow::Result<()> {
     ])?;
     ensure!(output.status.success());
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("namespace:"));
+    ensure!(stdout.contains("syncweb://"));
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
@@ -275,7 +275,7 @@ fn test_daemon_create_via_ipc() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "create should succeed via daemon");
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("namespace:"));
+    ensure!(stdout.contains("syncweb://"));
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
     ensure!(shutdown.status.success());
@@ -305,15 +305,13 @@ fn test_daemon_health_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
-        let health = syncweb(&["--data-dir", data_dir_arg, "stats", "seeding", "--folder", ns])?;
-        ensure!(health.status.success(), "stats seeding should succeed via daemon");
-
-        let files = syncweb(&["--data-dir", data_dir_arg, "stats", "files", "--folder", ns])?;
+        let files = syncweb(&["--data-dir", data_dir_arg, "stats", "files", ns])?;
         ensure!(files.status.success(), "stats files should succeed via daemon");
         let output = String::from_utf8(files.stdout).context("UTF-8 output")?;
         ensure!(
@@ -419,9 +417,10 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
         let subscribe = syncweb(&["--data-dir", data_dir_arg, "join", "--subscribe", "--ingest-only", ns])?;
@@ -456,15 +455,19 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
-        let publish = syncweb(&["--data-dir", data_dir_arg, "share", "--namespace", ns])?;
+        let publish = syncweb(&["--data-dir", data_dir_arg, "share", ns])?;
         ensure!(publish.status.success(), "share should succeed via daemon");
         let pub_stdout = String::from_utf8(publish.stdout).context("UTF-8 output")?;
-        ensure!(pub_stdout.contains("ticket:"));
+        ensure!(
+            pub_stdout.contains("syncweb://"),
+            "share should emit a URL: {pub_stdout}"
+        );
     }
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
@@ -495,9 +498,10 @@ fn test_daemon_leave_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
         let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns])?;
@@ -532,9 +536,10 @@ fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
     ensure!(namespace.is_some(), "create should output a namespace");
     let ns = namespace.unwrap();
 
@@ -581,9 +586,10 @@ fn test_daemon_verify_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
         let verify = syncweb(&["--data-dir", data_dir_arg, "verify", ns])?;
@@ -618,9 +624,10 @@ fn test_daemon_snapshot_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
 
     if let Some(ns) = namespace {
         let snapshot_list = syncweb(&["--data-dir", data_dir_arg, "snapshot", "list", ns])?;
@@ -675,15 +682,6 @@ fn test_folders_help_mentions_daemon_routing() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_stats_seeding_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["stats", "seeding", "--help"])?;
-    ensure!(output.status.success());
-    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("--no-daemon") || help.contains("daemon"));
-    Ok(())
-}
-
-#[test]
 fn test_download_help_mentions_daemon_routing() -> anyhow::Result<()> {
     let output = syncweb(&["download", "--help"])?;
     ensure!(output.status.success());
@@ -704,15 +702,6 @@ fn test_subscribe_help_mentions_daemon_routing() -> anyhow::Result<()> {
 #[test]
 fn test_publish_help_mentions_daemon_routing() -> anyhow::Result<()> {
     let output = syncweb(&["publish", "--help"])?;
-    ensure!(output.status.success());
-    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("--no-daemon") || help.contains("daemon"));
-    Ok(())
-}
-
-#[test]
-fn test_leave_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["leave", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -748,9 +737,10 @@ fn test_daemon_leave_untracks_via_ipc() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim));
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim);
     ensure!(namespace.is_some(), "create should output a namespace");
     let ns = namespace.unwrap();
 
@@ -825,7 +815,7 @@ fn test_cli_no_daemon_flag_bypasses_daemon() -> anyhow::Result<()> {
         "embedded create with --no-daemon should succeed without daemon running"
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("namespace:"));
+    ensure!(stdout.contains("syncweb://"));
 
     let folders = syncweb(&["--data-dir", data_dir_arg, "status"])?;
     let status_stdout = String::from_utf8(folders.stdout).context("UTF-8 output")?;
@@ -986,12 +976,14 @@ fn test_daemon_sync_scoped_to_namespace() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = stdout
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .and_then(|line| line.strip_prefix("namespace:").map(str::trim))
-        .context("create should output a namespace")?;
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
 
-    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync", namespace])?;
+    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync", &namespace])?;
     ensure!(sync.status.success(), "daemon-sync --namespace should succeed");
 
     let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--force"])?;
@@ -1032,27 +1024,17 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = create_out
-        .lines()
-        .find_map(|line| line.strip_prefix("namespace: "))
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
         .map(str::trim)
         .context("create should output a namespace")?
         .to_owned();
-    let share = syncweb(&[
-        "--data-dir",
-        alice_data_arg,
-        "share",
-        "--namespace",
-        &namespace,
-        "--write",
-    ])?;
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
-    let ticket = share_out
-        .lines()
-        .find_map(|line| line.strip_prefix("ticket: "))
-        .map(str::trim)
-        .context("share should output a ticket")?
-        .to_owned();
+    let ticket = share_out.trim().to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
     let import = syncweb(&[
@@ -1069,13 +1051,13 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         bob_data_arg,
         "--no-daemon",
         "join",
-        "--download",
+        "--download-all",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "join --download should succeed: {}",
+        "join --download-all should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
@@ -1126,21 +1108,14 @@ fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
     );
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = create_out
-        .lines()
-        .find_map(|line| line.strip_prefix("namespace: "))
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
         .map(str::trim)
         .context("create should output a namespace")?
         .to_owned();
 
-    let report = syncweb(&[
-        "--json",
-        "--data-dir",
-        data_dir_arg,
-        "stats",
-        "files",
-        "--folder",
-        &namespace,
-    ])?;
+    let report = syncweb(&["--json", "--data-dir", data_dir_arg, "stats", "files", &namespace])?;
     ensure!(
         report.status.success(),
         "stats files should succeed: {}",
@@ -1187,27 +1162,17 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
     let namespace = create_out
-        .lines()
-        .find_map(|line| line.strip_prefix("namespace: "))
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
         .map(str::trim)
         .context("create should output a namespace")?
         .to_owned();
-    let share = syncweb(&[
-        "--data-dir",
-        alice_data_arg,
-        "share",
-        "--namespace",
-        &namespace,
-        "--write",
-    ])?;
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
-    let ticket = share_out
-        .lines()
-        .find_map(|line| line.strip_prefix("ticket: "))
-        .map(str::trim)
-        .context("share should output a ticket")?
-        .to_owned();
+    let ticket = share_out.trim().to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
     let import = syncweb(&[
@@ -1223,13 +1188,13 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "join",
-        "--download",
+        "--download-all",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "daemon join --download should succeed: {}",
+        "daemon join --download-all should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;

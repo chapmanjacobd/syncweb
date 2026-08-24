@@ -776,15 +776,8 @@ fn parse_namespace(message: &str) -> Result<String> {
         .context("no namespace in response")
 }
 
-fn parse_ticket(message: &str) -> Result<String> {
-    message
-        .lines()
-        .find_map(|line| line.strip_prefix("ticket: "))
-        .map(|value| value.trim().to_owned())
-        .context("no ticket in response")
-}
-
-/// Share a folder on daemon A and return a writable ticket for joining on B.
+/// Share a folder on daemon A and return a writable `syncweb://folder/...` URL
+/// for joining on B.
 async fn share_ticket(client: &IpcClient, namespace: &str) -> Result<String> {
     let share = client
         .send(IpcRequest::new(IpcCommand::Share {
@@ -798,7 +791,11 @@ async fn share_ticket(client: &IpcClient, namespace: &str) -> Result<String> {
     let IpcResponse::Ok { message } = &share else {
         anyhow::bail!("unexpected share response: {share:?}");
     };
-    parse_ticket(message)
+    ensure!(
+        message.starts_with("syncweb://folder/"),
+        "share should emit a URL: {message}"
+    );
+    Ok(message.clone())
 }
 
 /// Create a folder on daemon A and join it on daemon B with live syncing and
@@ -818,6 +815,7 @@ async fn assert_join_subscribe_filters(
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: folder_path.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await?;
         let IpcResponse::Ok { message } = &create else {
@@ -836,6 +834,7 @@ async fn assert_join_subscribe_filters(
                 subscribe: true,
                 filters: filters.clone(),
                 download: false,
+                indexing: false,
             }))
             .await?;
         ensure!(
@@ -898,6 +897,7 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: folder_path.clone(),
                 mode: "sendreceive".to_owned(),
+                indexing: false,
             }))
             .await?;
         let IpcResponse::Ok { message } = &create else {
@@ -930,6 +930,7 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
                 subscribe: true,
                 filters: SubscribeFilters::default(),
                 download: false,
+                indexing: false,
             }))
             .await?;
         ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");
@@ -944,22 +945,12 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
         for _ in 0..40 {
             let health = daemons
                 .client_b
-                .send(IpcRequest::new(IpcCommand::HealthCheck {
-                    path: std::path::PathBuf::from(&namespace),
-                    hash: Vec::new(),
-                    path_prefix: None,
-                    glob: None,
+                .send(IpcRequest::new(IpcCommand::StatsFiles {
+                    folder: std::path::PathBuf::from(&namespace),
                 }))
                 .await?;
-            if let IpcResponse::Ok {
-                message: health_message,
-            } = &health
-                && health_message
-                    .split(',')
-                    .next()
-                    .and_then(|part| part.trim().strip_prefix("total: "))
-                    .and_then(|value| value.parse::<usize>().ok())
-                    .is_some_and(|total| total >= 1)
+            if let IpcResponse::FileStats(report) = &health
+                && report.total_files >= 1
             {
                 synced = true;
                 break;

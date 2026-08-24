@@ -61,7 +61,7 @@ impl PublicSubscription {
     pub fn ticket(&self) -> Option<iroh_blobs::ticket::BlobTicket> {
         self.provider
             .as_ref()
-            .map(|addr| iroh_blobs::ticket::BlobTicket::new(addr.clone(), self.hash, iroh_blobs::BlobFormat::Raw))
+            .map(|addr| crate::node::blob_store::raw_blob_ticket(addr.clone(), self.hash))
     }
 
     #[must_use]

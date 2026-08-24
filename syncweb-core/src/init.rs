@@ -20,7 +20,7 @@ pub struct InitResult {
 impl InitResult {
     #[must_use]
     pub fn new(path: impl Into<PathBuf>, namespace: NamespaceId, ticket: DocTicket) -> Self {
-        let share_url = format!("{}{namespace}?ticket={ticket}", crate::constants::LINK_SCHEME);
+        let share_url = crate::uri::folder_url(namespace, &ticket);
         Self {
             path: path.into(),
             namespace,

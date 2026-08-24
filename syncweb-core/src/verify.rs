@@ -171,12 +171,9 @@ impl IntegrityChecker {
     ///
     /// Returns an error if folder entries or local blobs cannot be read.
     pub async fn verify_folder(&self, folder: &SyncwebFolder) -> Result<VerifyResult> {
-        let entries = self.docs_engine.list_latest(folder.doc()).await?;
+        let entries = folder.content_entries().await?;
         let mut result = VerifyResult::default();
         for entry in entries {
-            if entry.key().starts_with(b"sys/") {
-                continue;
-            }
             result.total = result.total.saturating_add(1);
             let path = String::from_utf8(entry.key().to_vec())
                 .map(PathBuf::from)
@@ -213,12 +210,9 @@ impl IntegrityChecker {
         folder: &SyncwebFolder,
         filter: Option<&VerifyFilter>,
     ) -> Result<VerifyResult> {
-        let entries = self.docs_engine.list_latest(folder.doc()).await?;
+        let entries = folder.content_entries().await?;
         let mut result = VerifyResult::default();
         for entry in entries {
-            if entry.key().starts_with(b"sys/") {
-                continue;
-            }
             let expected = entry.content_hash();
             if filter.is_some_and(|f| !f.matches(entry.key(), &expected)) {
                 continue;

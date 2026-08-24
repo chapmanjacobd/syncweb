@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 
 use crate::error::{Result, SyncwebError};
 use crate::node::{blob_store::BlobStore, docs_engine::DocsEngine};
-use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotId, SnapshotStore};
 
 use super::SyncMode;
 use super::public_subscription::{EntryLike, FolderLike};
@@ -58,41 +57,6 @@ impl SyncwebFolder {
             sync_mode,
             capabilities: Arc::new(RwLock::new(HashMap::new())),
         }
-    }
-
-    /// Create a new folder by allocating a namespace in the docs engine.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the namespace cannot be created or the default author cannot be retrieved.
-    pub async fn create(docs_engine: DocsEngine, blob_store: BlobStore, sync_mode: SyncMode) -> Result<Self> {
-        let (doc, _ticket) = docs_engine
-            .create_or_open_namespace(None)
-            .await
-            .map_err(|error| SyncwebError::operation("failed to create folder namespace", error))?;
-        let author = docs_engine
-            .author()
-            .await
-            .map_err(|error| SyncwebError::operation("failed to retrieve folder author", error))?;
-        Ok(Self::new(doc, author, blob_store, docs_engine, sync_mode))
-    }
-
-    /// Accept a locally available folder by namespace ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the namespace cannot be opened.
-    pub async fn accept(docs_engine: DocsEngine, blob_store: BlobStore, namespace_id: NamespaceId) -> Result<Self> {
-        let doc = docs_engine
-            .open(namespace_id)
-            .await
-            .map_err(|error| SyncwebError::operation("failed to open folder namespace", error))?
-            .ok_or(SyncwebError::NamespaceNotAvailable)?;
-        let author = docs_engine
-            .author()
-            .await
-            .map_err(|error| SyncwebError::operation("failed to retrieve folder author", error))?;
-        Ok(Self::new(doc, author, blob_store, docs_engine, SyncMode::ReceiveOnly))
     }
 
     /// Drop this folder's namespace from the docs engine.
@@ -153,59 +117,20 @@ impl SyncwebFolder {
         self.blob_store.has(hash).await
     }
 
-    /// Create a content-addressed snapshot of this folder.
+    /// List the folder's content entries, excluding `sys/` metadata keys.
+    ///
+    /// Used by stats, verify, and health-reporting paths so the "iterate the
+    /// latest per-key entries, skip system keys" pattern lives in one place.
     ///
     /// # Errors
     ///
-    /// Returns an error if document entries cannot be read or referenced blobs
-    /// are unavailable.
-    pub async fn create_snapshot(&self, description: Option<String>) -> Result<Snapshot> {
-        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
-            .create_for_folder(self, description)
-            .await
-    }
-
-    /// Restore this folder's document entries from a snapshot.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the snapshot belongs to another folder or content
-    /// is unavailable.
-    pub async fn restore_snapshot(&self, snapshot: &Snapshot) -> Result<()> {
-        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
-            .restore_for_folder(self, snapshot)
-            .await
-    }
-
-    /// List snapshots stored in the local blob store.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if snapshot manifests cannot be read.
-    pub async fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
-        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
-            .list()
-            .await
-    }
-
-    /// Delete a snapshot and release its pins.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the snapshot cannot be found or pins cannot be released.
-    pub async fn delete_snapshot(&self, snapshot_id: SnapshotId) -> Result<()> {
-        SnapshotStore::with_docs(self.blob_store.clone(), self.docs_engine.clone())
-            .delete(snapshot_id)
-            .await
-    }
-
-    /// Compare two snapshots.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if either snapshot is invalid.
-    pub fn diff_snapshots(&self, first: &Snapshot, second: &Snapshot) -> Result<SnapshotDiff> {
-        first.diff(second)
+    /// Returns an error if the document query fails.
+    pub async fn content_entries(&self) -> Result<Vec<iroh_docs::Entry>> {
+        let entries = self.docs_engine.list_latest(self.doc()).await?;
+        Ok(entries
+            .into_iter()
+            .filter(|entry| !entry.key().starts_with(b"sys/"))
+            .collect())
     }
 
     /// # Errors
@@ -259,7 +184,7 @@ impl SyncwebFolder {
     /// # Errors
     ///
     /// Returns an error if the folder ticket cannot be created.
-    pub async fn ticket(&self, _endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
+    pub async fn ticket(&self, writable: bool) -> Result<DocTicket> {
         let can_write = writable && self.sync_mode.can_grant_write();
         self.docs_engine.share_ticket(&self.doc, can_write).await
     }
@@ -278,7 +203,7 @@ impl SyncwebFolder {
         }
         let ticket = self.blob_store.ticket_for_addr(endpoint, hash);
         self.blob_store
-            .pin(public_pin_name(self.namespace_id, hash), hash)
+            .pin(crate::pins::public_blob_pin(self.namespace_id, hash), hash)
             .await?;
         Ok(ticket)
     }
@@ -292,7 +217,9 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the public-sharing pin cannot be removed.
     pub async fn unpublish_blob(&self, hash: Hash) -> Result<()> {
-        self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await
+        self.blob_store
+            .unpin(crate::pins::public_blob_pin(self.namespace_id, hash))
+            .await
     }
 
     /// Pin every blob currently referenced by the folder's document so the
@@ -309,7 +236,7 @@ impl SyncwebFolder {
         for entry in entries {
             let hash = entry.content_hash();
             self.blob_store
-                .pin(public_pin_name(self.namespace_id, hash), hash)
+                .pin(crate::pins::public_blob_pin(self.namespace_id, hash), hash)
                 .await?;
             pinned = pinned.saturating_add(1);
         }
@@ -329,7 +256,9 @@ impl SyncwebFolder {
         let mut unpinned = 0_usize;
         for entry in entries {
             let hash = entry.content_hash();
-            self.blob_store.unpin(public_pin_name(self.namespace_id, hash)).await?;
+            self.blob_store
+                .unpin(crate::pins::public_blob_pin(self.namespace_id, hash))
+                .await?;
             unpinned = unpinned.saturating_add(1);
         }
         Ok(unpinned)
@@ -370,8 +299,4 @@ impl FolderLike for SyncwebFolder {
         }
         Ok(result)
     }
-}
-
-fn public_pin_name(namespace_id: NamespaceId, hash: Hash) -> String {
-    format!("{}{namespace_id}/{hash}", crate::constants::PUBLIC_PIN_PREFIX)
 }

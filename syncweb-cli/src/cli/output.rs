@@ -1,4 +1,7 @@
+use std::io::IsTerminal;
+
 use anyhow::{Result, anyhow};
+use dialoguer::Confirm;
 use tracing_subscriber::{EnvFilter, fmt};
 
 pub fn init_tracing(verbose: bool) -> Result<()> {
@@ -15,4 +18,20 @@ pub fn init_tracing(verbose: bool) -> Result<()> {
 
 pub fn print_version() {
     println!("syncweb {}", env!("CARGO_PKG_VERSION"));
+}
+
+/// Require interactive confirmation for destructive operations. Skips the prompt
+/// for JSON output and non-interactive stdin.
+pub fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
+    if output_json {
+        return Ok(true);
+    }
+    if !std::io::stdin().is_terminal() {
+        return Ok(true);
+    }
+    Ok(Confirm::new()
+        .with_prompt(format!("Are you sure you want to {operation}?"))
+        .default(false)
+        .show_default(true)
+        .interact()?)
 }

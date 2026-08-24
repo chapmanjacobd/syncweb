@@ -11,7 +11,7 @@ pub use denylist::{Denied, DenyReason, Denylist, DenylistRule, DenylistService, 
 pub use links::{
     CapabilityLink, ContentLink, ImmutableLink, Link, LinkResolution, LinkResolver, LinkStore, Mirror, MutableLink,
     MutablePointer, NameLink, PrivateLink, ProviderFetch, ResolveOptions, ResolvedLink, SignedMutablePointer,
-    collect_files, current_epoch_seconds, fetch_from_mirrors, hash_source,
+    collect_files, fetch_from_mirrors, hash_source,
 };
 
 use std::{
@@ -669,24 +669,6 @@ impl IndexingDatabase {
         })
     }
 
-    /// Search all known catalogs. This is an alias for [`Self::search_catalogs`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query is invalid or `SQLite` cannot read results.
-    pub fn global_search(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        self.search_catalogs(query, limit)
-    }
-
-    /// Search all known catalogs. Alias for [`Self::search_catalogs`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query is invalid or `SQLite` cannot read results.
-    pub fn catalog_search(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        self.search_catalogs(query, limit)
-    }
-
     /// Remove a catalog and all records imported from it.
     ///
     /// # Errors
@@ -1259,19 +1241,8 @@ impl IndexingService {
         self.denylist.clone()
     }
 
-    /// Alias for [`Self::denylist_service`].
-    #[must_use]
-    pub fn denylist(&self) -> denylist::DenylistService {
-        self.denylist_service()
-    }
-
     #[must_use]
     pub const fn database(&self) -> &IndexingDatabase {
-        &self.database
-    }
-
-    #[must_use]
-    pub const fn db(&self) -> &IndexingDatabase {
         &self.database
     }
 
@@ -1315,12 +1286,6 @@ impl IndexingService {
         self.events.subscribe()
     }
 
-    /// Subscribe to indexing and core-engine events.
-    #[must_use]
-    pub fn subscribe_events(&self) -> broadcast::Receiver<IndexingEvent> {
-        self.subscribe()
-    }
-
     /// Opt a folder into indexing and begin consuming its document events.
     ///
     /// Existing document entries are indexed before the method returns.
@@ -1340,7 +1305,7 @@ impl IndexingService {
             return Ok(IndexingHandle { namespace_id });
         }
 
-        let live_events = folder.docs_engine().watch(folder.doc()).await?;
+        let live_events = folder.docs_engine().watch_and_sync(folder.doc()).await?;
         self.database.enable_folder(namespace_id, &namespace_id.to_string())?;
         send_event(&self.events, IndexingEvent::FolderEnabled { namespace_id });
 

@@ -1,4 +1,4 @@
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use iroh_docs::{AuthorId, api::Doc};
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,7 @@ use crate::{
     Result, SyncwebError,
     constants::{MEMBER_LIST_SIGNATURE_CONTEXT, NETWORK_MEMBERS_KEY},
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
+    parsing::current_unix_secs,
 };
 
 use super::network::Network;
@@ -92,7 +93,7 @@ impl SignedMemberList {
     ///
     /// Returns an error if serialization fails.
     pub fn sign(&mut self, signing_key: &SigningKey) -> Result<()> {
-        let owner_hex = hex::encode(signing_key.verifying_key().to_bytes());
+        let owner_hex = crate::signature::public_key_hex(signing_key);
         if self.owner != owner_hex {
             return Err(SyncwebError::InvalidSignature(
                 "signing key does not match owner field".to_owned(),
@@ -102,7 +103,7 @@ impl SignedMemberList {
         let mut signed_bytes = Vec::new();
         signed_bytes.extend_from_slice(MEMBER_LIST_SIGNATURE_CONTEXT);
         signed_bytes.extend_from_slice(&message);
-        self.signature = hex::encode(signing_key.sign(&signed_bytes).to_bytes());
+        self.signature = crate::signature::sign_hex(signing_key, &signed_bytes);
         Ok(())
     }
 
@@ -112,26 +113,11 @@ impl SignedMemberList {
     ///
     /// Returns an error if the signature is missing, malformed, or invalid.
     pub fn verify(&self) -> Result<()> {
-        let key_bytes = hex::decode(&self.owner)
-            .map_err(|error| SyncwebError::InvalidSignature(format!("invalid owner key hex: {error}")))?;
-        let key_array: [u8; 32] = key_bytes
-            .try_into()
-            .map_err(|_length_error| SyncwebError::InvalidSignature("owner key must be 32 bytes".to_owned()))?;
-        let verifying_key = VerifyingKey::from_bytes(&key_array)
-            .map_err(|error| SyncwebError::InvalidSignature(format!("invalid owner key: {error}")))?;
-        let sig_bytes = hex::decode(&self.signature)
-            .map_err(|error| SyncwebError::InvalidSignature(format!("invalid signature hex: {error}")))?;
-        let sig_array: [u8; 64] = sig_bytes
-            .try_into()
-            .map_err(|_length_error| SyncwebError::InvalidSignature("signature must be 64 bytes".to_owned()))?;
-        let signature = Signature::from_bytes(&sig_array);
         let message = self.serialize_unsigned()?;
         let mut signed_bytes = Vec::new();
         signed_bytes.extend_from_slice(MEMBER_LIST_SIGNATURE_CONTEXT);
         signed_bytes.extend_from_slice(&message);
-        verifying_key
-            .verify(&signed_bytes, &signature)
-            .map_err(|error| SyncwebError::InvalidSignature(format!("signature verification failed: {error}")))
+        crate::signature::verify_hex(&self.owner, &signed_bytes, &self.signature)
     }
 
     /// Serialize without the signature field.
@@ -188,10 +174,4 @@ async fn next_member_list_sequence(docs: &DocsEngine, blobs: &BlobStore, doc: &D
     let current: SignedMemberList = serde_json::from_slice(&bytes)
         .map_err(|error| SyncwebError::operation("failed to deserialize member list", error))?;
     Ok(current.sequence.saturating_add(1))
-}
-
-fn current_unix_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
 }

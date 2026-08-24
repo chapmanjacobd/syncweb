@@ -347,16 +347,6 @@ impl NetworkManager {
         self.networks.values().find(|network| network.name == name)
     }
 
-    /// Check if the local node can access a given folder namespace through any network.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    pub fn can_access_folder(&self, namespace_id: &NamespaceId) -> Result<bool> {
-        self.db
-            .can_access_folder(&namespace_id.to_string(), &self.local_node.to_string())
-    }
-
     /// Return the network IDs (as strings) that contain a given folder.
     ///
     /// # Errors

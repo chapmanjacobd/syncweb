@@ -27,12 +27,13 @@ cd syncweb && cargo install .
 ## Quick Start
 
 ```sh
-syncweb create ~/my-folder        # create a folder, get a read-only sharing ticket/URL
-syncweb create --write ~/my-folder # create + writable sharing ticket
+syncweb create ~/my-folder        # create a folder, print a read-only syncweb:// share URL
+syncweb create --write ~/my-folder # create + writable share URL
 syncweb create --no-share ~/my-folder  # create locally, don't share yet
-syncweb join <ticket>             # join a folder via ticket
+syncweb join <url-or-ticket>      # join a folder via its share URL or ticket
 syncweb folders                   # list local folders
 syncweb devices                   # show device identity
+syncweb networks                  # list networks and their health
 ```
 
 ## Configuration

@@ -47,7 +47,7 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
     ensure!(help.contains("join"));
     ensure!(help.contains("leave"));
     ensure!(help.contains("folders"));
-    ensure!(help.contains("devices"));
+    ensure!(help.contains("status"));
     ensure!(help.contains("network"));
     ensure!(help.contains("config"));
     Ok(())
@@ -152,6 +152,7 @@ fn test_create_command() -> anyhow::Result<()> {
             "--data-dir",
             directory.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "create",
             "--no-import",
         ])
@@ -166,7 +167,8 @@ fn test_create_command() -> anyhow::Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("namespace: "), "should print namespace: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout)?;
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
     Ok(())
 }
 
@@ -232,17 +234,15 @@ fn test_join_command() -> anyhow::Result<()> {
         .context("run syncweb create")?;
     ensure!(create_output.status.success());
     let share_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--no-daemon", "share", "--write"])
+        .args(["--data-dir", &data_dir, "--no-daemon", "--json", "share", "--write"])
         .output()
         .context("run syncweb share")?;
     ensure!(share_output.status.success());
-    let share_stdout = String::from_utf8(share_output.stdout).context("UTF-8 output")?;
-    let ticket = share_stdout
-        .lines()
-        .find(|line| line.starts_with("ticket: "))
-        .context("should have ticket line")?
-        .trim_start_matches("ticket: ")
-        .trim()
+    let share_value: serde_json::Value = serde_json::from_slice(&share_output.stdout).context("share JSON")?;
+    let ticket = share_value
+        .get("ticket")
+        .and_then(serde_json::Value::as_str)
+        .context("should have ticket")?
         .to_owned();
 
     let join_dir = directory.join("join_target");
@@ -816,6 +816,7 @@ fn test_create_outputs_url() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "create",
             directory.to_str().context("UTF-8 path")?,
         ])
@@ -831,11 +832,15 @@ fn test_create_outputs_url() -> anyhow::Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("path:"), "should print path: {stdout}");
-    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
-    ensure!(stdout.contains("access: read"), "should print access: read: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
-    ensure!(stdout.contains("url:"), "should print a share url: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).context("create should emit JSON")?;
+    ensure!(value.get("path").is_some(), "should print path: {stdout}");
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
+    ensure!(
+        value.get("access") == Some(&serde_json::Value::from("read")),
+        "should print access: read: {stdout}"
+    );
+    ensure!(value.get("ticket").is_some(), "should print a share ticket: {stdout}");
+    ensure!(value.get("url").is_some(), "should print a share url: {stdout}");
     Ok(())
 }
 
@@ -849,6 +854,7 @@ fn test_create_no_share_skips_ticket() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "create",
             "--no-share",
             "--no-import",
@@ -866,14 +872,15 @@ fn test_create_no_share_skips_ticket() -> anyhow::Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("path:"), "should print path: {stdout}");
-    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).context("create should emit JSON")?;
+    ensure!(value.get("path").is_some(), "should print path: {stdout}");
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
     ensure!(
-        !stdout.contains("ticket"),
+        value.get("ticket").is_none(),
         "create --no-share should not print a ticket: {stdout}"
     );
     ensure!(
-        !stdout.contains("url:"),
+        value.get("url").is_none(),
         "create --no-share should not print a url: {stdout}"
     );
     Ok(())
@@ -889,6 +896,7 @@ fn test_create_write_shares_writable() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "create",
             "--write",
             "--no-import",
@@ -906,8 +914,12 @@ fn test_create_write_shares_writable() -> anyhow::Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("access: write"), "should print access: write: {stdout}");
-    ensure!(stdout.contains("ticket:"), "should print a share ticket: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).context("create should emit JSON")?;
+    ensure!(
+        value.get("access") == Some(&serde_json::Value::from("write")),
+        "should print access: write: {stdout}"
+    );
+    ensure!(value.get("ticket").is_some(), "should print a share ticket: {stdout}");
     Ok(())
 }
 
@@ -934,24 +946,25 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "share",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
         .context("run syncweb share (read-only)")?;
     ensure!(read.status.success());
-    let read_out = String::from_utf8(read.stdout).context("UTF-8 output")?;
+    let read_value: serde_json::Value = serde_json::from_slice(&read.stdout).context("share JSON")?;
     ensure!(
-        read_out.contains("access: read"),
-        "default share should be read-only: {read_out}"
+        read_value.get("access") == Some(&serde_json::Value::from("read")),
+        "default share should be read-only: {read_value}"
     );
-    ensure!(read_out.contains("ticket:"), "should print ticket: {read_out}");
 
     let write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "--json",
             "share",
             "--write",
             directory.to_str().context("UTF-8 path")?,
@@ -959,10 +972,10 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
         .output()
         .context("run syncweb share --write")?;
     ensure!(write.status.success());
-    let write_out = String::from_utf8(write.stdout).context("UTF-8 output")?;
+    let write_value: serde_json::Value = serde_json::from_slice(&write.stdout).context("share JSON")?;
     ensure!(
-        write_out.contains("access: write"),
-        "share --write should be write access: {write_out}"
+        write_value.get("access") == Some(&serde_json::Value::from("write")),
+        "share --write should be write access: {write_value}"
     );
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -987,13 +1000,12 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "share",
-            "--rm",
+            "unshare",
             "--write",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb share --rm --write")?;
+        .context("run syncweb unshare --write")?;
     ensure!(rm.status.success());
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
@@ -1017,7 +1029,7 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .output()
         .context("run network help")?;
     let network_help = String::from_utf8(network.stdout).context("UTF-8 output")?;
-    for command in ["create", "ls", "join", "leave", "invite", "kick"] {
+    for command in ["create", "join", "leave", "invite", "kick", "events"] {
         ensure!(network_help.contains(command));
     }
     Ok(())
@@ -1037,7 +1049,7 @@ fn network_create_and_list_persist() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create.stderr)
     );
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "ls"])
+        .args(["--data-dir", data_dir, "networks"])
         .output()
         .context("list networks")?;
     std::fs::remove_dir_all(directory).context("cleanup")?;
@@ -1150,7 +1162,7 @@ fn network_list_inspects_single_network() -> anyhow::Result<()> {
     ensure!(create.status.success());
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "ls", "inspect-me"])
+        .args(["--data-dir", data_dir, "networks", "inspect-me"])
         .output()
         .context("inspect network")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1249,7 +1261,7 @@ fn network_leave_removes_from_list() -> anyhow::Result<()> {
     );
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "ls"])
+        .args(["--data-dir", data_dir, "networks"])
         .output()
         .context("list after leave")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1290,6 +1302,7 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             "--data-dir",
             data_dir,
             "--no-daemon",
+            "--json",
             "create",
             "--network",
             "team-net",
@@ -1305,7 +1318,8 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create.stderr)
     );
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    ensure!(stdout.contains("namespace:"), "should print namespace: {stdout}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).context("create should emit JSON")?;
+    ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
     Ok(())
 }
 
@@ -1326,17 +1340,16 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
         .context("create folder for ticket")?;
     ensure!(create.status.success());
     let share = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "--no-daemon", "share", "--write"])
+        .args(["--data-dir", data_dir, "--no-daemon", "--json", "share", "--write"])
         .output()
         .context("share folder for ticket")?;
     ensure!(share.status.success());
     let stdout = String::from_utf8(share.stdout).context("UTF-8 output")?;
-    let ticket = stdout
-        .lines()
-        .find(|l| l.starts_with("ticket: "))
-        .context("should have ticket line")?
-        .trim_start_matches("ticket: ")
-        .trim()
+    let share_value: serde_json::Value = serde_json::from_str(&stdout).context("share JSON")?;
+    let ticket = share_value
+        .get("ticket")
+        .and_then(serde_json::Value::as_str)
+        .context("should have ticket")?
         .to_owned();
 
     let join_dir = directory.join("join_target");
@@ -1943,6 +1956,7 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
         "--data-dir",
         data_dir_s,
         "--no-daemon",
+        "--json",
         "create",
         managed.to_str().context("UTF-8 path")?,
     ])?;
@@ -1951,13 +1965,11 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
         "create failed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
-    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .context("namespace line")?
-        .trim_start_matches("namespace:")
-        .trim()
+    let create_value: serde_json::Value = serde_json::from_slice(&create.stdout).context("create JSON")?;
+    let namespace = create_value
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .context("namespace field")?
         .to_owned();
 
     let import = syncweb(&[
@@ -1990,6 +2002,46 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
 }
 
 #[test]
+fn download_accepts_paths_from_stdin() -> anyhow::Result<()> {
+    use std::io::Write;
+
+    let src = cli_test_dir("download-stdin-src");
+    let dest = cli_test_dir("download-stdin-dest");
+    std::fs::create_dir_all(&src).context("create src dir")?;
+    std::fs::write(src.join("a.txt"), b"piped content").context("write a.txt")?;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["download", "-", dest.join("copied.txt").to_str().context("UTF-8 path")?])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("spawn download -")?;
+    child
+        .stdin
+        .as_mut()
+        .context("stdin handle")?
+        .write_all(src.join("a.txt").to_str().context("UTF-8 path")?.as_bytes())
+        .context("write stdin")?;
+    drop(child.stdin.take());
+    let output = child.wait_with_output().context("wait download -")?;
+
+    let copied = dest.join("copied.txt");
+    let copied_ok = copied.exists() && std::fs::read(&copied).context("read copy")? == b"piped content";
+
+    std::fs::remove_dir_all(&src).context("cleanup src")?;
+    std::fs::remove_dir_all(&dest).context("cleanup dest")?;
+
+    ensure!(
+        output.status.success(),
+        "download - should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(copied_ok, "copied file should exist with piped content");
+    Ok(())
+}
+
+#[test]
 fn verify_fix_and_filters() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("verify-data");
     let managed = cli_test_dir("verify-managed");
@@ -2000,19 +2052,17 @@ fn verify_fix_and_filters() -> anyhow::Result<()> {
     let data_dir_s = data_dir.to_str().context("UTF-8 path")?;
     let managed_s = managed.to_str().context("UTF-8 path")?;
 
-    let create = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "create", managed_s])?;
+    let create = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "--json", "create", managed_s])?;
     ensure!(
         create.status.success(),
         "create failed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
-    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .lines()
-        .find(|line| line.starts_with("namespace:"))
-        .context("namespace line")?
-        .trim_start_matches("namespace:")
-        .trim()
+    let create_value: serde_json::Value = serde_json::from_slice(&create.stdout).context("create JSON")?;
+    let namespace = create_value
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .context("namespace field")?
         .to_owned();
 
     let import = syncweb(&[

@@ -326,6 +326,25 @@ impl DocsEngine {
         Ok(stream.map(|event| event.map_err(|error| SyncwebError::operation("document event failed", error))))
     }
 
+    /// Subscribe to a document's live events and start live synchronization.
+    ///
+    /// This is the shared prologue for every background doc consumer: catalog
+    /// subscribers, indexing watchers, and sync intents all pair
+    /// [`Self::watch`] with [`Self::start_sync`] before spawning a consumer
+    /// task over the returned stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document cannot be watched or synchronized.
+    pub async fn watch_and_sync(
+        &self,
+        doc: &Doc,
+    ) -> Result<impl n0_future::Stream<Item = Result<LiveEvent>> + Send + Unpin + 'static> {
+        let live_events = self.watch(doc).await?;
+        self.start_sync(doc, Vec::new()).await?;
+        Ok(live_events)
+    }
+
     #[must_use]
     pub fn namespace_id(&self, doc: &Doc) -> NamespaceId {
         doc.id()

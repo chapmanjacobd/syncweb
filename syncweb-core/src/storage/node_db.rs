@@ -6,7 +6,6 @@ use std::{
 };
 
 use iroh::PublicKey;
-use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -1566,69 +1565,6 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to remove blob folder association", error))?;
         drop(connection);
         Ok(())
-    }
-
-    /// Check if a blob hash is accessible in any network the local node belongs to.
-    /// Check if a blob is accessible in any network the member belongs to.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    pub fn can_access_blob(&self, hash: &Hash, member: &str) -> Result<bool> {
-        self.can_access_blob_in_network(hash.as_bytes(), member)
-    }
-
-    /// Check if a blob (by raw hash bytes) is accessible in any network.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    pub fn can_access_blob_in_network(&self, content_hash: &[u8; 32], member: &str) -> Result<bool> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let exists: bool = connection
-            .query_row(
-                "SELECT 1 FROM blob_folders bf
-             JOIN network_folders nf ON bf.namespace_id = nf.namespace_id
-             JOIN network_members nm ON nf.network_id = nm.network_id
-             WHERE bf.content_hash = ?1 AND nm.member = ?2
-             LIMIT 1",
-                params![content_hash.as_slice(), member],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(|error| SyncwebError::operation("failed to check blob access", error))?
-            .is_some();
-        drop(connection);
-        Ok(exists)
-    }
-
-    /// Check if the local node can access a folder namespace through any network.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    pub fn can_access_folder(&self, namespace_id: &str, member: &str) -> Result<bool> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
-        let exists: bool = connection
-            .query_row(
-                "SELECT 1 FROM network_folders nf
-             JOIN network_members nm ON nf.network_id = nm.network_id
-             WHERE nf.namespace_id = ?1 AND nm.member = ?2
-             LIMIT 1",
-                params![namespace_id, member],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(|error| SyncwebError::operation("failed to check folder access", error))?
-            .is_some();
-        drop(connection);
-        Ok(exists)
     }
 
     /// List all namespace IDs associated with a network.

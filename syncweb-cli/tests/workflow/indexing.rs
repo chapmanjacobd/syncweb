@@ -29,7 +29,7 @@ fn indexing_enable_disable_uses_persistent_folder_namespace() -> Result<()> {
     fs::create_dir_all(&folder)?;
 
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "create", "--no-indexing", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -82,8 +82,6 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
         .as_str()
         .context("namespace is not a string")?
         .to_owned();
-
-    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
     let published = run(alice, &["publish", "catalog", "--catalog", "test-catalog", &namespace])?;
     ensure!(
@@ -170,31 +168,17 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
     let hash = Hash::from_bytes(*blake3::hash(b"hello publish blob").as_bytes());
     let hash_str = hash.to_string();
 
-    let published = run(
-        alice,
-        &["--json", "share", "--namespace", &namespace, "--blob", &hash_str],
-    )?;
+    let published = run(alice, &["--json", "share", "--blob", &hash_str, &namespace])?;
     let published_json = json_output(&published)?;
     ensure!(
         published_json.get("ticket").is_some(),
         "share --blob should emit a blob ticket"
     );
 
-    let unpublished = run(
-        alice,
-        &[
-            "--json",
-            "share",
-            "--rm",
-            "--namespace",
-            &namespace,
-            "--blob",
-            &hash_str,
-        ],
-    )?;
+    let unpublished = run(alice, &["--json", "unshare", "--blob", &hash_str, &namespace])?;
     ensure!(
         json_output(&unpublished)?.get("status") == Some(&Value::from("unshared")),
-        "share --rm --blob should confirm the pin was removed"
+        "unshare --blob should confirm the pin was removed"
     );
 
     Ok(())
@@ -223,7 +207,6 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
     let pkg_path = pkg.to_str().context("pkg path is not UTF-8")?;
 
     let _init = run(alice, &["package", "add", "--name", "sample", pkg_path])?;
-    let _add = run(alice, &["package", "add", pkg_path])?;
 
     let published = run(
         alice,
@@ -271,8 +254,6 @@ fn publish_catalog_with_tags() -> Result<()> {
         .as_str()
         .context("namespace is not a string")?
         .to_owned();
-
-    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
     let published = run(
         alice,
@@ -419,6 +400,7 @@ fn link_resolve_fetches_local_content_by_default() -> Result<()> {
     let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     alice.write_file(&folder.join("payload.txt"), b"link resolve content")?;
+    let _created = run(alice, &["create", folder.to_str().context("folder not UTF-8")?])?;
     alice.import(&folder)?;
 
     let content = alice.file_content(&folder.join("payload.txt"))?;
@@ -486,18 +468,6 @@ fn indexing_search_with_limit() -> Result<()> {
         .as_str()
         .context("namespace is not a string")?
         .to_owned();
-
-    let _imported = run(
-        alice,
-        &[
-            "import",
-            "--folder",
-            &namespace,
-            folder.join("test-file.txt").to_str().context("file is not UTF-8")?,
-        ],
-    )?;
-
-    let _enabled = run(alice, &["indexing", "enable", &namespace])?;
 
     let _published = run(alice, &["publish", "catalog", "--catalog", "library", &namespace])?;
 

@@ -122,14 +122,14 @@ async fn test_node_discovery() -> anyhow::Result<()> {
     let topic = iroh_gossip::TopicId::from_bytes(rand::random());
 
     let first_topic = first
-        .gossip_service()
+        .gossip()
         .subscribe(topic, vec![])
         .await
         .map_err(|e| anyhow::anyhow!("first subscribe: {e}"))?;
-    let (_first_sender, mut first_receiver) = syncweb_core::node::gossip_service::GossipService::split(first_topic);
+    let (_first_sender, mut first_receiver) = first_topic.split();
 
     let mut second_topic = second
-        .gossip_service()
+        .gossip()
         .subscribe(topic, vec![first.endpoint().id()])
         .await
         .map_err(|e| anyhow::anyhow!("second subscribe: {e}"))?;

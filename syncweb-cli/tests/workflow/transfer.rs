@@ -66,6 +66,7 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
             "media/clip.mp4",
             "--hash",
             &hash,
+            "--size",
             "1048576",
         ],
     )?;
@@ -145,10 +146,6 @@ fn transfer_enqueue_now_materializes_immediately() -> anyhow::Result<()> {
     alice.write_file(&file_path, b"clip data")?;
     alice.import(&folder_dir)?;
 
-    let content = alice.file_content(&file_path)?;
-    let hash = iroh_blobs::Hash::from_bytes(*blake3::hash(&content).as_bytes()).to_string();
-    let size = content.len().to_string();
-
     let enqueue = run(
         alice,
         &[
@@ -160,9 +157,8 @@ fn transfer_enqueue_now_materializes_immediately() -> anyhow::Result<()> {
             &info.namespace,
             "--path",
             "media/clip.mp4",
-            "--hash",
-            &hash,
-            &size,
+            "--source",
+            file_path.to_str().context("UTF-8 path")?,
         ],
     )?;
     let enqueue_json = json(&enqueue)?;
@@ -182,7 +178,7 @@ fn transfer_enqueue_now_materializes_immediately() -> anyhow::Result<()> {
         materialized.display()
     );
     ensure!(
-        alice.file_content(&materialized)? == content,
+        alice.file_content(&materialized)? == b"clip data",
         "materialized content should match the source file"
     );
 

@@ -7,10 +7,9 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use serde::{Deserialize, Serialize};
@@ -302,33 +301,6 @@ impl Denylist {
         rules
     }
 
-    /// Subscribe to a federated filter namespace and apply its first list.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the list is malformed or unsigned.
-    pub fn subscribe_filter_list(&mut self, list: &FilterList) -> Result<bool> {
-        self.sync_filter_list(list)
-    }
-
-    /// Alias for [`Self::subscribe_filter_list`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the list is malformed or unsigned.
-    pub fn subscribe(&mut self, list: &FilterList) -> Result<bool> {
-        self.subscribe_filter_list(list)
-    }
-
-    /// Alias for [`Self::sync_filter_list`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the list is malformed or unsigned.
-    pub fn sync(&mut self, list: &FilterList) -> Result<bool> {
-        self.sync_filter_list(list)
-    }
-
     #[must_use]
     pub fn federated_sequence(&self, namespace_id: &NamespaceId) -> Option<u64> {
         self.federated.get(namespace_id).copied()
@@ -476,15 +448,6 @@ impl DenylistService {
         }
         Ok(changed)
     }
-
-    /// Alias for [`Self::sync_filter_list`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the denylist lock is poisoned or the list is invalid.
-    pub fn subscribe(&self, list: &FilterList) -> Result<bool> {
-        self.sync_filter_list(list)
-    }
 }
 
 /// A signed, monotonic federated filter-list update.
@@ -515,9 +478,9 @@ impl FilterList {
         let mut list = Self {
             namespace_id,
             sequence,
-            publisher: hex::encode(signing_key.verifying_key().to_bytes()),
+            publisher: crate::signature::public_key_hex(signing_key),
             entries,
-            created_at: current_epoch_seconds(),
+            created_at: crate::parsing::current_unix_secs(),
             signature: None,
         };
         list.sign(signing_key)?;
@@ -529,12 +492,12 @@ impl FilterList {
     /// Returns an error if the signer does not match the publisher or
     /// serialization fails.
     pub fn sign(&mut self, signing_key: &SigningKey) -> Result<()> {
-        if self.publisher != hex::encode(signing_key.verifying_key().to_bytes()) {
+        if self.publisher != crate::signature::public_key_hex(signing_key) {
             return Err(SyncwebError::InvalidIdentity(
                 "filter list signer does not match publisher".to_owned(),
             ));
         }
-        self.signature = Some(hex::encode(signing_key.sign(&self.unsigned_bytes()?).to_bytes()));
+        self.signature = Some(crate::signature::sign_hex(signing_key, &self.unsigned_bytes()?));
         Ok(())
     }
 
@@ -547,22 +510,7 @@ impl FilterList {
             .signature
             .as_deref()
             .ok_or_else(|| SyncwebError::InvalidConfig("filter list must be signed".to_owned()))?;
-        let bytes = hex::decode(signature)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("invalid filter list signature: {error}")))?;
-        let parsed_signature = Signature::from_slice(&bytes)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("invalid filter list signature: {error}")))?;
-        let publisher_bytes = hex::decode(&self.publisher)
-            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid filter list publisher: {error}")))?;
-        let publisher: [u8; 32] = publisher_bytes.try_into().map_err(|publisher_bytes_vec: Vec<u8>| {
-            SyncwebError::InvalidIdentity(format!(
-                "filter list publisher must be 32 bytes, got {}",
-                publisher_bytes_vec.len()
-            ))
-        })?;
-        let key = VerifyingKey::from_bytes(&publisher)
-            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid filter list publisher: {error}")))?;
-        key.verify(&self.unsigned_bytes()?, &parsed_signature)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("filter list signature is invalid: {error}")))
+        crate::signature::verify_hex(&self.publisher, &self.unsigned_bytes()?, signature)
     }
 
     /// # Errors
@@ -616,12 +564,6 @@ impl FilterList {
     }
 }
 
-fn current_epoch_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -667,8 +609,8 @@ mod tests {
             &key(1),
         )?;
         let mut denylist = Denylist::new();
-        anyhow::ensure!(denylist.subscribe_filter_list(&list.clone())?);
-        anyhow::ensure!(!denylist.subscribe_filter_list(&list)?);
+        anyhow::ensure!(denylist.sync_filter_list(&list.clone())?);
+        anyhow::ensure!(!denylist.sync_filter_list(&list)?);
         anyhow::ensure!(denylist.is_hash_blocked(&Hash::from_bytes([5_u8; 32])));
         Ok(())
     }

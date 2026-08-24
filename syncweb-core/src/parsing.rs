@@ -262,6 +262,14 @@ pub fn parse_depth_constraints(
     (result_min, result_max)
 }
 
+/// The current time as seconds since the Unix epoch.
+#[must_use]
+pub fn current_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

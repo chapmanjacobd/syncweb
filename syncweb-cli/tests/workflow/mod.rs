@@ -45,20 +45,19 @@ pub struct TicketInfo {
 
 impl TicketInfo {
     pub fn from_stdout(stdout: &str) -> anyhow::Result<Self> {
-        let mut ticket = None;
-        let mut namespace = None;
-        for line in stdout.lines() {
-            if let Some(value) = line.strip_prefix("ticket: ") {
-                ticket = Some(value.trim().to_string());
-            }
-            if let Some(value) = line.strip_prefix("namespace: ") {
-                namespace = Some(value.trim().to_string());
-            }
-        }
-        Ok(Self {
-            ticket: ticket.context("no ticket found in output")?,
-            namespace: namespace.context("no namespace found in output")?,
-        })
+        let value: serde_json::Value =
+            serde_json::from_str(stdout).context("create output should be JSON under --json")?;
+        let ticket = value
+            .get("ticket")
+            .and_then(serde_json::Value::as_str)
+            .context("no ticket in create output")?
+            .to_owned();
+        let namespace = value
+            .get("namespace")
+            .and_then(serde_json::Value::as_str)
+            .context("no namespace in create output")?
+            .to_owned();
+        Ok(Self { ticket, namespace })
     }
 }
 
@@ -94,16 +93,14 @@ impl Device {
     }
 
     pub fn create(&self, path: &Path) -> anyhow::Result<TicketInfo> {
-        let output = self.run_ok(&["--no-daemon", "create", path.to_str().context("UTF-8 path")?])?;
-        let namespace = output
-            .stdout()
-            .lines()
-            .find_map(|line| line.strip_prefix("namespace: "))
-            .map(str::trim)
-            .context("create should print a namespace")?
-            .to_owned();
-        let share = self.run_ok(&["--no-daemon", "share", "--namespace", &namespace, "--write"])?;
-        TicketInfo::from_stdout(&share.stdout())
+        let output = self.run_ok(&[
+            "--json",
+            "--no-daemon",
+            "create",
+            "--write",
+            path.to_str().context("UTF-8 path")?,
+        ])?;
+        TicketInfo::from_stdout(&output.stdout())
     }
 
     pub fn join(&self, ticket: &str, path: &Path) -> anyhow::Result<CmdOutput> {
@@ -196,7 +193,7 @@ impl Device {
     }
 
     pub fn network_list(&self) -> anyhow::Result<Vec<String>> {
-        let output = self.run_ok(&["network", "ls"])?;
+        let output = self.run_ok(&["networks"])?;
         Ok(output
             .stdout()
             .lines()
@@ -242,13 +239,10 @@ impl Device {
 
     pub fn snapshot_create_id(&self, path: &Path) -> anyhow::Result<String> {
         let output = self.snapshot_create(path)?;
-        output
-            .stdout()
-            .lines()
-            .find_map(|line| line.strip_prefix("snapshot: "))
-            .map(str::trim)
-            .map(String::from)
-            .context("snapshot id missing from create output")
+        let stdout = output.stdout();
+        let id = stdout.trim();
+        ensure!(!id.is_empty(), "snapshot create output was empty");
+        Ok(id.to_owned())
     }
 
     pub fn snapshot_restore(&self, destination: &Path, snapshot_id: &str) -> anyhow::Result<CmdOutput> {

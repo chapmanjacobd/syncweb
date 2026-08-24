@@ -379,7 +379,7 @@ fn test_peer_tracker_on_blob_fetched() -> anyhow::Result<()> {
     let peer = SecretKey::generate().public();
     let mut tracker = PeerTracker::new(10, EvictionStrategy::Lru);
 
-    tracker.on_blob_fetched(blob(1), peer);
+    tracker.record_peer(blob(1), peer);
     ensure!(tracker.contains(&blob(1), &peer));
     anyhow::ensure!(tracker.peer_count(&blob(1)) == 1);
     Ok(())

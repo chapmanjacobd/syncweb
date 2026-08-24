@@ -14,10 +14,9 @@ use std::{
     pin::Pin,
     str::{FromStr, Split},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use iroh::{PublicKey, SecretKey};
 use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::NamespaceId;
@@ -32,14 +31,6 @@ use crate::{
 };
 
 const DEFAULT_PRIVATE_LINK_TTL: u64 = 30 * 24 * 60 * 60;
-
-/// Return the current Unix epoch in seconds.
-#[must_use]
-pub fn current_epoch_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
-}
 
 /// An immutable content-addressed link.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -60,12 +51,6 @@ impl ContentLink {
     #[must_use]
     pub const fn hash(self) -> Hash {
         self.hash
-    }
-
-    /// Alias for [`Self::new`].
-    #[must_use]
-    pub const fn create(hash: Hash) -> Self {
-        Self::new(hash)
     }
 
     /// Parse an immutable content URI.
@@ -146,15 +131,6 @@ impl NameLink {
         };
         link.validate()?;
         Ok(link)
-    }
-
-    /// Alias for [`Self::new`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the alias is invalid.
-    pub fn create(publisher: PublicKey, alias: impl Into<String>) -> Result<Self> {
-        Self::new(publisher, alias)
     }
 
     /// Parse a mutable name URI.
@@ -345,7 +321,7 @@ impl MutablePointer {
             ));
         }
         self.validate()?;
-        self.signature = Some(hex::encode(signing_key.sign(&self.unsigned_bytes()?).to_bytes()));
+        self.signature = Some(crate::signature::sign_hex(signing_key, &self.unsigned_bytes()?));
         Ok(())
     }
 
@@ -361,15 +337,11 @@ impl MutablePointer {
             .signature
             .as_deref()
             .ok_or_else(|| SyncwebError::InvalidConfig("mutable link pointer must be signed".to_owned()))?;
-        let signature_bytes = hex::decode(signature_text)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("invalid mutable link signature: {error}")))?;
-        let signature = Signature::from_slice(&signature_bytes)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("invalid mutable link signature: {error}")))?;
-        let key = VerifyingKey::from_bytes(self.publisher.as_bytes())
-            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid mutable link publisher: {error}")))?;
-        key.verify(&self.unsigned_bytes()?, &signature)
-            .map_err(|error| SyncwebError::InvalidConfig(format!("mutable link signature is invalid: {error}")))?;
-        Ok(())
+        crate::signature::verify_hex(
+            &hex::encode(self.publisher.as_bytes()),
+            &self.unsigned_bytes()?,
+            signature_text,
+        )
     }
 
     /// Validate non-cryptographic pointer fields.
@@ -444,15 +416,6 @@ impl PrivateLink {
     pub fn generate(manifest: Hash, expires_at: u64) -> Result<Self> {
         let capability = rand::random::<[u8; 32]>();
         Self::new(manifest, capability, expires_at)
-    }
-
-    /// Alias for [`Self::generate`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the expiration is invalid.
-    pub fn create(manifest: Hash, expires_at: u64) -> Result<Self> {
-        Self::generate(manifest, expires_at)
     }
 
     /// Parse a private capability URI.
@@ -632,12 +595,6 @@ impl LinkResolution {
     /// Return the resolved hash.
     #[must_use]
     pub const fn hash(&self) -> Hash {
-        self.manifest
-    }
-
-    /// Return the resolved immutable manifest hash.
-    #[must_use]
-    pub const fn manifest_hash(&self) -> Hash {
         self.manifest
     }
 
@@ -907,24 +864,6 @@ impl LinkResolver {
         Ok(())
     }
 
-    /// Alias for [`Self::register_mirror`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the ticket is malformed.
-    pub fn add_mirror(&self, ticket: BlobTicket) -> Result<()> {
-        self.register_mirror(ticket)
-    }
-
-    /// Register a provider ticket as a mirror.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the ticket is malformed.
-    pub fn register_provider_ticket(&self, ticket: BlobTicket) -> Result<()> {
-        self.register_mirror(ticket)
-    }
-
     /// Return registered direct mirror tickets in registration order.
     ///
     /// # Errors
@@ -974,24 +913,6 @@ impl LinkResolver {
         Ok(())
     }
 
-    /// Alias for [`Self::publish`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the pointer is invalid or not monotonic.
-    pub fn register_pointer(&self, pointer: &MutablePointer) -> Result<()> {
-        self.publish(pointer)
-    }
-
-    /// Alias for [`Self::publish`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the pointer is invalid or not monotonic.
-    pub fn update(&self, pointer: &MutablePointer) -> Result<()> {
-        self.publish(pointer)
-    }
-
     /// Return the current pointer for a mutable name.
     ///
     /// # Errors
@@ -1017,16 +938,6 @@ impl LinkResolver {
         link.validate()?;
         self.lock_state()?.revoked.insert(link.revocation_key());
         Ok(())
-    }
-
-    /// Alias for [`Self::revoke`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the link is invalid or the resolver state lock is
-    /// poisoned.
-    pub fn revoke_private(&self, link: &PrivateLink) -> Result<()> {
-        self.revoke(link)
     }
 
     /// Return whether a private capability has been revoked.
@@ -1076,7 +987,7 @@ impl LinkResolver {
     /// Returns an error if the link is invalid, unavailable, expired, revoked,
     /// or has an invalid provider.
     pub fn resolve_with_options(&self, link: &Link, options: &ResolveOptions) -> Result<LinkResolution> {
-        let now = options.now.unwrap_or_else(current_epoch_seconds);
+        let now = options.now.unwrap_or_else(crate::parsing::current_unix_secs);
         let state = self.lock_state()?;
         let resolution = match link {
             Link::Content(content) => {
@@ -1206,7 +1117,8 @@ impl LinkStore {
     ///
     /// Returns an error if the capability cannot be generated or persisted.
     pub fn create_private_link(&self, hash: Hash, expires: Option<u64>) -> Result<Link> {
-        let expires_at = expires.unwrap_or_else(|| current_epoch_seconds().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
+        let expires_at = expires
+            .unwrap_or_else(|| crate::parsing::current_unix_secs().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
         let link = PrivateLink::generate(hash, expires_at)?;
         let (pointers, mirrors, revoked) = self.database.load_links()?;
         let retained = revoked
@@ -1495,11 +1407,10 @@ fn next_part<'a>(parts: &mut Split<'a, char>, field: &str) -> Result<&'a str> {
 mod tests {
     use super::*;
     use iroh::{EndpointAddr, SecretKey};
-    use iroh_blobs::BlobFormat;
 
     fn ticket(seed: u8, hash: Hash) -> BlobTicket {
         let secret = SecretKey::from_bytes(&[seed; 32]);
-        BlobTicket::new(EndpointAddr::new(secret.public()), hash, BlobFormat::Raw)
+        crate::node::blob_store::raw_blob_ticket(EndpointAddr::new(secret.public()), hash)
     }
 
     fn pointer(seed: u8, alias: &str, hash: Hash, sequence: u64, version: &str) -> Result<MutablePointer> {

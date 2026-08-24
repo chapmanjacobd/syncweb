@@ -125,13 +125,8 @@ fn two_nodes_relay_connection() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create_a.stderr)
     );
     let stdout_a = String::from_utf8(create_a.stdout).context("UTF-8 output")?;
-    let ticket = stdout_a
-        .lines()
-        .find(|l| l.starts_with("ticket: "))
-        .context("should have ticket")?
-        .trim_start_matches("ticket: ")
-        .trim()
-        .to_owned();
+    let url = stdout_a.trim().to_owned();
+    ensure!(url.starts_with("syncweb://"), "create should emit a share URL: {url}");
 
     let join_dir = data_b.join("joined");
     std::fs::create_dir(&join_dir)?;
@@ -140,7 +135,7 @@ fn two_nodes_relay_connection() -> anyhow::Result<()> {
             "--data-dir",
             data_b.to_str().context("UTF-8 path")?,
             "join",
-            &ticket,
+            &url,
             join_dir.to_str().context("UTF-8 path")?,
         ])
         .output()

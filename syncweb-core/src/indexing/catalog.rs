@@ -291,30 +291,10 @@ impl CatalogService {
         self.create_catalog(name).await
     }
 
-    /// Create a catalog namespace. Alias for [`Self::create_catalog`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the namespace or its metadata cannot be created.
-    pub async fn create(&self, name: impl Into<String>) -> Result<Catalog> {
-        self.create_catalog(name).await
-    }
-
     /// Publish all entries in a folder to a catalog.
     ///
     /// The catalog contains searchable metadata and content hashes, not file
     /// contents. The folder's existing document remains authoritative.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if folder entries or catalog records cannot be read or
-    /// written.
-    pub async fn publish_folder(&self, catalog: &Catalog, folder: &SyncwebFolder) -> Result<usize> {
-        self.publish_folder_with_metadata(catalog, folder, folder.namespace_id().to_string(), &[])
-            .await
-    }
-
-    /// Publish all entries in a folder with a display name and search tags.
     ///
     /// # Errors
     ///
@@ -360,22 +340,12 @@ impl CatalogService {
         Ok(published)
     }
 
-    /// Publish a folder using its namespace as the display name.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if folder entries or catalog records cannot be read or
-    /// written.
-    pub async fn publish(&self, catalog: &Catalog, folder: &SyncwebFolder) -> Result<usize> {
-        self.publish_folder(catalog, folder).await
-    }
-
     /// Create a read-only ticket for a catalog namespace.
     ///
     /// # Errors
     ///
     /// Returns an error if the catalog ticket cannot be created.
-    pub async fn ticket(&self, catalog: &Catalog, _endpoint: iroh::EndpointAddr, writable: bool) -> Result<DocTicket> {
+    pub async fn ticket(&self, catalog: &Catalog, writable: bool) -> Result<DocTicket> {
         self.docs.share_ticket(&catalog.doc, writable).await
     }
 
@@ -392,15 +362,6 @@ impl CatalogService {
         let catalog = Catalog::new(doc, "remote catalog");
         self.activate(&catalog).await?;
         Ok(catalog)
-    }
-
-    /// Subscribe to a catalog. Alias for [`Self::subscribe`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the ticket cannot be imported or synchronized.
-    pub async fn subscribe_catalog(&self, ticket: DocTicket) -> Result<Catalog> {
-        self.subscribe(ticket).await
     }
 
     /// Open and subscribe to a catalog namespace already available locally.
@@ -423,15 +384,6 @@ impl CatalogService {
     pub async fn sync_catalog(&self, catalog: &Catalog) -> Result<usize> {
         self.docs.start_sync(&catalog.doc, Vec::new()).await?;
         self.index_catalog(catalog).await
-    }
-
-    /// Synchronize a catalog once. Alias for [`Self::sync_catalog`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if document synchronization or record indexing fails.
-    pub async fn sync(&self, catalog: &Catalog) -> Result<usize> {
-        self.sync_catalog(catalog).await
     }
 
     /// Import all currently available records from a catalog.
@@ -459,21 +411,7 @@ impl CatalogService {
     ///
     /// Returns an error if the FTS query is invalid.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        Ok(self
-            .database()
-            .search_catalogs(query, limit)?
-            .into_iter()
-            .filter(|record| self.indexing.denylist_service().check_discovery(record).is_ok())
-            .collect())
-    }
-
-    /// Search records imported from all known catalogs. Alias for [`Self::search`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the FTS query is invalid.
-    pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<CatalogRecord>> {
-        self.search(query, limit)
+        self.indexing.search(query, limit)
     }
 
     /// Stop following a catalog and remove its local records.
@@ -494,7 +432,7 @@ impl CatalogService {
     }
 
     async fn activate(&self, catalog: &Catalog) -> Result<()> {
-        let live_events = self.docs.watch(&catalog.doc).await?;
+        let live_events = self.docs.watch_and_sync(&catalog.doc).await?;
         self.database().enable_catalog(catalog.namespace_id, catalog.name())?;
         self.index_catalog(catalog).await?;
 
@@ -509,14 +447,6 @@ impl CatalogService {
             .lock()
             .map_err(|error| SyncwebError::operation("catalog task lock poisoned", error))?
             .insert(namespace_id, task);
-        if let Err(error) = self.docs.start_sync(&catalog.doc, Vec::new()).await {
-            if let Ok(mut tasks) = self.tasks.lock()
-                && let Some(task_handle) = tasks.remove(&namespace_id)
-            {
-                task_handle.abort();
-            }
-            return Err(error);
-        }
         Ok(())
     }
 

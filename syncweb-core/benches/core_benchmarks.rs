@@ -583,6 +583,7 @@ fn bench_ipc_create_folder(c: &mut Criterion) {
                 let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                     path: test_dir.clone(),
                     mode: "sendreceive".to_owned(),
+                    indexing: false,
                 })));
                 let _ = std::hint::black_box(response);
             });
@@ -634,6 +635,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
                 .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                     path: test_dir.clone(),
                     mode: "sendreceive".to_owned(),
+                    indexing: false,
                 }))
                 .await;
             let namespace = if let IpcResponse::Ok { message } = &response {
@@ -654,13 +656,10 @@ fn bench_ipc_health_check(c: &mut Criterion) {
     if let Some(ref ns) = fixture.4 {
         let namespace = ns.clone();
         let mut group = c.benchmark_group("daemon_ipc");
-        group.bench_function("health_check", |b| {
+        group.bench_function("stats_files", |b| {
             b.iter(|| {
-                let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::HealthCheck {
-                    path: std::path::PathBuf::from(&namespace),
-                    hash: Vec::new(),
-                    path_prefix: None,
-                    glob: None,
+                let response = runtime.block_on(fixture.1.handle_request(IpcRequest::new(IpcCommand::StatsFiles {
+                    folder: std::path::PathBuf::from(&namespace),
                 })));
                 let _ = std::hint::black_box(response);
             });
@@ -712,6 +711,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
                 .handle_request(IpcRequest::new(IpcCommand::CreateFolder {
                     path: test_dir.clone(),
                     mode: "sendreceive".to_owned(),
+                    indexing: false,
                 }))
                 .await;
             let namespace = if let IpcResponse::Ok { message } = &response {

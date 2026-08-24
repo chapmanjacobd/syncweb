@@ -88,13 +88,19 @@ fn create_with_mode() -> anyhow::Result<()> {
     let alice = world.device("alice")?;
 
     let output = alice.run_ok(&[
+        "--json",
         "--no-daemon",
         "create",
         "--mode",
         "sendonly",
         world.root().join("sendonly-folder").to_str().context("UTF-8 path")?,
     ])?;
-    ensure!(output.stdout().contains("namespace:"));
+    let value: serde_json::Value = serde_json::from_str(&output.stdout()).context("create should emit JSON")?;
+    ensure!(
+        value.get("namespace").is_some(),
+        "should print namespace: {}",
+        output.stdout()
+    );
 
     Ok(())
 }
@@ -229,15 +235,11 @@ fn snapshot_create_and_list() -> anyhow::Result<()> {
     alice.import(&folder_dir)?;
 
     let snap = alice.snapshot_create(&folder_dir)?;
+    let snap_stdout = snap.stdout();
+    let snap_id = snap_stdout.trim();
     ensure!(
-        snap.stdout().contains("snapshot:"),
-        "should print snapshot: {}",
-        snap.stdout()
-    );
-    ensure!(
-        snap.stdout().contains("files:"),
-        "should print files: {}",
-        snap.stdout()
+        !snap_id.is_empty() && snap_id.parse::<iroh_blobs::Hash>().is_ok(),
+        "snapshot create should print just the snapshot ID: {snap_stdout}"
     );
 
     let list = alice.snapshot_list()?;
@@ -312,10 +314,10 @@ fn snapshot_create_with_description() -> anyhow::Result<()> {
     alice.write_file(&folder_dir.join("note.txt"), b"note")?;
 
     let snap = alice.snapshot_create_described(&folder_dir, "release-tag", "1")?;
+    let snap_stdout = snap.stdout();
     ensure!(
-        snap.stdout().contains("snapshot:"),
-        "should print snapshot: {}",
-        snap.stdout()
+        snap_stdout.trim().parse::<iroh_blobs::Hash>().is_ok(),
+        "snapshot create should print just the snapshot ID: {snap_stdout}"
     );
 
     let list = alice.snapshot_list_json()?;
@@ -466,12 +468,18 @@ fn create_with_relay_fallback() -> anyhow::Result<()> {
 
     let folder_dir = world.root().join("relay-folder");
     let info = alice.run_ok(&[
+        "--json",
         "--no-daemon",
         "create",
         "--relay-fallback",
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
-    ensure!(info.stdout().contains("namespace:"));
+    let value: serde_json::Value = serde_json::from_str(&info.stdout()).context("create should emit JSON")?;
+    ensure!(
+        value.get("namespace").is_some(),
+        "should print namespace: {}",
+        info.stdout()
+    );
 
     Ok(())
 }
@@ -562,7 +570,7 @@ fn network_events_and_health() -> anyhow::Result<()> {
         events.stdout()
     );
 
-    let health = alice.run_ok(&["network", "health", "--network", id])?;
+    let health = alice.run_ok(&["networks", id])?;
     ensure!(
         health.stdout().contains("events:"),
         "should report event count: {}",
@@ -594,7 +602,6 @@ fn stats_files_by_and_top_largest() -> anyhow::Result<()> {
         "--no-daemon",
         "stats",
         "files",
-        "--folder",
         &info.namespace,
         "--by",
         "size",
@@ -619,66 +626,6 @@ fn stats_files_by_and_top_largest() -> anyhow::Result<()> {
     ensure!(
         first.get(1).and_then(serde_json::Value::as_u64) == Some(4096),
         "largest file size should be 4096: {value}"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn stats_seeding_with_content_filter() -> anyhow::Result<()> {
-    let world = World::new(&["alice"])?;
-    let alice = world.device("alice")?;
-
-    let folder_dir = world.root().join("stats-seeding");
-    let info = alice.create(&folder_dir)?;
-    alice.write_file(&folder_dir.join("doc.txt"), b"seeding content")?;
-    alice.import(&folder_dir)?;
-
-    let base = alice.run_ok(&["--json", "--no-daemon", "stats", "seeding", "--folder", &info.namespace])?;
-    let base_json: serde_json::Value = serde_json::from_str(&base.stdout()).context("parse stats seeding JSON")?;
-    ensure!(
-        base_json.get("total") == Some(&serde_json::Value::from(1)),
-        "should report 1 blob: {base_json}"
-    );
-    let hash = base_json
-        .get("least_seeded")
-        .and_then(serde_json::Value::as_array)
-        .and_then(|a| a.first())
-        .and_then(|b| b.get("hash"))
-        .and_then(serde_json::Value::as_str)
-        .context("seeding report missing hash")?;
-
-    let filtered = alice.run_ok(&[
-        "--json",
-        "--no-daemon",
-        "stats",
-        "seeding",
-        "--folder",
-        &info.namespace,
-        "--hash",
-        hash,
-    ])?;
-    let filtered_json: serde_json::Value =
-        serde_json::from_str(&filtered.stdout()).context("parse filtered stats seeding JSON")?;
-    ensure!(
-        filtered_json.get("total") == Some(&serde_json::Value::from(1)),
-        "matching hash should keep the blob: {filtered_json}"
-    );
-
-    let none = alice.run_ok(&[
-        "--json",
-        "--no-daemon",
-        "stats",
-        "seeding",
-        "--folder",
-        &info.namespace,
-        "--glob",
-        "*.md",
-    ])?;
-    let none_json: serde_json::Value = serde_json::from_str(&none.stdout()).context("parse glob stats seeding JSON")?;
-    ensure!(
-        none_json.get("total") == Some(&serde_json::Value::from(0)),
-        "non-matching glob should filter everything out: {none_json}"
     );
 
     Ok(())
@@ -720,31 +667,31 @@ fn create_no_import_skips_scanning() -> anyhow::Result<()> {
     alice.write_file(&folder_dir.join("a.txt"), b"aaa")?;
 
     let output = alice.run_ok(&[
+        "--json",
         "--no-daemon",
         "create",
         "--no-import",
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
-    let namespace = output
-        .stdout()
-        .lines()
-        .find_map(|line| line.strip_prefix("namespace: "))
-        .map(str::trim)
+    let value: serde_json::Value = serde_json::from_str(&output.stdout()).context("create should emit JSON")?;
+    let namespace = value
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
         .context("create should print a namespace")?
         .to_owned();
 
-    let report = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &namespace])?;
-    let value: serde_json::Value = serde_json::from_str(&report.stdout()).context("parse stats files JSON")?;
+    let report = alice.run_ok(&["--json", "--no-daemon", "stats", "files", &namespace])?;
+    let report_value: serde_json::Value = serde_json::from_str(&report.stdout()).context("parse stats files JSON")?;
     ensure!(
-        value.get("total_files") == Some(&serde_json::Value::from(0)),
-        "--no-import should skip indexing, got: {value}"
+        report_value.get("total_files") == Some(&serde_json::Value::from(0)),
+        "--no-import should skip indexing, got: {report_value}"
     );
 
     Ok(())
 }
 
 #[test]
-fn import_creates_folder_on_unknown_path() -> anyhow::Result<()> {
+fn import_on_unknown_path_errors_without_creating_folder() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
@@ -752,18 +699,17 @@ fn import_creates_folder_on_unknown_path() -> anyhow::Result<()> {
     std::fs::create_dir_all(&folder_dir)?;
     alice.write_file(&folder_dir.join("x.txt"), b"x")?;
 
-    alice.import(&folder_dir)?;
+    let output = alice.run(&["--no-daemon", "import", folder_dir.to_str().context("UTF-8 path")?])?;
+    ensure!(
+        !output.success(),
+        "import on an unknown path should fail rather than auto-create a folder: {}",
+        output.stdout()
+    );
 
     let folders = alice.folders()?;
     ensure!(
-        !folders.is_empty(),
-        "import on an unknown path should create a folder: {folders:?}"
-    );
-
-    let ls = alice.ls(&folder_dir)?;
-    ensure!(
-        ls.iter().any(|f| f.contains("x.txt")),
-        "ls should find x.txt after import-creates: {ls:?}"
+        folders.iter().all(|f| f.contains("No folders found")),
+        "no folder should be created by an unknown-path import: {folders:?}"
     );
 
     Ok(())
@@ -779,7 +725,7 @@ fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
     alice.write_file(&folder_dir.join("small.txt"), b"s")?;
     alice.import(&folder_dir)?;
 
-    let by_namespace = alice.run_ok(&["--json", "--no-daemon", "stats", "files", "--folder", &info.namespace])?;
+    let by_namespace = alice.run_ok(&["--json", "--no-daemon", "stats", "files", &info.namespace])?;
     let ns_value: serde_json::Value =
         serde_json::from_str(&by_namespace.stdout()).context("parse stats files by namespace")?;
 
@@ -788,7 +734,6 @@ fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
         "--no-daemon",
         "stats",
         "files",
-        "--folder",
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
     let path_value: serde_json::Value = serde_json::from_str(&by_path.stdout()).context("parse stats files by path")?;

@@ -66,14 +66,6 @@ impl Importer {
         self.import_entries(files).await
     }
 
-    /// Import one file or every file below a directory using this pipeline.
-    /// # Errors
-    ///
-    /// Returns an error if the filesystem or database cannot be accessed.
-    pub async fn import(&self, input: impl AsRef<Path>) -> Result<Vec<ImportEntry>> {
-        self.import_path(input).await
-    }
-
     /// Import pre-scanned entries.
     /// # Errors
     ///
@@ -191,14 +183,6 @@ impl ParallelImporter {
     pub async fn import_path(&self, input: impl AsRef<Path>) -> Result<Vec<ImportEntry>> {
         let entries = self.importer.scan_input(input.as_ref(), Some(self.threads))?;
         self.import_entries(entries).await
-    }
-
-    /// Import one file or every file below a directory using the parallel pipeline.
-    /// # Errors
-    ///
-    /// Returns an error if the filesystem or database cannot be accessed.
-    pub async fn import_parallel(&self, input: impl AsRef<Path>) -> Result<Vec<ImportEntry>> {
-        self.import_path(input).await
     }
 
     /// Import pre-scanned entries. This method can be used with a custom

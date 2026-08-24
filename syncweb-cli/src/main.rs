@@ -4,7 +4,6 @@ use async_recursion::async_recursion;
 use comfy_table::Table;
 
 use std::{
-    io::IsTerminal,
     path::{Path, PathBuf},
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
@@ -16,15 +15,14 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        Command, ConfigCommand, ImportArgs, NetworkCommand, PackageCommand, PublishCommand, ScheduleCommand,
-        SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs,
-        StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs,
+        Command, ConfigCommand, ImportArgs, NetworkCommand, NetworkListArgs, PackageCommand, PublishCommand,
+        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, TransferAllocateArgs,
         TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs,
-        TransferRootArgs, VerifyArgs, WatchArgs,
+        TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
     },
-    output::{init_tracing, print_version},
+    output::{confirm_destructive, init_tracing, print_version},
 };
-use dialoguer::Confirm;
 use indicatif::{ProgressBar, ProgressStyle};
 use n0_future::StreamExt;
 use rayon::prelude::*;
@@ -55,7 +53,7 @@ use syncweb_core::{
         node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
         stats_db::StatsDatabase,
     },
-    sync::{AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
+    sync::{AreaFilter, FetchFilter, FetchStrategy, SyncEngine, SyncEvent},
     verify::IntegrityChecker,
 };
 
@@ -93,20 +91,6 @@ fn open_stats_db(data_dir: &Path) -> Result<StatsDatabase> {
     Ok(StatsDatabase::open(data_dir.join("stats.db"))?)
 }
 
-fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
-    if output_json {
-        return Ok(true);
-    }
-    if !std::io::stdin().is_terminal() {
-        return Ok(true);
-    }
-    Ok(Confirm::new()
-        .with_prompt(format!("Are you sure you want to {operation}?"))
-        .default(false)
-        .show_default(true)
-        .interact()?)
-}
-
 fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes;
@@ -129,7 +113,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(cli.verbose)?;
     tracing::debug!(command = ?cli.command, category = category_of(&cli.command), "cli initialized");
-    execute_cli(cli).await
+    Box::pin(execute_cli(cli)).await
 }
 
 /// Detect a top-level help request (no subcommand selected) in the raw argument
@@ -203,7 +187,9 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Join(command) => handle_join(&ctx, command).await?,
         Command::Leave(command) => handle_leave(&ctx, command).await?,
         Command::Folders => handle_folders(&ctx).await?,
+        Command::Status => handle_status(&ctx).await?,
         Command::Devices => handle_devices(&ctx)?,
+        Command::Networks(args) => handle_networks(&ctx, &args)?,
         Command::Ls(command) => handle_ls(&ctx, command)?,
         Command::Find(command) => handle_find(&ctx, command)?,
         Command::Search(args) => handle_search(&ctx, args).await?,
@@ -218,6 +204,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Verify(command) => handle_verify(&ctx, command).await?,
         Command::Publish { command } => handle_publish(&ctx, command).await?,
         Command::Share(args) => handle_share(&ctx, args).await?,
+        Command::Unshare(args) => handle_unshare(&ctx, args).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Stats { command } => handle_stats(&ctx, command).await?,
@@ -226,7 +213,6 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Start(_)
         | Command::Shutdown(_)
-        | Command::Status
         | Command::Reload
         | Command::DaemonSync(_)
         | Command::Watch(_)
@@ -244,7 +230,6 @@ const fn is_auxiliary_command(command: &Command) -> bool {
         command,
         Command::Start(_)
             | Command::Shutdown(_)
-            | Command::Status
             | Command::Reload
             | Command::DaemonSync(_)
             | Command::Watch(_)
@@ -293,9 +278,6 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     }
     if let Command::Shutdown(args) = command {
         return handle_shutdown(&ctx, args).await;
-    }
-    if matches!(&command, Command::Status) {
-        return handle_daemon_status(&ctx).await;
     }
     if matches!(&command, Command::Reload) {
         return handle_reload(&ctx).await;
@@ -499,11 +481,22 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
         println!("aborted");
         return Ok(());
     }
+    send_daemon_command(
+        data_dir,
+        output_json,
+        IpcRequest::new(IpcCommand::Shutdown { force: args.force }),
+    )
+    .await
+}
+
+/// Send a command to the running daemon and print its response.
+///
+/// Shared plumbing for the daemon control commands (`shutdown`, `reload`,
+/// `daemon-sync`) that only differ in the [`IpcRequest`] they send.
+async fn send_daemon_command(data_dir: &std::path::Path, output_json: bool, request: IpcRequest) -> Result<()> {
     let client =
         syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
-    let response = client
-        .send(IpcRequest::new(IpcCommand::Shutdown { force: args.force }))
-        .await?;
+    let response = client.send(request).await?;
     print_daemon_message(response, output_json)
 }
 
@@ -604,7 +597,7 @@ async fn daemon_client_or_start(
 }
 
 #[async_recursion]
-async fn handle_daemon_status(ctx: &CliContext<'_>) -> Result<()> {
+async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let state_file = StateFile::new(data_dir);
@@ -663,24 +656,16 @@ async fn handle_daemon_status(ctx: &CliContext<'_>) -> Result<()> {
 
 #[async_recursion]
 async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let client =
-        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
-    let response = client.send(IpcRequest::new(IpcCommand::ReloadConfig)).await?;
-    print_daemon_message(response, output_json)
+    send_daemon_command(ctx.data_dir, ctx.output_json, IpcRequest::new(IpcCommand::ReloadConfig)).await
 }
 
-#[async_recursion]
 async fn handle_daemon_sync(ctx: &CliContext<'_>, namespace: Option<String>) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let client =
-        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
-    let response = client
-        .send(IpcRequest::new(IpcCommand::TriggerSync { namespace }))
-        .await?;
-    print_daemon_message(response, output_json)
+    send_daemon_command(
+        ctx.data_dir,
+        ctx.output_json,
+        IpcRequest::new(IpcCommand::TriggerSync { namespace }),
+    )
+    .await
 }
 
 #[async_recursion]
@@ -768,10 +753,12 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     let folder = if let Some(namespace) = command.folder {
         manager.get(namespace.parse()?).await?
     } else {
-        match resolve_folder(&manager, &command.path).await {
-            Ok(folder) => folder,
-            Err(_) => manager.create(SyncMode::from_str("sendreceive")?).await?,
-        }
+        manager.resolve(&command.path).await.map_err(|_error| {
+            anyhow::anyhow!(
+                "import path '{}' is not a managed folder; use `syncweb create` to make a new folder",
+                command.path.display()
+            )
+        })?
     };
     let root = if command.path.is_dir() {
         command.path.clone()
@@ -803,60 +790,6 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     }
     node.stop().await?;
     Ok(())
-}
-
-async fn download_from_ticket(
-    ctx: &CliContext<'_>,
-    command: &crate::cli::commands::DownloadArgs,
-    ticket: iroh_blobs::ticket::BlobTicket,
-) -> Result<()> {
-    cli::indexing::download_blob(
-        ctx,
-        &[ticket],
-        command.providers.min_providers,
-        command.providers.no_sharing,
-        command.destination.as_deref(),
-    )
-    .await
-}
-
-async fn download_with_hash(
-    ctx: &CliContext<'_>,
-    hash: &str,
-    command: &crate::cli::commands::DownloadArgs,
-) -> Result<()> {
-    if command.providers.from.is_empty() {
-        anyhow::bail!("--from (or --provider) is required with --hash");
-    }
-    if command.max_peers.is_some()
-        || command.min_peers.is_some()
-        || command.min_count.is_some()
-        || command.max_count.is_some()
-    {
-        anyhow::bail!("fetch filters are not supported with --hash; use a blob ticket as the source instead");
-    }
-    let content_hash: iroh_blobs::Hash = hash.parse().map_err(|e| anyhow::anyhow!("invalid content hash: {e}"))?;
-    let tickets: Vec<iroh_blobs::ticket::BlobTicket> = command
-        .providers
-        .from
-        .iter()
-        .map(|t| {
-            let ticket: iroh_blobs::ticket::BlobTicket =
-                t.parse().map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?;
-            if ticket.hash() != content_hash {
-                anyhow::bail!("blob ticket hash does not match --hash");
-            }
-            Ok(ticket)
-        })
-        .collect::<Result<_>>()?;
-    cli::indexing::download_blob(
-        ctx,
-        &tickets,
-        command.providers.min_providers,
-        command.providers.no_sharing,
-        command.destination.as_deref(),
-    )
-    .await
 }
 
 async fn download_via_daemon_or_node(
@@ -925,7 +858,7 @@ async fn download_with_node(
 ) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.source).await?;
+    let folder = manager.resolve(&command.source).await?;
     let sync = SyncEngine::from_node(&node, manager);
     let stats_db = open_stats_db(data_dir)?;
     let folder_key = folder.namespace_id().to_string();
@@ -980,16 +913,77 @@ async fn download_with_node(
 }
 
 async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    if command.source.as_os_str() == "-" {
+        return download_from_stdin(ctx, command).await;
+    }
+    download_one(ctx, command).await
+}
+
+async fn download_from_stdin(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let lines: Vec<String> = stdin.lock().lines().collect::<Result<_, _>>()?;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut one = command.clone();
+        one.source = std::path::PathBuf::from(trimmed);
+        download_one(ctx, one).await?;
+    }
+    Ok(())
+}
+
+async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
     if let Ok(ticket) = command
         .source
         .to_string_lossy()
         .parse::<iroh_blobs::ticket::BlobTicket>()
     {
-        return download_from_ticket(ctx, &command, ticket).await;
+        return cli::indexing::download_blob(
+            ctx,
+            &[ticket],
+            command.providers.min_providers,
+            command.providers.no_sharing,
+            command.destination.as_deref(),
+        )
+        .await;
     }
 
     if let Some(hash) = command.filter.hash.first() {
-        return download_with_hash(ctx, hash, &command).await;
+        if command.providers.from.is_empty() {
+            anyhow::bail!("--from (or --provider) is required with --hash");
+        }
+        if command.max_peers.is_some()
+            || command.min_peers.is_some()
+            || command.min_count.is_some()
+            || command.max_count.is_some()
+        {
+            anyhow::bail!("fetch filters are not supported with --hash; use a blob ticket as the source instead");
+        }
+        let content_hash: iroh_blobs::Hash = hash.parse().map_err(|e| anyhow::anyhow!("invalid content hash: {e}"))?;
+        let tickets: Vec<iroh_blobs::ticket::BlobTicket> = command
+            .providers
+            .from
+            .iter()
+            .map(|t| {
+                let ticket: iroh_blobs::ticket::BlobTicket =
+                    t.parse().map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?;
+                if ticket.hash() != content_hash {
+                    anyhow::bail!("blob ticket hash does not match --hash");
+                }
+                Ok(ticket)
+            })
+            .collect::<Result<_>>()?;
+        return cli::indexing::download_blob(
+            ctx,
+            &tickets,
+            command.providers.min_providers,
+            command.providers.no_sharing,
+            command.destination.as_deref(),
+        )
+        .await;
     }
 
     if let Some(destination) = command.destination {
@@ -1024,7 +1018,7 @@ async fn handle_snapshot_create(ctx: &CliContext<'_>, command: SnapshotCreateArg
             .create_from_path(&command.path, command.threads, command.description)
             .await?
     } else {
-        let folder = resolve_folder(&manager, &command.path).await?;
+        let folder = manager.resolve(&command.path).await?;
         snapshots.create_for_folder(&folder, command.description).await?
     };
     if output_json {
@@ -1038,10 +1032,7 @@ async fn handle_snapshot_create(ctx: &CliContext<'_>, command: SnapshotCreateArg
             })
         );
     } else {
-        println!("snapshot: {}", snapshot.id);
-        println!("root_hash: {}", snapshot.root_hash);
-        println!("files: {}", snapshot.file_count);
-        println!("size: {}", snapshot.total_size);
+        println!("{}", snapshot.id);
     }
     node.stop().await?;
     Ok(())
@@ -1427,7 +1418,20 @@ fn handle_transfer_root(ctx: &CliContext<'_>, args: TransferRootArgs) -> Result<
 async fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs) -> Result<()> {
     let namespace = iroh_docs::NamespaceId::from_str(&args.namespace)
         .with_context(|| format!("invalid namespace: {}", args.namespace))?;
-    let hash = iroh_blobs::Hash::from_str(&args.hash).with_context(|| format!("invalid blob hash: {}", args.hash))?;
+    let (hash, size) = if let Some(source) = &args.source {
+        let bytes = std::fs::read(source)
+            .with_context(|| format!("failed to read source file {}", source.display()))?;
+        let size = u64::try_from(bytes.len()).context("source file is too large")?;
+        (iroh_blobs::Hash::from_bytes(*blake3::hash(&bytes).as_bytes()), size)
+    } else {
+        let hash = args
+            .hash
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("provide --hash or --source"))?
+            .parse()
+            .with_context(|| format!("invalid blob hash: {:?}", args.hash))?;
+        (hash, args.size)
+    };
     let path = args.path;
     let entry_key = path.to_string_lossy().into_owned();
     let namespace_id = namespace.to_string();
@@ -1436,7 +1440,7 @@ async fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs
         &namespace_id,
         entry_key.as_bytes(),
         hash.as_bytes(),
-        args.size,
+        size,
         None,
         None,
     ))?;
@@ -1653,103 +1657,6 @@ fn handle_transfer_retry(ctx: &CliContext<'_>, args: &TransferJobArgs) -> Result
 }
 
 #[async_recursion]
-async fn handle_stats_seeding(ctx: &CliContext<'_>, command: StatsSeedingArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::HealthCheck {
-                path: command.folder.clone(),
-                hash: command.filter.hash.clone(),
-                path_prefix: command.filter.path_prefix.clone(),
-                glob: command.filter.glob.clone(),
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
-    }
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.folder).await?;
-
-    let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
-        None
-    } else {
-        match syncweb_core::verify::VerifyFilter::try_from(&command.filter) {
-            Ok(f) => Some(f),
-            Err(e) => {
-                node.stop().await?;
-                anyhow::bail!("{e}");
-            }
-        }
-    };
-
-    let entries = node.docs_engine().list_latest(folder.doc()).await?;
-    let mut candidates = Vec::new();
-    for entry in entries {
-        if entry.key().starts_with(b"sys/") {
-            continue;
-        }
-        let hash = entry.content_hash();
-        if let Some(ref f) = filter
-            && !f.matches(entry.key(), &hash)
-        {
-            continue;
-        }
-        let path = String::from_utf8(entry.key().to_vec())
-            .map_err(|error| anyhow::anyhow!("folder entry path is not UTF-8: {error}"))?;
-        candidates.push(FetchCandidate::new(
-            path,
-            hash,
-            entry.content_len(),
-            0,
-            folder.has_local(hash).await?,
-        ));
-    }
-
-    let peers_per_hash: std::collections::HashMap<iroh_blobs::Hash, usize> = std::collections::HashMap::new();
-    let report = HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 4);
-    if output_json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "total": report.total,
-                "well_seeded": report.well_seeded,
-                "under_seeded": report.under_seeded,
-                "unseeded": report.unseeded,
-                "least_seeded": report.least_seeded.iter().take(10).map(|b| serde_json::json!({
-                    "hash": b.hash.to_string(),
-                    "peer_count": b.peer_count,
-                    "size": b.size,
-                    "path": b.path,
-                })).collect::<Vec<_>>(),
-            })
-        );
-    } else {
-        println!("Total blobs: {}", report.total);
-        println!("Well-seeded (>=4 peers): {}", report.well_seeded);
-        println!("Under-seeded (1-3 peers): {}", report.under_seeded);
-        println!("Unseeded (0 peers): {}", report.unseeded);
-        if !report.least_seeded.is_empty() {
-            println!();
-            let mut table = Table::new();
-            table.set_header(["Hash", "Peers", "Size", "Path"]);
-            for blob in report.least_seeded.iter().take(10) {
-                table.add_row([
-                    blob.hash.to_string(),
-                    blob.peer_count.to_string(),
-                    blob.size.to_string(),
-                    blob.path.display().to_string(),
-                ]);
-            }
-            println!("{table}");
-        }
-    }
-    node.stop().await?;
-    Ok(())
-}
-
-#[async_recursion]
 async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -1769,8 +1676,7 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let selector = command.namespace.map_or_else(|| command.path.clone(), PathBuf::from);
-    let folder = resolve_folder(&manager, &selector).await?;
+    let folder = manager.resolve(&command.path).await?;
     let checker = IntegrityChecker::new(node.blob_store().clone(), node.docs_engine().clone());
 
     let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
@@ -1938,7 +1844,6 @@ async fn handle_stats(ctx: &CliContext<'_>, command: StatsCommand) -> Result<()>
     match command {
         StatsCommand::Network(args) => handle_stats_network(ctx, args),
         StatsCommand::Files(args) => handle_stats_files(ctx, args).await,
-        StatsCommand::Seeding(args) => handle_stats_seeding(ctx, args).await,
     }
 }
 
@@ -2034,7 +1939,7 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::StatsFiles {
-                folder: command.folder.clone(),
+                folder: command.path.clone(),
             }))
             .await?;
         let IpcResponse::FileStats(report) = response else {
@@ -2046,14 +1951,11 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
 
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.folder).await?;
-    let entries = node.docs_engine().list_latest(folder.doc()).await?;
+    let folder = manager.resolve(&command.path).await?;
+    let entries = folder.content_entries().await?;
 
     let mut collector = syncweb_core::bandwidth_stats::FileStatsCollector::new();
     for entry in entries {
-        if entry.key().starts_with(b"sys/") {
-            continue;
-        }
         collector.add_entry_bytes_with_time(entry.key(), entry.content_len(), Some(entry.timestamp()));
     }
     let report = collector.report();
@@ -2257,7 +2159,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = resolve_folder(&manager, &command.path).await?;
+    let folder = manager.resolve(&command.path).await?;
     let importer = Importer::new(
         node.blob_store().clone(),
         node.docs_engine().clone(),
@@ -2374,17 +2276,6 @@ fn parse_period(val: &str) -> Result<Duration> {
     Ok(Duration::from_secs(seconds))
 }
 
-async fn resolve_folder(
-    manager: &FolderManager,
-    selector: &std::path::Path,
-) -> Result<syncweb_core::folder::SyncwebFolder> {
-    Ok(manager.resolve(selector).await?)
-}
-
-async fn resolve_namespace(manager: &FolderManager, selector: &str) -> Result<iroh_docs::NamespaceId> {
-    Ok(manager.resolve_namespace(selector).await?)
-}
-
 #[async_recursion]
 async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::FolderCreate) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -2400,6 +2291,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
             .send(IpcRequest::new(IpcCommand::CreateFolder {
                 path: command.path.clone(),
                 mode: command.mode.clone(),
+                indexing: !command.no_indexing,
             }))
             .await?;
         let created_namespace = if let IpcResponse::Ok { message } = &response {
@@ -2418,55 +2310,56 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                         path: command.path.clone(),
                     }))
                     .await?;
-                match import {
-                    IpcResponse::ImportFilesComplete { entries } => {
-                        if output_json {
-                            let mut json = if let IpcResponse::Ok { message } = &response {
-                                serde_json::json!({"status": "ok", "message": message})
-                            } else {
-                                serde_json::json!({})
-                            };
-                            if let serde_json::Value::Object(ref mut map) = json {
-                                map.insert("imported".to_owned(), serde_json::json!(entries));
-                            }
-                            println!("{}", serde_json::to_string_pretty(&json)?);
-                        } else {
-                            print_daemon_message(response, output_json)?;
-                            println!("imported: {entries}");
-                        }
-                    }
-                    IpcResponse::Ok { .. }
-                    | IpcResponse::Status(_)
-                    | IpcResponse::FolderList(_)
-                    | IpcResponse::DownloadComplete { .. }
-                    | IpcResponse::ImportComplete(_)
-                    | IpcResponse::ExportComplete(_)
-                    | IpcResponse::Error { .. }
-                    | _ => return print_daemon_message(import, output_json),
+                if !matches!(import, IpcResponse::ImportFilesComplete { .. }) {
+                    return print_daemon_message(import, output_json);
                 }
             } else {
                 return print_daemon_message(response, output_json);
             }
-        } else {
-            print_daemon_message(response, output_json)?;
         }
-        if let Some(namespace) = created_namespace {
-            if do_share {
-                let share = client
-                    .send(IpcRequest::new(IpcCommand::Share {
-                        namespace: namespace.clone(),
-                        blob: None,
-                        writable: write,
-                        pin: true,
-                        persist: true,
-                    }))
-                    .await?;
-                print_daemon_message(share, output_json)?;
+        let namespace = created_namespace.ok_or_else(|| anyhow::anyhow!("daemon create did not report a namespace"))?;
+        if do_share {
+            let share = client
+                .send(IpcRequest::new(IpcCommand::Share {
+                    namespace: namespace.clone(),
+                    blob: None,
+                    writable: write,
+                    pin: true,
+                    persist: true,
+                }))
+                .await?;
+            let url = if let IpcResponse::Ok { message } = &share {
+                message.clone()
+            } else {
+                return print_daemon_message(share, output_json);
+            };
+            if output_json {
+                let ticket = url.split_once("?ticket=").map_or("", |(_, t)| t);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "path": command.path,
+                        "namespace": namespace,
+                        "access": if write { "write" } else { "read" },
+                        "ticket": ticket,
+                        "url": url,
+                    }))?
+                );
+            } else {
+                println!("{url}");
             }
-            Some(namespace)
+        } else if output_json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "path": command.path,
+                    "namespace": namespace,
+                }))?
+            );
         } else {
-            None
+            println!("{namespace}");
         }
+        Some(namespace)
     } else {
         let node = open_node(data_dir).await?;
         let manager = FolderManager::new(&node);
@@ -2493,32 +2386,29 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
         }
         let namespace = folder.namespace_id().to_string();
         if do_share {
-            let pinned = folder.pin_all_content().await?;
-            let ticket = folder.ticket(node.endpoint().addr(), write).await?;
-            let access = if write { "write" } else { "read" };
-            open_node_db(data_dir)?.add_share(&namespace, access, &ticket.to_string())?;
-            let url = format!("syncweb://folder/{namespace}?ticket={ticket}");
+            let db = open_node_db(data_dir)?;
+            let result = syncweb_core::folder::share_folder(
+                &folder,
+                syncweb_core::folder::ShareOptions::new(write)
+                    .with_pin(true)
+                    .with_persist(true),
+                |ns, access, ticket| db.add_share(&ns.to_string(), access, &ticket.to_string()),
+            )
+            .await?;
             if output_json {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&serde_json::json!({
                         "path": command.path,
-                        "namespace": namespace,
-                        "access": access,
-                        "ticket": ticket.to_string(),
-                        "url": url,
-                        "pinned": pinned,
+                        "namespace": result.namespace.to_string(),
+                        "access": result.access(),
+                        "ticket": result.ticket.to_string(),
+                        "url": result.url,
+                        "pinned": result.pinned,
                     }))?
                 );
             } else {
-                println!("path: {}", command.path.display());
-                println!("namespace: {namespace}");
-                println!("access: {access}");
-                println!("ticket: {ticket}");
-                println!("url: {url}");
-                if pinned > 0 {
-                    println!("pinned: {pinned} blobs");
-                }
+                println!("{}", result.url);
             }
         } else if output_json {
             println!(
@@ -2529,8 +2419,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                 }))?
             );
         } else {
-            println!("path: {}", command.path.display());
-            println!("namespace: {namespace}");
+            println!("{namespace}");
         }
         node.stop().await?;
         Some(namespace)
@@ -2562,7 +2451,9 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     };
 
     // `join <folder> --subscribe` on an already-tracked folder: idempotent enable.
-    if command.ticket.parse::<iroh_docs::DocTicket>().is_err() {
+    let is_new_ticket =
+        command.ticket.parse::<iroh_docs::DocTicket>().is_ok() || command.ticket.trim_start().starts_with("syncweb://");
+    if !is_new_ticket {
         if !command.subscribe {
             anyhow::bail!("folder already tracked — re-enable live syncing with `join <folder> --subscribe`");
         }
@@ -2579,7 +2470,8 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                 mode: SyncMode::from_str(&command.mode)?,
                 subscribe: command.subscribe,
                 filters: filters.clone(),
-                download: command.download,
+                download: command.download_all,
+                indexing: !command.no_indexing,
             }))
             .await?;
         return print_daemon_message(response, output_json);
@@ -2590,12 +2482,18 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
+    if !command.no_indexing
+        && let Ok(indexing) = syncweb_core::indexing::IndexingService::new(data_dir.join("indexing.sqlite"))
+        && let Err(error) = indexing.enable_folder(&folder).await
+    {
+        tracing::warn!(%error, "failed to enable indexing for joined folder");
+    }
     let namespace = folder.namespace_id().to_string();
     let node_db = open_node_db(data_dir)?;
     let mut config = node_db.load_app_config()?;
     config.set_subscribe(&namespace, command.subscribe, &filters);
     node_db.save_app_config(&config)?;
-    let downloaded = if command.download {
+    let downloaded = if command.download_all {
         download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
     } else {
         0
@@ -2607,7 +2505,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         );
     } else {
         println!("joined: {namespace}");
-        if command.download {
+        if command.download_all {
             println!("downloaded: {downloaded} files");
         }
     }
@@ -2628,7 +2526,7 @@ async fn download_joined_folder(
     let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
     while let Some(event) = intent.next().await {
         match event {
-            SyncEvent::Failed(message) => anyhow::bail!("join download failed: {message}"),
+            SyncEvent::Failed(message) => anyhow::bail!("join --download-all failed: {message}"),
             SyncEvent::Finished => break,
             SyncEvent::Started
             | SyncEvent::Progress { .. }
@@ -2701,7 +2599,7 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, selector).await?;
+    let namespace = manager.resolve_namespace(selector).await?;
     let namespace_str = namespace.to_string();
     let node_db = open_node_db(data_dir)?;
     let mut config = node_db.load_app_config()?;
@@ -2726,11 +2624,8 @@ async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result
 }
 
 async fn handle_share(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
-    if args.rm {
-        return handle_share_remove(ctx, &args).await;
-    }
     if args.list {
-        return handle_share_list(ctx, &args.selectors).await;
+        return handle_share_list(ctx, Some(&args.path)).await;
     }
     handle_share_add(ctx, &args).await
 }
@@ -2739,10 +2634,7 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    let selector = args
-        .namespace
-        .clone()
-        .unwrap_or_else(|| args.selectors.first().cloned().unwrap_or_else(|| ".".to_owned()));
+    let selector = args.path.to_string_lossy();
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
@@ -2758,7 +2650,7 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &selector).await?;
+    let namespace = manager.resolve_namespace(&selector).await?;
     let folder = manager.get(namespace).await?;
     if let Some(blob) = &args.blob {
         let hash = blob.parse()?;
@@ -2769,46 +2661,39 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
                 serde_json::json!({"namespace": namespace, "blob": blob, "ticket": ticket.to_string()})
             );
         } else {
-            println!("namespace: {namespace}");
-            println!("blob: {blob}");
-            println!("ticket: {ticket}");
+            println!("{ticket}");
         }
         node.stop().await?;
         return Ok(());
     }
-    let pinned = if args.no_pin {
-        0
-    } else {
-        folder.pin_all_content().await?
-    };
-    let ticket = folder.ticket(node.endpoint().addr(), args.write).await?;
-    let access = if args.write { "write" } else { "read" };
-    if !args.no_persist {
-        open_node_db(data_dir)?.add_share(&namespace.to_string(), access, &ticket.to_string())?;
-    }
+    let db = open_node_db(data_dir)?;
+    let result = syncweb_core::folder::share_folder(
+        &folder,
+        syncweb_core::folder::ShareOptions::new(args.write)
+            .with_pin(!args.no_pin)
+            .with_persist(!args.no_persist),
+        |ns, access, ticket| db.add_share(&ns.to_string(), access, &ticket.to_string()),
+    )
+    .await?;
     if output_json {
         println!(
             "{}",
             serde_json::json!({
-                "namespace": namespace,
-                "access": access,
-                "ticket": ticket.to_string(),
-                "pinned": pinned,
+                "namespace": result.namespace.to_string(),
+                "access": result.access(),
+                "ticket": result.ticket.to_string(),
+                "url": result.url,
+                "pinned": result.pinned,
             })
         );
     } else {
-        println!("namespace: {namespace}");
-        println!("access: {access}");
-        println!("ticket: {ticket}");
-        if pinned > 0 {
-            println!("pinned: {pinned} blobs");
-        }
+        println!("{}", result.url);
     }
     node.stop().await?;
     Ok(())
 }
 
-async fn handle_share_list(ctx: &CliContext<'_>, filters: &[String]) -> Result<()> {
+async fn handle_share_list(ctx: &CliContext<'_>, filter: Option<&std::path::Path>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
@@ -2817,14 +2702,16 @@ async fn handle_share_list(ctx: &CliContext<'_>, filters: &[String]) -> Result<(
         return print_daemon_message(response, output_json);
     }
     let mut shares = open_node_db(data_dir)?.list_shares()?;
-    if !filters.is_empty() {
+    if let Some(selector) = filter
+        && selector.as_os_str() != "."
+    {
         let node = open_node(data_dir).await?;
         let manager = FolderManager::new(&node);
-        let mut wanted = Vec::new();
-        for selector in filters {
-            wanted.push(resolve_namespace(&manager, selector).await?.to_string());
-        }
-        shares.retain(|(namespace, _, _)| wanted.iter().any(|w| w == namespace));
+        let wanted = manager
+            .resolve_namespace(&selector.to_string_lossy())
+            .await?
+            .to_string();
+        shares.retain(|(namespace, _, _)| namespace == &wanted);
         node.stop().await?;
     }
     if shares.is_empty() {
@@ -2847,14 +2734,11 @@ async fn handle_share_list(ctx: &CliContext<'_>, filters: &[String]) -> Result<(
     Ok(())
 }
 
-async fn handle_share_remove(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> {
+async fn handle_unshare(ctx: &CliContext<'_>, args: UnshareArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    let selector = args
-        .namespace
-        .clone()
-        .unwrap_or_else(|| args.selectors.first().cloned().unwrap_or_else(|| ".".to_owned()));
+    let selector = args.path.to_string_lossy();
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
@@ -2868,7 +2752,7 @@ async fn handle_share_remove(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<(
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &selector).await?;
+    let namespace = manager.resolve_namespace(&selector).await?;
     if let Some(blob) = &args.blob {
         let hash = blob.parse()?;
         let folder = manager.get(namespace).await?;
@@ -2959,7 +2843,7 @@ fn handle_package_bump(
     let source = root.to_string_lossy();
     let manifest_bytes = node_db
         .load_workspace_manifest(&source)?
-        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package add` first"))?;
     let mut manifest = CollectionManifest::from_bytes(manifest_bytes)?;
     let parent = manifest.blob_id()?;
     manifest.parent = Some(parent);
@@ -2978,13 +2862,22 @@ async fn handle_package_publish(
     ctx: &CliContext<'_>,
     node_db: &NodeDatabase,
     paths: Vec<PathBuf>,
-    namespace: String,
+    namespace: Option<String>,
     sequence: u64,
     bootstrap: Vec<String>,
     root_override: Option<PathBuf>,
 ) -> Result<()> {
     let root = resolve_package_root(&paths, root_override);
-    handle_collection_publish(ctx, node_db, root, namespace, sequence, bootstrap).await
+    let resolved_namespace = if let Some(provided) = namespace {
+        provided
+    } else {
+        let node = open_node(ctx.data_dir).await?;
+        let manager = syncweb_core::folder::FolderManager::new(&node);
+        let resolved = manager.resolve_namespace(".").await?;
+        node.stop().await?;
+        resolved.to_string()
+    };
+    handle_collection_publish(ctx, node_db, root, resolved_namespace, sequence, bootstrap).await
 }
 
 async fn handle_collection_publish(
@@ -2999,7 +2892,7 @@ async fn handle_collection_publish(
     let source = root.to_string_lossy();
     let manifest_bytes = node_db
         .load_workspace_manifest(&source)?
-        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package init` first"))?;
+        .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package add` first"))?;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let response = client
             .send(IpcRequest::new(IpcCommand::CollectionPublish {
@@ -3025,12 +2918,7 @@ async fn handle_collection_publish(
     }
     let manager = syncweb_core::folder::FolderManager::new(&node);
     let folder = manager.get(namespace.parse()?).await?;
-    let store = syncweb_core::folder::CollectionStore::new(
-        folder.doc().clone(),
-        folder.author(),
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-    );
+    let store = syncweb_core::folder::CollectionStore::for_node(&node, &folder);
     let head = store.publish(&manifest, sequence).await?;
     let manifest_ticket = node.blob_store().ticket(node.endpoint(), head.manifest);
     if output_json {
@@ -3130,10 +3018,9 @@ async fn handle_package_info(
     } else if let (Some(hash_str), Some(node_id_str)) = (hash, node_id) {
         let blob_hash = hash_str.parse::<iroh_blobs::Hash>()?;
         let peer_id = node_id_str.parse::<iroh::PublicKey>()?;
-        let ticket = iroh_blobs::ticket::BlobTicket::new(
+        let ticket = syncweb_core::node::blob_store::raw_blob_ticket(
             iroh::EndpointAddr::new(peer_id),
             blob_hash,
-            iroh_blobs::BlobFormat::Raw,
         );
         if !node.blob_store().has(blob_hash).await? {
             node.blob_store().fetch(node.endpoint(), &ticket).await?;
@@ -3338,13 +3225,9 @@ async fn handle_package_archive_import(
     }
 
     let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
-    let store = CollectionStore::new(
-        folder.doc().clone(),
-        folder.author(),
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-    );
-    store.publish(&result.collection_manifest, 1).await?;
+    CollectionStore::for_node(&node, &folder)
+        .publish(&result.collection_manifest, 1)
+        .await?;
     let namespace = folder.namespace_id();
     node.stop().await?;
 
@@ -3565,47 +3448,42 @@ fn handle_package_list(packages: &PackageManager, output_json: bool) -> Result<(
 }
 
 #[derive(serde::Serialize)]
-struct SearchResult {
-    kind: &'static str,
-    title: String,
-    name: String,
-    version: String,
-    collection: String,
-    hash: String,
-    size: u64,
-    manifest: String,
-    publisher: String,
-    tags: Vec<String>,
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum SearchResult {
+    Catalog {
+        title: String,
+        collection: String,
+        hash: String,
+        size: u64,
+        publisher: String,
+        tags: Vec<String>,
+    },
+    Package {
+        name: String,
+        version: String,
+        collection: String,
+        manifest: String,
+    },
 }
 
 impl SearchResult {
     fn catalog(record: syncweb_core::indexing::CatalogRecord) -> Self {
-        Self {
-            kind: "catalog",
-            title: record.title.clone(),
-            name: record.title,
-            version: String::new(),
+        Self::Catalog {
+            title: record.title,
             collection: record.folder_name,
             hash: record.hash.to_string(),
             size: record.size,
-            manifest: String::new(),
             publisher: record.publisher,
             tags: record.tags,
         }
     }
 
     fn package(name: &str, version: &str, collection: &str, manifest: &str) -> Self {
-        Self {
-            kind: "package",
-            title: name.to_string(),
+        Self::Package {
             name: name.to_string(),
             version: version.to_string(),
             collection: collection.to_string(),
-            hash: String::new(),
-            size: 0,
             manifest: manifest.to_string(),
-            publisher: String::new(),
-            tags: Vec::new(),
         }
     }
 }
@@ -3702,20 +3580,39 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
         "Size",
     ]);
     for r in &all_results {
-        let id = if r.hash.is_empty() {
-            r.manifest.clone()
-        } else {
-            r.hash.clone()
+        let (kind, title, name, version, collection, id, size) = match r {
+            SearchResult::Catalog {
+                title,
+                collection,
+                hash,
+                size,
+                ..
+            } => (
+                "catalog",
+                title.as_str(),
+                title.as_str(),
+                "",
+                collection.as_str(),
+                hash.as_str(),
+                *size,
+            ),
+            SearchResult::Package {
+                name,
+                version,
+                collection,
+                manifest,
+                ..
+            } => (
+                "package",
+                name.as_str(),
+                name.as_str(),
+                version.as_str(),
+                collection.as_str(),
+                manifest.as_str(),
+                0_u64,
+            ),
         };
-        table.add_row([
-            r.kind,
-            &r.title,
-            &r.name,
-            &r.version,
-            &r.collection,
-            &id,
-            &r.size.to_string(),
-        ]);
+        table.add_row([kind, title, name, version, collection, id, &size.to_string()]);
     }
     println!("{table}");
     Ok(())
@@ -3824,8 +3721,8 @@ fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<
             } else {
                 let mut table = Table::new();
                 table.set_header(["Database", "Size", "Freelist Pages"]);
-                table.add_row(["node.db", &human_size(node_size), &node_freelist.to_string()]);
-                table.add_row(["stats.db", &human_size(stats_size), &stats_freelist.to_string()]);
+                table.add_row(["node.db", &format_bytes(node_size), &node_freelist.to_string()]);
+                table.add_row(["stats.db", &format_bytes(stats_size), &stats_freelist.to_string()]);
                 println!("{table}");
             }
         }
@@ -3837,7 +3734,10 @@ fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<
 }
 
 fn handle_db_backup(data_dir: &std::path::Path, output: &std::path::Path, output_json: bool) -> Result<()> {
-    let backup_dir = output.join(format!("syncweb-db-backup-{}", chrono_timestamp()));
+    let backup_dir = output.join(format!(
+        "syncweb-db-backup-{}",
+        syncweb_core::parsing::current_unix_secs()
+    ));
     std::fs::create_dir_all(&backup_dir)?;
     let node_path = data_dir.join("node.db");
     let stats_path = data_dir.join("stats.db");
@@ -3859,49 +3759,6 @@ fn handle_db_backup(data_dir: &std::path::Path, output: &std::path::Path, output
         println!("Backup created at: {}", backup_dir.display());
     }
     Ok(())
-}
-
-fn chrono_timestamp() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}", now.as_secs())
-}
-
-fn human_size(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-    if bytes >= GB {
-        let whole = bytes.checked_div(GB).unwrap_or(0);
-        let frac = bytes
-            .checked_rem(GB)
-            .unwrap_or(0)
-            .checked_mul(100)
-            .and_then(|n| n.checked_div(GB))
-            .unwrap_or(0);
-        format!("{whole}.{frac:02} GB")
-    } else if bytes >= MB {
-        let whole = bytes.checked_div(MB).unwrap_or(0);
-        let frac = bytes
-            .checked_rem(MB)
-            .unwrap_or(0)
-            .checked_mul(100)
-            .and_then(|n| n.checked_div(MB))
-            .unwrap_or(0);
-        format!("{whole}.{frac:02} MB")
-    } else if bytes >= KB {
-        let whole = bytes.checked_div(KB).unwrap_or(0);
-        let frac = bytes
-            .checked_rem(KB)
-            .unwrap_or(0)
-            .checked_mul(100)
-            .and_then(|n| n.checked_div(KB))
-            .unwrap_or(0);
-        format!("{whole}.{frac:02} KB")
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 fn scan_single_root_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
@@ -4025,7 +3882,6 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("created: {name}\t{id}");
             }
         }
-        NetworkCommand::List { name } => handle_network_list(&manager, name, output_json)?,
         NetworkCommand::Join { ticket } => {
             let parsed = ticket.parse()?;
             let id = manager.join(parsed)?;
@@ -4048,6 +3904,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("left: {name}");
             }
         }
+        NetworkCommand::List { name } => handle_network_list(&manager, name, output_json)?,
         NetworkCommand::Invite { name, device } => {
             let id = network_id_by_name(&manager, &name)?;
             let ticket = if let Some(node_id) = device {
@@ -4088,9 +3945,6 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
         }
         NetworkCommand::Events { network_id, limit } => {
             handle_network_events(data_dir, &network_id, limit, output_json)?;
-        }
-        NetworkCommand::Health { network } => {
-            handle_network_health(data_dir, &manager, network, output_json)?;
         }
         NetworkCommand::TestRelay { relay_url } => {
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
@@ -4265,6 +4119,23 @@ fn handle_network_health(
     Ok(())
 }
 
+fn handle_status_networks(data_dir: &std::path::Path, name: Option<&str>, output_json: bool) -> Result<()> {
+    let manager = open_network_manager(data_dir)?;
+    if let Some(selected) = name {
+        let network = manager
+            .get_by_name(selected)
+            .or_else(|| manager.list().into_iter().find(|n| n.id.to_string() == selected))
+            .with_context(|| format!("network not found: {selected}"))?;
+        let network_name = network.name.clone();
+        let network_id = network.id.to_string();
+        handle_network_list(&manager, Some(network_name), output_json)?;
+        handle_network_health(data_dir, &manager, Some(network_id), output_json)?;
+    } else {
+        handle_network_health(data_dir, &manager, None, output_json)?;
+    }
+    Ok(())
+}
+
 fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
@@ -4308,7 +4179,7 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let namespace = resolve_namespace(&manager, &command.folder).await?;
+    let namespace = manager.resolve_namespace(&command.folder).await?;
     let _ = cancel_session(namespace);
     manager.drop_when_ready(namespace).await?;
     if command.delete_files {
@@ -4423,39 +4294,43 @@ fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
     Ok(())
 }
 
+fn handle_networks(ctx: &CliContext<'_>, args: &NetworkListArgs) -> Result<()> {
+    handle_status_networks(ctx.data_dir, args.name.as_deref(), ctx.output_json)
+}
+
 fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs) -> Result<()> {
     let output_json = ctx.output_json;
+    if let Some(criteria) = command.sort {
+        let sort_args = crate::cli::commands::SortArgs {
+            path: command.path,
+            by: criteria,
+            min_seeders: None,
+            max_seeders: None,
+            niche: None,
+            frecency_weight: None,
+            limit_size: None,
+            depth: Vec::new(),
+            min_depth: None,
+            max_depth: None,
+            threads: command.threads,
+            enrich: false,
+        };
+        return handle_sort(ctx, &sort_args);
+    }
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
     if entries.is_empty() && !output_json {
         println!("No files found in {}", command.path.display());
         return Ok(());
     }
-    if let Some(criteria_str) = command.sort {
-        let criteria = SortConfig::parse_criteria(&[criteria_str]);
-        let mut config = SortConfig::default();
-        config.criteria = criteria;
-        let mut sortable = entries.into_iter().map(sort_entry).collect::<Vec<_>>();
-        let sorter = Sorter::new(config);
-        let result = sorter.sort(&mut sortable);
-        if output_json {
-            let paths: Vec<_> = result.iter().map(|entry| entry.path.display().to_string()).collect();
-            println!("{}", serde_json::to_string_pretty(&paths)?);
-        } else {
-            for entry in &result {
-                println!("{}", entry.path.display());
-            }
-        }
+    if output_json {
+        let paths = entries
+            .iter()
+            .map(|entry| entry.relative_path.display().to_string())
+            .collect::<Vec<_>>();
+        println!("{}", serde_json::to_string_pretty(&paths)?);
     } else {
-        if output_json {
-            let paths = entries
-                .iter()
-                .map(|entry| entry.relative_path.display().to_string())
-                .collect::<Vec<_>>();
-            println!("{}", serde_json::to_string_pretty(&paths)?);
-        } else {
-            for entry in entries {
-                println!("{}", entry.relative_path.display());
-            }
+        for entry in entries {
+            println!("{}", entry.relative_path.display());
         }
     }
     Ok(())

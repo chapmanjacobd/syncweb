@@ -51,6 +51,7 @@ help_categories! {
         Command::Start(_) => "start",
         Command::Shutdown(_) => "shutdown",
         Command::Status => "status",
+        Command::Devices => "devices",
         Command::Reload => "reload",
         Command::DaemonSync(_) => "daemon-sync",
     ];
@@ -76,6 +77,7 @@ help_categories! {
     "Sharing & Publishing" => [
         Command::Publish { .. } => "publish",
         Command::Share(_) => "share",
+        Command::Unshare(_) => "unshare",
         Command::Provider { .. } => "provider",
         Command::Link { .. } => "link",
     ];
@@ -86,7 +88,7 @@ help_categories! {
     ];
     "Network" => [
         Command::Network { .. } => "network",
-        Command::Devices => "devices",
+        Command::Networks(_) => "networks",
     ];
     "Statistics" => [
         Command::Stats { .. } => "stats",

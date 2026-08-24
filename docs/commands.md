@@ -8,25 +8,26 @@ manage sharing and publishing explicitly.
 
 | Level | Command | Access | What you get |
 |-------|---------|--------|--------------|
-| Create | `create <path>` | Public, read-only access (default) | Creates the folder and prints `path`, `namespace`, `access: read`, and a `ticket`/`url`. Pins + persists the share. |
+| Create | `create <path>` | Public, read-only access (default) | Creates the folder and prints a `syncweb://folder/<ns>?ticket=...` share URL. Pins + persists the share. |
 | Create | `create --write <path>` | Public, write access | Same, but the ticket grants write access. |
-| Create | `create --no-share <path>` | Local | Prints only `path` and `namespace`. Content is private until you share or publish it. |
+| Create | `create --no-share <path>` | Local | Prints only the namespace. Content is private until you share or publish it. |
 | Create | `create --no-import <path>` | Local | Skips scanning existing files in the directory. |
-| Share | `share <path>` | Public, read-only access (default) | A read-only access folder `ticket` anyone can use to fetch content. Persisted + pins folder blobs. |
-| Share | `share <path> --write` | Public, write access | A write-access folder `ticket`; holders can edit. Persisted + pins folder blobs. |
-| Share | `share --blob <hash> --namespace <ns>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
-| Share | `share --list` / `share --list <ns>` | — | List persisted shares, optionally filtered by namespace/path selectors. |
-| Share | `share --rm <path>` / `share --rm --blob <hash> --namespace <ns>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
+| Share | `share <path>` | Public, read-only access (default) | A read-only share URL anyone can use to fetch content. Persisted + pins folder blobs. |
+| Share | `share <path> --write` | Public, write access | A write-access share URL; holders can edit. Persisted + pins folder blobs. |
+| Share | `share <path> --blob <hash>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
+| Share | `share --list` / `share --list <path>` | — | List persisted shares, optionally filtered by a folder path/namespace. |
+| Unshare | `unshare <path>` / `unshare <path> --blob <hash>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
 | Publish | `publish catalog <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
 
 Key distinction: `create` provisions a folder and shares it by default, printing a
-read-only access ticket/URL. Hand a `--write` ticket only to collaborators you trust to
-edit; hand a read-only ticket to anyone who may fetch the content. Use `--no-share` when
-you only want a local folder. `share` persists the record (see `share --list` /
-`share --rm`) and pins the folder's blobs by default (`--no-pin` to skip,
-`--no-persist` to avoid saving). `share --blob` publishes a single immutable content
-hash (always pinned, never persisted).
+`syncweb://folder/<ns>?ticket=...` URL. Hand a `--write` ticket only to collaborators you
+trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
+`--no-share` when you only want a local folder. `share` persists the record (see
+`share --list` / `unshare`) and pins the folder's blobs by default (`--no-pin` to skip,
+`--no-persist` to avoid saving). `share --blob` publishes a single immutable content hash
+(always pinned, never persisted). `join` accepts either the `syncweb://...` URL or a bare
+ticket.
 
 ## `find` Command Design
 
@@ -368,18 +369,14 @@ impl IrohNode {
 
 CLI:
 ```bash
-# Create folder (default: shares read-only and prints a ticket/URL)
+# Create folder (default: shares read-only and prints a share URL)
 syncweb create ./documents
-# Output: path: ./documents
-#         namespace: <ns>
-#         access: read
-#         ticket: <read-only ticket>
-#         url: syncweb://folder/<ns>?ticket=<ticket>
+# Output: syncweb://folder/<ns>?ticket=<read-only ticket>
 
 # Create with a writable share ticket
 syncweb create --write ./documents
 
-# Create locally without sharing (no ticket/URL)
+# Create locally without sharing (prints only the namespace)
 syncweb create --no-share ./documents
 
 # Create with sync mode
@@ -403,9 +400,7 @@ syncweb create --no-import ./documents
 ```bash
 # Share a folder with public read-only access (default) + persist + pin
 syncweb share ./documents
-# Output: namespace: <ns>
-#         access: read
-#         ticket: <read-only ticket>
+# Output: syncweb://folder/<ns>?ticket=<read-only ticket>
 
 # Share with write access
 syncweb share --write ./documents
@@ -413,19 +408,19 @@ syncweb share --write ./documents
 # Skip pinning and/or persistence
 syncweb share --no-pin --no-persist ./documents
 
-# Share by namespace directly
-syncweb share --namespace <ns> --write
+# Share by namespace or path directly
+syncweb share <ns> --write
 
 # Share a single content hash as an unauthenticated blob ticket
-syncweb share --blob <hash> --namespace <ns>
+syncweb share <ns> --blob <hash>
 
 # List persisted shares, optionally filtered by namespace/path selectors
 syncweb share --list
 syncweb share --list <ns>
 
 # Stop sharing a folder (unpins blobs) or remove a shared blob pin
-syncweb share --rm --write ./documents
-syncweb share --rm --blob <hash> --namespace <ns>
+syncweb unshare --write ./documents
+syncweb unshare --blob <hash> --namespace <ns>
 ```
 
 ### Config Command
@@ -487,6 +482,8 @@ syncweb config set discovery.interface eth0
 | `stat` | `stat` | File metadata from doc + blob store |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
 | | `status` | Show daemon status |
+| | `devices` | Show this device's Iroh and Syncthing identities |
+| | `networks` | Show networks and their health |
 | | `daemon-sync` | Ask the daemon to trigger synchronization |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
@@ -497,9 +494,9 @@ syncweb config set discovery.interface eth0
 | | `public list` | List announced public folders |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
 | | `share --list` | List persisted folder shares, optionally filtered by selectors |
-| | `share --rm` | Stop sharing a folder (unpins folder blobs) |
+| | `unshare` | Stop sharing a folder (unpins folder blobs) |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
-| | `share --rm --blob` | Remove a shared blob pin |
+| | `unshare --blob` | Remove a shared blob pin |
 | | `publish catalog` | Publish folder metadata to a catalog |
 | | `package add` | Scan one or more paths into a package manifest (idempotent; creates it if missing) |
 | | `package add` | Re-scan paths and update the manifest |
@@ -517,7 +514,7 @@ syncweb config set discovery.interface eth0
 | | `package switch` | Change active version |
 | | `stats network` | Bandwidth accounting per folder/peer |
 | | `stats files` | File-level statistics for synced folder content |
-| | `stats seeding` | Seeding status per blob (well/under/unseeded) |
+
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `transfer info` | Inspect durable per-item transfer state, progress, errors, and grouping |
 | | `transfer remaining` | Show root capacity after materialized files and pending reservations |
@@ -537,7 +534,7 @@ syncweb config set discovery.interface eth0
 | | `network kick` | Remove device from a network |
 | | `stats network` | Bandwidth accounting per folder/peer |
 | | `stats files` | File-level statistics for synced folder content |
-| | `stats seeding` | Seeding status per blob (well/under/unseeded) |
+
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `config schedule` | Show/modify sync schedule |
 | | `conflicts` | List/resolve file conflicts |
@@ -580,8 +577,8 @@ syncweb join --subscribe --ingest-only --ignore-self <ticket> /path/to/folder
 
 # Join and download existing content in one step (receive-side symmetry to
 # `create --import`); honors the same prefix/glob/max filters
-syncweb join --download <ticket> /path/to/folder
-syncweb join --download --glob '*.md' <ticket> /path/to/folder
+syncweb join --download-all <ticket> /path/to/folder
+syncweb join --download-all --glob '*.md' <ticket> /path/to/folder
 
 # Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
 syncweb join --subscribe <folder>
@@ -592,15 +589,15 @@ syncweb config set <namespace>.subscribe off
 # or publish folder metadata to a catalog
 syncweb share /path/to/folder
 syncweb share --write /path/to/folder
-syncweb share --namespace <namespace-id> .
-syncweb share --blob <hash> --namespace <namespace-id>
+syncweb share <namespace-id>
+syncweb share <namespace-id> --blob <hash>
 syncweb publish catalog --catalog <name> --tag music /path/to/folder
 
 # List and remove persisted shares; remove a shared blob pin
 syncweb share --list
 syncweb share --list <namespace-id>
-syncweb share --rm --write /path/to/folder
-syncweb share --rm --blob <hash> --namespace <namespace-id>
+syncweb unshare --write /path/to/folder
+syncweb unshare <namespace-id> --blob <hash>
 
 # Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
 # (size/limit filters live on `syncweb download`, not `publish`)
@@ -624,8 +621,8 @@ syncweb import /path/to/files
 # Parallel export (the default)
 syncweb export /path/to/output
 
-# Health check (show seeding status)
-syncweb stats seeding --folder audio/
+# File-level statistics for a folder
+syncweb stats files audio/
 
 # Capacity-aware transfer placement
 syncweb transfer root --min-free 10GB media /srv/media

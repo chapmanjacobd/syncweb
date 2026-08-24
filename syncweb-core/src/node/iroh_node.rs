@@ -11,10 +11,11 @@ use std::time::Duration;
 use crate::error::{Result, SyncwebError};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
+use super::blob_store::BlobStore;
 use super::discovery::TopicTracker;
+use super::docs_engine::DocsEngine;
 use super::identity::IdentityManager;
 use super::membership_hook::MembershipHook;
-use super::{blob_store::BlobStore, docs_engine::DocsEngine, gossip_service::GossipService};
 
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -156,7 +157,6 @@ pub struct IrohNode {
     gossip: Arc<Gossip>,
     blob_store: BlobStore,
     docs_engine: DocsEngine,
-    gossip_service: GossipService,
     topic_tracker: TopicTracker,
 }
 
@@ -255,7 +255,6 @@ impl IrohNode {
 
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
         let docs_engine = DocsEngine::new(&docs);
-        let gossip_service = GossipService::new(&gossip);
         let topic_tracker = TopicTracker::new(&gossip, &endpoint);
 
         Ok(Self {
@@ -266,7 +265,6 @@ impl IrohNode {
             gossip,
             blob_store,
             docs_engine,
-            gossip_service,
             topic_tracker,
         })
     }
@@ -299,11 +297,6 @@ impl IrohNode {
     #[must_use]
     pub const fn docs_engine(&self) -> &DocsEngine {
         &self.docs_engine
-    }
-
-    #[must_use]
-    pub const fn gossip_service(&self) -> &GossipService {
-        &self.gossip_service
     }
 
     #[must_use]

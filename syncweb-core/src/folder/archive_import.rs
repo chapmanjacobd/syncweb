@@ -272,13 +272,9 @@ pub async fn import_archive(
     importer.materialize(&result, target_dir).await?;
 
     let folder = FolderManager::new(node).create(SyncMode::SendReceive).await?;
-    let store = CollectionStore::new(
-        folder.doc().clone(),
-        folder.author(),
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-    );
-    store.publish(&result.collection_manifest, 1).await?;
+    CollectionStore::for_node(node, &folder)
+        .publish(&result.collection_manifest, 1)
+        .await?;
     result.namespace_id = Some(folder.namespace_id());
     Ok(result)
 }

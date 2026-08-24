@@ -10,8 +10,12 @@ pub enum Command {
     Start(StartArgs),
     #[command(about = "Stop the local syncweb node")]
     Shutdown(ShutdownArgs),
-    #[command(about = "Show the local daemon status")]
+    #[command(about = "Show local daemon status")]
     Status,
+    #[command(about = "Show this device's Iroh and Syncthing identities")]
+    Devices,
+    #[command(about = "Show networks and their health")]
+    Networks(NetworkListArgs),
     #[command(about = "Ask the local daemon to reload configuration")]
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
@@ -26,8 +30,6 @@ pub enum Command {
     Leave(LeaveArgs),
     #[command(about = "List managed folders")]
     Folders,
-    #[command(about = "Show this device's Iroh and Syncthing identities")]
-    Devices,
     #[command(about = "Show or update local configuration")]
     Config {
         #[command(subcommand)]
@@ -59,7 +61,7 @@ pub enum Command {
     },
     #[command(about = "Watch a folder and import filesystem changes")]
     Watch(WatchArgs),
-    #[command(about = "Show statistics for folders, files, and seeding status")]
+    #[command(about = "Show statistics for folders and files")]
     Stats {
         #[command(subcommand)]
         command: StatsCommand,
@@ -73,6 +75,8 @@ pub enum Command {
     },
     #[command(about = "Share a folder, printing a ticket (read-only by default, --write for write access)")]
     Share(ShareArgs),
+    #[command(about = "Stop sharing a folder or blob (removes pins and announcements)")]
+    Unshare(UnshareArgs),
     #[command(about = "Create, version, publish, and manage collection packages")]
     Package {
         #[command(subcommand)]
@@ -124,6 +128,12 @@ pub enum Command {
 pub struct DaemonSyncArgs {
     #[arg(help = "Namespace of a live folder to sync now; omit it to sync every enabled folder")]
     pub namespace: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct NetworkListArgs {
+    #[arg(value_name = "NAME", help = "Limit to a single network by name or ID")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -194,7 +204,17 @@ pub struct TransferEnqueueArgs {
     #[arg(long, help = "Relative materialization path")]
     pub path: PathBuf,
     #[arg(long, help = "32-byte blob hash in hexadecimal")]
-    pub hash: String,
+    pub hash: Option<String>,
+    #[arg(
+        long,
+        help = "Local file to read content from; computes the blob hash and size automatically"
+    )]
+    pub source: Option<PathBuf>,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Blob size in bytes (ignored when --source is given)"
+    )]
     pub size: u64,
     #[arg(
         long,
@@ -315,7 +335,12 @@ pub struct FolderJoin {
         long,
         help = "Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)"
     )]
-    pub download: bool,
+    pub download_all: bool,
+    #[arg(
+        long,
+        help = "Do not opt the folder into local indexing (indexing is enabled by default)"
+    )]
+    pub no_indexing: bool,
 }
 
 #[derive(Debug, Args)]
@@ -533,7 +558,7 @@ pub struct LeaveArgs {
     pub delete_files: bool,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Clone)]
 pub struct DownloadArgs {
     pub source: PathBuf,
     pub destination: Option<PathBuf>,
@@ -605,8 +630,6 @@ pub enum StatsCommand {
     Network(StatsNetworkArgs),
     #[command(about = "Show file-level statistics for synced folder content")]
     Files(StatsFilesArgs),
-    #[command(about = "Show seeding status per folder blob")]
-    Seeding(StatsSeedingArgs),
 }
 
 #[derive(Debug, Args)]
@@ -623,13 +646,8 @@ pub struct StatsNetworkArgs {
 
 #[derive(Debug, Args)]
 pub struct StatsFilesArgs {
-    #[arg(
-        long,
-        default_value = ".",
-        visible_alias = "namespace",
-        help = "Namespace ID or path to a managed folder"
-    )]
-    pub folder: PathBuf,
+    #[arg(default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub path: PathBuf,
     #[arg(
         long,
         default_value = "extension",
@@ -638,19 +656,6 @@ pub struct StatsFilesArgs {
     pub by: String,
     #[arg(long, help = "Top N largest files by size")]
     pub top_largest: Option<usize>,
-}
-
-#[derive(Debug, Args)]
-pub struct StatsSeedingArgs {
-    #[arg(
-        long,
-        default_value = ".",
-        visible_alias = "namespace",
-        help = "Namespace ID or path to a managed folder"
-    )]
-    pub folder: PathBuf,
-    #[command(flatten)]
-    pub filter: super::filter::ContentFilter,
 }
 
 #[derive(Debug, Subcommand)]
@@ -732,11 +737,6 @@ pub struct WatchArgs {
 pub struct VerifyArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
-    #[arg(
-        long,
-        help = "Namespace ID or managed folder path (alternative to the positional path)"
-    )]
-    pub namespace: Option<String>,
     #[command(flatten)]
     pub filter: super::filter::ContentFilter,
     #[arg(long, help = "Attempt to repair corrupted blobs by re-downloading from peers")]
@@ -781,11 +781,6 @@ pub enum PublishCommand {
 #[derive(Debug, Args)]
 pub struct PublishCatalogArgs {
     pub folder: PathBuf,
-    #[arg(
-        long,
-        help = "Namespace ID or managed folder path (alternative to the positional folder)"
-    )]
-    pub namespace: Option<String>,
     #[arg(long)]
     pub catalog: String,
     #[arg(long = "tag")]
@@ -794,14 +789,8 @@ pub struct PublishCatalogArgs {
 
 #[derive(Debug, Args)]
 pub struct ShareArgs {
-    #[arg(
-        value_name = "SELECTOR",
-        num_args = 0..,
-        help = "Folder path, namespace, or (with --list) filters to list shares"
-    )]
-    pub selectors: Vec<String>,
-    #[arg(long, help = "Namespace ID or managed folder path")]
-    pub namespace: Option<String>,
+    #[arg(default_value = ".", help = "Folder path or namespace")]
+    pub path: PathBuf,
     #[arg(
         long,
         help = "Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)"
@@ -815,11 +804,23 @@ pub struct ShareArgs {
     pub no_persist: bool,
     #[arg(
         long = "list",
-        help = "List persisted shares, optionally filtered by the positional selectors"
+        help = "List persisted shares, optionally filtered by the positional path"
     )]
     pub list: bool,
-    #[arg(long = "rm", alias = "remove", help = "Stop sharing a folder or blob")]
-    pub rm: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct UnshareArgs {
+    #[arg(default_value = ".", help = "Folder path or namespace")]
+    pub path: PathBuf,
+    #[arg(long, help = "Stop sharing a single content hash (unpins and unannounces the blob)")]
+    pub blob: Option<String>,
+    #[arg(
+        long = "write",
+        alias = "writable",
+        help = "Remove the write share (default: read-only)"
+    )]
+    pub write: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -852,8 +853,11 @@ pub enum PackageCommand {
     Publish {
         #[arg(required = true, num_args = 1.., value_name = "PATH")]
         paths: Vec<PathBuf>,
-        #[arg(long)]
-        namespace: String,
+        #[arg(
+            long,
+            help = "Folder namespace, managed folder path, or omitted to default to the only managed folder"
+        )]
+        namespace: Option<String>,
         #[arg(long, default_value_t = 1)]
         sequence: u64,
         #[arg(long, value_name = "NODE_ID")]
@@ -927,12 +931,18 @@ pub enum NetworkCommand {
         #[arg(long)]
         invite_only: bool,
     },
-    #[command(name = "ls", about = "List networks or inspect one")]
-    List { name: Option<String> },
     #[command(about = "Join a network from an invitation")]
     Join { ticket: String },
     #[command(about = "Leave a network")]
     Leave { name: String },
+    #[command(
+        about = "List networks, optionally limited to a single network by name",
+        alias = "ls"
+    )]
+    List {
+        #[arg(help = "Optional network name to inspect")]
+        name: Option<String>,
+    },
     #[command(about = "Generate a network invitation")]
     Invite {
         name: String,
@@ -947,11 +957,6 @@ pub enum NetworkCommand {
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
-    #[command(about = "Show network connectivity health")]
-    Health {
-        #[arg(long)]
-        network: Option<String>,
-    },
     #[command(about = "Test a Syncthing relay TCP connection")]
     TestRelay {
         #[arg(long = "relay-url")]
@@ -962,23 +967,9 @@ pub enum NetworkCommand {
 #[derive(Debug, Subcommand)]
 pub enum IndexingCommand {
     #[command(about = "Opt a synchronized folder into indexing")]
-    Enable {
-        folder: PathBuf,
-        #[arg(
-            long,
-            help = "Namespace ID or managed folder path (alternative to the positional folder)"
-        )]
-        namespace: Option<String>,
-    },
+    Enable { folder: PathBuf },
     #[command(about = "Remove a folder from the local index")]
-    Disable {
-        folder: PathBuf,
-        #[arg(
-            long,
-            help = "Namespace ID or managed folder path (alternative to the positional folder)"
-        )]
-        namespace: Option<String>,
-    },
+    Disable { folder: PathBuf },
     #[command(about = "Manage local and federated denylists")]
     Filter {
         #[command(subcommand)]

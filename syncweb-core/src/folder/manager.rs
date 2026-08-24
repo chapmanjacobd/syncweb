@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
-    str::FromStr,
     sync::Arc,
 };
 
@@ -20,7 +19,6 @@ use super::{Capability, SyncMode, SyncwebFolder};
 #[derive(Clone)]
 pub struct FolderManager {
     endpoint: iroh::Endpoint,
-    endpoint_addr: iroh::EndpointAddr,
     node_id: PublicKey,
     blob_store: crate::node::blob_store::BlobStore,
     docs_engine: crate::node::docs_engine::DocsEngine,
@@ -35,7 +33,6 @@ impl FolderManager {
     pub fn new(node: &IrohNode) -> Self {
         Self {
             endpoint: node.endpoint().clone(),
-            endpoint_addr: node.endpoint().addr(),
             node_id: node.endpoint().id(),
             blob_store: node.blob_store().clone(),
             docs_engine: node.docs_engine().clone(),
@@ -72,20 +69,7 @@ impl FolderManager {
     ///
     /// Returns an error if the folder ticket cannot be joined or parsed.
     pub async fn join(&self, ticket_str: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
-        let mut ticket_raw = ticket_str.as_ref();
-        if let Some(rest) = ticket_raw.strip_prefix("syncweb://") {
-            if let Some((_, query)) = rest.split_once('?') {
-                for param in query.split('&') {
-                    if let Some(val) = param.strip_prefix("ticket=") {
-                        ticket_raw = val;
-                        break;
-                    }
-                }
-            } else {
-                ticket_raw = rest;
-            }
-        }
-        let ticket = DocTicket::from_str(ticket_raw).map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+        let ticket = crate::uri::parse_folder_ticket(ticket_str.as_ref())?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
@@ -290,17 +274,8 @@ impl FolderManager {
     /// Returns an error when no folder matches the selector or the selector is
     /// ambiguous.
     pub async fn resolve(&self, selector: &std::path::Path) -> Result<SyncwebFolder> {
-        if let Ok(namespace_id) = selector.to_string_lossy().parse() {
-            return self.get(namespace_id).await;
-        }
-        let folders = self.list().await?;
-        match folders.as_slice() {
-            [folder] => Ok(folder.clone()),
-            [] => Err(SyncwebError::NoFolders),
-            _ => Err(SyncwebError::AmbiguousFolderSelector(
-                selector.to_string_lossy().into_owned(),
-            )),
-        }
+        let namespace_id = self.resolve_namespace(&selector.to_string_lossy()).await?;
+        self.get(namespace_id).await
     }
 
     /// Resolve a string selector to a folder namespace ID. Accepts a namespace ID,
@@ -312,10 +287,6 @@ impl FolderManager {
     pub async fn resolve_namespace(&self, selector: &str) -> Result<NamespaceId> {
         if let Ok(namespace_id) = selector.parse() {
             return Ok(namespace_id);
-        }
-        let path = std::path::Path::new(selector);
-        if path.exists() {
-            return Ok(self.resolve(path).await?.namespace_id());
         }
         let folders = self.list().await?;
         match folders.as_slice() {
@@ -336,7 +307,7 @@ impl FolderManager {
             .get(&namespace_id)
             .cloned()
             .ok_or(SyncwebError::FolderNotFound(namespace_id.to_string()))?;
-        folder.ticket(self.endpoint_addr.clone(), writable).await
+        folder.ticket(writable).await
     }
 
     async fn folder_from_doc(&self, doc: Doc, mode: SyncMode) -> Result<SyncwebFolder> {

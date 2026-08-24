@@ -13,7 +13,6 @@ use n0_future::StreamExt;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Result, SyncwebError};
-use crate::net::NetworkContext;
 
 #[derive(Clone)]
 pub struct BlobStore {
@@ -175,7 +174,7 @@ impl BlobStore {
 
     #[must_use]
     pub fn ticket_for_addr(&self, addr: EndpointAddr, hash: Hash) -> BlobTicket {
-        BlobTicket::new(addr, hash, iroh_blobs::BlobFormat::Raw)
+        raw_blob_ticket(addr, hash)
     }
 
     /// Pin a blob with a durable named tag so garbage collection cannot remove it.
@@ -266,26 +265,24 @@ impl BlobStore {
         Ok(())
     }
 
-    /// Fetch a blob with network access control gating.
-    ///
-    /// Checks via `NetworkContext` that the local node can access the blob
-    /// through at least one network membership before downloading.
+    /// Fetch a blob through the first working provider ticket and pin it,
+    /// skipping the fetch when the blob is already present locally.
     ///
     /// # Errors
     ///
-    /// Returns `AccessDenied` if the blob is not associated with any network
-    /// the local node belongs to. Returns other errors if the fetch itself fails.
-    pub async fn download_with_network(
-        &self,
-        endpoint: &Endpoint,
-        ticket: &BlobTicket,
-        ctx: &NetworkContext,
-    ) -> Result<()> {
-        let hash = ticket.hash();
-        if !ctx.can_access_blob(&hash)? {
-            return Err(SyncwebError::access_denied("blob not accessible in any network"));
+    /// Returns an error if the blob cannot be fetched through any ticket.
+    pub async fn fetch_and_pin(&self, endpoint: &Endpoint, content_hash: Hash, tickets: &[BlobTicket]) -> Result<()> {
+        if !self.has(content_hash).await? {
+            let candidates: Vec<BlobTicket> = tickets
+                .iter()
+                .filter(|ticket| ticket.hash() == content_hash)
+                .cloned()
+                .collect();
+            try_fetch_first_working(&candidates, |ticket| self.fetch(endpoint, ticket)).await?;
         }
-        self.fetch(endpoint, ticket).await
+        let pin_name = crate::pins::download_pin(content_hash);
+        self.pin(&pin_name, content_hash).await?;
+        Ok(())
     }
 
     /// Force-fetch a blob from a remote peer, re-downloading even if the blob
@@ -332,4 +329,35 @@ impl BlobStore {
 fn absolute_path(path: impl AsRef<Path>) -> Result<PathBuf> {
     std::path::absolute(path.as_ref())
         .map_err(|error| SyncwebError::operation("failed to resolve blob file path", error))
+}
+
+/// Build an unauthenticated blob ticket for a content hash hosted by an address.
+#[must_use]
+pub fn raw_blob_ticket(addr: EndpointAddr, hash: Hash) -> BlobTicket {
+    BlobTicket::new(addr, hash, BlobFormat::Raw)
+}
+
+/// Try each provider in order until one succeeds, returning the first success.
+/// This is the shared "first working provider wins" primitive used by
+/// fetch-with-fallback flows; [`crate::indexing::links::fetch_from_mirrors`] is
+/// the synchronous twin for resolver closures.
+///
+/// # Errors
+///
+/// Returns the last fetch error, or a generic error when no provider succeeded.
+pub(crate) async fn try_fetch_first_working<'a, T, U, F, Fut>(items: &'a [T], mut fetch: F) -> Result<U>
+where
+    T: Sync,
+    F: FnMut(&'a T) -> Fut + Send,
+    Fut: std::future::Future<Output = Result<U>> + Send + 'a,
+{
+    let mut last_error: Option<SyncwebError> = None;
+    for item in items {
+        match fetch(item).await {
+            Ok(value) => return Ok(value),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| SyncwebError::operation("failed to fetch blob", "no working provider ticket")))
 }

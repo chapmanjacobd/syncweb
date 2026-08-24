@@ -216,7 +216,7 @@ impl SyncEngine {
         filter: Option<FilterEngine>,
     ) -> Result<IntentHandle> {
         let folder = self.folder_manager.get(folder_id).await?;
-        let live_events = self.docs_engine.watch(folder.doc()).await?;
+        let live_events = self.docs_engine.watch_and_sync(folder.doc()).await?;
         if let Some(topic_tracker) = &self.topic_tracker {
             match topic_tracker.find_peers(folder_id).await {
                 Ok(peers) if !peers.is_empty() => {
@@ -228,7 +228,6 @@ impl SyncEngine {
                 }
             }
         }
-        self.docs_engine.start_sync(folder.doc(), Vec::new()).await?;
         let (events, commands, handle) = IntentHandle::channel();
         let node_db = self.node_db.clone();
         tokio::spawn(run_intent(

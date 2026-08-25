@@ -1419,8 +1419,8 @@ async fn handle_transfer_enqueue(ctx: &CliContext<'_>, args: TransferEnqueueArgs
     let namespace = iroh_docs::NamespaceId::from_str(&args.namespace)
         .with_context(|| format!("invalid namespace: {}", args.namespace))?;
     let (hash, size) = if let Some(source) = &args.source {
-        let bytes = std::fs::read(source)
-            .with_context(|| format!("failed to read source file {}", source.display()))?;
+        let bytes =
+            std::fs::read(source).with_context(|| format!("failed to read source file {}", source.display()))?;
         let size = u64::try_from(bytes.len()).context("source file is too large")?;
         (iroh_blobs::Hash::from_bytes(*blake3::hash(&bytes).as_bytes()), size)
     } else {
@@ -3018,10 +3018,7 @@ async fn handle_package_info(
     } else if let (Some(hash_str), Some(node_id_str)) = (hash, node_id) {
         let blob_hash = hash_str.parse::<iroh_blobs::Hash>()?;
         let peer_id = node_id_str.parse::<iroh::PublicKey>()?;
-        let ticket = syncweb_core::node::blob_store::raw_blob_ticket(
-            iroh::EndpointAddr::new(peer_id),
-            blob_hash,
-        );
+        let ticket = syncweb_core::node::blob_store::raw_blob_ticket(iroh::EndpointAddr::new(peer_id), blob_hash);
         if !node.blob_store().has(blob_hash).await? {
             node.blob_store().fetch(node.endpoint(), &ticket).await?;
         }

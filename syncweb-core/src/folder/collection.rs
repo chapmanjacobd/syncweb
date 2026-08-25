@@ -500,9 +500,7 @@ impl CollectionStore {
                 .await?;
         }
         let hash = self.blobs.add_bytes(&bytes).await?;
-        self.blobs
-            .pin(crate::pins::collection_manifest_pin(hash), hash)
-            .await?;
+        self.blobs.pin(crate::pins::collection_manifest_pin(hash), hash).await?;
         self.docs
             .set_blob(
                 &self.doc,

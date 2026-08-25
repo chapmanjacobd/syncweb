@@ -1117,8 +1117,8 @@ impl LinkStore {
     ///
     /// Returns an error if the capability cannot be generated or persisted.
     pub fn create_private_link(&self, hash: Hash, expires: Option<u64>) -> Result<Link> {
-        let expires_at = expires
-            .unwrap_or_else(|| crate::parsing::current_unix_secs().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
+        let expires_at =
+            expires.unwrap_or_else(|| crate::parsing::current_unix_secs().saturating_add(DEFAULT_PRIVATE_LINK_TTL));
         let link = PrivateLink::generate(hash, expires_at)?;
         let (pointers, mirrors, revoked) = self.database.load_links()?;
         let retained = revoked

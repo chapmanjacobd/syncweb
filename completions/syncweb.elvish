@@ -29,14 +29,15 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand version 'Show syncweb version information'
             cand start 'Start the local syncweb daemon'
             cand shutdown 'Stop the local syncweb node'
-            cand status 'Show the local daemon status'
+            cand status 'Show local daemon status'
+            cand devices 'Show this device''s Iroh and Syncthing identities'
+            cand networks 'Show networks and their health'
             cand reload 'Ask the local daemon to reload configuration'
             cand daemon-sync 'Ask the local daemon to trigger synchronization'
             cand create 'Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)'
             cand join 'Join a folder from an Iroh document ticket'
             cand leave 'Leave a synchronized folder, optionally deleting its local files'
             cand folders 'List managed folders'
-            cand devices 'Show this device''s Iroh and Syncthing identities'
             cand config 'Show or update local configuration'
             cand ls 'List files in a local folder'
             cand find 'Search local files'
@@ -48,10 +49,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand snapshot 'Manage content-addressed snapshots'
             cand transfer 'Inspect and control durable transfer jobs'
             cand watch 'Watch a folder and import filesystem changes'
-            cand stats 'Show statistics for folders, files, and seeding status'
+            cand stats 'Show statistics for folders and files'
             cand verify 'Re-check local folder blob integrity'
             cand publish 'Publish folder metadata to a catalog'
             cand share 'Share a folder, printing a ticket (read-only by default, --write for write access)'
+            cand unshare 'Stop sharing a folder or blob (removes pins and announcements)'
             cand package 'Create, version, publish, and manage collection packages'
             cand network 'Network connectivity utilities'
             cand db 'Database maintenance: check, vacuum, stats, backup'
@@ -110,6 +112,24 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'syncweb;devices'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;networks'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'syncweb;reload'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -158,7 +178,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --subscribe 'Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder'
             cand --ingest-only 'Only deliver entries ingested after live syncing is enabled'
             cand --ignore-self 'Ignore events emitted by this device''s own writes'
-            cand --download 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)'
+            cand --download-all 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)'
+            cand --no-indexing 'Do not opt the folder into local indexing (indexing is enabled by default)'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -177,15 +198,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;folders'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;devices'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -504,6 +516,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --namespace 'namespace'
             cand --path 'Relative materialization path'
             cand --hash '32-byte blob hash in hexadecimal'
+            cand --source 'Local file to read content from; computes the blob hash and size automatically'
+            cand --size 'Blob size in bytes (ignored when --source is given)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --now 'Allocate and materialize the job immediately instead of leaving it queued'
             cand --verbose 'Enable verbose structured logging'
@@ -599,7 +613,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand network 'Show persisted bandwidth accounting'
             cand files 'Show file-level statistics for synced folder content'
-            cand seeding 'Show seeding status per folder blob'
         }
         &'syncweb;stats;network'= {
             cand --folder 'Limit display to a folder or namespace'
@@ -615,8 +628,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;stats;files'= {
-            cand --folder 'Namespace ID or path to a managed folder'
-            cand --namespace 'Namespace ID or path to a managed folder'
             cand --by 'by'
             cand --top-largest 'Top N largest files by size'
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -627,22 +638,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;stats;seeding'= {
-            cand --folder 'Namespace ID or path to a managed folder'
-            cand --namespace 'Namespace ID or path to a managed folder'
-            cand --hash 'Content hash(es) to select (can repeat)'
-            cand --path-prefix 'Only entries whose path starts with this prefix'
-            cand --glob 'Only entries whose path matches this glob pattern'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'syncweb;verify'= {
-            cand --namespace 'Namespace ID or managed folder path (alternative to the positional path)'
             cand --hash 'Content hash(es) to select (can repeat)'
             cand --path-prefix 'Only entries whose path starts with this prefix'
             cand --glob 'Only entries whose path matches this glob pattern'
@@ -671,7 +667,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand catalog 'Publish folder metadata to a catalog'
         }
         &'syncweb;publish;catalog'= {
-            cand --namespace 'Namespace ID or managed folder path (alternative to the positional folder)'
             cand --catalog 'catalog'
             cand --tag 'tag'
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -683,14 +678,23 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;share'= {
-            cand --namespace 'Namespace ID or managed folder path'
             cand --blob 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --write 'Grant write access (default: read-only)'
             cand --no-pin 'Skip pinning the shared folder''s blobs'
             cand --no-persist 'Skip persisting the share record'
-            cand --list 'List persisted shares, optionally filtered by the positional selectors'
-            cand --rm 'Stop sharing a folder or blob'
+            cand --list 'List persisted shares, optionally filtered by the positional path'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;unshare'= {
+            cand --blob 'Stop sharing a single content hash (unpins and unannounces the blob)'
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --write 'Remove the write share (default: read-only)'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -744,7 +748,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;package;publish'= {
-            cand --namespace 'namespace'
+            cand --namespace 'Folder namespace, managed folder path, or omitted to default to the only managed folder'
             cand --sequence 'sequence'
             cand --bootstrap 'bootstrap'
             cand --root 'Override the common root for logical path rebasing'
@@ -863,28 +867,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a named network'
-            cand ls 'List networks or inspect one'
             cand join 'Join a network from an invitation'
             cand leave 'Leave a network'
+            cand list 'List networks, optionally limited to a single network by name'
             cand invite 'Generate a network invitation'
             cand kick 'Remove a device from a network'
             cand events 'Show recent network events'
-            cand health 'Show network connectivity health'
             cand test-relay 'Test a Syncthing relay TCP connection'
         }
         &'syncweb;network;create'= {
             cand --label 'label'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --invite-only 'invite-only'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;network;ls'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
@@ -902,6 +896,15 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;network;leave'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON where supported'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;list'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -930,16 +933,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;network;events'= {
             cand --limit 'limit'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON where supported'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;network;health'= {
-            cand --network 'network'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1021,7 +1014,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand filter 'Manage local and federated denylists'
         }
         &'syncweb;indexing;enable'= {
-            cand --namespace 'Namespace ID or managed folder path (alternative to the positional folder)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'
@@ -1031,7 +1023,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;indexing;disable'= {
-            cand --namespace 'Namespace ID or managed folder path (alternative to the positional folder)'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON where supported'

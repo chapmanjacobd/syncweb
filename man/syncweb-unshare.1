@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH unshare 1  "unshare " 
+.SH NAME
+unshare \- Stop sharing a folder or blob (removes pins and announcements)
+.SH SYNOPSIS
+\fBunshare\fR [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+.SH DESCRIPTION
+Stop sharing a folder or blob (removes pins and announcements)
+.SH OPTIONS
+.TP
+\fB\-\-blob\fR \fI<BLOB>\fR
+Stop sharing a single content hash (unpins and unannounces the blob)
+.TP
+\fB\-\-write\fR
+Remove the write share (default: read\-only)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR] [default: .]
+Folder path or namespace

@@ -88,6 +88,29 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(devices)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(networks)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Limit to a single network by name or ID:_default' \
+&& ret=0
+;;
 (reload)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -145,7 +168,8 @@ _arguments "${_arguments_options[@]}" : \
 '--subscribe[Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
-'--download[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)]' \
+'--download-all[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)]' \
+'--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -170,17 +194,6 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (folders)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(devices)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -599,6 +612,8 @@ _arguments "${_arguments_options[@]}" : \
 '--namespace=[]:NAMESPACE:_default' \
 '--path=[Relative materialization path]:PATH:_files' \
 '--hash=[32-byte blob hash in hexadecimal]:HASH:_default' \
+'--source=[Local file to read content from; computes the blob hash and size automatically]:SOURCE:_files' \
+'--size=[Blob size in bytes (ignored when --source is given)]:SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--now[Allocate and materialize the job immediately instead of leaving it queued]' \
 '--verbose[Enable verbose structured logging]' \
@@ -607,7 +622,6 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':size:_default' \
 && ret=0
 ;;
 (allocate)
@@ -745,8 +759,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (files)
 _arguments "${_arguments_options[@]}" : \
-'--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
-'--namespace=[Namespace ID or path to a managed folder]:FOLDER:_files' \
 '--by=[]:BY:(extension size all time)' \
 '--top-largest=[Top N largest files by size]:TOP_LARGEST:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -756,22 +768,7 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-&& ret=0
-;;
-(seeding)
-_arguments "${_arguments_options[@]}" : \
-'--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
-'--namespace=[Namespace ID or path to a managed folder]:FOLDER:_files' \
-'*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
-'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
-'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
+'::path -- Namespace ID or path to a managed folder:_files' \
 && ret=0
 ;;
         esac
@@ -780,7 +777,6 @@ esac
 ;;
 (verify)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path (alternative to the positional path)]:NAMESPACE:_default' \
 '*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
@@ -821,7 +817,6 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (catalog)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--catalog=[]:CATALOG:_default' \
 '*--tag=[]:TAGS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -840,21 +835,33 @@ esac
 ;;
 (share)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path]:NAMESPACE:_default' \
 '--blob=[Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)]:BLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--write[Grant write access (default\: read-only)]' \
 '--no-pin[Skip pinning the shared folder'\''s blobs]' \
 '--no-persist[Skip persisting the share record]' \
-'--list[List persisted shares, optionally filtered by the positional selectors]' \
-'--rm[Stop sharing a folder or blob]' \
+'--list[List persisted shares, optionally filtered by the positional path]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'*::selectors -- Folder path, namespace, or (with --list) filters to list shares:_default' \
+'::path -- Folder path or namespace:_files' \
+&& ret=0
+;;
+(unshare)
+_arguments "${_arguments_options[@]}" : \
+'--blob=[Stop sharing a single content hash (unpins and unannounces the blob)]:BLOB:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--write[Remove the write share (default\: read-only)]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Folder path or namespace:_files' \
 && ret=0
 ;;
 (package)
@@ -907,7 +914,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (publish)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[]:NAMESPACE:_default' \
+'--namespace=[Folder namespace, managed folder path, or omitted to default to the only managed folder]:NAMESPACE:_default' \
 '--sequence=[]:SEQUENCE:_default' \
 '*--bootstrap=[]:NODE_ID:_default' \
 '--root=[Override the common root for logical path rebasing]:PATH:_files' \
@@ -1087,18 +1094,6 @@ _arguments "${_arguments_options[@]}" : \
 ':name:_default' \
 && ret=0
 ;;
-(ls)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::name:_default' \
-&& ret=0
-;;
 (join)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1121,6 +1116,18 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Optional network name to inspect:_default' \
 && ret=0
 ;;
 (invite)
@@ -1160,18 +1167,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':network_id:_default' \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-'--network=[]:NETWORK:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON where supported]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'-h[Print help]' \
-'--help[Print help]' \
 && ret=0
 ;;
 (test-relay)
@@ -1279,7 +1274,6 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (enable)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1292,7 +1286,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (disable)
 _arguments "${_arguments_options[@]}" : \
-'--namespace=[Namespace ID or managed folder path (alternative to the positional folder)]:NAMESPACE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -1505,14 +1498,15 @@ _syncweb_commands() {
 'version:Show syncweb version information' \
 'start:Start the local syncweb daemon' \
 'shutdown:Stop the local syncweb node' \
-'status:Show the local daemon status' \
+'status:Show local daemon status' \
+'devices:Show this device'\''s Iroh and Syncthing identities' \
+'networks:Show networks and their health' \
 'reload:Ask the local daemon to reload configuration' \
 'daemon-sync:Ask the local daemon to trigger synchronization' \
 'create:Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)' \
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave a synchronized folder, optionally deleting its local files' \
 'folders:List managed folders' \
-'devices:Show this device'\''s Iroh and Syncthing identities' \
 'config:Show or update local configuration' \
 'ls:List files in a local folder' \
 'find:Search local files' \
@@ -1524,10 +1518,11 @@ _syncweb_commands() {
 'snapshot:Manage content-addressed snapshots' \
 'transfer:Inspect and control durable transfer jobs' \
 'watch:Watch a folder and import filesystem changes' \
-'stats:Show statistics for folders, files, and seeding status' \
+'stats:Show statistics for folders and files' \
 'verify:Re-check local folder blob integrity' \
 'publish:Publish folder metadata to a catalog' \
 'share:Share a folder, printing a ticket (read-only by default, --write for write access)' \
+'unshare:Stop sharing a folder or blob (removes pins and announcements)' \
 'package:Create, version, publish, and manage collection packages' \
 'network:Network connectivity utilities' \
 'db:Database maintenance\: check, vacuum, stats, backup' \
@@ -1737,13 +1732,12 @@ _syncweb__subcmd__manpages_commands() {
 _syncweb__subcmd__network_commands() {
     local commands; commands=(
 'create:Create a named network' \
-'ls:List networks or inspect one' \
 'join:Join a network from an invitation' \
 'leave:Leave a network' \
+'list:List networks, optionally limited to a single network by name' \
 'invite:Generate a network invitation' \
 'kick:Remove a device from a network' \
 'events:Show recent network events' \
-'health:Show network connectivity health' \
 'test-relay:Test a Syncthing relay TCP connection' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
@@ -1757,11 +1751,6 @@ _syncweb__subcmd__network__subcmd__create_commands() {
 _syncweb__subcmd__network__subcmd__events_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network events commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__health_commands] )) ||
-_syncweb__subcmd__network__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__invite_commands] )) ||
 _syncweb__subcmd__network__subcmd__invite_commands() {
@@ -1783,15 +1772,20 @@ _syncweb__subcmd__network__subcmd__leave_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network leave commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__network__subcmd__ls_commands] )) ||
-_syncweb__subcmd__network__subcmd__ls_commands() {
+(( $+functions[_syncweb__subcmd__network__subcmd__list_commands] )) ||
+_syncweb__subcmd__network__subcmd__list_commands() {
     local commands; commands=()
-    _describe -t commands 'syncweb network ls commands' commands "$@"
+    _describe -t commands 'syncweb network list commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__test-relay_commands] )) ||
 _syncweb__subcmd__network__subcmd__test-relay_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network test-relay commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__networks_commands] )) ||
+_syncweb__subcmd__networks_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb networks commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package_commands] )) ||
 _syncweb__subcmd__package_commands() {
@@ -1977,7 +1971,6 @@ _syncweb__subcmd__stats_commands() {
     local commands; commands=(
 'network:Show persisted bandwidth accounting' \
 'files:Show file-level statistics for synced folder content' \
-'seeding:Show seeding status per folder blob' \
     )
     _describe -t commands 'syncweb stats commands' commands "$@"
 }
@@ -1990,11 +1983,6 @@ _syncweb__subcmd__stats__subcmd__files_commands() {
 _syncweb__subcmd__stats__subcmd__network_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb stats network commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__stats__subcmd__seeding_commands] )) ||
-_syncweb__subcmd__stats__subcmd__seeding_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb stats seeding commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__status_commands] )) ||
 _syncweb__subcmd__status_commands() {
@@ -2066,6 +2054,11 @@ _syncweb__subcmd__transfer__subcmd__retry_commands() {
 _syncweb__subcmd__transfer__subcmd__root_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer root commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__unshare_commands] )) ||
+_syncweb__subcmd__unshare_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb unshare commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

@@ -29,9 +29,9 @@ pub(crate) fn sign_hex(signing_key: &SigningKey, message: &[u8]) -> String {
 /// Returns an error if the public key or signature is malformed or the
 /// signature does not verify.
 pub(crate) fn verify_hex(public_key_hex: &str, message: &[u8], signature_hex: &str) -> Result<()> {
-    decode_verifying_key(public_key_hex)?.verify(message, &decode_signature(signature_hex)?).map_err(
-        |error| SyncwebError::InvalidSignature(format!("signature verification failed: {error}")),
-    )
+    decode_verifying_key(public_key_hex)?
+        .verify(message, &decode_signature(signature_hex)?)
+        .map_err(|error| SyncwebError::InvalidSignature(format!("signature verification failed: {error}")))
 }
 
 /// Decode a hex-encoded ed25519 verifying key.
@@ -57,6 +57,5 @@ pub(crate) fn decode_verifying_key(encoded: &str) -> Result<VerifyingKey> {
 pub(crate) fn decode_signature(encoded: &str) -> Result<Signature> {
     let bytes = hex::decode(encoded)
         .map_err(|error| SyncwebError::InvalidSignature(format!("invalid signature hex: {error}")))?;
-    Signature::from_slice(&bytes)
-        .map_err(|error| SyncwebError::InvalidSignature(format!("invalid signature: {error}")))
+    Signature::from_slice(&bytes).map_err(|error| SyncwebError::InvalidSignature(format!("invalid signature: {error}")))
 }

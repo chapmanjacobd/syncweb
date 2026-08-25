@@ -358,6 +358,5 @@ where
             Err(error) => last_error = Some(error),
         }
     }
-    Err(last_error
-        .unwrap_or_else(|| SyncwebError::operation("failed to fetch blob", "no working provider ticket")))
+    Err(last_error.unwrap_or_else(|| SyncwebError::operation("failed to fetch blob", "no working provider ticket")))
 }

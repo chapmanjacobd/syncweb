@@ -1567,10 +1567,9 @@ impl IpcServer {
                 .filter(|(ticket_hash, _)| *ticket_hash == hash)
                 .map(|(_, ticket)| ticket.clone())
                 .collect();
-            let repaired = crate::node::blob_store::try_fetch_first_working(
-                &candidate_tickets,
-                |ticket| context.node.blob_store().force_fetch(context.node.endpoint(), ticket),
-            )
+            let repaired = crate::node::blob_store::try_fetch_first_working(&candidate_tickets, |ticket| {
+                context.node.blob_store().force_fetch(context.node.endpoint(), ticket)
+            })
             .await
             .is_ok()
                 || crate::node::blob_store::try_fetch_first_working(&namespace_peers, |peer| async {
@@ -1691,16 +1690,12 @@ impl IpcServer {
                 Err(error) => response_from_error(error),
             };
         }
-        let result = match share_folder(
-            &folder,
-            options,
-            |ns, access, ticket| {
-                if let Some(node_db) = &self.node_db {
-                    node_db.add_share(&ns.to_string(), access, &ticket.to_string())?;
-                }
-                Ok(())
-            },
-        )
+        let result = match share_folder(&folder, options, |ns, access, ticket| {
+            if let Some(node_db) = &self.node_db {
+                node_db.add_share(&ns.to_string(), access, &ticket.to_string())?;
+            }
+            Ok(())
+        })
         .await
         {
             Ok(result) => result,

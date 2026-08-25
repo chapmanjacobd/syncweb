@@ -74,11 +74,7 @@ impl ShareResult {
 ///
 /// Returns an error if pinning or ticket creation fails, or the persist
 /// callback fails.
-pub async fn share_folder<F>(
-    folder: &SyncwebFolder,
-    options: ShareOptions,
-    persist: F,
-) -> Result<ShareResult>
+pub async fn share_folder<F>(folder: &SyncwebFolder, options: ShareOptions, persist: F) -> Result<ShareResult>
 where
     F: FnOnce(NamespaceId, &str, &DocTicket) -> Result<()>,
 {

@@ -4,13 +4,10 @@
 .SH NAME
 share \- Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH SYNOPSIS
-\fBshare\fR [\fB\-\-namespace\fR] [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-\-list\fR] [\fB\-\-rm\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fISELECTOR\fR] 
+\fBshare\fR [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-\-list\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH OPTIONS
-.TP
-\fB\-\-namespace\fR \fI<NAMESPACE>\fR
-Namespace ID or managed folder path
 .TP
 \fB\-\-blob\fR \fI<BLOB>\fR
 Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)
@@ -25,13 +22,10 @@ Skip pinning the shared folder\*(Aqs blobs
 Skip persisting the share record
 .TP
 \fB\-\-list\fR
-List persisted shares, optionally filtered by the positional selectors
-.TP
-\fB\-\-rm\fR
-Stop sharing a folder or blob
+List persisted shares, optionally filtered by the positional path
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .TP
-[\fISELECTOR\fR]
-Folder path, namespace, or (with \-\-list) filters to list shares
+[\fIPATH\fR] [default: .]
+Folder path or namespace

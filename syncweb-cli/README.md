@@ -27,7 +27,6 @@ syncweb config                    # show/set configuration
 syncweb --network work start      # start daemon for private network "work"
 syncweb network create work       # create a private network
 syncweb network ls                # list networks & members
-syncweb repl                      # interactive REPL
 ```
 
 ## Shell Completions

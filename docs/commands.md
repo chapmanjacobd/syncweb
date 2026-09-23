@@ -128,11 +128,11 @@ fn matches_all_constraints(p: &FindParams, entry: &DocEntry) -> bool {
 # Regex search (default)
 syncweb find '.*\.mp3$' music/
 
-# Glob search
-syncweb find --glob '/*.mp3' music/
+# Glob search (the default match kind)
+syncweb find '*.mp3' music/
 
 # Fixed/exact search (substring)
-syncweb find --fixed-string 'beethoven' music/
+syncweb find --fixed-strings 'beethoven' music/
 
 # Combined filters
 syncweb find --type f --ext mp3 --min-size 10MB --max-size 500MB music/
@@ -470,28 +470,22 @@ syncweb config set discovery.interface eth0
 |------------|----------------|-------|
 | `create` | `create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
 | `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
-| `accept` | `accept` | Grant capability to peer |
-| `drop` | `drop` | Revoke capability, remove peer |
 | `folders` | `folders` | List local docs + status |
-| `devices` | `devices` | List known peers + connection status |
+| `devices` | `devices` | Show this device's Iroh and Syncthing identities |
 | `ls` | `ls` | List doc entries (lazy) |
 | `find` | `find` | Search doc entries (with filters) |
-| | `search` | Unified search across catalog content, packages, and editorial channels (`--kind`, `--channel`, `--bootstrap`, `--limit`, `--timeout-ms`) |
+| | `search` | Unified search across catalog content, packages, and editorial channels (`--kind`, `--channel`, `--limit`) |
 | `download` | `download` | Trigger lazy fetch for paths |
 | `sort` | `sort` | Sort results (uses peer tracker) |
 | `stat` | `stat` | File metadata from doc + blob store |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
 | | `status` | Show daemon status |
-| | `devices` | Show this device's Iroh and Syncthing identities |
 | | `networks` | Show networks and their health |
 | | `daemon-sync` | Ask the daemon to trigger synchronization |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |
-| `repl` | `repl` | Interactive REPL |
 | (implicit) | `import` | Import local files to blob store + doc entries |
-| | `policy` | Manage deployment policy levers (access, encryption, searchable, pinning) at various scopes (`show`, `set`, `explain`) |
-| | `public list` | List announced public folders |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
 | | `share --list` | List persisted folder shares, optionally filtered by selectors |
 | | `unshare` | Stop sharing a folder (unpins folder blobs) |
@@ -537,7 +531,6 @@ syncweb config set discovery.interface eth0
 
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `config schedule` | Show/modify sync schedule |
-| | `conflicts` | List/resolve file conflicts |
 | | `watch` | Watch a folder, importing filesystem changes and honoring filter rules (`--filters`, `--dry-run`, `--show-filters`) |
 | | `network test-relay` | Test Syncthing relay connectivity |
 
@@ -561,7 +554,7 @@ syncweb config schedule set --bandwidth "5MB/s" --period "08:00-18:00"
 syncweb config schedule folder --active "01:00-05:00" media
 
 # Download with limits (max entries)
-syncweb download --limit 10 /path/to/files
+syncweb download --max-count 10 /path/to/files
 
 # Download with size limit
 syncweb download --size 1GB /path/to/files
@@ -602,12 +595,6 @@ syncweb unshare <namespace-id> --blob <hash>
 # Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
 # (size/limit filters live on `syncweb download`, not `publish`)
 
-# Show deleted files
-syncweb deleted /path/to/folder
-
-# Restore deleted file
-syncweb undelete <entry-hash>
-
 # Scan with all available CPUs (the default)
 syncweb ls
 
@@ -618,8 +605,8 @@ syncweb ls --threads 1
 # Parallel import (the default)
 syncweb import /path/to/files
 
-# Parallel export (the default)
-syncweb export /path/to/output
+# Parallel package export (the default)
+syncweb package export ./collection /tmp/out/
 
 # File-level statistics for a folder
 syncweb stats files audio/
@@ -638,10 +625,6 @@ syncweb download --max-peers 2 audio/
 # Download a local tree in parallel (the default); use 1 for sequential copying
 syncweb download --threads 1 /path/to/source /path/to/destination
 
-# Bandwidth limiting
-syncweb folders --limit-upload 1MB/s --limit-download 5MB/s
-syncweb devices --peer-limit NODE-ID --upload 500KB/s --download 2MB/s
-
 # Snapshot commands
 syncweb snapshot create --description "before edit" documents/
 syncweb snapshot list documents/
@@ -655,7 +638,7 @@ syncweb network ls work
 syncweb network invite work <device-id>
 
 # Find with filters
-syncweb find --glob '/*.mp3' music/
+syncweb find '*.mp3' music/
 syncweb find --type f --ext mp3 --min-size 10MB music/
 syncweb find --modified-within 7d 'report.*'
 
@@ -679,18 +662,6 @@ syncweb start --no-mdns                    # Disable mDNS local peer discovery
 syncweb start --no-beacon                  # Disable the UDP beacon local discovery
 syncweb start --beacon-port 15200          # Override the beacon base port
 syncweb start --discovery-interface eth0   # Bind the beacon to one interface
-
-# BEP-compatible device ID display
-syncweb devices --bep
-
-# Conflict resolution
-syncweb conflicts
-syncweb conflicts --resolve
-syncweb conflicts --auto-resolve
-syncweb conflicts resolve --keep-local <id>
-
-# Offline queue
-syncweb pending
 ```
 
 ---
@@ -824,7 +795,7 @@ efficient_cache_threshold = 100
 # Parallel file operations ((standard CS pattern: parallel directory traversal))
 # Number of threads (0 = auto-detect CPU count, 1 = single-threaded)
 threads = 0
-# Parallel is default for ls, import, export
+# Parallel is default for ls and import
 # Use --threads=1 to disable per-command, or set threads = 1 here globally
 
 ```

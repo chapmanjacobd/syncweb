@@ -102,14 +102,13 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 6 | Alice: `syncweb create --mode receiveencrypted ./enc` | ReceiveEncrypted folder | |
 | 7 | Bob: `join` the folder | Can write, but blobs are encrypted at rest | |
 
-### 3.3 Leave / Drop
+### 3.3 Leave
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Alice: `syncweb leave ./shared-docs` | Leaves the folder | `syncweb folders` no longer shows it |
 | 2 | Alice: `syncweb join <url> ./shared-docs` again | Can rejoin | |
-| 3 | Alice: `syncweb devices` | Lists Bob's device | |
-| 4 | Alice: `syncweb drop <bob-device-id>` | Removes Bob's access | Bob sees disconnection in logs |
+| 3 | Alice: `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
 
 ### 3.4 Folders & Devices Listing
 
@@ -117,9 +116,8 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 |------|--------|-----------------|-------|
 | 1 | `syncweb folders` | Table with Name, Mode, Local count, Remote count, State | Empty state shows "no folders" |
 | 2 | `syncweb folders --json` | JSON output | Valid JSON: `syncweb folders --json \| jq .` |
-| 3 | `syncweb devices` | Lists peers, connection status | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM folder_peers;"` |
-| 4 | `syncweb devices --bep` | Shows Syncthing-compatible DeviceIds | |
-| 5 | `syncweb devices --json` | JSON output | |
+| 3 | `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
+| 4 | `syncweb devices --json` | JSON output | |
 
 ---
 
@@ -139,8 +137,8 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | `syncweb find '.*\.txt$' ./shared-docs` | Regex find — shows all .txt files | |
-| 2 | `syncweb find --glob '/*.md' ./shared-docs` | Glob find | |
-| 3 | `syncweb find --fixed-string 'report' ./shared-docs` | Substring/exact find | |
+| 2 | `syncweb find '*.md' ./shared-docs` | Glob find | |
+| 3 | `syncweb find --fixed-strings 'report' ./shared-docs` | Substring/exact find | |
 | 4 | `syncweb find --type f --ext mp3 --min-size 10MB --max-size 500MB ./music` | Combined filters | |
 | 5 | `syncweb find 'report.*' --modified-within 7d ./shared-docs` | Time filter | |
 | 6 | `syncweb find --depth +2 --depth -5 'config' ./shared-docs` | Depth constraints | |
@@ -180,7 +178,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 |------|--------|-----------------|-------|
 | 1 | `syncweb download ./shared-docs/test.txt` | Downloads single file | Check file exists: `cat ./shared-docs/test.txt` |
 | 2 | `syncweb download ./shared-docs/` | Downloads entire folder | `ls -la ./shared-docs/` shows all files |
-| 3 | `syncweb download --limit 10 ./shared-docs/` | Downloads at most 10 entries | |
+| 3 | `syncweb download --max-count 10 ./shared-docs/` | Downloads at most 10 entries | |
 | 4 | `syncweb download --size 1GB ./shared-docs/` | Skips blobs >1GB | |
 | 5 | `syncweb download --threads 1 ./shared-docs/` | Sequential download (no parallelism) | Compare speed with default |
 | 6 | Piped: `syncweb find '*.iso' ./shared-docs \| syncweb download -` | Pipe from stdin | |
@@ -194,12 +192,12 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 3 | Create nested dir structure, then `syncweb import ./shared-docs/` | Respects directory structure | |
 | 4 | `syncweb import /tmp/new-files ./shared-docs/` | Import from different source path | |
 
-### 5.3 Export
+### 5.3 Package Export
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb export ./shared-docs/ /tmp/export-test` | Exports all blobs to filesystem | `ls /tmp/export-test` shows files |
-| 2 | `syncweb export --threads 1 ./shared-docs/ /tmp/export-test` | Sequential export | Compare speed with default |
+| 1 | `syncweb package export ./shared-docs/ /tmp/export-test` | Exports all blobs to filesystem | `ls /tmp/export-test` shows files |
+| 2 | `syncweb package export --version 1.0.1 ./shared-docs/ /tmp/export-test` | Exports with a pinned version | |
 
 ---
 
@@ -217,21 +215,14 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 ## 7. Public Folders & Publishing
 
-### 7.1 Publish / Subscribe
+### 7.1 Share / Subscribe
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb publish ./shared-docs` | Creates public blob ticket, outputs URL | Save the ticket |
-| 2 | Alice: `syncweb publish --limit 100 --size 10GB ./shared-docs` | Published with limits | |
-| 3 | Bob: `syncweb join <ticket> --subscribe ./bob-public` | Tracks folder and enables live syncing (persisted) | `syncweb ls ./bob-public` shows files |
-| 4 | Bob: `syncweb download ./bob-public/` | Downloads content | |
-| 5 | Alice: `syncweb unpublish ./shared-docs` | Removes pin, stops announcing | Bob can no longer see updates |
-
-### 7.2 Public List
-
-| Step | Action | Expected Result | Debug |
-|------|--------|-----------------|-------|
-| 1 | `syncweb public list` | Lists announced public folders | May be empty if none announced |
+| 1 | Alice: `syncweb share ./shared-docs` | Creates read-only share ticket/URL | Save the ticket |
+| 2 | Bob: `syncweb join <ticket> --subscribe ./bob-public` | Tracks folder and enables live syncing (persisted) | `syncweb ls ./bob-public` shows files |
+| 3 | Bob: `syncweb download ./bob-public/` | Downloads content | |
+| 4 | Alice: `syncweb unshare ./shared-docs` | Stops sharing (removes pin, stops announcing) | Bob can no longer see updates |
 
 ---
 
@@ -262,19 +253,19 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb collection init ./pkg-dir` | Initializes collection, creates manifest | `ls ./pkg-dir/` shows manifest |
-| 2 | Add files to `./pkg-dir/`, then `syncweb collection add ./pkg-dir` | Scans + hashes, updates manifest | |
-| 3 | `syncweb collection versions ./pkg-dir --changelog "v1 initial"` | Creates new manifest version | |
-| 4 | `syncweb publish collection ./pkg-dir --namespace <namespace-id>` | Stores manifest, pins content, announces blob ticket | Outputs ticket URL |
+| 1 | `syncweb package add ./pkg-dir` | Initializes collection, creates manifest | `ls ./pkg-dir/` shows manifest |
+| 2 | Add files to `./pkg-dir/`, then `syncweb package add ./pkg-dir` | Scans + hashes, updates manifest | |
+| 3 | `syncweb package bump ./pkg-dir --changelog "v1 initial"` | Creates new manifest version | |
+| 4 | `syncweb package publish ./pkg-dir --namespace <namespace-id>` | Stores manifest, pins content, announces blob ticket | Outputs ticket URL |
 
 ### 9.2 Package Install / Upgrade / Remove
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: publish collection | Get the ticket from output | |
-| 2 | Bob: `syncweb package search ./ --query "pkg"` | Discovers Alice's package via gossip | |
-| 3 | Bob: `syncweb package info <collection-id>` | Shows metadata, versions | |
-| 4 | Bob: `syncweb package install <collection-id> ./pkg-install` | Fetches, verifies, installs atomically | Verify: `ls ./pkg-install/` has files |
+| 1 | Alice: `syncweb package publish ./pkg-dir` | Get the ticket from output | |
+| 2 | Bob: `syncweb search --kind package "pkg"` | Discovers Alice's package via gossip | |
+| 3 | Bob: `syncweb package info <ticket>` | Shows metadata, versions | |
+| 4 | Bob: `syncweb package install <ticket> --path ./pkg-install` | Fetches, verifies, installs atomically | Verify: `ls ./pkg-install/` has files |
 | 5 | Bob: `syncweb package list` | Shows installed packages | |
 | 6 | Bob: `syncweb package versions <collection-id>` | Lists installed versions | |
 | 7 | Bob: `syncweb package verify <collection-id>` | Integrity check passes | |
@@ -326,11 +317,9 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | `syncweb indexing enable ./shared-docs` | Enables FTS5 index for folder | Check indexing db exists: `ls ~/.local/share/syncweb/indexing.sqlite` |
-| 2 | `syncweb indexing search "test" --in ./shared-docs` | Full-text search results | |
-| 3 | `syncweb indexing health ./shared-docs` | Lease/health status | |
-| 4 | `syncweb publish catalog ./shared-docs --catalog <name>` | Publishes to catalog namespace | |
-| 5 | `syncweb indexing meta add ./shared-docs --key "description" --value "My docs"` | Adds signed metadata | |
-| 6 | `syncweb indexing disable ./shared-docs` | Disables indexing | |
+| 2 | `syncweb search --kind catalog "test"` | Full-text search results | |
+| 3 | `syncweb publish catalog ./shared-docs --catalog <name>` | Publishes to catalog namespace | |
+| 4 | `syncweb indexing disable ./shared-docs` | Disables indexing | |
 
 ---
 
@@ -346,20 +335,9 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 ---
 
-## 13. Mirroring
+## 13. Schedules & Bandwidth
 
-| Step | Action | Expected Result | Debug |
-|------|--------|-----------------|-------|
-| 1 | `syncweb mirror <provider-node-id>` | Mirrors all blobs from provider | Shows progress |
-| 2 | `syncweb mirror --network home` | Mirrors all blobs in network "home" | |
-| 3 | `syncweb mirror <provider-node-id> --dry-run` | Shows what would be mirrored | |
-| 4 | `syncweb mirror <provider-node-id> --no-share` | Downloads but doesn't re-share | |
-
----
-
-## 14. Schedules & Bandwidth
-
-### 14.1 Schedule Configuration
+### 13.1 Schedule Configuration
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -369,7 +347,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 4 | `syncweb config schedule folder media --active "01:00-05:00"` | Per-folder override | |
 | 5 | `syncweb config schedule` (check) | Shows updated schedule | |
 
-### 14.2 Bandwidth Verification
+### 13.2 Bandwidth Verification
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -381,7 +359,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 ---
 
-## 15. Filter Engine / Watch Mode
+## 14. Filter Engine / Watch Mode
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -409,7 +387,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 16. Watch Mode (File Watcher)
+## 15. Watch Mode (File Watcher)
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -420,34 +398,28 @@ match = { name = "*.tmp" }
 
 ---
 
-## 17. Conflict Resolution
+## 16. Conflict Resolution
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Alice and Bob both modify the same file offline | Both have local edits | |
 | 2 | Both come online and sync | Conflict detected | |
-| 3 | `syncweb conflicts ./shared-docs` | Lists unresolved conflicts | |
-| 4 | For text files: auto-resolve keeps newer (LWW), saves .diff | Conflict auto-resolved or listed | Check for `.conflict` or `.diff` files |
-| 5 | `syncweb conflicts --auto-resolve` | Resolves all automatically | |
-| 6 | `syncweb conflicts resolve <id> --keep-local` | Keep local version | |
-| 7 | `syncweb conflicts resolve <id> --keep-remote` | Keep remote version | |
-| 8 | Binary file conflict | Creates `.conflict.<hash>` file | Both versions preserved |
+| 3 | For text files: auto-resolve keeps newer (LWW), saves .diff | Conflict auto-resolved or listed | Check for `.conflict` or `.diff` files |
+| 4 | Binary file conflict | Creates `.conflict.<hash>` file | Both versions preserved |
 
 ---
 
-## 18. Offline Queue
+## 17. Offline Queue
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Go offline (disconnect network) | | |
 | 2 | Make changes to synced folder | | |
-| 3 | `syncweb pending` | Shows pending changes queued | |
-| 4 | Come back online | Pending changes sync automatically | |
-| 5 | `syncweb pending` (after sync) | No pending changes | |
+| 3 | Come back online | Pending changes sync automatically | |
 
 ---
 
-## 19. Media Server
+## 18. Media Server
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -459,7 +431,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 20. WebSocket Bridge
+## 19. WebSocket Bridge
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -470,7 +442,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 21. Syncthing Relay (BEP)
+## 20. Syncthing Relay (BEP)
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -478,11 +450,11 @@ match = { name = "*.tmp" }
 | 2 | `syncweb config set bep.relay_urls '["tcp://relay.syncthing.net:22270"]'` | Sets relay | |
 | 3 | Two nodes behind CGNAT (or simulate with firewall) | Connection falls back to Syncthing relay | Logs show "relay connected" |
 | 4 | `syncweb network test-relay` | Tests relay connectivity | Logs latency and status |
-| 5 | `syncweb devices --bep` | Shows DeviceIds | Verify format matches Syncthing DeviceId |
+| 5 | `syncweb devices` | Shows DeviceIds | Verify format matches Syncthing DeviceId |
 
 ---
 
-## 22. Discovery Mechanisms
+## 21. Discovery Mechanisms
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -493,7 +465,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 23. CLI Global Flags & Output
+## 22. CLI Global Flags & Output
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -507,7 +479,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 24. Version & Completions
+## 23. Version & Completions
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -519,7 +491,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 25. Integrity & Error Recovery
+## 24. Integrity & Error Recovery
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
@@ -532,7 +504,7 @@ match = { name = "*.tmp" }
 
 ---
 
-## 26. Performance Smoke Tests
+## 25. Performance Smoke Tests
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|

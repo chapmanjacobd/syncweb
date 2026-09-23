@@ -49,8 +49,8 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 +------------------------------------------------------------------------------+
 |                              syncweb CLI                               |
 +------------------------------------------------------------------------------+
-|  Commands: create, join, accept, drop, ls, find, download, sort, stat,       |
-|            devices, folders, watch, version, repl, publish,                  |
+|  Commands: create, join, ls, find, download, sort, stat,                 |
+|            devices, folders, watch, version, publish,                     |
 |            snapshot, config, network, stats                               |
 +------------------------------------------------------------------------------+
                                       |
@@ -86,8 +86,8 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 |                                                                              |
 |  +-----------------------+  +-----------------------+                       |
 |  |   BEP Identity        |  |   BEP Bridge          |                       |
-|  |  (DeviceId conversion,|  |  (full protocol       |                       |
-|  |   --bep)              |  |   translation)        |                       |
+|  |  (DeviceId conversion)|  |  (full protocol       |                       |
+|  |                       |  |   translation)        |                       |
 |  +-----------------------+  +-----------------------+                       |
 +------------------------------------------------------------------------------+
 ```
@@ -142,7 +142,6 @@ Decision: Best-effort text diff when smaller than winner; full file otherwise
 - Otherwise save the full file (both versions kept, older renamed with hash suffix)
 - Winning version always stays at the original path (LWW by timestamp)
 - Diff filename: `<stem>.diff` if there are enough filename characters, otherwise fall back to full file
-- User sees conflicts in `syncweb conflicts` command
 
 ### 7. Peer Availability
 Decision: DHT-based discovery via distributed-topic-tracker + cache from natural iroh flow
@@ -201,7 +200,6 @@ Decision: Every sync operation returns an IntentHandle
 ### 14. Deleted Files Tracking (from iroh-willow)
 Decision: Track deleted-but-previously-seen files
 - Record which session deleted which entry
-- Enable "undelete" feature
 - Audit trail for compliance
 - PruneEvent carries session ID (who deleted it)
 
@@ -263,7 +261,7 @@ Decision: Per-device identity with folder-level capabilities
 - Revocation: Revoke a specific device without affecting others
 - Sync modes: Device A (SendReceive) + Device B (ReceiveOnly) + Phone (ReceiveOnly, limited)
 - Implementation: `CapabilityMap` tracks `NodeId -> Capability` per folder
-- UX: `syncweb devices` shows all devices, `syncweb accept` adds device to folder
+- UX: `syncweb devices` shows this device's Iroh and Syncthing identities; folder access is granted via `share` and revoked via `unshare`
 - Note: No concept of "user" in the protocol - just devices with capabilities
 ### 21. Living Folders
 

@@ -40,20 +40,6 @@ impl OfflineQueue {
 }
 ```
 
-CLI:
-```bash
-# Show pending offline changes
-syncweb pending
-
-# Output:
-# Offline since: 2 hours ago
-# Pending changes:
-#   Created: 3 files (12.5 MiB)
-#   Modified: 5 files (45.2 MiB)
-#   Deleted: 1 file
-# Total: 9 changes (57.7 MiB)
-```
-
 ### Conflict Resolution UX
 When two devices edit the same file offline, iroh-docs detects the conflict (two entries for the same key from different authors). We provide automatic resolution with clear UX:
 
@@ -151,25 +137,6 @@ impl Conflict {
         }
     }
 }
-```
-
-CLI:
-```bash
-# Show conflicts
-syncweb conflicts
-
-# Output:
-# Conflict: docs/report.md
-#   Local (you): 2024-01-15 10:30 (modified)
-#   Remote (alice): 2024-01-15 11:45 (modified)
-#   Auto-resolve: DiffFile (text, diff smaller than winner)
-
-# Resolve all conflicts (auto-resolve: diff if smaller, else full file)
-syncweb conflicts --auto-resolve
-
-# Resolve specific conflict
-syncweb conflicts resolve --keep-local <conflict-id>
-syncweb conflicts resolve --keep-remote <conflict-id>
 ```
 
 ### Sync Status Display

@@ -389,7 +389,7 @@ impl AreaOfInterest {
 }
 ```
 
-Use case: `download --limit 10` creates `AreaOfInterest::with_count_limit(area, 10)`, stops after 10 entries.
+Use case: `download --max-count 10` creates `AreaOfInterest::with_count_limit(area, 10)`, stops after 10 entries.
 
 ### 7. Deleted Files Tracking (PruneEvent)
 
@@ -518,7 +518,7 @@ impl SpaceTicket {
 }
 ```
 
-Use case: `syncweb publish --limit 10 --size 1GB` creates a limited ticket.
+Use case: `syncweb download --max-count 10` limits how many entries are fetched (count-limited fetch).
 
 ### 9. IntentHandle Usage Examples
 

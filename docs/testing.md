@@ -29,7 +29,7 @@
 - Atomic upgrade: verify rollback works if upgrade fails
 - Package integrity: verify catches corrupted files
 - Package discovery: publish, search, info across two nodes
-- Parallel operations: ls/import/export use parallelism by default; `--threads 1` disables it
+- Parallel operations: ls/import use parallelism by default; `--threads 1` disables it
 - Partial fetch: download --max-peers improves seeder counts
 - Cache eviction: test LRU and FIFO under memory pressure
 - Large peer network: test EfficientPeerCache with 1000+ peers
@@ -40,11 +40,12 @@
 - Stat: detailed output, local/global diffs, availability display
 - Init: folder creation with URL output and network membership
 
-### Interop Tests (with `--bep` flag)
+### Interop Tests
 - Syncthing node to syncweb folder join
 - syncweb to Syncthing folder join
 - Bidirectional sync
 - Relay-only connection
+- `syncweb devices` output is a valid Syncthing DeviceId (`config bep` shows relay settings)
 
 ### Local Tests
 - Schedule parsing, cross-midnight windows, and per-folder overrides
@@ -70,7 +71,7 @@
 | Filter evaluation | < 10ms per entry |
 | Scan (10k files, default) | < 500ms (6x speedup) |
 | Import (1000 files, default) | < 3s (6x speedup) |
-| Export (1000 files, default) | < 2.5s (6x speedup) |
+| Package export (1000 files, default) | < 2.5s (6x speedup) |
 | Cache eviction (10k entries) | < 10ms |
 | Efficient cache memory (1000 peers) | < 1MB |
 
@@ -85,7 +86,7 @@
 | Public folder spam/abuse | Medium | Low | Rate limit gossip, allowlist |
 | Syncthing relay protocol v1 changes | Low | High | Protocol is simple (3 message types); monitor releases; fallback to iroh relay |
 | Windows file locking | Medium | Medium | Test early, use iroh-blobs async API |
-| File conflict resolution UX | Low | Medium | Clear naming convention; `syncweb conflicts` command; LWW for text, keep-both for binary |
+| File conflict resolution UX | Low | Medium | Clear naming convention; LWW for text, keep-both for binary |
 | BitTorrent DHT availability | Low | Medium | DHT has ~10M+ nodes; fallback to iroh relays for connectivity |
 | DHT write rate limits | Medium | Low | Tune `dht_write_limit` per-folder; accept slower re-discovery after long offline periods |
 | distributed-topic-tracker version drift | Medium | Medium | Pin version; monitor upstream releases when upgrading iroh |
@@ -105,16 +106,16 @@
 
 ## Success Criteria
 
-1. Functional parity: All syncweb-py commands work (create, join, accept, drop, ls, find, sort, stat, download, devices, folders, watch, start, shutdown, version, repl)
+1. Functional parity: All syncweb-py commands work (create, join, ls, find, sort, stat, download, devices, folders, watch, start, shutdown, version)
 2. Performance: Faster sync, lower resource usage than Syncthing
-3. Public folders: `publish`/`subscribe` work end-to-end
+3. Public folders: `share`/`join`/`download` work end-to-end
 4. Data versioning: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)
 5. Networks: `network create/join/invite/kick` work across devices
 6. Syncthing relay: Two syncweb nodes can communicate via Syncthing relay when direct QUIC fails
 7. UX: Single binary, no daemon, config file optional
 8. Reliability: No data loss, verified transfers, BLAKE3 integrity on all transfers
 9. Conflict resolution: Automatic LWW for text, keep-both for binary, older version renamed
-10. Parallel operations: 4-6x speedup for ls, import, export (default on)
+10. Parallel operations: 4-6x speedup for ls and import (default on)
 11. Memory efficiency: PeerTracker handles 1000+ peers without OOM
 12. Network robustness: Filter-based partial fetch improves seeder counts for rare content
 13. Cache efficiency: Age-based eviction prevents unbounded memory growth

@@ -41,7 +41,7 @@ The indexing service acts as an automated fleet manager for replication.
 *   Action: Users configure a folder with a replication budget (e.g., "ensure 3 providers"). The indexing service monitors the network for signed `ProviderLeases`.
 *   Execution: If availability drops below the threshold, the indexing service commands the core engine to fetch and pin the blob. The core engine simply sees a standard "download and pin" request.
 *   Thundering Herd Mitigation: To prevent all peers from fetching simultaneously when availability drops, the system uses consistent hashing (only peers mathematically closest to the blob's hash are responsible), randomized jitter (staggered fetch delays), and gossip short-circuiting (if a peer gossips a new `ProviderLease` during the delay, others cancel their fetch).
-*   Overlap Note: Core `syncweb stats seeding` shows basic local observations of peers. `syncweb indexing health` shows cryptographically verified leases and historical uptime.
+*   Overlap Note: Core `syncweb stats seeding` shows basic local observations of peers. The indexing layer shows cryptographically verified leases and historical uptime.
 
 The Rust API for this layer is `syncweb_core::indexing::ResilienceService`.
 `ProviderLease` values bind a signed provider identity, blob hash, expiry, and
@@ -69,11 +69,11 @@ reputation ingestion.
 Metadata extraction is crowdsourced to trusted entities.
 *   Action: Trusted authors in a Web of Trust (WoT)--whether humans or automated bots—can manually append metadata, tags, or derivatives to a file's record.
 *   Execution: These metadata entries are synced via `iroh-docs` and indexed by the local indexing service. You only index metadata written by authors you trust.
-*   Overlap Note: Core `syncweb stat` shows raw file sizes and hashes. `syncweb indexing meta` surfaces community-curated metadata (like transcriptions or content tags).
+*   Overlap Note: Core `syncweb stat` shows raw file sizes and hashes. The indexing layer surfaces community-curated metadata (like transcriptions or content tags).
     • Signed Mutable Pointers & Manifests (Mechanical): These answer the question, "Who said what, and when?" They provide cryptographic proof that a specific identity published a pointer to a specific hash, and that they did so with a valid monotonic sequence number (preventing rollbacks). They are entirely unopinionated about whether the content is good.
-    • syncweb trust (Contextual): This answers the question, "How do we feel about what they said?" It is the policy layer that evaluates whether a publisher is trusted by you or your community, whether the content has been flagged by a moderator, or if valid license attestations exist.
+    • Trust policy (Contextual): This answers the question, "How do we feel about what they said?" It is the policy layer that evaluates whether a publisher is trusted by you or your community, whether the content has been flagged by a moderator, or if valid license attestations exist.
     • Self-Revocation (Mechanical): If a publisher wants to take down their own content, they publish a new Signed Mutable Pointer with an incremented sequence number pointing to a tombstone or empty manifest. The core resolver handles this automatically.
-    • Takedowns/Filtering (Contextual): If a publisher distributes malware and refuses to take it down, the community moderator publishes a signed ModerationRecord against the publisher's identity or content hash. The syncweb trust layer intercepts the discovery and hides the content, even though the publisher's pointer remains mathematically valid.
+    • Takedowns/Filtering (Contextual): If a publisher distributes malware and refuses to take it down, the community moderator publishes a signed ModerationRecord against the publisher's identity or content hash. The trust layer intercepts the discovery and hides the content, even though the publisher's pointer remains mathematically valid.
 
 The Rust API is `syncweb_core::indexing::WotService`. `MetadataEntry`,
 `TrustDelegation`, `RevocationRecord`, `ModerationRecord`, and `Attestation`
@@ -122,10 +122,10 @@ is resolved for download. `FilterList` updates are signed and monotonic per
 namespace, and `IndexingService::denylist_service` exposes the thread-safe
 local policy.
 
-Moderation decisions (`moderation hide`) filter display of records in
-`trust show` and metadata search; they do not block blob transfer. Moderation
-remains a local policy layer over immutable content — plan 017 documented this
-rather than enforcing it at fetch/serve time.
+Moderation decisions filter display of records in trust and metadata search;
+they do not block blob transfer. Moderation remains a local policy layer over
+immutable content — plan 017 documented this rather than enforcing it at
+fetch/serve time.
 
 ### 6. Trust, Governance, and Moderation
 Content hashes prove integrity, but they do not prove accuracy, authorship, legality, or quality. Public and community catalogs require mechanisms for spam, abuse, takedown, and conflicting claims without relying on a single global authority.
@@ -133,26 +133,12 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 *   Execution: Trust policies are evaluated locally (scoped by network, folder, or file). Moderation hides or de-prioritizes records in an index; it does not rewrite or delete immutable content on other nodes. The indexing service evaluates these records to return a discovery decision (Show, Warn, Hide, Quarantine).
 *   Overlap Note: Core `syncweb` ensures cryptographic integrity of content hashes. The indexing service evaluates contextual trust, licenses, provenance, and community moderation policies.
 
-### CLI Subcommands (`syncweb indexing`, `syncweb link`, `syncweb mirror`, `syncweb trust`, `syncweb moderation`, `syncweb attest`)
+### CLI Subcommands (`syncweb indexing`, `syncweb link`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
 *   `syncweb publish catalog --catalog <name> <folder>` - Publish to a catalog.
 *   `syncweb search --kind catalog "query"` - Search across known catalogs (FTS).
-*   `syncweb indexing health <hash>` - Check verified leases and availability.
- *   `syncweb indexing meta add <hash> <key> <value>` - Append WoT metadata to an entry.
- *   `syncweb indexing meta list <hash>` - List signed metadata for a content hash.
  *   `syncweb indexing filter add <type> <value>` - Add a hash, device, or file to the local denylist.
  *   `syncweb indexing filter subscribe <url>` - Subscribe to a federated filter list.
  *   `syncweb link create <file-or-collection>` - Create a stable pinned or mutable link.
  *   `syncweb link resolve <url>` - Resolve a link to its manifest, sequence, and providers.
  *   `syncweb link revoke <link>` - Revoke a private link.
- *   `syncweb mirror add <collection> <provider>` - Register an alternate mirror provider.
- *   `syncweb trust show <content-or-publisher>` - Show trust, license, provenance, and moderation state.
- *   `syncweb trust delegate <publisher>` - Cryptographically delegate trust to another publisher (Web of Trust).
- *   `syncweb trust provider show <pubkey>` - Show provider reputation, bans, and trust records.
- *   `syncweb trust provider list` - List providers known to the local indexing state.
- *   `syncweb trust provider ban <pubkey>` / `unban <pubkey>` - Manage global or scoped provider bans.
- *   `syncweb trust provider vouch <pubkey>` / `distrust <pubkey>` - Publish a signed provider trust opinion.
- *   `syncweb attest --license <license> <content>` - Sign an attestation for content.
- *   `syncweb attest list <hash>` - List local attestations for a content hash.
- *   `syncweb moderation ls [<content>]` - List moderation records and decisions, optionally scoped to content.
- *   `syncweb moderation hide <record>` - Hide a record based on local or community policy.

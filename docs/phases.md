@@ -11,14 +11,14 @@ IrohNode with basic identity, storage, and logging:
 - `TopicTracker` for distributed-topic-tracker integration (DHT-based peer discovery)
 - Basic CLI with `clap`
 - `tracing` structured logging
-- `syncweb version`, `syncweb repl` commands
+- `syncweb version` command
 
 ### Folder Core and Syncthing Relay Piggyback
 Folder creation, joining, basic sync, and Syncthing relay fallback for CGNAT traversal:
 - `SyncwebFolder` with NamespaceId, entries, and blob refs
-- `FolderManager` for create, join, list, accept, drop
+- `FolderManager` for create, join, list
 - `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
-- `syncweb create`, `syncweb join`, `syncweb accept`, `syncweb drop`
+- `syncweb create`, `syncweb join`
 - `syncweb folders`, `syncweb devices`
 - `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
 - `SyncthingRelayTransport` with bounded framed TCP tunnel
@@ -74,7 +74,7 @@ Public sharing and data package versioning:
 - Networks are always private; default daemon (no `--network`) is fully open
 - Blob ticket generation
 - Content pinning (prevent GC for shared blobs)
-- `syncweb publish`, `syncweb unpublish`, `syncweb join --subscribe`
+- `syncweb share`, `syncweb unshare`, `syncweb join --subscribe`
 - `CollectionManifest` struct and iroh-docs storage
 - `CollectionState` local tracking (installed collections, versions)
 - `syncweb package init` (with package profile) for initializing paths as a versioned package

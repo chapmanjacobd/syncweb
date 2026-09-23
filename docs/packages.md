@@ -127,31 +127,6 @@ async fn subscribe_public(&self, ticket: BlobTicket) -> Result<NamespaceId> {
 
 ### CLI Commands
 
-```bash
-# Show policy for a file, folder, or network
-syncweb policy show [file-or-folder-or-network]
-
-# Generate a public ticket for a folder (pins content)
-syncweb policy set --access public_ticket --pinning true audio/
-# Output: iroh-blob://<ticket>  (shareable URL)
-
-# Explain why a file has its effective policy settings
-syncweb policy explain audio/raw/participants.csv
-
-# Subscribe to public folder (no auth, read-only)
-syncweb subscribe iroh-blob://<ticket>
-# Creates local read-only folder, lazy-fetches on access
-
-# List known public folders (from gossip)
-syncweb public list
-
-# Get version info for public folder
-syncweb public info <ticket>
-
-# Revert access to capability-only
-syncweb policy set --access capability --pinning false audio/
-```
-
 Noninteractive promotion to public should require an explicit flag such as `--confirm-public summary.csv`. Configuration errors that would broaden access must fail closed and name the field and source scopes.
 
 ### Code Implementation Patterns
@@ -206,7 +181,7 @@ Useful for long-running edits where the publisher doesn't want to sync broken st
 1. `publish_mode = "manual"` is set on the folder policy.
 2. Local filesystem changes are indexed locally (staging), generating new immutable blobs, but the Signed Mutable Pointer is NOT updated.
 3. Subscribers continue to see and sync the previous stable version.
-4. When ready, the publisher explicitly runs `syncweb publish <folder>`. This atomically advances the mutable pointer, pushing the batch of changes to subscribers all at once.
+4. When ready, the publisher explicitly runs the publish step. This atomically advances the mutable pointer, pushing the batch of changes to subscribers all at once.
 
 ### 4. Discovery via Ephemeral Gossip
 There is no persistent global catalog. A folder is only discoverable if a node is actively seeding it.

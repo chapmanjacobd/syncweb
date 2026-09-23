@@ -2223,7 +2223,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__stats__subcmd__network)
-            opts="-h --folder --peer --reset --period --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            opts="-h --folder --peer --reset --period --since --watch --follow --once --verbose --json --yes --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2238,6 +2238,10 @@ _syncweb() {
                     return 0
                     ;;
                 --period)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --since)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

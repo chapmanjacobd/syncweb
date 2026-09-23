@@ -317,7 +317,11 @@ pub struct Cli {
     #[arg(long, global = true, help = "Enable verbose structured logging")]
     pub verbose: bool,
 
-    #[arg(long, global = true, help = "Emit machine-readable JSON where supported")]
+    #[arg(
+        long,
+        global = true,
+        help = "Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)"
+    )]
     pub json: bool,
 
     #[arg(long, global = true, help = "Assume yes to every destructive-operation prompt")]

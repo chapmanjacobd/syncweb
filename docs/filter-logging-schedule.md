@@ -379,8 +379,11 @@ struct PeerStats {
 ```bash
 syncweb stats network                    # Show all stats
 syncweb stats network --period 24h       # Last 24 hours
+syncweb stats network --since 24h        # Same window via --since (or a unix timestamp)
 syncweb stats network --folder ./documents  # Per-folder breakdown
 syncweb stats network --peer <node-id>   # Per-peer breakdown
+syncweb stats network --follow           # Stream sync sessions/network events live
+syncweb stats network --follow --once    # Print the current snapshot and exit (cron-safe)
 ```
 
 ---

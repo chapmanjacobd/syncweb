@@ -65,6 +65,19 @@ doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`,
 `pending`, `deleted`, `undelete`, `policy`, `public list`) were removed from the
 surfaces, so docs match reality ahead of the major release.
 
+Plan 08 (progress/status + `--json`) is done — `stats network` gained real
+`--period`/`--since` windows (persisted-transfer filtering via
+`StatsDatabase::stats_since`) and a `--follow`/`--watch` event feed that streams
+sync sessions and network events as NDJSON lines under `--json` (`--once` is the
+cron-safe snapshot), `status --json` now aggregates into a stable
+`{daemon, folders, devices, networks}` envelope (folders/devices/networks keys
+always present), and the global `--json` help text is a firm contract ("single
+JSON object per command; arrays only under a named key; streaming commands emit
+NDJSON"). Tests: `workflow_test.rs` shape assertions for `stats network
+--period 24h --json`, `--since` window filtering, `--follow --once`, and a live
+`--follow` streaming test; `main.rs` unit tests for the `status` envelope and
+`--since` parsing. No daemon protocol/IPC change.
+
 Plan 10 (command re-home) is done — for the major release the hidden legacy
 surface is deleted and re-homed: `create`/`join`/`leave`/`import` → `folders`,
 `networks` → `network status`, `publish` → `indexing publish`, `unshare` →
@@ -79,19 +92,18 @@ containers, and man/completions/docs/tests were regenerated. See
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | 02 |
 | 09 | [09-peer-availability.md](09-peer-availability.md) | LOW | Read-only per-folder peer surface: `network peers` (per-blob avail + inbound-peer list) that plans 05/08 defer to | 05, 08 |
-| 10 | [10-command-rehome.md](10-command-rehome.md) | HIGH | Major release: delete hidden legacy commands, re-home under noun-group verbs, 30-verb surface | 06, 07 |
 
 Notes on dependencies:
 
-- Plan 08's dependency on plan 02 (eager `join`) is satisfied.
+- Plan 08 (done) satisfied its dependency on plan 02 (eager `join`), and its
+  universal `--json` contract built on plan 01's `ListEntries` IPC and plan
+  03's shared `ContentFilterArgs` (landed in the order 03 → 08).
+- Plan 09 depends on plan 08's aggregated `status --json` surface and plan
+  05's `access` view: it adds the read-only `network peers` surface.
 - Plan 05 landed `access` as a canonical top-level verb; plan 06 kept it as a
   retained (hidden) `Command` variant folded under `share` when collapsing the
   surface — still fully functional.
-- Plan 08's universal `--json` contract builds on plan 01's `ListEntries` IPC
-  (the listing the filters run over) and plan 03's shared
-  `ContentFilterArgs`; the work should land once, in the order 03 → 08.
 - Plan 01's `ListEntries` IPC is now additive and stable (daemon-computed
   `local`/enriched size/mtime); plan 03 filters in the daemon before shipping
   rows.

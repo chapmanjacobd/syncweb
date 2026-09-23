@@ -544,9 +544,16 @@ syncweb --verbose find .            # Verbose output
 syncweb --json folders              # JSON output (for scripting)
 syncweb --no-color devices          # Disable color output
 
+# `--json` is a stable machine contract: each command prints a single JSON
+# object (arrays only inside a named key). Streaming commands — `stats network
+# --follow` — emit one JSON object per line (NDJSON).
+
 syncweb import ./documents
 syncweb watch --once ./documents
 syncweb stats network --period 24h
+syncweb stats network --since 24h --json   # Last 24h of transfer events as JSON
+syncweb stats network --follow             # Stream sync progress live
+syncweb stats network --follow --once      # One-shot snapshot (cron-safe) and exit
 syncweb stats files --folder ./documents
 syncweb verify ./documents
 syncweb config schedule

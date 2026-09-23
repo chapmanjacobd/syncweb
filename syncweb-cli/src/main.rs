@@ -31,6 +31,7 @@ use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
+    bandwidth_stats::BandwidthStats,
     cancel_session,
     daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
@@ -603,55 +604,120 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
     let state_file = StateFile::new(data_dir);
     let Some(report) = state_file.load_status()? else {
         if output_json {
-            println!("{}", serde_json::json!({"status": "stopped"}));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "daemon": {"status": "stopped"},
+                    "folders": [],
+                    "devices": devices_value(data_dir)?,
+                    "networks": [],
+                }))?
+            );
         } else {
             println!("daemon not running");
         }
         return Ok(());
     };
     if output_json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else {
-        println!("daemon: running");
-        println!("pid: {}", report.pid);
-        println!("node: {}", report.node_id);
-        println!("uptime: {} seconds", report.uptime_seconds);
-        println!("rayon threads: {}", report.rayon_threads);
+        let folders = status_folders_value(data_dir).await?;
+        let networks = network_health_summary_json(data_dir)?;
         println!(
-            "bandwidth: {} uploaded, {} downloaded",
-            report.bandwidth.upload_total, report.bandwidth.download_total
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "daemon": report,
+                "folders": folders,
+                "devices": devices_value(data_dir)?,
+                "networks": networks,
+            }))?
         );
-        if let Some(schedule) = report.schedule {
-            println!(
-                "schedule: {}",
-                if schedule.in_active_window {
-                    "active"
-                } else {
-                    "inactive"
-                }
-            );
-        }
-        let mut table = Table::new();
-        table.set_header(["Namespace", "Path", "Session", "Last sync", "Entries", "Errors"]);
-        for folder in report.folders {
-            table.add_row([
-                folder.namespace,
-                folder.path.display().to_string(),
-                if folder.session_active {
-                    "active".to_owned()
-                } else {
-                    "paused".to_owned()
-                },
-                folder
-                    .last_sync_at
-                    .map_or_else(|| "-".to_owned(), |value| value.to_string()),
-                folder.entries_synced.to_string(),
-                folder.errors.len().to_string(),
-            ]);
-        }
-        println!("{table}");
+        return Ok(());
     }
+    println!("daemon: running");
+    println!("pid: {}", report.pid);
+    println!("node: {}", report.node_id);
+    println!("uptime: {} seconds", report.uptime_seconds);
+    println!("rayon threads: {}", report.rayon_threads);
+    println!(
+        "bandwidth: {} uploaded, {} downloaded",
+        report.bandwidth.upload_total, report.bandwidth.download_total
+    );
+    if let Some(schedule) = report.schedule {
+        println!(
+            "schedule: {}",
+            if schedule.in_active_window {
+                "active"
+            } else {
+                "inactive"
+            }
+        );
+    }
+    let mut table = Table::new();
+    table.set_header(["Namespace", "Path", "Session", "Last sync", "Entries", "Errors"]);
+    for folder in report.folders {
+        table.add_row([
+            folder.namespace,
+            folder.path.display().to_string(),
+            if folder.session_active {
+                "active".to_owned()
+            } else {
+                "paused".to_owned()
+            },
+            folder
+                .last_sync_at
+                .map_or_else(|| "-".to_owned(), |value| value.to_string()),
+            folder.entries_synced.to_string(),
+            folder.errors.len().to_string(),
+        ]);
+    }
+    println!("{table}");
     Ok(())
+}
+
+/// Self-identity for the `status --json` envelope (the same value `devices`
+/// prints, but as a `serde_json::Value`).
+fn devices_value(data_dir: &std::path::Path) -> Result<serde_json::Value> {
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let device_id = DeviceId::from_node_id(identity.node_id());
+    Ok(serde_json::json!({
+        "iroh": identity.node_id().to_string(),
+        "syncthing": device_id.to_syncthing(),
+    }))
+}
+
+/// Folder list for the `status --json` envelope. When the daemon is running we
+/// reuse its `ListFolders` IPC surface (same data `folders` prints); otherwise
+/// the key stays present and empty so the envelope is shape-stable.
+async fn status_folders_value(data_dir: &std::path::Path) -> Result<serde_json::Value> {
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        if let IpcResponse::FolderList(folders) = response {
+            return Ok(serde_json::to_value(folders)?);
+        }
+    }
+    Ok(serde_json::json!([]))
+}
+
+/// Network health summary for the `status --json` envelope, mirroring
+/// `handle_network_health`'s no-name summary output.
+fn network_health_summary_json(data_dir: &std::path::Path) -> Result<serde_json::Value> {
+    let manager = open_network_manager(data_dir)?;
+    let stats_db = open_stats_db(data_dir)?;
+    let summary: Vec<_> = manager
+        .list()
+        .iter()
+        .map(|n| {
+            let id = n.id.to_string();
+            let events = stats_db.recent_network_events(&id, 1).unwrap_or_default();
+            serde_json::json!({
+                "name": n.name,
+                "id": id,
+                "member_count": n.members.len(),
+                "folder_count": n.folders.len(),
+                "last_event": events.first().map(|e| e.timestamp),
+            })
+        })
+        .collect();
+    Ok(serde_json::json!(summary))
 }
 
 #[async_recursion]
@@ -1944,14 +2010,15 @@ async fn handle_stats(ctx: &CliContext<'_>, command: StatsCommand) -> Result<()>
 fn handle_stats_network(ctx: &CliContext<'_>, command: StatsNetworkArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    if let Some(period) = command.period {
-        parse_period(&period)?;
-    }
+    let since_ts = stats_since_ts(&command)?;
     let stats_db = open_stats_db(data_dir)?;
     if command.reset {
         stats_db.reset_bandwidth()?;
     }
-    let stats = stats_db.current_stats()?;
+    if command.follow {
+        return follow_stats_network(&stats_db, since_ts, &command, output_json);
+    }
+    let stats = load_stats_snapshot(&stats_db, since_ts)?;
     if output_json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
         return Ok(());
@@ -2022,6 +2089,140 @@ fn handle_stats_network(ctx: &CliContext<'_>, command: StatsNetworkArgs) -> Resu
         }
     }
     Ok(())
+}
+
+/// Compute the `since` timestamp (in seconds) applied by `--period` or `--since`.
+fn stats_since_ts(command: &StatsNetworkArgs) -> Result<Option<i64>> {
+    let now = syncweb_core::daemon::current_timestamp().cast_signed();
+    if let Some(period) = &command.period {
+        let window = parse_period(period)?.as_secs().cast_signed();
+        return Ok(Some(now.saturating_sub(window)));
+    }
+    if let Some(since) = &command.since {
+        if let Ok(timestamp) = since.trim().parse::<i64>() {
+            return Ok(Some(timestamp));
+        }
+        let window = parse_period(since)?.as_secs().cast_signed();
+        return Ok(Some(now.saturating_sub(window)));
+    }
+    Ok(None)
+}
+
+/// Load the `BandwidthStats` snapshot, honoring an optional `since` window.
+fn load_stats_snapshot(stats_db: &StatsDatabase, since_ts: Option<i64>) -> Result<BandwidthStats> {
+    match since_ts {
+        Some(since) => Ok(stats_db.stats_since(since)?),
+        None => Ok(stats_db.current_stats()?),
+    }
+}
+
+/// Stream sync progress and network events live. `--follow --once` prints the
+/// current snapshot and exits (cron-safe); plain `--follow` keeps polling for
+/// new sync sessions, network events, and bandwidth changes. Under `--json`
+/// each observation is one JSON object per line (NDJSON).
+fn follow_stats_network(
+    stats_db: &StatsDatabase,
+    since_ts: Option<i64>,
+    command: &StatsNetworkArgs,
+    output_json: bool,
+) -> Result<()> {
+    let snapshot = load_stats_snapshot(stats_db, since_ts)?;
+    if output_json {
+        println!("{}", serde_json::to_string(&snapshot)?);
+    } else {
+        println!(
+            "{}",
+            serde_json::json!({
+                "event": "snapshot",
+                "total_upload": snapshot.total_upload,
+                "total_download": snapshot.total_download,
+                "period_start": snapshot.period_start,
+            })
+        );
+    }
+    if command.once {
+        return Ok(());
+    }
+
+    let mut last_session = 0_i64;
+    let mut last_event = 0_i64;
+    let mut last_snapshot = snapshot;
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let sessions = stats_db.sync_sessions_after(last_session, 100)?;
+        for session in &sessions {
+            last_session = last_session.max(session.id);
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "event": "sync_session",
+                        "id": session.id,
+                        "network_id": session.network_id,
+                        "folder": session.folder_namespace,
+                        "status": session.status,
+                        "files": session.files_transferred,
+                        "bytes": session.bytes_transferred,
+                        "started_at": session.started_at,
+                        "finished_at": session.finished_at,
+                    }))?
+                );
+            } else {
+                println!(
+                    "sync {} {} {} ({}/{})",
+                    session.id,
+                    session.folder_namespace,
+                    session.status,
+                    session.files_transferred,
+                    format_bytes(session.bytes_transferred),
+                );
+            }
+        }
+        let events = stats_db.network_events_after(last_event, 100)?;
+        for event in &events {
+            last_event = last_event.max(event.id);
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "event": "network",
+                        "id": event.id,
+                        "network_id": event.network_id,
+                        "event_type": event.event_type,
+                        "timestamp": event.timestamp,
+                        "peer": event.peer,
+                        "details": event.details,
+                    }))?
+                );
+            } else {
+                println!(
+                    "{} {} {}",
+                    event.timestamp,
+                    event.event_type,
+                    event.details.as_deref().unwrap_or("")
+                );
+            }
+        }
+        if command.folder.is_none() && command.peer.is_none() && since_ts.is_none() {
+            let current = stats_db.current_stats()?;
+            if current != last_snapshot {
+                if output_json {
+                    println!("{}", serde_json::to_string(&current)?);
+                } else {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "event": "snapshot",
+                            "total_upload": current.total_upload,
+                            "total_download": current.total_download,
+                            "period_start": current.period_start,
+                        })
+                    );
+                }
+                last_snapshot = current;
+            }
+        }
+    }
 }
 
 #[async_recursion]
@@ -5846,5 +6047,76 @@ mod tests {
     fn canonical_path_resolves_relative_to_cwd() {
         let absolute = canonical_path(Path::new("."));
         assert!(absolute.is_absolute());
+    }
+
+    #[test]
+    fn status_json_envelope_keeps_all_keys_even_when_lists_empty() {
+        let daemon = serde_json::json!({"status": "stopped"});
+        let folders = serde_json::json!([]);
+        let devices = serde_json::json!({});
+        let networks = serde_json::json!([]);
+        let envelope = serde_json::json!({
+            "daemon": daemon,
+            "folders": folders,
+            "devices": devices,
+            "networks": networks,
+        });
+        let serialized = serde_json::to_string(&envelope).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        for key in ["daemon", "folders", "devices", "networks"] {
+            assert!(
+                parsed.get(key).is_some(),
+                "status --json envelope must carry '{key}' even when empty: {parsed}"
+            );
+        }
+    }
+
+    #[test]
+    fn stats_since_ts_parses_period_and_timestamp() {
+        let period_args = StatsNetworkArgs {
+            folder: None,
+            peer: None,
+            reset: false,
+            period: Some("1h".to_owned()),
+            since: None,
+            follow: false,
+            once: false,
+        };
+        let since = stats_since_ts(&period_args)
+            .unwrap()
+            .expect("period should yield a window");
+        let now = syncweb_core::daemon::current_timestamp().cast_signed();
+        assert!(
+            (now.saturating_sub(since) - 3600).abs() < 2,
+            "1h window should be ~3600s ago: {since}"
+        );
+
+        let timestamp_args = StatsNetworkArgs {
+            since: Some("1700000000".to_owned()),
+            ..StatsNetworkArgs {
+                folder: None,
+                peer: None,
+                reset: false,
+                period: None,
+                since: None,
+                follow: false,
+                once: false,
+            }
+        };
+        assert_eq!(stats_since_ts(&timestamp_args).unwrap(), Some(1_700_000_000));
+    }
+
+    #[test]
+    fn stats_since_ts_none_without_window() {
+        let args = StatsNetworkArgs {
+            folder: None,
+            peer: None,
+            reset: false,
+            period: None,
+            since: None,
+            follow: false,
+            once: false,
+        };
+        assert!(stats_since_ts(&args).unwrap().is_none());
     }
 }

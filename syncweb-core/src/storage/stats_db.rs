@@ -358,6 +358,188 @@ impl StatsDatabase {
         })
     }
 
+    /// Return bandwidth statistics aggregated from transfer events recorded on
+    /// or after `since_ts`. Unlike [`Self::current_stats`], the folder/peer
+    /// breakdowns are computed directly from `bandwidth_events`, so the window
+    /// can be any timestamp (not just a persisted hourly period bucket).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be queried.
+    pub fn stats_since(&self, since_ts: i64) -> Result<BandwidthStats> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
+
+        let (total_upload, total_download): (i64, i64) = connection
+            .query_row(
+                "SELECT COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0)
+                 FROM bandwidth_events WHERE timestamp >= ?1",
+                params![since_ts],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|error| SyncwebError::operation("failed to query bandwidth totals", error))?;
+
+        let mut per_folder = BTreeMap::new();
+        let mut folder_stmt = connection
+            .prepare(
+                "SELECT folder_namespace,
+                        COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(files), 0)
+                 FROM bandwidth_events
+                 WHERE timestamp >= ?1 AND folder_namespace IS NOT NULL
+                 GROUP BY folder_namespace",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare folder stats query", error))?;
+        let folder_rows = folder_stmt
+            .query_map(params![since_ts], |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query folder stats", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read folder stats", error))?;
+        for (ns, upload, download, files) in folder_rows {
+            per_folder.insert(
+                ns,
+                FolderStats {
+                    upload: upload.cast_unsigned(),
+                    download: download.cast_unsigned(),
+                    files_transferred: files.cast_unsigned(),
+                },
+            );
+        }
+        drop(folder_stmt);
+
+        let mut per_peer = BTreeMap::new();
+        let mut peer_stmt = connection
+            .prepare(
+                "SELECT peer,
+                        COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0),
+                        COUNT(*)
+                 FROM bandwidth_events
+                 WHERE timestamp >= ?1 AND peer IS NOT NULL
+                 GROUP BY peer",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare peer stats query", error))?;
+        let peer_rows = peer_stmt
+            .query_map(params![since_ts], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query peer stats", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read peer stats", error))?;
+        for (peer, upload, download, conns) in peer_rows {
+            per_peer.insert(
+                peer,
+                PeerStats {
+                    upload: upload.cast_unsigned(),
+                    download: download.cast_unsigned(),
+                    connection_count: conns.cast_unsigned(),
+                },
+            );
+        }
+        drop(peer_stmt);
+        drop(connection);
+        Ok(BandwidthStats {
+            total_upload: total_upload.cast_unsigned(),
+            total_download: total_download.cast_unsigned(),
+            per_folder,
+            per_peer,
+            period_start: since_ts.cast_unsigned(),
+        })
+    }
+
+    /// Return network events newer than `after_id`, ordered by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn network_events_after(&self, after_id: i64, limit: usize) -> Result<Vec<NetworkEventRecord>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare(
+                "SELECT id, timestamp, network_id, event_type, peer, details, metadata_json
+                 FROM network_events WHERE id > ?1
+                 ORDER BY id ASC LIMIT ?2",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare network events query", error))?;
+        let records = stmt
+            .query_map(params![after_id, limit.cast_signed()], |row| {
+                Ok(NetworkEventRecord {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    network_id: row.get(2)?,
+                    event_type: row.get(3)?,
+                    peer: row.get(4)?,
+                    details: row.get(5)?,
+                    metadata_json: row.get(6)?,
+                })
+            })
+            .map_err(|error| SyncwebError::operation("failed to query network events", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read network event rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(records)
+    }
+
+    /// Return sync sessions newer than `after_id`, ordered by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn sync_sessions_after(&self, after_id: i64, limit: usize) -> Result<Vec<SyncSessionRecord>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare(
+                "SELECT id, network_id, folder_namespace, started_at, finished_at,
+                 files_transferred, bytes_transferred, errors, status
+                 FROM network_sync_sessions WHERE id > ?1
+                 ORDER BY id ASC LIMIT ?2",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare sync sessions query", error))?;
+        let records = stmt
+            .query_map(params![after_id, limit.cast_signed()], |row| {
+                Ok(SyncSessionRecord {
+                    id: row.get(0)?,
+                    network_id: row.get(1)?,
+                    folder_namespace: row.get(2)?,
+                    started_at: row.get(3)?,
+                    finished_at: row.get(4)?,
+                    files_transferred: row.get::<_, i64>(5)?.cast_unsigned(),
+                    bytes_transferred: row.get::<_, i64>(6)?.cast_unsigned(),
+                    errors: row.get::<_, i64>(7)?.cast_unsigned(),
+                    status: row.get(8)?,
+                })
+            })
+            .map_err(|error| SyncwebError::operation("failed to query sync sessions", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read sync session rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(records)
+    }
+
     /// Delete all persisted bandwidth counters and transfer events across every
     /// period, zeroing the totals reported by [`Self::current_stats`].
     ///

@@ -78,3 +78,170 @@ fn access_dashboard_lists_and_revokes_write() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn stats_network_period_json_shape() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let stats_db =
+        syncweb_core::storage::stats_db::StatsDatabase::open(alice.data_dir().join("default").join("stats.db"))?;
+    stats_db.record_download(1024, 1, Some("folderA"), Some("peer1"), None)?;
+    stats_db.record_upload(512, 1, Some("folderA"), Some("peer1"), None)?;
+    drop(stats_db);
+
+    let json = alice.run_ok(&["--json", "stats", "network", "--period", "24h"])?;
+    let value: serde_json::Value = serde_json::from_str(&json.stdout()).context("stats network should emit JSON")?;
+    ensure!(
+        value.get("total_upload").is_some(),
+        "JSON should carry total_upload: {value}"
+    );
+    ensure!(
+        value.get("total_download").is_some(),
+        "JSON should carry total_download: {value}"
+    );
+    ensure!(
+        value.get("per_folder").and_then(serde_json::Value::as_object).is_some(),
+        "JSON should carry per_folder object: {value}"
+    );
+    ensure!(
+        value.get("per_peer").and_then(serde_json::Value::as_object).is_some(),
+        "JSON should carry per_peer object: {value}"
+    );
+    ensure!(
+        value.get("period_start").is_some(),
+        "JSON should carry period_start: {value}"
+    );
+    ensure!(
+        value.get("total_download") == Some(&serde_json::Value::from(1024)),
+        "download counter should be visible: {value}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stats_network_since_filters_window() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let stats_db =
+        syncweb_core::storage::stats_db::StatsDatabase::open(alice.data_dir().join("default").join("stats.db"))?;
+    stats_db.record_download(1024, 1, Some("recent"), Some("peer1"), None)?;
+    drop(stats_db);
+
+    // A future window boundary excludes every recorded transfer.
+    let future = syncweb_core::daemon::current_timestamp().saturating_add(3600);
+    let json = alice.run_ok(&["--json", "stats", "network", "--since", &future.to_string()])?;
+    let value: serde_json::Value = serde_json::from_str(&json.stdout()).context("stats network --since JSON")?;
+    ensure!(
+        value.get("total_download") == Some(&serde_json::Value::from(0)),
+        "a future --since should exclude all transfers: {value}"
+    );
+    let folder = value
+        .get("per_folder")
+        .and_then(serde_json::Value::as_object)
+        .context("per_folder should be an object")?;
+    ensure!(
+        !folder.contains_key("recent"),
+        "the recent transfer should be filtered out by a future --since: {value}"
+    );
+
+    // Without a window the transfer is visible again.
+    let all = alice.run_ok(&["--json", "stats", "network"])?;
+    let all_value: serde_json::Value =
+        serde_json::from_str(&all.stdout()).context("stats network JSON without window")?;
+    ensure!(
+        all_value.get("total_download") == Some(&serde_json::Value::from(1024)),
+        "without --since the transfer should be visible: {all_value}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stats_network_follow_once_prints_snapshot() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let stats_db =
+        syncweb_core::storage::stats_db::StatsDatabase::open(alice.data_dir().join("default").join("stats.db"))?;
+    stats_db.record_download(2048, 2, Some("folderA"), Some("peer1"), None)?;
+    drop(stats_db);
+
+    let once = alice.run_ok(&["--json", "stats", "network", "--follow", "--once"])?;
+    let value: serde_json::Value =
+        serde_json::from_str(&once.stdout()).context("--follow --once should emit a snapshot")?;
+    ensure!(
+        value.get("total_download") == Some(&serde_json::Value::from(2048)),
+        "--follow --once should print the current snapshot: {value}"
+    );
+    ensure!(
+        value.get("per_folder").is_some() && value.get("per_peer").is_some(),
+        "follow snapshot should keep the stable envelope: {value}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stats_network_follow_streams_new_sync_events() -> anyhow::Result<()> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+    let data_dir = alice.data_dir().to_str().context("UTF-8 path")?.to_owned();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", &data_dir, "--json", "stats", "network", "--follow"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("spawn stats network --follow")?;
+    let stdout = child.stdout.take().context("follow stdout")?;
+    let mut lines = BufReader::new(stdout).lines();
+
+    // The stream opens with the current snapshot.
+    let first = lines
+        .next()
+        .context("follow should emit its opening snapshot")?
+        .context("read first follow line")?;
+    let opening: serde_json::Value = serde_json::from_str(&first).context("opening follow line should be JSON")?;
+    ensure!(
+        opening.get("total_upload").is_some() && opening.get("total_download").is_some(),
+        "opening follow line should be a bandwidth snapshot: {opening}"
+    );
+
+    // Recording a sync session while the stream is live must surface as a line.
+    let stats_db =
+        syncweb_core::storage::stats_db::StatsDatabase::open(alice.data_dir().join("default").join("stats.db"))?;
+    let session = stats_db.record_sync_session_start("net1", "folderA")?;
+    stats_db.record_sync_session_finish(session, 3, 2048, 0, "completed")?;
+    drop(stats_db);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut observed = false;
+    while std::time::Instant::now() < deadline {
+        match lines.next() {
+            Some(Ok(line)) => {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line)
+                    && value.get("event") == Some(&serde_json::Value::from("sync_session"))
+                {
+                    observed = true;
+                    break;
+                }
+            }
+            Some(Err(error)) => anyhow::bail!("follow stream errored: {error}"),
+            None => break,
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    ensure!(
+        observed,
+        "a sync session recorded while following should appear in the stream"
+    );
+
+    Ok(())
+}

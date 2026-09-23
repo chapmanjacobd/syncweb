@@ -621,8 +621,24 @@ pub struct StatsNetworkArgs {
     pub peer: Option<String>,
     #[arg(long, help = "Reset persisted counters before displaying them")]
     pub reset: bool,
-    #[arg(long, help = "Retained for compatibility; counters are persisted since period start")]
+    #[arg(long, help = "Only include transfer events recorded in the last N (e.g. 24h, 7d)")]
     pub period: Option<String>,
+    #[arg(
+        long,
+        help = "Only include transfer events recorded since a unix timestamp or period (e.g. 24h, 7d)"
+    )]
+    pub since: Option<String>,
+    #[arg(
+        long,
+        visible_alias = "watch",
+        help = "Stream sync progress and network events live (one JSON object per line under --json)"
+    )]
+    pub follow: bool,
+    #[arg(
+        long,
+        help = "With --follow: print the current snapshot and exit instead of streaming"
+    )]
+    pub once: bool,
 }
 
 #[derive(Debug, Args)]

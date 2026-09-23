@@ -58,6 +58,7 @@
 | 2 | Ctrl+C on daemon | Graceful shutdown, logs "daemon stopped" | Check lifecycle: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_lifecycle;"` |
 | 3 | `syncweb start` (background) | Daemon forks to background, returns to prompt | |
 | 4 | `syncweb status` | Shows PID, uptime, bandwidth rates, folder statuses | Manual DB check: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_status;"` |
+| 4b | `syncweb --json status` (daemon running) | Single JSON object `{daemon, folders, devices, networks}` with all four keys present | |
 | 5 | `syncweb stop` | Prompts "Are you sure…?" (default no); confirm stops daemon, status shows "not running" | `syncweb status` returns error or "no daemon" |
 | 6 | Start daemon, then `syncweb stop --force` | Force kills daemon after the same confirmation | Check PID gone: `ps aux | grep syncweb` |
 | 7 | `syncweb stop --yes` in a script/pipe | Skips the prompt and stops the daemon; without `--yes` non-interactive runs abort ("aborted") and the daemon stays up — `--json` does not skip the prompt | `syncweb status` after aborted run still shows "daemon: running" |
@@ -388,8 +389,11 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | 1 | Sync large files while monitoring `syncweb stats network` | Bandwidth is capped at configured limit | `sqlite3 ~/.local/share/syncweb/stats.db "SELECT SUM(bytes) FROM bandwidth_events WHERE direction='download';"` |
 | 2 | Wait for inactive window, trigger sync | Sync does not start (or is delayed) | |
 | 3 | `syncweb stats network` | Shows totals, per-folder, per-peer | |
-| 4 | `syncweb stats network --period 24h` | Last 24 hours | |
-| 5 | `syncweb stats network --folder <namespace>` | Per-folder breakdown | |
+| 4 | `syncweb stats network --period 24h` | Only transfer events from the last 24h | `sqlite3 ~/.local/share/syncweb/stats.db "SELECT COUNT(*) FROM bandwidth_events;"` |
+| 5 | `syncweb stats network --since 24h --json` | JSON object with `total_upload`/`total_download`/`per_folder`/`per_peer`/`period_start` | |
+| 6 | `syncweb stats network --folder <namespace>` | Per-folder breakdown | |
+| 7 | `syncweb stats network --follow --once` | Prints the current snapshot and exits (cron-safe) | |
+| 8 | `syncweb stats network --follow` (Ctrl+C after a moment) | Streams sync sessions / network events live; under `--json` one JSON object per line (NDJSON) | |
 
 ---
 

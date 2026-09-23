@@ -8,7 +8,8 @@ the lazy-listing escape hatch that makes eager `join` (plan 02) safe
 ## Goal
 
 Restore the documented "List doc entries (lazy)" behavior
-(`docs/commands.md:35`, `docs/commands.md:477`) and, in one move, the rest of
+(`docs/commands.md:35`, `docs/commands.md:477` — :35 describes `find`'s
+metadata-only design; the "List doc entries (lazy)" `ls` row is at :477) and, in one move, the rest of
 that promised family (`find`, `sort`). The original Python client is the
 behavior spec: those commands read the **metadata index only** and the disk is
 touched **at most to enrich a row** (real size/mtime for files already on
@@ -24,7 +25,8 @@ after `join`).
     against each configured folder's mount root and aborts with
     `"X is not inside of a Syncweb folder"` otherwise; the listing data comes
     from Syncthing's `db/browse` + `db/file` metadata REST
-    (`syncweb/cmds/syncthing.py:711-729`), never a disk walk; the long form's
+    (`syncweb/syncthing.py:711-729`; the `files` reader is at :711-718, the
+    `file` metadata reader at :720-729), never a disk walk; the long form's
     Size/Modified come from that metadata.
   - `syncweb/cmds/find.py:179` `cmd_find` (:224 `args.st.files(...)`) and
     `syncweb/cmds/sort.py:164` `cmd_sort` are likewise `db/browse` reads.
@@ -109,7 +111,7 @@ after `join`).
     CLI has no client-side per-blob peer-count IPC (the daemon's `EnrichSort`
     peer map is always empty, ipc.rs:1467 — `sort --enrich` already degrades
     gracefully to metadata fields). Surfacing `peers`/% seeded needs a new IPC
-    surface — out of this plan's scope; tracked in plans 03/08.
+    surface — out of this plan's scope; **filed as plan 09** (`network peers`).
 - File: syncweb-cli/src/main.rs.
 
 ### 2. Python-style path→folder resolution: `resolve_selector_to_folder`

@@ -33,6 +33,7 @@ last.
 | 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
 | 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`, `policy`, `public list`) | — |
 | 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | 01, 02 |
+| 09 | [09-peer-availability.md](09-peer-availability.md) | LOW | Read-only per-folder peer surface: `network peers` (per-blob avail + inbound-peer list) that plans 01/05/08 all defer to | 01, 05, 08 |
 
 Notes on dependencies:
 

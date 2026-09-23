@@ -57,9 +57,10 @@ to know it was `stats files`, and the JSON shape varies per command).
    Maya's happy line, upgrading `handle_status`'s current single-`StateFile`
    surface (main.rs:600-655). No new IPC: reuse the same
    `handle_folders`/`handle_devices`/`handle_networks` data paths in an
-   aggregated branch. (`devices` will show only self-identity until the peer
-   list from plan 07/05 lands; keep the key present and empty rather than
-   omitting it.)
+    aggregated branch. (`devices` shows only self-identity until plan 09's
+    `syncweb network peers` peer surface ("inbound peers + per-blob
+    availability") lands; keep the key present and empty rather than omitting
+    it.)
 3. **Event feed for live progress** — `syncweb stats network --follow` /
    `--watch` that streams daemon sync events live using the existing
    `SyncEvent`/fetch-intent plumbing (main.rs:2527-2539); Oli gets a

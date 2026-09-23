@@ -53,11 +53,11 @@ piece is missing:
   recommended — it is the only place `access` needs data the daemon doesn't
   already serve, and it also fixes the `handle_folders` daemon path, which today
   silently omits mode.
-- The "who joined" (inbound peer) column is **deferred**: exposing it requires a
-  new core/IPC peer-list surface, which is out of scope here and should be filed
-  as its own plan (or folded into the plan-07 `devices` doc-drift fix). Until
-  then, `access` reports outbound shares + network members, and leaves the
-  `Devices` column empty with a clear "inbound peers not yet surfaced" note.
+- The "who joined" (inbound peer) column is **deferred to plan 09**
+  (`syncweb network peers`: a new read-only core/IPC peer-list surface, filed
+  in 09). Until then, `access` reports outbound shares + network members, and
+  leaves the `Devices` column empty with a clear "inbound peers not yet
+  surfaced" note.
 - `Pinned?` is populated from the blob store's pin list (`blob_store.list_pins`
   with the `public_blob_pin` prefix), which requires a node handle. If gathering
   it per-row adds cost/complexity, defer it to the same follow-up as inbound

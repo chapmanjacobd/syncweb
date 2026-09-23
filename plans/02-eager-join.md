@@ -121,9 +121,11 @@ subscribes nothing — the user must already know the two hidden flags
   `join`/`join_with_options` (tests/workflow/mod.rs:106-116, used across
   `basic_sync.rs` and friends) and the daemon-mode join at
   daemon_integration_test.rs:426 (`join --subscribe --ingest-only`, which
-  currently stays lazy; the existing `--download-all` joins at :1049/:1187 are
-  unaffected). They assert on folder tracking / capability, not on absence of
-  files, so they keep passing — but any lazy-focused scenario (plan 01's tests)
+  currently stays lazy; the existing `--download-all` joins at
+  daemon_integration_test.rs:1049/:1191 — the `syncweb()` calls start at
+  :1049/:1187 — are unaffected). They assert on folder tracking / capability,
+  not on absence of files, so they keep passing — but any lazy-focused
+  scenario (plan 01's tests)
   must pin `--no-download`, and the suite gets slower. Note this in the PR
   description rather than modifying every helper.
 

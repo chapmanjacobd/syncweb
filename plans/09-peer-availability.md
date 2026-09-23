@@ -5,21 +5,23 @@ Priority: LOW · Status: Draft · Owner: `syncweb-core` (one additive read-only 
 ## Why this plan exists
 
 Three earlier plans each defer the **same** reader-facing surface — per-blob
-peer availability and the inbound-peer ("who joined") list — and each points at
-a destination that does not deliver it:
+peer availability and the inbound-peer ("who joined") list — and all three
+explicitly point **here**. This plan is the destination they name; it must
+actually land, or those deferral lines become dangling:
 
-- **Plan 01:109-113** — `ls`/`find`/`sort` "Peer availability is deliberately
+- **Plan 01:109-114** — `ls`/`find`/`sort` "Peer availability is deliberately
   absent… Surfacing `peers`/% seeded needs a new IPC surface — out of this
-  plan's scope; **tracked in plans 03/08**." Plan 03 is the unified-filter
-  vocabulary and plan 08 is `stats network` bandwidth JSON — neither adds the
-  peer surface. Dangling pointer.
-- **Plan 05:56-58** — the `access` inbound-peer column: "should be filed as
-  its own plan (or folded into the plan-07 `devices` doc-drift fix)." The
-  plan-07 fold is docs-only (docs/commands.md:476 drift; 07:118-122 requires
-  **no** IPC), so it can never surface inbound peers. The "own plan" was never
-  filed. Dangling pointer.
-- **Plan 08:60** — `devices` "will show only self-identity until the peer
-  surface" lands; the surface never lands.
+  plan's scope; **filed as plan 09** (`network peers`)."
+- **Plan 05:56-59** — the `access` inbound-peer `Devices` column is
+  "**deferred to plan 09** (`syncweb network peers`: a new read-only
+  core/IPC peer-list surface, filed in 09)."
+- **Plan 08:60-62** — `devices` "shows only self-identity until plan 09's
+  `syncweb network peers` peer surface… lands; keep the key present and empty
+  rather than omitting it."
+
+Note: an earlier draft of this plan misquoted those three deferral lines as
+pointing at plan 03 / plan 08 / the plan-07 doc fold; the plans as they stand
+all name this one correctly, so no retargeting is needed — only the work below.
 
 This plan is that surface. It is deliberately **additive and read-only**:
 exactly one new core/IPC command, consumed by the three reading sites above,
@@ -36,22 +38,22 @@ plans 01/05/08's deferral lines.
 ## Evidence (verified in code)
 
 - `devices` today prints **self-identity only** — iroh node id +
-  syncthing device id (main.rs:4274-4290 "handle_devices"). No peer list.
+  syncthing device id (main.rs:4274-4292 `handle_devices`). No peer list.
 - The daemon's per-blob peer-count map **exists but is always empty at the
   client**: `EnrichSort` carries a `peers` map that the CLI can't populate
   (`ipc.rs:1467` — `sort --enrich` already degrades gracefully to metadata
   fields; prior noted ipc.rs:1467).
-- There is **no inbound-peer ("who joined") IPC**: the daemon's peer list
-  (`handle_devices`) is outbound share/named-network data only
-  (commands.rs:813-824 `UnshareArgs`, main.rs:2737 `handle_unshare`); folder
-  status reports carry `mode`/path but no peer set (state.rs:80, plan 05 step
+- There is **no inbound-peer ("who joined") IPC**: the only share/network
+  surfaces are outbound — the persisted share records (`share --list`,
+  `handle_unshare`, main.rs:2737) and named-network membership — and folder
+  status reports carry `mode`/path but no peer set (state.rs:80; plan 05 step
   1 adds `mode` but not peers).
 - Python is likewise outbound-only today (`syncweb/syncthing.py:483-518`
   `devices` REST), so nothing to port; this is the CLI's first inbound view.
 
 ### Scope guard
 
-- **Permissions exactly one core/IPC addition:** a read-only
+- **Permits exactly one core/IPC addition:** a read-only
   `IpcCommand::PeerAvailability { folder_selection }` →
   `{folder, peers: [{device_id, name?, connection}] ,
   per_blob: [{path, hash, peer_count, peers: [device_id], % seeded}]}`
@@ -69,8 +71,11 @@ plans 01/05/08's deferral lines.
 1. **Core IPC (read-only): `IpcCommand::PeerAvailability`** — daemon aggregates
    from its device registry (`networks`, `share --list`-adjacent data)
    + the blob store's per-blob peer-interest count (the count `EnrichSort`
-   would carry). No new state; reuse existing aggregation in `handle_devices`
-   + the (empty today) `EnrichSort` peer map at ipc.rs:1467.
+   would carry). No new state; reuse the daemon's existing network/membership
+   aggregation (the data `handle_status_networks`, main.rs:4119, draws on
+   through `network_manager`) + the (empty today) `EnrichSort` peer map at
+   ipc.rs:1467. (`handle_devices` is CLI-side self-identity printing,
+   main.rs:4274, and has no peer aggregation to reuse.)
 2. **CLI surface: `syncweb network peers [<namespace-or-path>] [--json]`** —
    hidden-arg alias on the grouped `network` family (plan 06 verbs; commands.rs
    category table), never a new top-level verb. `--json` always available.

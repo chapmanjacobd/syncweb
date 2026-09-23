@@ -81,7 +81,10 @@ piece is missing:
    guess.
 3. Add `access --revoke <ns> [--read|--write]` sugar that dispatches to
    `handle_unshare` (main.rs:2737) with the appropriate flags — i.e. one verb to
-   both see and revoke, with plan 04's confirmation + `--yes` running underneath.
+   both see and revoke. Confirmation follows plan 04 exactly: `--write` runs
+   plan 04's write-access prompt (with `--yes` as the skip); `--read` maps to
+   the plain unshare path, which per plan 04's scope choice is prompt-free (it
+   removes the read share row and drops retention pins, not data).
    **`UnshareArgs` has no `--read` flag** (only `--write` and `--blob`;
    commands.rs:813-824 — there is no `--ticket`); map `--read` to the plain
    unshare path (no `--write`), which is the read-ticket revoke — and remember

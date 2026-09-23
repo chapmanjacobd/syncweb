@@ -70,11 +70,20 @@ after `join`).
 - Changes `ls`, **`find`, and `sort`** to metadata-first via **one shared
   resolver + one shared entry-listing helper** guarded by `--local-only`
   (below), which preserves today's exact disk-scan code path for scripts.
-- Core change permitted (and the only one): a **folder mount-path registry**
-  (new node_db rows upserted at create/join/accept in embedded and daemon
-  modes; read by the resolver). No daemon **protocol** changes — reads go
-  through the already-existing `folder.list_entries()`/`has_local()` bound to
-  the resolved folder.
+- Two core additions permitted: a **folder mount-path registry** (new node_db
+  rows upserted at create/join in embedded and daemon modes; read by the
+  resolver) and **one read-only IPC command** (`ListEntries { folder_selection }
+  -> Vec<EntryRow>`, where `EntryRow = {path, hash, size, local, modified?}`,
+  mirroring the existing `IpcCommand::StatsFiles` pattern at
+  ipc.rs:133/782). The IPC is required because in daemon-connected runs the CLI
+  has no `SyncwebFolder` *or* blob store: the daemon owns the node, and opening
+  a second embedded node on the same `data_dir` conflicts (endpoint binds the
+  same node identity; `Docs::persistent` store is single-instance). The IPC
+  response carries the daemon-computed `local` flag (`has_local`) and, when the
+  file is local, the stat-enriched `size`/`modified`; the CLI only renders. The
+  CLI therefore lists entries over IPC when a daemon is connected and via
+  `folder.list_entries()`/`has_local()` when embedded — reads never scan the
+  disk in either mode.
 - `download`/`verify` keep their current behavior; their `--remote-only` and
   filter unification arrive in plan 03.
 
@@ -83,11 +92,21 @@ after `join`).
 ### 1. Shared metadata listing helper: `print_folder_entries`
 
 - Extract the doc-metadata walk from the `join --download-all` flow
-  (main.rs:2546-2560) **minus its disk-write step** into a reusable function:
+  (main.rs:2546-2560) **minus its disk-write step** into a reusable function
+  (must be `async` — `list_entries`/`has_local` are async, so `handle_ls`
+  main.rs:4298, `handle_find` main.rs:4336, and `handle_sort` main.rs:4449
+  all become `async fn`):
   - Signature:
-    `fn print_folder_entries(folder: &SyncwebFolder, mount_root: &Path, filter: &ContentFilter, output_json: bool) -> Result<()>`.
+    `async fn print_folder_entries(folder: &SyncwebFolder, mount_root: &Path, filter: &ContentFilter, output_json: bool) -> Result<()>`.
     `mount_root` comes from the resolver (step 2) because `SyncwebFolder`
     carries no mount path (`path()` → `None`, syncweb_folder.rs:282-284).
+    `find`/`sort` do **not** call this helper as-is: they share its entry-walk
+    + stat-enrichment + envelope-printing core but apply a `FindQuery`
+    predicate (find) or a table sort (sort) before printing — refactor the
+    walk into `enumerate_folder_entries(folder, mount_root) -> Vec<LocalEntry>`
+    (returns the stat-enriched rows) plus one small `print_entries(rows,
+    output_json)`; `ls` = enumerate + print, `find` = enumerate + filter +
+    print, `sort` = enumerate + sort + print.
   - The walk calls `blob_store.export_to_path(entry.hash, …)`
     (main.rs:2553-2558); the listing must **never materialize blobs** — it
     only checks `folder.has_local(hash)` (syncweb_folder.rs:116) to set
@@ -116,9 +135,14 @@ after `join`).
 
 ### 2. Python-style path→folder resolution: `resolve_selector_to_folder`
 
-- Add `fn resolve_selector_to_folder(ctx, selector: &Path) -> Result<(SyncwebFolder, RelativePath, PathBuf)>`
-  (the third element is the folder's mount root, needed for enrichment —
-  `SyncwebFolder.path()` is `None`):
+- Add `fn resolve_selector_to_folder(ctx, selector: &Path) -> Result<(NamespaceId, PathBuf, RelativePath)>`
+  — the resolved namespace id, its mount root, and the selector's relative
+  remainder (the mount root is needed for enrichment because
+  `SyncwebFolder.path()` is `None`, syncweb_folder.rs:282-284). The tuple
+  keeps both listing modes representable: embedded callers turn the id into a
+  `SyncwebFolder` via `FolderManager::get(namespace_id)`;
+  daemon-connected callers send `ListEntries { folder_selection: <id> }`
+  without ever needing a local `SyncwebFolder`:
   1. **Namespace id:** `manager.resolve(selector)` (manager.rs:276) →
      wholesale listing, prefix empty. (Covers the `stats files` path and the
      existing `resolve_namespace` callers.)
@@ -137,17 +161,30 @@ after `join`).
      ls.py:13 — where Python logs and continues, we **error and exit**; the
      Python client walks multiple folders and keeps going, the CLI is
      single-selector. See Risks.)
-- **Registry (the one core change):** add a `folder_mounts(namespace_id TEXT
+- **Registry (a core change):** add a `folder_mounts(namespace_id TEXT
   PRIMARY KEY, path TEXT NOT NULL, updated_at)` table to
   `syncweb-core/src/storage/node_db.rs` (alongside `folder_status_reports`,
   node_db.rs:210/555), upserted by the CLI in **both** embedded and daemon
-  paths from the folder's actual mount dir at `create`/`join`/`accept`; a
-  `load_folder_mounts()` helper for the resolver. Registry rows are advisory —
-  the resolver filters by live `FolderManager` membership at call time, so
-  stale rows never resolve to a departed folder. In daemon-connected runs the
-  resolver additionally seeds from `FolderList` paths (ipc.rs:662-665) so a
-  `syncweb --remote ls <path>` sees paths the daemon knows but the local
-  registry lacks.
+  paths from the folder's actual mount dir at `create`/`join` (there is no
+  `accept` verb — see plan 07); a `load_folder_mounts()` helper for the
+  resolver. Registry rows are advisory — the resolver filters by live
+  `FolderManager` membership at call time, so stale rows never resolve to a
+  departed folder. In daemon-connected runs the resolver additionally seeds
+  from `FolderList` paths (ipc.rs:662-665) so a `syncweb ls <path>` sees paths
+  the daemon knows but the local registry lacks.
+- **Daemon-connected listing:** the resolver's `print_folder_entries` caller
+  picks the entry source by mode — embedded opens `open_node(data_dir)` and
+  calls `folder.list_entries()` + `has_local` + the per-entry stat itself;
+  daemon-connected sends the new `ListEntries` IPC (scope guard) and renders
+  the response rows directly (the daemon computes `local`/enriched size/mtime
+  there, since the CLI has no blob store in that mode). Selector resolution
+  follows the same split: embedded uses `manager.resolve`/`resolve_namespace` +
+  the mount registry; daemon-connected uses the existing
+  `resolve_namespace_via_daemon` (main.rs:672, which matches via
+  `IpcCommand::ListFolders` — path equality, namespace prefix, or the
+  sole-folder fallback) and `FolderList` `path` fields as the mount roots for
+  the longest-prefix step. Do **not** open a second embedded node while a daemon
+  runs (store/endpoint conflict).
 - **Removes yesterday's single-folder hack:** the old draft's "on a
   single-folder node every selector resolves to the sole folder" caveat is
   obsolete — `ls <folder-dir>` now resolves on multi-folder nodes via the
@@ -175,6 +212,12 @@ after `join`).
     vocabulary (`name`/`size`/`modified`/`state`), not `handle_sort`'s
     `--by` set (niche/frecency/peers/…); the flag name is shared but the two
     modes accept different values, so document the split in the man page.
+    **Validation rule to implement:** under `--local-only` the value must
+    parse in `handle_sort`'s `--by` set (else that handler errors today);
+    on a resolved folder it must be one of `name`/`size`/`modified`/`state`
+    (reject the others with a clear message). Sorting by `modified` on remote
+    rows is undefined — they print `-` — so `modified` falls back to doc
+    `size` for remote rows and the man page says so.
 - Files: syncweb-cli/src/main.rs, syncweb-cli/src/cli/commands.rs.
 
 ### 4. Guard the no-metadata state
@@ -209,7 +252,7 @@ after `join`).
   assertion (plan 08's single-envelope contract; one object per command,
   arrays only under a named key).
 - **Verification note:** `ls --json` today emits a **bare array of paths**
-  (main.rs:4322-4327) and `find --json` does the same (main.rs:4411-4422).
+  (main.rs:4322-4327) and `find --json` does the same (main.rs:4425-4436).
   This plan switches both to the envelope: a deliberate, **breaking contract
   change** overriding index principle #2's "additive only" in this one case
   (plan 08's envelope). Flag it in the changelog; the revert path is in Risks.
@@ -239,8 +282,9 @@ after `join`).
     under a mount root → folder+prefix; outside every root → the error; a
     stale registry row filtered out by live `FolderManager` membership.
 - `syncweb-cli/tests/daemon_integration_test.rs` (optional but encouraged):
-  `syncweb --remote ls <ns>` shows remote entries via the `FolderList`-seeded
-  path when the local registry is empty.
+  with a daemon running, `syncweb ls <ns>` shows remote entries via the new
+  `ListEntries` IPC when the local mount registry is empty (no `--remote` flag
+  exists; daemon-connected is the default when a daemon is up).
 
 ## Risks / rollback
 
@@ -264,10 +308,11 @@ after `join`).
 
 - Do **not** regress the `ls --sort`→`handle_sort` dispatch for non-folder
   selectors (main.rs:4300); only folder selections move to the table sort.
-- `FolderManager.create`/`join`/`accept` call sites in main.rs:
+- `FolderManager.create`/`join` call sites in main.rs:
   `handle_create` (main.rs:2280), `handle_join` (main.rs:2442),
   daemon join-download (ipc.rs:1235) — registry upsert goes where the folder's
-  mount dir is known in **each** path (embedded + daemon).
+  mount dir is known in **each** path (embedded + daemon). (There is no
+  `accept` verb in the CLI — see plan 07 — so no accept-site upsert.)
 - Man pages `syncweb-ls.1`, `syncweb-find.1`, `syncweb-sort.1` and
   completions regenerate after the flag change (plan 07's drift loop);
   `docs/commands.md:477-478` rows become accurate again (see plan 07).

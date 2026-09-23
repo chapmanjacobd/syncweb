@@ -67,7 +67,9 @@ error at dispatch or behave differently than promised.
     `folders --limit-upload` (:642), `devices --peer-limit` (:643),
     `devices --bep` (:684), `find --glob` (:658) / `find --min-size` (:659),
     and `search --bootstrap`/`--timeout-ms` (:479). Correct or delete the
-    flags. Note plan 03 makes `download --size`/`--ext` and `find`'s size/ext
+    flags. The `find` examples at :132 (`find --glob '/*.mp3'`) and :138
+    (`find --type f --ext mp3 --min-size 10MB`) use the same two unwired
+    spellings — fix those blocks in the same sweep. Note plan 03 makes `download --size`/`--ext` and `find`'s size/ext
     real — re-check those two rows *after* plan 03, not now; the
     `folders`/`devices`/`search` flags stay unwired and should be deleted or
     marked unsupported.
@@ -103,15 +105,17 @@ error at dispatch or behave differently than promised.
      implementation): docs/commands.md:491, docs/overview.md:53,
      docs/phases.md:14, docs/testing.md:108, syncweb-cli/README.md:30.
    - `policy` / `public list` / `export` → `policy` and `public list` have no
-     implementation behind any plan, so remove their rows (docs/commands.md:493-494).
-     Top-level `export` (docs/commands.md:621-622, :827; MANUAL_TESTING_PLAN.md:201-202)
-     is a stale spelling — the real command is `package export` — so rewrite the
-     references to `syncweb package export` rather than dropping the (implemented)
-     feature.
+      implementation behind any plan, so remove their rows (docs/commands.md:493-494)
+      **and the `syncweb public list` row at MANUAL_TESTING_PLAN.md:234** (the
+      sweep missed it in the first audit).
+      Top-level `export` (docs/commands.md:621-622, :827; MANUAL_TESTING_PLAN.md:201-202)
+      is a stale spelling — the real command is `package export` — so rewrite the
+      references to `syncweb package export` rather than dropping the (implemented)
+      feature.
    - `conflicts`/`pending`/`deleted`/`undelete` rows in
-     MANUAL_TESTING_PLAN.md (:429-433, :444-446) and the `docs/overview.md:204`
-     "undelete" mention → remove alongside their docs/commands.md rows above.
-- `mirror` → remove `man/syncweb-mirror.1` and the docs/indexing.md
+      MANUAL_TESTING_PLAN.md (:429-433, :444-446) and the `docs/overview.md:204`
+      "undelete" mention → remove alongside their docs/commands.md rows above.
+   - `mirror` → remove `man/syncweb-mirror.1` and the docs/indexing.md
       references (:136, :148) and the MANUAL_TESTING_PLAN.md mirror section
       (:353-356); `mirror` is core-only (`register_mirror`), never a CLI verb.
    - `devices`/`ls`/`find` behavior drift → the `ls`/`find` rows

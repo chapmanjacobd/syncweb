@@ -76,12 +76,15 @@ content-fetch commands (`download`/`verify`) have almost no filters at all.
    `--fix`. Add `ContentFilterArgs → ContentFilter` so the new fields map onto
    the download/verify filter without breaking their existing hash/path filters.
    **Where the filtering happens (scope-guard constraint):** the daemon-side
-   filter (`build_ipc_verify_filter`, ipc.rs:1503) only understands
+   filter (`build_ipc_verify_filter`, ipc.rs:2113) only understands
    hash/path-prefix/glob, so ext/size/type/modified must be applied **client-side
    to the entry list before the fetch/verify call** (list doc entries via
-   `folder.list_entries()`, filter by the new predicates, then pass the matched
+   `folder.list_entries()` — or, in daemon-connected runs, plan 01's new
+   read-only `ListEntries` IPC — filter by the new predicates, then pass the matched
    hashes/paths through the existing hash/path filters). This keeps
-   "no daemon/core protocol changes" true; extending `VerifyFilter` (core) is
+   "no daemon/core protocol changes" true for the filter surface itself
+   (plan 01's `ListEntries` is the only protocol addition, and it is additive);
+   extending `VerifyFilter` (core) is
    explicitly out of scope here. **Underspecification fix:** `download`'s
    `source` is not always a managed folder — it can be a plain local path
    (`handle_download`'s local-copy branch walks the filesystem directly). The

@@ -92,7 +92,8 @@ matching the visual weight their consequences deserve.
 
 - Add `yes: bool` to `Cli` (syncweb-cli/src/cli/args.rs, `#[arg(long, global = true, help = "Assume yes to every destructive-operation prompt")]`).
 - Plumb it through `CliContext` (add a `yes: bool` field, args.rs:7-13) so
-  handlers can pass it. `confirm_destructive`'s signature becomes
+  handlers can pass it — `CliContext` is constructed at **three** sites in
+  main.rs (172, 253, 262), all must add the field. `confirm_destructive`'s signature becomes
   `confirm_destructive(operation: &str, assume_yes: bool)` where the caller
   passes `ctx.output_json || ctx.yes`. Update the existing call sites
   (main.rs:480 `shutdown` and 1174 `snapshot delete` use `ctx` directly; 3892
@@ -130,9 +131,9 @@ matching the visual weight their consequences deserve.
     now aborts and the assert flips. (The plain `leave` calls at :507/:750 are
     unaffected.) The workflow helper `leave_delete_files` (mod.rs:123) is
     currently `#[expect(dead_code)]` — not called, so nothing to migrate there.
-  - `cli_test.rs`: `shutdown --force` (:779), `unshare --write` (:998),
-    `network leave` (:1253), `network kick` (:1225 — this test expects the kick
-    to *fail*; without `--yes` the non-TTY abort exits 0 and flips the
+  - `cli_test.rs`: `shutdown --force` (:778-779), `unshare --write` (:1003-1008),
+    `network leave` (:1253-1254), `network kick` (:1225-1230 — this test expects
+    the kick to *fail*; without `--yes` the non-TTY abort exits 0 and flips the
     assertion).
   - `workflow/basic_sync.rs`: network leave (:216) and `snapshot delete` (:286)
     both run non-TTY and now abort; the workflow helpers `network_leave`

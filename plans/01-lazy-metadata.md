@@ -1,4 +1,4 @@
-# Plan 01 — Expose lazy metadata browsing: real remote-listing for joined folders
+# Plan 01 — Metadata-first `ls`/`find`/`sort`: the doc index is the source; the filesystem only enriches (Python-impl parity)
 
 Priority: HIGH · Status: Draft · Owner: `syncweb-cli`
 Depends on: — · Serves story #4 (Ari: browse a huge remote library before
@@ -7,151 +7,261 @@ the lazy-listing escape hatch that makes eager `join` (plan 02) safe
 
 ## Goal
 
-Give users a real, documented way to **see a joined folder's contents before
-those files exist on disk**. Today `ls` is a local-disk scan, so a joined (but
-not yet downloaded) folder prints nothing — the exact opposite of the promised
-"doc metadata only — no blob download needed" story in `docs/commands.md:35`
-and the "List doc entries (lazy)" row at `docs/commands.md:477`.
+Restore the documented "List doc entries (lazy)" behavior
+(`docs/commands.md:35`, `docs/commands.md:477`) and, in one move, the rest of
+that promised family (`find`, `sort`). The original Python client is the
+behavior spec: those commands read the **metadata index only** and the disk is
+touched **at most to enrich a row** (real size/mtime for files already on
+disk). Today the Rust CLI is the exact inverse — `ls`/`find`/`sort` are full
+`ParallelScanner`/`FindEngine` directory walks that print nothing for a
+joined-but-not-yet-downloaded folder (plan 02 makes that state the norm right
+after `join`).
 
 ## Evidence (verified in code)
 
-- `handle_ls` (syncweb-cli/src/main.rs:4298) always scans the **local
-  filesystem** via `ParallelScanner` (main.rs:4317). It never consults the
-  folder's doc entries.
-- The lazy metadata source of truth **already exists**: joined folders expose
-  `folder.list_entries()` (doc entries, no blob fetch) — used today only inside
-  `download_joined_folder` (main.rs:2546) during `join --download-all` (and by
-  the daemon's join-download handler, ipc.rs:1235).
-- `FolderManager` is available in the same module as `handle_ls`; the
-  namespace-resolution helpers already exist and require no new capabilities:
-  - `manager.resolve(&path)` (syncweb-core/src/folder/manager.rs:276) — resolves
-    a path selector to a `SyncwebFolder`; already used by `stats files`
-    (main.rs:1954).
-  - `manager.resolve_namespace(&str)` (manager.rs:287) — used at
-    main.rs:2602/2653/2755/2876.
-  - `manager.get(namespace)` — used at main.rs:2654/2758/2773.
-- Filter plumbing already exists to reuse rather than reinvent:
-  - `FindQuery` (syncweb-core/src/search.rs:29) supports glob/exact/regex
-    pattern, extensions, size, depth, time, and file-type constraints; consumed
-    by `handle_find` (main.rs:4338-4410).
-  - `ContentFilter` (syncweb-cli/src/cli/filter.rs:9) is the download/verify
-    filter group (hash/path-prefix/glob). Plan 03 unifies the filter vocabulary
-    into one shared `ContentFilterArgs`; this plan reuses only the existing
-    `ContentFilter` (path-prefix/glob) and defers the depth/ext/size predicates
-    to plan 03 rather than adding one-off flags.
+- **Python implementation is the behavior spec** (`../syncweb-py/`):
+  - `syncweb/cmds/ls.py:95` `cmd_ls`; `path2fid` (ls.py:9-20) resolves a path
+    against each configured folder's mount root and aborts with
+    `"X is not inside of a Syncweb folder"` otherwise; the listing data comes
+    from Syncthing's `db/browse` + `db/file` metadata REST
+    (`syncweb/cmds/syncthing.py:711-729`), never a disk walk; the long form's
+    Size/Modified come from that metadata.
+  - `syncweb/cmds/find.py:179` `cmd_find` (:224 `args.st.files(...)`) and
+    `syncweb/cmds/sort.py:164` `cmd_sort` are likewise `db/browse` reads.
+    `stat.py` too. Nothing smaller than a single fstat touches the disk.
+- **Rust today is the opposite:** `handle_ls` (syncweb-cli/src/main.rs:4298)
+  always scans via `ParallelScanner` (main.rs:4317); `handle_find`
+  (main.rs:4336-4410) and `handle_sort` (main.rs:4449+) scan disk and never
+  consult the folder's doc entries.
+- **The lazy source of truth already exists:** `folder.list_entries()`
+  (doc entries, no blob fetch) — used today only inside
+  `download_joined_folder` (main.rs:2546) and by the daemon's join-download
+  handler (ipc.rs:1235). `folder.has_local(hash)` (syncweb_folder.rs:116)
+  decides local/remote without a scan.
+- **Folder mount paths are already persisted**, so Python-style path→folder
+  resolution is a small addition, not a new protocol:
+  - `FolderStatusReport.path` (syncweb-core/src/daemon/state.rs:82) is
+    persisted in `folder_status_reports` (node_db.rs:555, loaded at
+    node_db.rs:640-655) and served over IPC by `FolderList` (ipc.rs:662-665).
+  - **Gap:** the reports are written only by the daemon status save; embedded
+    `--no-daemon` nodes and stale daemon data aren't reliable, and
+    `SyncwebFolder` does not carry its mount path (`path()` → `None`,
+    syncweb_folder.rs:282-284). One core addition is therefore in scope: a
+    namespace→mount-path registry written at create/join in both modes — the
+    Rust analogue of Python's folder `"path"` field surfaced by Syncthing's
+    `config/folders` API.
+- Existing resolver plumbing handles the "selector is a namespace id" case:
+  `manager.resolve(path)` (manager.rs:276, already used by `stats files`,
+  main.rs:1954) and `manager.resolve_namespace` (manager.rs:287, used at
+  main.rs:2602/2653/2755/2876). The new registry handles the "selector is a
+  path inside a mount root" case that `resolve_namespace` cannot
+  (manager.rs:287-297 matches a namespace id or the sole folder only).
+- Filter plumbing exists to reuse: `ContentFilter` (syncweb-cli/src/cli/filter.rs:9)
+  provides path-prefix/glob for the listing; `FindQuery`
+  (syncweb-core/src/search.rs:29) provides pattern/size/depth/time/type for
+  find. Plan 03 lands the unified `ContentFilterArgs`; this plan uses only
+  today's `ContentFilter` (path-prefix/glob, with plan 03's `--path-glob`
+  spelling from day one) and defers the depth/ext/size predicates to plan 03.
 
 ## Scope guard
 
-- This plan changes **`ls` only**; `find` and `sort` keep their local-disk
-  behavior for now (they get remoted as a follow-up once this approach proves
-  out — see plan 03). No daemon protocol changes; no core changes.
+- Changes `ls`, **`find`, and `sort`** to metadata-first via **one shared
+  resolver + one shared entry-listing helper** guarded by `--local-only`
+  (below), which preserves today's exact disk-scan code path for scripts.
+- Core change permitted (and the only one): a **folder mount-path registry**
+  (new node_db rows upserted at create/join/accept in embedded and daemon
+  modes; read by the resolver). No daemon **protocol** changes — reads go
+  through the already-existing `folder.list_entries()`/`has_local()` bound to
+  the resolved folder.
+- `download`/`verify` keep their current behavior; their `--remote-only` and
+  filter unification arrive in plan 03.
 
 ## Steps
 
-### 1. Detach lazy listing into `print_remote_entries`
+### 1. Shared metadata listing helper: `print_folder_entries`
 
-- Extract the doc-metadata table path from the `join --download-all` flow into a
-  reusable function:
-  - Signature: `fn print_remote_entries(folder: &SyncwebFolder, filter: &ContentFilter, output_json: bool) -> Result<()>`, modeled on the entry walk at main.rs:2546-2560 **minus its disk-write step** — the walk calls `blob_store.export_to_path(entry.hash, …)` (main.rs:2553-2558); the listing must never materialize blobs, only check `folder.has_local(hash)`. (`folder` already carries the blob store, so `folder.has_local(hash)` (syncweb_folder.rs:116) decides `State`; no separate `manager`/`node` param is needed.)
-  - Columns (human): `Path`, `Size`, `State` (`local` if the blob is present in
-    the blob store, `remote` otherwise).
-  - JSON: `{folder, path, entries: [{path, size, hash, local}]}` (see step 4 —
-    one envelope per command, consistent with plan 08).
+- Extract the doc-metadata walk from the `join --download-all` flow
+  (main.rs:2546-2560) **minus its disk-write step** into a reusable function:
+  - Signature:
+    `fn print_folder_entries(folder: &SyncwebFolder, mount_root: &Path, filter: &ContentFilter, output_json: bool) -> Result<()>`.
+    `mount_root` comes from the resolver (step 2) because `SyncwebFolder`
+    carries no mount path (`path()` → `None`, syncweb_folder.rs:282-284).
+  - The walk calls `blob_store.export_to_path(entry.hash, …)`
+    (main.rs:2553-2558); the listing must **never materialize blobs** — it
+    only checks `folder.has_local(hash)` (syncweb_folder.rs:116) to set
+    `State`. (`folder` carries the blob store, so no extra
+    `manager`/`node` param.)
+  - **Disk is consulted only to enrich:** for entries where `has_local` is
+    true, `std::fs::metadata(mount_root.join(entry.path))` overlays the real
+    file `size` (byte count differs from blob metadata) and `modified` time on
+    the row when present. This is a per-entry `stat`, **not** a directory
+    scan. If the stat fails (file vanished between check and read), fall back
+    to the doc metadata silently.
+  - Columns (human): `Path`, `Size`, `Modified`, `State` (`local` if the blob
+    is in the blob store, `remote` otherwise).
+  - JSON: `{folder, path, entries: [{path, size, hash, local, modified?}]}`
+    (plan 08 single-object envelope; bare array today at main.rs:4322-4327).
   - **Peer availability is deliberately absent.** Doc entries carry only
-    `path/hash/size` (`EntryLike`, folder/public_subscription.rs:11) and the CLI
-    has no client-side per-blob peer-count IPC today (the daemon's
-    `EnrichSort` peer map is always empty, ipc.rs:1467). Surfacing `peers`/%
-    seeded would need a new IPC surface — out of this plan's "no daemon/core
-    changes" scope. Track it as a follow-up (plans 03/08).
-  - File: syncweb-cli/src/main.rs.
+    `path/hash/size` (`EntryLike`, folder/public_subscription.rs:11) and the
+    CLI has no client-side per-blob peer-count IPC (the daemon's `EnrichSort`
+    peer map is always empty, ipc.rs:1467 — `sort --enrich` already degrades
+    gracefully to metadata fields). Surfacing `peers`/% seeded needs a new IPC
+    surface — out of this plan's scope; tracked in plans 03/08.
+- File: syncweb-cli/src/main.rs.
 
-### 2. Make `ls` folder-aware
+### 2. Python-style path→folder resolution: `resolve_selector_to_folder`
 
-- In `handle_ls`, before falling back to the local scan:
-  1. Try `manager.resolve(&command.path)` (manager.rs:276) or
-     `manager.resolve_namespace(selector)`.
-  2. If it resolves to a folder: call `print_remote_entries` (the doc path).
-  3. If it doesn't resolve, keep the current local scan (unchanged behavior for
-     ordinary directories).
-  - **Selector-resolution caveat:** `resolve_namespace` (manager.rs:287-297)
-    matches only a namespace ID or, when there is exactly **one** managed
-    folder, the sole folder — it does **not** match an arbitrary mount-point
-    path, and `SyncwebFolder` does not track its mount path today
-    (`path()` returns `None`, syncweb_folder.rs:282-284). So `ls <folder-dir>`
-    resolves only when `<folder-dir>` is a namespace ID or the node has a
-    single folder. Mapping an arbitrary managed path → folder requires folder
-    path tracking, which is a core change out of scope here; note it as a
-    follow-up rather than claiming path resolution works.
-    **Consequence on single-folder nodes:** on a node with exactly one managed
-    folder, *every* `ls <path>` first resolves to that folder's remote listing
-    — including unrelated local paths. That is the intended "lazy wins" default;
-    `--local-only` below is the documented escape hatch.
-- Add flags:
-  - `--remote-only` (only show entries not yet on disk)
-  - `--local-only` (show only the current disk scan; equivalent to today's
-    default — this preserves scripts that rely on `ls` = disk)
-  - Filter flags on `ls` are **new** (there are none today — `LocalPathArgs`
-    has only `path`/`sort`/`threads`, commands.rs:347-358). This plan adds
-    `--path-prefix`/`--path-glob` (with hidden `--glob` alias), wired into
-    `print_remote_entries` via the existing `ContentFilter` and using plan 03's
-    renamed spelling from day one (`--glob` → `--path-glob`, step 5 of plan 03);
-    the depth/ext/size/type vocabulary lands later with plan 03's shared
-    `ContentFilterArgs`, not as one-off flags here.
-- Files: syncweb-cli/src/main.rs, syncweb-cli/src/cli/commands.rs
-  (`LocalPathArgs`, currently commands.rs:347-358).
+- Add `fn resolve_selector_to_folder(ctx, selector: &Path) -> Result<(SyncwebFolder, RelativePath, PathBuf)>`
+  (the third element is the folder's mount root, needed for enrichment —
+  `SyncwebFolder.path()` is `None`):
+  1. **Namespace id:** `manager.resolve(selector)` (manager.rs:276) →
+     wholesale listing, prefix empty. (Covers the `stats files` path and the
+     existing `resolve_namespace` callers.)
+  2. **Mount-path prefix match** (Python `path2fid`, ls.py:9-20): canonicalize
+     the selector (`fs::canonicalize` where it exists on disk; otherwise the
+     resolved absolute path), find the registered folder whose mount root is
+     the longest ancestor prefix, return that folder + the relative remainder.
+     Compare against `realpath`-ed roots so `..`/symlink tricks don't
+     misresolve.
+  3. **Neither** → a clear error (see Risks for the behavior flip):
+     ```
+     Error: <path> is not inside of a Syncweb folder —
+     run `syncweb ls --local-only <path>` to list the disk directly
+     ```
+     (Message mirrors Python's `"X is not inside of a Syncweb folder"`
+     ls.py:13 — where Python logs and continues, we **error and exit**; the
+     Python client walks multiple folders and keeps going, the CLI is
+     single-selector. See Risks.)
+- **Registry (the one core change):** add a `folder_mounts(namespace_id TEXT
+  PRIMARY KEY, path TEXT NOT NULL, updated_at)` table to
+  `syncweb-core/src/storage/node_db.rs` (alongside `folder_status_reports`,
+  node_db.rs:210/555), upserted by the CLI in **both** embedded and daemon
+  paths from the folder's actual mount dir at `create`/`join`/`accept`; a
+  `load_folder_mounts()` helper for the resolver. Registry rows are advisory —
+  the resolver filters by live `FolderManager` membership at call time, so
+  stale rows never resolve to a departed folder. In daemon-connected runs the
+  resolver additionally seeds from `FolderList` paths (ipc.rs:662-665) so a
+  `syncweb --remote ls <path>` sees paths the daemon knows but the local
+  registry lacks.
+- **Removes yesterday's single-folder hack:** the old draft's "on a
+  single-folder node every selector resolves to the sole folder" caveat is
+  obsolete — `ls <folder-dir>` now resolves on multi-folder nodes via the
+  mount registry, and unrelated local paths no longer leak into remote
+  listings.
 
-### 3. Guard against the state where lazy metadata doesn't exist
+### 3. Flags
 
-- When the folder is joined but has no local doc entries yet (`list_entries`
-  returns zero after subscribe has not ingressed), print a **clear nudge**:
-  `"folder ... has no remote entries yet; files will appear as they sync — run
-  \`syncweb download-all\` to fetch current content"` instead of printing an
-  empty table header.
+- Extend `LocalPathArgs` (commands.rs:347-358; today only
+  `path`/`sort`/`threads`):
+  - `--remote-only`: show only `State == remote` rows.
+  - `--local-only`: force the current `ParallelScanner` disk path for the
+    selector (works on **any** path, even outside a folder; bypasses step 2's
+    error). This is today's default behavior preserved under an explicit flag.
+    `--threads` is meaningful only here (metadata path never parallel-scans).
+  - `--path-prefix` / `--path-glob` (hidden `--glob` alias): filter the entry
+    list via the existing `ContentFilter`, using plan 03's renamed spelling
+    from day one (`--glob → --path-glob`, plan 03 step 5). The
+    depth/ext/size/type vocabulary lands later with plan 03's shared
+    `ContentFilterArgs`, not as one-off flags.
+  - `--no-enrich`: skip even the per-entry `stat` (pure metadata listing).
+  - `--sort <by>`: on a resolved folder, sorts the metadata table
+    (name/size/modified/state) instead of early-dispatching to `handle_sort`
+    (main.rs:4300) — see step 5.
+- Files: syncweb-cli/src/main.rs, syncweb-cli/src/cli/commands.rs.
 
-### 4. Wire `--json`
+### 4. Guard the no-metadata state
 
-- The `--json` path emits `{folder, path, entries: [...]}` (the step-1 shape;
-  `entries[i] = {path, size, hash, local}`) and must be stable +
-  `--json`-covered by an assertion. Human output renders the same data as a
-  table. Follows plan 08's single-envelope contract (one object per command;
+- When the folder has no local doc entries yet (joined, subscribe not yet
+  ingressed), print a clear nudge instead of an empty table:
+  `"folder <ns> has no remote entries yet; files will appear as they sync —
+  run \`syncweb download-all\` to fetch current content"`.
+
+### 5. Port `find` and `sort` onto the same metadata path
+
+- `handle_find` (main.rs:4336-4410): resolve via step 2; build the `FindQuery`
+  exactly as today but run it over the **entry list** (pattern against the
+  entry `path`, honor `--full-path`, size/time/depth/ext/type predicates from
+  `EntryLike` metadata) instead of over scanned disk entries; same stat
+  enrichment; `--local-only` keeps the disk scan (including outside-folder
+  paths); `--remote-only` predicate applies too. Python parity: `cmd_find`
+  searches `db/browse` children, find.py:224-230.
+- `handle_sort` (main.rs:4449-4475): sort the metadata table (by doc size or
+  stat-enriched size/time when local); `--enrich` degrades to metadata
+  fields until the IPC peer map exists (already the case, ipc.rs:1467).
+- `handle_ls --sort` (main.rs:4300 early dispatch): only when selection does
+  **not** resolve to a folder — i.e. under `--local-only` — keep routing to
+  `handle_sort`. On a resolved folder, sort the table in place.
+- Files: syncweb-cli/src/main.rs.
+
+### 6. Wire `--json`
+
+- `ls`/`find`/`sort` all emit the step-1 envelope `{folder, path,
+  entries:[{path, size, hash, local, modified?}]}`; `folder` = resolved
+  namespace id, `path` = selector as typed. Stable shape covered by an
+  assertion (plan 08's single-envelope contract; one object per command,
   arrays only under a named key).
-- `folder` = the resolved namespace id; `path` = the selector as typed.
 - **Verification note:** `ls --json` today emits a **bare array of paths**
-  (`—json` branch at main.rs:4322-4327) whenever `handle_ls` runs. For managed
-  folders, this plan switches that branch to the envelope — a deliberate,
-  **breaking contract change** (not additive), and the exact case index
-  principle #2 ("additive only, must not regress") is intentionally overridden
-  here with plan 08's envelope. Flag it in the changelog; the revert path is
-  the note in Risks.
+  (main.rs:4322-4327) and `find --json` does the same (main.rs:4411-4422).
+  This plan switches both to the envelope: a deliberate, **breaking contract
+  change** overriding index principle #2's "additive only" in this one case
+  (plan 08's envelope). Flag it in the changelog; the revert path is in Risks.
 
 ## Tests (name the file + behavior)
 
 - `syncweb-cli/tests/workflow_test.rs` — after `join --no-download` (plan 02
-  flips bare `join` to eager, so the lazy state requires the explicit opt-out):
-  1. `syncweb ls <folder-dir>` lists remote entries (assert a remote filename
-     appears).
-  2. `syncweb ls --local-only <folder-dir>` prints nothing (files not on disk).
-  3. `syncweb ls <plain-local-dir>` still lists disk files — **only on a node
-     whose manager has zero or ≥2 managed folders** (a single-folder node
-     resolves every path to its sole folder by design; see the step-2 caveat).
-     Use the two-folder fixture in the workflow suite, not the happy-path world.
-- `syncweb-cli/src/main.rs` `#[cfg(test)]` — a unit test on
-  `print_remote_entries` JSON shape (`{folder, path, entries:[{path, size, hash,
-  local}]}`), asserting `local` flips on `folder.has_local`.
+  flips bare `join` to eager, so the lazy state needs the explicit opt-out):
+  1. `syncweb ls <folder-dir>` lists remote entries **before any download**
+     (assert a remote filename appears; the disk holds nothing). Python-parity
+     core.
+  2. `syncweb ls <plain-local-dir>` **errors** with "not inside of a Syncweb
+     folder" — the deliberate flip (this is the old scan result's replacement).
+  3. `syncweb ls --local-only <folder-dir>` prints nothing (files not on disk)
+     — disk path preserved.
+  4. `syncweb ls --local-only <plain-local-dir>` lists disk files exactly as
+     today (no-folder scan regression).
+  5. `syncweb find '*.md' <folder-dir>` returns remote entries from the
+     metadata index; `--remote-only` narrows to undownloaded rows.
+  6. `syncweb sort --by size <folder-dir>` returns the metadata table sorted;
+     `--threads 8` is accepted but has no effect outside `--local-only`.
+- `syncweb-cli/src/main.rs` `#[cfg(test)]` unit tests:
+  - `print_folder_entries` JSON shape (`{folder, path, entries:[…]}`) and the
+    `local` flip on `folder.has_local`, including the enrichment overlay when a
+    local file's disk size/mtime differs from doc metadata.
+  - `resolve_selector_to_folder`: namespace id → whole-folder; a path nested
+    under a mount root → folder+prefix; outside every root → the error; a
+    stale registry row filtered out by live `FolderManager` membership.
+- `syncweb-cli/tests/daemon_integration_test.rs` (optional but encouraged):
+  `syncweb --remote ls <ns>` shows remote entries via the `FolderList`-seeded
+  path when the local registry is empty.
 
 ## Risks / rollback
 
-- If remote listing grows stale vs. disk (doc entries lag real files), the
-  `State` column must show `local`/`remote` based on the blob store
-  (`folder.has_local`), not on doc-entry presence; verify with the test in step
-  2. Peer availability is deferred (no client-side IPC surface today — see step
-  1) and must not be invented from doc-entry counts.
-- Rollback: revert the `handle_ls` folder-awareness branch; `--local-only` and
-  plain `ls` behavior are unchanged, so scripts keep working.
+- **Behavior flip (accepting it):** `ls`/`find`/`sort` on a path outside any
+  folder moves from "list the disk" to a clear error, Python-style; disk
+  listing survives only as `--local-only`. All existing scripts that used
+  plain `ls <dir>` on a plain directory must add `--local-only`. This is the
+  point of the plan (Python parity), so document it in the changelog and man
+  pages (plan 07). Rollback = make the step-2 case-3 error a warn-and-scan;
+  `--local-only` code path is unchanged either way.
+- Both `--remote-only` and `--local-only` set → error out (`State` would be
+  contradictory).
+- Remote listing can lag disk reality for un-synced folders; `State` is always
+  derived from the blob store (`has_local`), never from doc-entry presence.
+  Verify with the step-1 unit test.
+- Registry staleness is handled by live-membership filtering (step 2), not by
+  trusting rows.
+- Peer availability must not be invented from doc-entry counts (deferred).
 
 ## Handoff notes
 
-- Must not regress `syncweb ls --sort ...` (main.rs:4300 dispatch to
-  `handle_sort`). Keep that path intact.
-- Man page `syncweb-ls.1` and completions regenerate after the flag change
-  (see plan 07 for the doc-drift loop).
+- Do **not** regress the `ls --sort`→`handle_sort` dispatch for non-folder
+  selectors (main.rs:4300); only folder selections move to the table sort.
+- `FolderManager.create`/`join`/`accept` call sites in main.rs:
+  `handle_create` (main.rs:~3010), `handle_join` (main.rs:~2457),
+  daemon join-download (ipc.rs:1235) — registry upsert goes where the folder's
+  mount dir is known in **each** path (embedded + daemon).
+- Man pages `syncweb-ls.1`, `syncweb-find.1`, `syncweb-sort.1` and
+  completions regenerate after the flag change (plan 07's drift loop);
+  `docs/commands.md:477-478` rows become accurate again (see plan 07).
+- `cargo test --workspace`, `clippy`, `fmt` at the end (index "definition of
+  done").

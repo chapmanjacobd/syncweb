@@ -103,11 +103,15 @@ error at dispatch or behave differently than promised.
    - `conflicts`/`pending`/`deleted`/`undelete` rows in
      MANUAL_TESTING_PLAN.md (:429-433, :444-446) and the `docs/overview.md:204`
      "undelete" mention → remove alongside their docs/commands.md rows above.
-   - `mirror` → remove `man/syncweb-mirror.1` and the docs/indexing.md
-     references (:136, :148) and the MANUAL_TESTING_PLAN.md mirror section
-     (:353-356); `mirror` is core-only (`register_mirror`), never a CLI verb.
-   - `devices`/`ls`/`find` behavior drift → correct the docs rows to match the
-     implemented behavior (or implement the promised behavior via plans 01/05).
+- `mirror` → remove `man/syncweb-mirror.1` and the docs/indexing.md
+      references (:136, :148) and the MANUAL_TESTING_PLAN.md mirror section
+      (:353-356); `mirror` is core-only (`register_mirror`), never a CLI verb.
+   - `devices`/`ls`/`find` behavior drift → the `ls`/`find` rows
+     (docs/commands.md:477-478) become **accurate** when plan 01 implements
+     metadata-first `ls`/`find`/`sort` — keep them, and add their new
+     `--local-only`/`--remote-only`/`--path-glob`/`--no-enrich` flags to the
+     flag tables; only `devices` (docs/commands.md:476) has no implementing
+     plan, so correct that row to match `handle_devices` or delete it.
    - Flag drift (see Evidence): correct the `find`/`download` rows after plan 03
      (they become real), and delete or mark unsupported the unwired
      `folders`/`devices`/`search` flags.
@@ -118,12 +122,13 @@ error at dispatch or behave differently than promised.
      registered command is missing its artifact.
    - Wire the check into CI (Makefile `docs-check` target if present).
 4. Update `docs/commands.md`'s command-mapping table to exactly match the
-   implemented verb set (plan 06's verbs + aliases), deleting the
-   `accept/drop/conflicts/pending/deleted/undelete/repl/policy/public list/export`
-   rows and correcting the `ls`/`find`/`devices` descriptions and the
-   flag-drift rows from Evidence. Also remove the `syncweb drop` row and the
-   `conflicts`/`pending` rows in MANUAL_TESTING_PLAN.md (:112, :429-433,
-   :444-446).
+    implemented verb set (plan 06's verbs + aliases), deleting the
+    `accept/drop/conflicts/pending/deleted/undelete/repl/policy/public list/export`
+    rows, keeping the `ls`/`find` rows as-is (accurate after plan 01's
+    metadata-first port), correcting only the `devices` description and the
+    flag-drift rows from Evidence. Also remove the `syncweb drop` row and the
+    `conflicts`/`pending` rows in MANUAL_TESTING_PLAN.md (:112, :429-433,
+    :444-446).
 
 ## Tests
 

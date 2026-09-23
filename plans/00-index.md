@@ -13,15 +13,18 @@ Start with `01-lazy-metadata.md` (the highest-impact gap: **the documented lazy
 `ls`/`find` metadata view doesn't exist** — `ls/find/sort` are local-disk
 scanners via `ParallelScanner`/`FindEngine` (main.rs:4317, 4412, 4452), and
 remote doc metadata listing (`folder.list_entries()` — a `SyncwebFolder`
-method, used only at main.rs:2546) is never surfaced to the user). Then
-`02-eager-join.md` and `03-unified-filters.md`. Safety and command-collapse
-follow; docs drift last.
+method, used only at main.rs:2546) is never surfaced to the user). The plan
+flips the bias to match the original Python client (`syncweb-py`): `ls`, `find`,
+`sort` read the doc metadata index and the filesystem is touched only to enrich
+a row (`--local-only` preserves today's disk scans). Then `02-eager-join.md`
+and `03-unified-filters.md`. Safety and command-collapse follow; docs drift
+last.
 
 ## Plans
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 01 | [01-lazy-metadata.md](01-lazy-metadata.md) | HIGH | Surface remote (not-yet-downloaded) folder contents via a real lazy `ls` backed by doc entries | — |
+| 01 | [01-lazy-metadata.md](01-lazy-metadata.md) | HIGH | Metadata-first `ls`/`find`/`sort`: doc index is the source, the filesystem only enriches (Python-impl parity); `join --download-all`'s listing is surfaced | — |
 | 02 | [02-eager-join.md](02-eager-join.md) | HIGH | `join` downloads + subscribes by default; lazy is opt-out | — |
 | 03 | [03-unified-filters.md](03-unified-filters.md) | HIGH | One filter vocabulary (`--ext`, `--size`, `--depth`, `--type`…) shared by `find`/`sort`/`download`/`verify`/`ls` | 01 |
 | 04 | [04-safety-confirmations.md](04-safety-confirmations.md) | HIGH | Real (safe-by-default) prompts before `leave --delete-files`, `unshare --write`, `unshare --blob`; add `--yes` | — |

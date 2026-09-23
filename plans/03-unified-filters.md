@@ -1,8 +1,9 @@
 # Plan 03 — One content-filter vocabulary: `find`, `sort`, `download`, `verify`, lazy `ls` agree
 
 Priority: HIGH · Status: Draft · Owner: `syncweb-cli`
-Depends on: plan 01 (lazy `ls` adds `--remote-only`) · Fulfills story: #4 (Ari) +
-cross-cutting theme #6 (no unified filters/progress/JSON)
+Depends on: plan 01 (metadata-first `ls`/`find`/`sort` add `--remote-only`,
+`--path-glob`) · Fulfills story: #4 (Ari) + cross-cutting theme #6 (no unified
+filters/progress/JSON)
 
 ## Goal
 
@@ -95,21 +96,21 @@ content-fetch commands (`download`/`verify`) have almost no filters at all.
    `--kind glob|regex|exact`. Same word, two meanings across commands. Rename
    the content-side flag to `--path-glob` (keep `--glob` as a hidden alias on
    download/verify), and document `find`'s positional pattern as filename
-   matching. Apply the same rename to plan 01's `ls --glob` (added in
-   step 2 of that plan — spell it `--path-glob` there too, reusing the shared
-   group) so download/verify/ls agree from day one. Note `join`'s `--glob`
+   matching. Apply the same rename to plan 01's `ls` (spell it `--path-glob`
+   there too, step 3 of that plan, reusing the shared group) so
+   download/verify/ls agree from day one. Note `join`'s `--glob`
    (commands.rs:329) is a **subscribe-filter** path glob, not part of this
    rename; it keeps its spelling.
 
-### Phase C — wire the group into lazy `ls` once plan 01 lands
+### Phase C — wire the group into the metadata-first commands once plan 01 lands
 
-6. `ls --remote-only` (plan 01) plus `find/sort/download/verify` all consume the
-   same `ContentFilterArgs`. Also accept `--remote-only` on `find`/`download`
-   once plan 01 proves lazy browsing (same "not yet on disk" predicate), as a
-   shared flag in the group rather than per-command. This is the point where
-   `find` gains plan 01's folder-aware listing (`print_remote_entries`) —
-   `--remote-only` on `find` is only meaningful once `find` can see remote doc
-   entries, which plan 01 explicitly keeps local-only until then.
+6. `ls`/`find`/`sort` (all metadata-first per plan 01) plus `download`/`verify`
+   consume the **same `ContentFilterArgs`**. Also accept `--remote-only` on
+   `find`/`download` as a shared flag in the group rather than per-command —
+   plan 01 already gives `find` the folder-aware, doc-entry-driven listing it
+   needs (`print_folder_entries` + `resolve_selector_to_folder`), so the "until
+   then" gate in earlier drafts no longer applies. `download --remote-only`
+   still waits for plan 01's `--remote-only` predicate to prove out.
 
 ## Tests
 

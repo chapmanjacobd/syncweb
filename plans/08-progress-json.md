@@ -1,7 +1,8 @@
 # Plan 08 — Progress, status, and a stable `--json` contract everywhere (Maya's "is it happening?" + Oli's headless loop)
 
 Priority: MEDIUM · Status: Draft · Owner: `syncweb-cli`
-Depends on: plan 01 (lazy `ls` adds a remote dimension), plan 02 (eager join
+Depends on: plan 01 (metadata-first `ls`/`find`/`sort`: the remote dimension +
+the envelope shape this plan's contract extends), plan 02 (eager join
 needs a progress summary) · Fulfills story: #6 (Oli, headless server) +
 cross-cutting theme #6 (no unified progress/JSON)
 

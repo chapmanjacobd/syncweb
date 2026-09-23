@@ -115,3 +115,61 @@ fn unpack_enrich_data(response: IpcResponse) -> Result<std::collections::HashMap
         }
     }
 }
+
+#[tokio::test]
+async fn daemon_peer_availability_returns_report_shape() -> Result<()> {
+    let directory = TestDirectory::new("syncweb-peer-availability")?;
+    let node = node(&directory).await?;
+    let folder = FolderManager::new(&node).create(SyncMode::SendReceive).await?;
+    let ns = folder.namespace_id();
+
+    folder.set_blob("a.txt", b"content_a").await?;
+    folder.set_blob("b.txt", b"content_b").await?;
+
+    let handle = DaemonHandle::new(DaemonState::new(
+        std::process::id(),
+        "node",
+        1,
+        directory.path(),
+        DaemonStatus::Running,
+    ));
+    let pool = Arc::new(ManagedPool::new("peer-availability-test", 1)?);
+    let server =
+        IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
+
+    let response = server
+        .handle_request(IpcRequest::new(IpcCommand::PeerAvailability { folder: ns.to_string() }))
+        .await;
+
+    let report = match response {
+        IpcResponse::PeerAvailability(report) => report,
+        IpcResponse::Ok { .. }
+        | IpcResponse::Status(_)
+        | IpcResponse::FolderList(_)
+        | IpcResponse::DownloadComplete { .. }
+        | IpcResponse::TransferJobsProcessed { .. }
+        | IpcResponse::ImportFilesComplete { .. }
+        | IpcResponse::ImportComplete(_)
+        | IpcResponse::ExportComplete(_)
+        | IpcResponse::EnrichData(_)
+        | IpcResponse::FileStats(_)
+        | IpcResponse::Entries(_)
+        | IpcResponse::Error { .. }
+        | _ => anyhow::bail!("expected PeerAvailability, got an unexpected response"),
+    };
+    ensure!(report.folder == ns.to_string(), "report should name the folder");
+    ensure!(report.peers.is_empty(), "no networks joined -> no inbound peers");
+    let mut paths = report.per_blob.iter().map(|blob| blob.path.clone()).collect::<Vec<_>>();
+    paths.sort_unstable();
+    ensure!(
+        paths == ["a.txt", "b.txt"],
+        "per_blob should list both blobs: {paths:?}"
+    );
+    for blob in &report.per_blob {
+        ensure!(blob.peer_count == 0, "peer count should be 0: {blob:?}");
+        ensure!(blob.pct_seeded >= 0.0, "pct_seeded should be >= 0: {blob:?}");
+    }
+
+    node.stop().await?;
+    Ok(())
+}

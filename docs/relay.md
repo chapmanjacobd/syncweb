@@ -117,7 +117,7 @@ auto_fallback = true
 syncweb config set bep.enabled true
 
 # Or per-connection
-syncweb join --relay-fallback syncweb://folder-id#NODE-ID
+syncweb folders join --relay-fallback syncweb://folder-id#NODE-ID
 
 # Test relay connectivity
 syncweb network test-relay

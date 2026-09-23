@@ -844,6 +844,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand events 'Show recent network events'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand status 'Show network membership and health, optionally limited to a single network by name'
+            cand peers 'Show peer availability for a folder: which peers joined and how seeded its blobs are'
         }
         &'syncweb;network;create'= {
             cand --label 'label'
@@ -930,6 +931,16 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;network;status'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+            cand --yes 'Assume yes to every destructive-operation prompt'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;peers'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

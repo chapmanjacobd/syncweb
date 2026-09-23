@@ -972,6 +972,11 @@ pub enum NetworkCommand {
         #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
         name: Option<String>,
     },
+    #[command(about = "Show peer availability for a folder: which peers joined and how seeded its blobs are")]
+    Peers {
+        #[arg(value_name = "FOLDER", help = "Optional folder path or namespace to inspect")]
+        folder: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

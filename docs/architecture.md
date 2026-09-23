@@ -103,12 +103,12 @@ syncweb network join <ticket>               # Join a network
 syncweb network leave <name>                # Leave a network
 syncweb network invite <name> <device-id>   # Add device to network
 syncweb network kick <name> <device-id>     # Remove device from network
-syncweb create --network <name> <path>      # Add folder to network
-syncweb join --network <name> <url>         # Join folder in network context
+syncweb folders create --network <name> <path>      # Add folder to network
+syncweb folders join --network <name> <url>         # Join folder in network context
 ```
 
 Use cases:
-- Team workspace: `syncweb network create work`, then `syncweb create --network work ./docs`
+- Team workspace: `syncweb network create work`, then `syncweb folders create --network work ./docs`
 - Multi-folder sharing: Share all project folders via single network invite
 - Departments: Separate networks for engineering, design, marketing
 - Home/Plex: Personal network for media + documents + backups

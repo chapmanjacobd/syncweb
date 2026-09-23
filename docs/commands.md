@@ -2,7 +2,7 @@
 
 ## Sharing model
 
-syncweb separates "creating" from "sharing/publishing". `create` provisions a local
+syncweb separates "creating" from "sharing/publishing". `folders create` provisions a local
 namespace and shares it by default (printing a read-only ticket/URL); `share`/`publish`
 manage sharing and publishing explicitly.
 
@@ -20,7 +20,7 @@ manage sharing and publishing explicitly.
 | Publish | `indexing publish <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
 
-Key distinction: `create` provisions a folder and shares it by default, printing a
+Key distinction: `folders create` provisions a folder and shares it by default, printing a
 `syncweb://folder/<ns>?ticket=...` URL. Hand a `--write` ticket only to collaborators you
 trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 `--no-share` when you only want a local folder. `share` persists the record (see
@@ -370,29 +370,29 @@ impl IrohNode {
 CLI:
 ```bash
 # Create folder (default: shares read-only and prints a share URL)
-syncweb create ./documents
+syncweb folders create ./documents
 # Output: syncweb://folder/<ns>?ticket=<read-only ticket>
 
 # Create with a writable share ticket
-syncweb create --write ./documents
+syncweb folders create --write ./documents
 
 # Create locally without sharing (prints only the namespace)
-syncweb create --no-share ./documents
+syncweb folders create --no-share ./documents
 
 # Create with sync mode
-syncweb create --mode sendreceive ./documents
+syncweb folders create --mode sendreceive ./documents
 
 # Create with network membership
-syncweb create --network work ./documents
+syncweb folders create --network work ./documents
 
 # Create with relay fallback
-syncweb create --relay-fallback ./documents
+syncweb folders create --relay-fallback ./documents
 
 # Create and ingest an already-populated directory in one step (default; the
 # embedded mode scans and imports existing files automatically)
-syncweb create ./documents
+syncweb folders create ./documents
 # Equivalent explicit flag; use --no-import to skip scanning:
-syncweb create --no-import ./documents
+syncweb folders create --no-import ./documents
 ```
 
 ### Share Command
@@ -415,12 +415,12 @@ syncweb share <ns> --write
 syncweb share <ns> --blob <hash>
 
 # List persisted shares, optionally filtered by namespace/path selectors
-syncweb share --list
-syncweb share --list <ns>
+syncweb share list
+syncweb share list <ns>
 
 # Stop sharing a folder (unpins blobs) or remove a shared blob pin
-syncweb unshare --write ./documents
-syncweb unshare --blob <hash> --namespace <ns>
+syncweb access --revoke --write ./documents
+syncweb access --revoke --blob <hash>
 ```
 
 ### Config Command
@@ -471,7 +471,7 @@ syncweb config set discovery.interface eth0
 | `create` | `folders create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
 | `join` | `folders join` | Track folder via ticket (metadata only by default); live sync with `--subscribe`, bulk download of existing content with `--download-existing` (`--download` alias) |
 | `folders` | `folders` | List local docs + status |
-| `devices` | `devices` | Show this device's Iroh and Syncthing identities |
+| `devices` | `devices` | Show this device's Iroh and Syncthing identities, plus the peer set (who joined) when a daemon answers |
 | `ls` | `ls` | List doc entries (lazy): reads the metadata index, never scans the disk; `--local-only` forces a disk scan, `--remote-only` shows undownloaded rows, `--path-prefix`/`--path-glob` filter |
 | `find` | `find` | Search doc entries via the metadata index (pattern/size/depth/time/type), no blob download; `--local-only` scans the disk |
 | | `search` | Unified search across catalog content, packages, and editorial channels (`--kind`, `--channel`, `--limit`) |
@@ -487,7 +487,7 @@ syncweb config set discovery.interface eth0
 | (implicit) | `folders import` | Import local files to blob store + doc entries |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
 | | `share list` | List persisted folder shares, optionally filtered by selectors |
-| | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets, and network membership; `access --revoke <path> [--read\|--write]` revokes in place |
+| | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets, network membership, and inbound peers (Devices column when the daemon answers); `access --revoke <path> [--read\|--write]` revokes in place |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
 | | `access --revoke --blob` | Remove a shared blob pin |
 | | `indexing publish` | Publish folder metadata to a catalog |
@@ -527,6 +527,7 @@ syncweb config set discovery.interface eth0
 | | `network leave` | Leave a network |
 | | `network invite` | Invite device to a network |
 | | `network kick` | Remove device from a network |
+| | `network peers` | Show peer availability for a folder: inbound peers (who joined) and per-blob seeding (`--json` always available) |
 | | `stats network` | Bandwidth accounting per folder/peer |
 | | `stats files` | File-level statistics for synced folder content |
 
@@ -548,7 +549,7 @@ syncweb --no-color devices          # Disable color output
 # object (arrays only inside a named key). Streaming commands — `stats network
 # --follow` — emit one JSON object per line (NDJSON).
 
-syncweb import ./documents
+syncweb folders import ./documents
 syncweb watch --once ./documents
 syncweb stats network --period 24h
 syncweb stats network --since 24h --json   # Last 24h of transfer events as JSON
@@ -619,7 +620,7 @@ syncweb ls --threads 8
 syncweb ls --threads 1
 
 # Parallel import (the default)
-syncweb import /path/to/files
+syncweb folders import /path/to/files
 
 # Parallel package export (the default)
 syncweb package export ./collection /tmp/out/
@@ -669,8 +670,8 @@ syncweb sort --sort peers --sort time music/
 syncweb sort --limit-size 10GB --min-seeders 2 music/
 
 # Create/Config
-syncweb create ./documents
-syncweb create --network work ./documents
+syncweb folders create ./documents
+syncweb folders create --network work ./documents
 syncweb config set default_path ~/Syncweb
 
 # Start/daemon with discovery options

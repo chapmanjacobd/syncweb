@@ -1444,7 +1444,7 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .output()
         .context("run network help")?;
     let network_help = String::from_utf8(network.stdout).context("UTF-8 output")?;
-    for command in ["create", "join", "leave", "invite", "kick", "events"] {
+    for command in ["create", "join", "leave", "invite", "kick", "events", "peers"] {
         ensure!(network_help.contains(command));
     }
     Ok(())

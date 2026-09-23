@@ -190,7 +190,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         }
         Command::Folders { command } => handle_folders(&ctx, command).await?,
         Command::Status => handle_status(&ctx).await?,
-        Command::Devices => handle_devices(&ctx)?,
+        Command::Devices => handle_devices(&ctx).await?,
         Command::Ls(command) => handle_ls(&ctx, command).await?,
         Command::Find(command) => handle_find(&ctx, command).await?,
         Command::Search(args) => handle_search(&ctx, args).await?,
@@ -3140,6 +3140,31 @@ struct AccessFolder {
     mode: String,
 }
 
+/// Populate each access row's inbound-peer `devices` from the daemon's peer
+/// availability snapshot. Returns whether any folder's peers were surfaced; a
+/// missing/older daemon leaves rows empty and the "not surfaced" note intact.
+async fn surface_access_peers(client: Option<&IpcClient>, rows: &mut BTreeMap<String, AccessRow>) -> Result<bool> {
+    let Some(daemon) = client else {
+        return Ok(false);
+    };
+    let namespaces: Vec<String> = rows.keys().cloned().collect();
+    let mut surfaced = false;
+    for namespace in namespaces {
+        let response = daemon
+            .send(IpcRequest::new(IpcCommand::PeerAvailability {
+                folder: namespace.clone(),
+            }))
+            .await?;
+        if let IpcResponse::PeerAvailability(report) = response {
+            surfaced = true;
+            if let Some(row) = rows.get_mut(&namespace) {
+                row.devices = report.peers.iter().map(|peer| peer.device_id.clone()).collect();
+            }
+        }
+    }
+    Ok(surfaced)
+}
+
 async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
     if args.revoke {
         let selector = args.path.clone().unwrap_or_else(|| std::path::PathBuf::from("."));
@@ -3155,7 +3180,7 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
 
     let mut folders: Vec<AccessFolder> = Vec::new();
     let mut filter: Option<String> = None;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+    let daemon_client = if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         if let Some(path) = args.path.as_ref().filter(|path| path.as_os_str() != ".") {
             filter = Some(resolve_namespace_via_daemon(&client, &path.to_string_lossy()).await?);
         }
@@ -3170,6 +3195,7 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
                 mode: folder.mode,
             });
         }
+        Some(client)
     } else {
         let node = open_node(data_dir).await?;
         let manager = FolderManager::new(&node);
@@ -3188,7 +3214,8 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
             });
         }
         node.stop().await?;
-    }
+        None
+    };
 
     let shares = open_node_db(data_dir)?.list_shares()?;
     let networks = open_network_manager(data_dir)?
@@ -3235,6 +3262,10 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
         row.networks.sort();
     }
 
+    // Inbound peers ("who joined"): populate the Devices column when the
+    // daemon answers; otherwise leave it empty and keep the "not surfaced" note.
+    let peers_surfaced = surface_access_peers(daemon_client.as_ref(), &mut rows).await?;
+
     if rows.is_empty() {
         if output_json {
             println!("[]");
@@ -3250,7 +3281,9 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
     }
 
     println!("{}", render_access_table(&rows, args.full));
-    println!("note: inbound peers (who joined a folder) are not surfaced yet; see `syncweb network peers`");
+    if !peers_surfaced {
+        println!("note: inbound peers (who joined a folder) are not surfaced yet; see `syncweb network peers`");
+    }
     println!(
         "note: pin status is not shown (it needs a local node); `syncweb share --list` reports what was pinned at share time"
     );
@@ -4434,6 +4467,9 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
         NetworkCommand::Status { name } => {
             handle_status_networks(data_dir, name.as_deref(), output_json)?;
         }
+        NetworkCommand::Peers { folder } => {
+            handle_network_peers(ctx, folder.as_deref()).await?;
+        }
     }
     Ok(())
 }
@@ -4609,6 +4645,82 @@ fn handle_status_networks(data_dir: &std::path::Path, name: Option<&str>, output
     Ok(())
 }
 
+async fn handle_network_peers(ctx: &CliContext<'_>, folder: Option<&str>) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let selector = folder.unwrap_or(".");
+    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::PeerAvailability {
+                folder: selector.to_string(),
+            }))
+            .await?;
+        match response {
+            IpcResponse::PeerAvailability(report) => {
+                if output_json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else {
+                    render_peer_availability(&report);
+                }
+                return Ok(());
+            }
+            IpcResponse::Error { message } => anyhow::bail!("{message}"),
+            IpcResponse::Ok { .. }
+            | IpcResponse::Status(_)
+            | IpcResponse::FolderList(_)
+            | IpcResponse::DownloadComplete { .. }
+            | IpcResponse::TransferJobsProcessed { .. }
+            | IpcResponse::ImportFilesComplete { .. }
+            | IpcResponse::ImportComplete(_)
+            | IpcResponse::ExportComplete(_)
+            | IpcResponse::EnrichData(_)
+            | IpcResponse::FileStats(_)
+            | IpcResponse::Entries(_)
+            | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+        }
+    }
+    // No daemon: honest empty state, no guessed peers.
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({"folder": selector, "peers": [], "per_blob": []})
+        );
+    } else {
+        println!("peer availability requires a running daemon; start one with `syncweb start`");
+    }
+    Ok(())
+}
+
+fn render_peer_availability(report: &syncweb_core::daemon::PeerAvailabilityReport) {
+    println!("folder: {}", report.folder);
+    println!("peers:");
+    if report.peers.is_empty() {
+        println!("  (none joined)");
+    } else {
+        let mut table = Table::new();
+        table.set_header(["Device ID", "Connection"]);
+        for peer in &report.peers {
+            table.add_row([&peer.device_id, peer.connection.as_deref().unwrap_or("member")]);
+        }
+        println!("{table}");
+    }
+    println!("per-blob availability:");
+    if report.per_blob.is_empty() {
+        println!("  (no entries)");
+    } else {
+        let mut table = Table::new();
+        table.set_header(["Path", "Peer count", "% seeded"]);
+        for blob in &report.per_blob {
+            table.add_row([
+                &blob.path,
+                &blob.peer_count.to_string(),
+                &format!("{:.0}%", blob.pct_seeded),
+            ]);
+        }
+        println!("{table}");
+    }
+}
+
 fn open_network_manager(data_dir: &std::path::Path) -> Result<NetworkManager> {
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let db = open_node_db(data_dir)?;
@@ -4776,22 +4888,55 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     Ok(())
 }
 
-fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
+async fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let device_id = DeviceId::from_node_id(identity.node_id());
+
+    // Peer list: the real "who joined" set across folders when a daemon answers;
+    // empty (not guessed) when it can't.
+    let mut peers: Vec<String> = Vec::new();
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        let folders_response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        if let IpcResponse::FolderList(folders) = folders_response {
+            for folder in folders.into_iter().filter(|folder| folder.kind == "folder") {
+                let peer_response = client
+                    .send(IpcRequest::new(IpcCommand::PeerAvailability {
+                        folder: folder.namespace.clone(),
+                    }))
+                    .await?;
+                if let IpcResponse::PeerAvailability(report) = peer_response {
+                    for peer in report.peers {
+                        if !peers.contains(&peer.device_id) {
+                            peers.push(peer.device_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    peers.sort();
     if output_json {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "iroh": identity.node_id().to_string(),
                 "syncthing": device_id.to_syncthing(),
+                "peers": peers,
             }))?
         );
     } else {
         println!("iroh: {}", identity.node_id());
         println!("syncthing: {}", device_id.to_syncthing());
+        if peers.is_empty() {
+            println!("peers: (none)");
+        } else {
+            println!("peers:");
+            for peer in peers {
+                println!("  {peer}");
+            }
+        }
     }
     Ok(())
 }
@@ -4808,6 +4953,8 @@ struct LocalEntry {
     size: u64,
     local: bool,
     modified: Option<SystemTime>,
+    /// Observed peer count for this blob (daemon availability snapshot).
+    peers: Option<usize>,
 }
 
 /// How a `ls`/`find`/`sort` selector resolved to a folder.
@@ -4878,6 +5025,7 @@ async fn enumerate_folder_entries(
             size,
             local,
             modified,
+            peers: None,
         });
     }
     Ok(rows)
@@ -4894,6 +5042,7 @@ fn entry_row_to_local(row: EntryRow) -> LocalEntry {
                 .checked_add(Duration::from_secs(seconds))
                 .unwrap_or(UNIX_EPOCH)
         }),
+        peers: None,
     }
 }
 
@@ -4919,6 +5068,31 @@ async fn fetch_listing_rows(mode: ListingMode, resolved: &ResolvedFolder, enrich
             Ok(rows)
         }
     }
+}
+
+/// Attach per-blob peer availability to listing rows when the daemon answers.
+/// Degrades gracefully (rows keep `peers: None`) when there is no daemon or the
+/// daemon cannot provide the snapshot.
+async fn attach_peer_counts(client: Option<&IpcClient>, namespace: &str, rows: &mut [LocalEntry]) -> Result<()> {
+    let Some(daemon) = client else {
+        return Ok(());
+    };
+    let response = daemon
+        .send(IpcRequest::new(IpcCommand::PeerAvailability {
+            folder: namespace.to_string(),
+        }))
+        .await?;
+    if let IpcResponse::PeerAvailability(report) = response {
+        let counts: std::collections::HashMap<String, usize> = report
+            .per_blob
+            .into_iter()
+            .map(|blob| (blob.path, blob.peer_count))
+            .collect();
+        for row in rows.iter_mut() {
+            row.peers = counts.get(&row.path).copied();
+        }
+    }
+    Ok(())
 }
 
 fn canonical_path(path: &Path) -> PathBuf {
@@ -5165,7 +5339,7 @@ fn sort_local_entries(rows: &mut [LocalEntry], by: MetaSort) {
 }
 
 fn local_entry_json(row: &LocalEntry) -> serde_json::Value {
-    serde_json::json!({
+    let mut entry = serde_json::json!({
         "path": row.path,
         "size": row.size,
         "hash": row.hash.to_string(),
@@ -5174,7 +5348,13 @@ fn local_entry_json(row: &LocalEntry) -> serde_json::Value {
             .modified
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_secs()),
-    })
+    });
+    if let Some(peers) = row.peers {
+        entry
+            .as_object_mut()
+            .and_then(|object| object.insert("peers".to_owned(), serde_json::Value::from(peers)));
+    }
+    entry
 }
 
 fn render_entries(rows: &[LocalEntry], namespace: &str, selector: &Path, output_json: bool) -> Result<()> {
@@ -5190,19 +5370,25 @@ fn render_entries(rows: &[LocalEntry], namespace: &str, selector: &Path, output_
         );
         return Ok(());
     }
+    let has_peers = rows.iter().any(|row| row.peers.is_some());
     let mut table = Table::new();
-    table.set_header(["Path", "Size", "Modified", "State"]);
+    if has_peers {
+        table.set_header(["Path", "Size", "Modified", "State", "Peers"]);
+    } else {
+        table.set_header(["Path", "Size", "Modified", "State"]);
+    }
     for row in rows {
         let modified = row
             .modified
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map_or_else(|| "-".to_owned(), |duration| duration.as_secs().to_string());
-        table.add_row([
-            row.path.as_str(),
-            &format_bytes(row.size),
-            &modified,
-            if row.local { "local" } else { "remote" },
-        ]);
+        let state = if row.local { "local" } else { "remote" };
+        if has_peers {
+            let peers = row.peers.map_or_else(|| "-".to_owned(), |count| count.to_string());
+            table.add_row([row.path.as_str(), &format_bytes(row.size), &modified, state, &peers]);
+        } else {
+            table.add_row([row.path.as_str(), &format_bytes(row.size), &modified, state]);
+        }
     }
     println!("{table}");
     Ok(())
@@ -5257,6 +5443,10 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
         return handle_ls_disk(&command.path, command.threads, output_json);
     }
     let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let client = match &mode {
+        ListingMode::Daemon { client } => Some(client.clone()),
+        ListingMode::Embedded(_) => None,
+    };
     let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
     if rows.is_empty() {
         if output_json {
@@ -5266,6 +5456,7 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
         }
         return Ok(());
     }
+    attach_peer_counts(client.as_ref(), &resolved.namespace, &mut rows).await?;
     rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
     if let Some(criteria) = command.sort {
         let by = parse_meta_sort(&criteria)?;
@@ -5421,6 +5612,10 @@ async fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindAr
     }
     let query = build_find_query(&command)?;
     let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let client = match &mode {
+        ListingMode::Daemon { client } => Some(client.clone()),
+        ListingMode::Embedded(_) => None,
+    };
     let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
     if rows.is_empty() {
         if output_json {
@@ -5430,6 +5625,7 @@ async fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindAr
         }
         return Ok(());
     }
+    attach_peer_counts(client.as_ref(), &resolved.namespace, &mut rows).await?;
     rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
 
     let file_entries: Vec<FileEntry> = rows
@@ -5608,6 +5804,10 @@ async fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortA
         return handle_sort_disk(ctx, command);
     }
     let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let client = match &mode {
+        ListingMode::Daemon { client } => Some(client.clone()),
+        ListingMode::Embedded(_) => None,
+    };
     let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
     if rows.is_empty() {
         if output_json {
@@ -5617,6 +5817,7 @@ async fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortA
         }
         return Ok(());
     }
+    attach_peer_counts(client.as_ref(), &resolved.namespace, &mut rows).await?;
     rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
     let by = parse_meta_sort(&command.by)?;
     sort_local_entries(&mut rows, by);
@@ -5890,6 +6091,7 @@ mod tests {
                     .checked_add(Duration::from_secs(seconds))
                     .unwrap_or(UNIX_EPOCH)
             }),
+            peers: None,
         }
     }
 
@@ -6040,6 +6242,24 @@ mod tests {
         assert_eq!(
             parsed_entries.first().unwrap().get("path"),
             Some(&serde_json::json!("a.txt"))
+        );
+    }
+
+    #[test]
+    fn local_entry_json_carries_peers_only_when_known() {
+        let mut row = entry("a.txt", 1, true, None);
+        let without_peers = local_entry_json(&row);
+        assert!(
+            without_peers.get("peers").is_none(),
+            "peers key must be absent when the daemon did not answer: {without_peers}"
+        );
+
+        row.peers = Some(3);
+        let with_peers = local_entry_json(&row);
+        assert_eq!(
+            with_peers.get("peers"),
+            Some(&serde_json::json!(3)),
+            "peers key must be present when the daemon answered: {with_peers}"
         );
     }
 

@@ -11,8 +11,8 @@ mod transfers;
 pub use transfers::{TransferJobSummary, process_transfer_jobs};
 
 pub use ipc::{
-    DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand, IpcListener, IpcRequest,
-    IpcResponse, IpcServer,
+    BlobPeerAvailability, DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand,
+    IpcListener, IpcRequest, IpcResponse, IpcServer, PeerAvailabilityReport, PeerInfo,
 };
 pub use pool::ManagedPool;
 pub use route::{daemon_client, try_daemon, with_node};

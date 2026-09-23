@@ -1505,3 +1505,104 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&bob_data);
     Ok(())
 }
+
+#[test]
+fn test_network_peers_returns_envelope_via_daemon() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("network-peers")?;
+    let folder = cli_test_dir("network-peers-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "create",
+        folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "folders create should succeed");
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = create_out
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
+
+    std::fs::write(folder.join("hello.txt"), b"hello world").context("write source file")?;
+    let import = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "import",
+        folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "folders import should succeed");
+
+    // `network peers <ns> --json` must return the `{folder, peers, per_blob}`
+    // envelope with a `peers` array and per-blob rows whose `% seeded` ≥ 0.
+    let peers = syncweb(&["--json", "--data-dir", data_dir_arg, "network", "peers", &namespace])?;
+    ensure!(
+        peers.status.success(),
+        "network peers should succeed: {}",
+        String::from_utf8_lossy(&peers.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&peers.stdout))
+        .context("network peers --json should be valid JSON")?;
+    ensure!(value.get("folder").is_some(), "envelope should carry folder: {value}");
+    let peer_list = value
+        .get("peers")
+        .and_then(serde_json::Value::as_array)
+        .context("envelope should carry peers array")?;
+    ensure!(
+        peer_list.iter().all(|peer| peer.get("device_id").is_some()),
+        "each peer should carry a device_id: {value}"
+    );
+    let per_blob = value
+        .get("per_blob")
+        .and_then(serde_json::Value::as_array)
+        .context("envelope should carry per_blob array")?;
+    ensure!(!per_blob.is_empty(), "per_blob should list the imported blobs: {value}");
+    for blob in per_blob {
+        ensure!(
+            blob.get("path").is_some() && blob.get("hash").is_some(),
+            "per_blob rows should carry path and hash: {value}"
+        );
+        let seeded = blob
+            .get("pct_seeded")
+            .and_then(serde_json::Value::as_f64)
+            .context("per_blob row should carry pct_seeded")?;
+        ensure!(seeded >= 0.0, "pct_seeded should be >= 0: {value}");
+    }
+
+    // `network peers` with no daemon must not guess: empty peers + per_blob.
+    let no_daemon_dir = cli_test_dir("network-peers-no-daemon")?;
+    let no_daemon_arg = no_daemon_dir.to_str().context("UTF-8 path")?;
+    let empty = syncweb(&["--json", "--no-daemon", "--data-dir", no_daemon_arg, "network", "peers"])?;
+    ensure!(empty.status.success(), "network peers without daemon should succeed");
+    let empty_value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&empty.stdout))
+        .context("no-daemon network peers should be valid JSON")?;
+    ensure!(
+        empty_value.get("peers").and_then(serde_json::Value::as_array).is_some(),
+        "no-daemon envelope should carry an empty peers array: {empty_value}"
+    );
+    ensure!(
+        empty_value
+            .get("per_blob")
+            .and_then(serde_json::Value::as_array)
+            .is_some(),
+        "no-daemon envelope should carry an empty per_blob array: {empty_value}"
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&folder);
+    let _ = std::fs::remove_dir_all(&data_dir);
+    let _ = std::fs::remove_dir_all(&no_daemon_dir);
+    Ok(())
+}

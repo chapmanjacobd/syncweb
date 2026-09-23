@@ -52,6 +52,8 @@ pub struct AccessRow {
     pub mode: String,
     pub shares: Vec<(String, String)>,
     pub networks: Vec<String>,
+    /// Inbound peers (who joined) for the folder; empty when not surfaced.
+    pub devices: Vec<String>,
 }
 
 /// Render a stored share ticket as a `syncweb://folder/...` URL, falling back
@@ -89,7 +91,7 @@ fn render_access_shares(namespace: &str, shares: &[(String, String)], full: bool
 #[must_use]
 pub fn render_access_table(rows: &BTreeMap<String, AccessRow>, full: bool) -> String {
     let mut table = Table::new();
-    table.set_header(["Folder", "Mode", "Write?", "Shared with", "Networks"]);
+    table.set_header(["Folder", "Mode", "Write?", "Shared with", "Devices", "Networks"]);
     for (namespace, row) in rows {
         let folder_label = row
             .path
@@ -106,12 +108,17 @@ pub fn render_access_table(rows: &BTreeMap<String, AccessRow>, full: bool) -> St
             "no".to_owned()
         };
         let shared = render_access_shares(namespace, &row.shares, full);
+        let devices = if row.devices.is_empty() {
+            "-".to_owned()
+        } else {
+            row.devices.join(", ")
+        };
         let networks = if row.networks.is_empty() {
             "-".to_owned()
         } else {
             row.networks.join(", ")
         };
-        table.add_row([folder_label, mode, write, shared, networks]);
+        table.add_row([folder_label, mode, write, shared, devices, networks]);
     }
     table.to_string()
 }
@@ -138,6 +145,7 @@ pub fn render_access_json(rows: &BTreeMap<String, AccessRow>) -> String {
                 "mode": row.mode,
                 "write": row.shares.iter().any(|(access, _)| access == "write"),
                 "shares": shares,
+                "devices": row.devices,
                 "networks": row.networks,
             })
         })
@@ -161,6 +169,7 @@ mod tests {
                     ("write".to_owned(), "write-ticket".to_owned()),
                 ],
                 networks: vec!["home".to_owned()],
+                devices: vec!["ABCD-EFGH".to_owned()],
             },
         );
         rows
@@ -173,6 +182,7 @@ mod tests {
         assert!(table.contains("Write?"), "table should have a Write? column: {table}");
         assert!(table.contains("sendreceive"), "table should show the mode: {table}");
         assert!(table.contains("home"), "table should show network membership: {table}");
+        assert!(table.contains("ABCD-EFGH"), "table should show inbound peers: {table}");
     }
 
     #[test]
@@ -184,6 +194,8 @@ mod tests {
             json.contains("\"sendreceive\""),
             "json should carry the mode value: {json}"
         );
+        assert!(json.contains("\"devices\""), "json should carry devices: {json}");
+        assert!(json.contains("ABCD-EFGH"), "json should carry the inbound peer: {json}");
         assert!(!json.contains("pinned"), "json must not guess pin status: {json}");
     }
 }

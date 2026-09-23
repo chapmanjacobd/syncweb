@@ -18,7 +18,7 @@ Folder creation, joining, basic sync, and Syncthing relay fallback for CGNAT tra
 - `SyncwebFolder` with NamespaceId, entries, and blob refs
 - `FolderManager` for create, join, list
 - `SyncMode` implementations (SendReceive, SendOnly, ReceiveOnly)
-- `syncweb create`, `syncweb join`
+- `syncweb folders create`, `syncweb folders join`
 - `syncweb folders`, `syncweb devices`
 - `DeviceId` bidirectional conversion (Syncthing ↔ Iroh Ed25519)
 - `SyncthingRelayTransport` with bounded framed TCP tunnel
@@ -47,7 +47,7 @@ Commands for ls, find, sort, stat, download, selective sync, create/config:
 - `StatOutput` with detailed file metadata and availability
 - `InitResult` for folder creation and shareable URL output
 - `syncweb ls`, `syncweb find`, `syncweb sort`, `syncweb stat`, `syncweb download`
-- `syncweb create`, `syncweb config`
+- `syncweb folders create`, `syncweb config`
 - Streaming output with optional collected sorting
 
 ### Advanced Sync and Networks
@@ -64,17 +64,17 @@ Sync engine, rules-based watch, and networks abstraction:
 - `Network` struct and `NetworkManager` for create, join, leave, invite, kick
 - Connection-level membership allowlists (no per-network gossip topic)
 - `syncweb watch` with filter engine (`--filters`, `--dry-run`, `--show-filters`)
-- `syncweb join --subscribe` with SubscribeParams
+- `syncweb folders join --subscribe` with SubscribeParams
 - `syncweb network create`, `syncweb network ls`, `syncweb network join`
 - `syncweb network leave`, `syncweb network invite`, `syncweb network kick`
-- `syncweb create --network <name>`, `syncweb join --network <name>`
+- `syncweb folders create --network <name>`, `syncweb folders join --network <name>`
 
 ### Public Folders and Living Folders
 Public sharing and data package versioning:
 - Networks are always private; default daemon (no `--network`) is fully open
 - Blob ticket generation
 - Content pinning (prevent GC for shared blobs)
-- `syncweb share`, `syncweb unshare`, `syncweb join --subscribe`
+- `syncweb share`, `syncweb access --revoke`, `syncweb folders join --subscribe`
 - `CollectionManifest` struct and iroh-docs storage
 - `CollectionState` local tracking (installed collections, versions)
 - `syncweb package init` (with package profile) for initializing paths as a versioned package

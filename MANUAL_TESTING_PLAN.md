@@ -121,7 +121,7 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | 1 | `syncweb folders` | Table with Name, Mode, Local count, Remote count, State | Empty state shows "no folders" |
 | 2 | `syncweb folders --json` | JSON output | Valid JSON: `syncweb folders --json \| jq .` |
 | 3 | `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
-| 4 | `syncweb devices --json` | JSON output | |
+| 4 | `syncweb devices --json` | JSON output; when a daemon is running, the output also carries a `peers` array (who joined) | |
 
 ---
 
@@ -253,8 +253,8 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb access ./shared-docs` | One table: `Folder · Mode · Write? · Shared with · Networks`; the folder appears once with `Mode` (e.g. `sendreceive`) and its share rows under `Shared with` | Table includes the `Write?`/`Mode` headers |
-| 2 | Alice: `syncweb access --json` | Array of `{folder, mode, write, shares:[{access, url}], networks:[...]}`; no `pinned` key | `jq '.[] | .folder'` lists every folder |
+| 1 | Alice: `syncweb access ./shared-docs` | One table: `Folder · Mode · Write? · Shared with · Devices · Networks`; the folder appears once with `Mode` (e.g. `sendreceive`) and its share rows under `Shared with`; inbound peers under `Devices` when a daemon answers | Table includes the `Write?`/`Mode` headers |
+| 2 | Alice: `syncweb access --json` | Array of `{folder, mode, write, shares:[{access, url}], devices:[...], networks:[...]}`; no `pinned` key | `jq '.[] | .folder'` lists every folder |
 | 3 | Alice: `syncweb access --revoke ./shared-docs --write --yes` | Revokes the write share (same as `unshare --write --yes`) | `syncweb access --json` now shows `"write": false` |
 | 4 | Alice: `syncweb access --revoke ./shared-docs` (no `--yes`) | Read-only revoke is prompt-free and removes the read share + retention pins | `syncweb share --list` no longer shows `access: read` |
 | 5 | Alice: `syncweb access --revoke ./shared-docs --write` (non-TTY, no `--yes`) | Prints `aborted`; write share stays | `syncweb access --json` still shows `"write": true` |
@@ -344,6 +344,8 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | 1 | `syncweb network events home` | Shows peer joins, leaves, sync events | `sqlite3 ~/.local/share/syncweb/stats.db "SELECT * FROM network_events WHERE network_id='home' ORDER BY timestamp DESC LIMIT 10;"` |
 | 2 | `syncweb network health home` | Network connectivity health | |
 | 3 | `syncweb network test-relay` | Tests relay connectivity | |
+| 4 | `syncweb network peers ./nw-docs` (daemon running) | Shows the folder's inbound peers (Devices) and a per-blob `% seeded` table | With `--json`, emits a single `{folder, peers, per_blob}` object |
+| 5 | `syncweb network peers ./nw-docs --json` (no daemon) | Honest empty state: `{folder, peers: [], per_blob: []}` — no guessed values | |
 
 ---
 

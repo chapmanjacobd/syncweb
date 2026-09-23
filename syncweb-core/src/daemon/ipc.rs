@@ -218,6 +218,9 @@ pub enum IpcCommand {
     NetworkJoin {
         ticket: String,
     },
+    PeerAvailability {
+        folder: String,
+    },
 }
 
 /// A response returned by the daemon control channel.
@@ -236,6 +239,7 @@ pub enum IpcResponse {
     EnrichData(HashMap<String, usize>),
     FileStats(Box<FileStatsReport>),
     Entries(Vec<EntryRow>),
+    PeerAvailability(Box<PeerAvailabilityReport>),
     Error { message: String },
 }
 
@@ -257,6 +261,55 @@ pub struct EntryRow {
 /// that predate the `--no-enrich` flag.
 const fn default_entry_enrich() -> bool {
     true
+}
+
+/// A read-only snapshot of which peers can serve a folder's blobs and which
+/// peers joined the folder.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct PeerAvailabilityReport {
+    /// The folder's namespace, as resolved by the daemon.
+    pub folder: String,
+    /// Inbound peers (who joined) for the folder. Syncthing device IDs only.
+    #[serde(default)]
+    pub peers: Vec<PeerInfo>,
+    /// Per-blob availability: each blob's path/hash plus the peers observed
+    /// serving it.
+    #[serde(default)]
+    pub per_blob: Vec<BlobPeerAvailability>,
+}
+
+/// One inbound peer that joined a folder.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct PeerInfo {
+    /// The peer's Syncthing device ID.
+    pub device_id: String,
+    /// Display name, empty-typed until inbound-device acceptance adds names.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Connection state ("online"/"offline"/"member") when known.
+    #[serde(default)]
+    pub connection: Option<String>,
+}
+
+/// One blob's peer availability within a folder.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct BlobPeerAvailability {
+    /// Folder-relative path of the blob's entry.
+    pub path: String,
+    /// Content hash of the blob.
+    pub hash: String,
+    /// Number of peers observed serving the blob (point-in-time snapshot).
+    #[serde(default)]
+    pub peer_count: usize,
+    /// Device IDs of the peers serving this blob.
+    #[serde(default)]
+    pub peers: Vec<String>,
+    /// Percentage of the folder's inbound peers that serve the blob.
+    #[serde(default)]
+    pub pct_seeded: f64,
 }
 
 /// A managed folder summary returned by the daemon.
@@ -864,6 +917,7 @@ impl IpcServer {
             | C::NetworkLeave { .. }
             | C::NetworkCreate { .. }
             | C::NetworkJoin { .. } => self.handle_network_group(request.command).await,
+            C::PeerAvailability { folder } => self.handle_peer_availability(folder).await,
         }
     }
 
@@ -1611,6 +1665,117 @@ impl IpcServer {
             })
             .collect();
         IpcResponse::EnrichData(result)
+    }
+
+    /// Read-only aggregation of which peers joined a folder and which of its
+    /// blobs each peer can serve. No new state: the peer set is drawn from the
+    /// network manager's membership records and the per-blob counts from the
+    /// (currently empty) `EnrichSort` peer map.
+    async fn handle_peer_availability(&self, folder_selection: String) -> IpcResponse {
+        let Some(context) = self.archive_context.clone() else {
+            return IpcResponse::Error {
+                message: "daemon peer-availability IPC is unavailable: server has no node context".to_owned(),
+            };
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match resolve_folder_for_daemon(&manager, Path::new(&folder_selection)).await {
+            Ok(folder) => folder,
+            Err(error) => return error,
+        };
+        let namespace_id = folder.namespace_id();
+        let namespace_str = namespace_id.to_string();
+
+        // Inbound peers: members of the networks that contain this folder.
+        let mut peers: Vec<PeerInfo> = Vec::new();
+        if let Some(net_mgr_ref) = self.network_manager.as_ref() {
+            let member_devices = {
+                let guard = net_mgr_ref.read().await;
+                let local_node = *guard.local_node();
+                let mut member_devices: Vec<String> = Vec::new();
+                if let Ok(network_ids) = guard.networks_for_folder(&namespace_id) {
+                    for network_id in network_ids {
+                        let Ok(net_id) = network_id.parse::<crate::net::NetworkId>() else {
+                            continue;
+                        };
+                        let Some(network) = guard.get(&net_id) else {
+                            continue;
+                        };
+                        for member in &network.members {
+                            if *member == local_node {
+                                continue;
+                            }
+                            let device_id = crate::node::identity::DeviceId::from_node_id(*member).to_syncthing();
+                            if !member_devices.contains(&device_id) {
+                                member_devices.push(device_id);
+                            }
+                        }
+                    }
+                }
+                drop(guard);
+                member_devices
+            };
+            for device_id in member_devices {
+                peers.push(PeerInfo {
+                    device_id,
+                    name: None,
+                    connection: Some("member".to_owned()),
+                });
+            }
+        }
+        peers.sort_by(|left, right| left.device_id.cmp(&right.device_id));
+
+        // Live gossip neighbors mark peers that are currently connected.
+        if let Ok(live_peers) = context.node.topic_tracker().find_peers(namespace_id).await {
+            let live: std::collections::HashSet<String> = live_peers
+                .into_iter()
+                .map(|peer| crate::node::identity::DeviceId::from_node_id(peer).to_syncthing())
+                .collect();
+            for peer in &mut peers {
+                if live.contains(&peer.device_id) {
+                    peer.connection = Some("online".to_owned());
+                }
+            }
+        }
+
+        // Per-blob counts reuse the empty `EnrichSort` map path: a blob's peers
+        // are not tracked per-blob yet, so `peer_count` is a point-in-time 0.
+        let Ok(entries) = context.node.docs_engine().list_latest(folder.doc()).await else {
+            return IpcResponse::PeerAvailability(Box::new(PeerAvailabilityReport {
+                folder: namespace_str,
+                peers,
+                per_blob: Vec::new(),
+            }));
+        };
+        let mut per_blob = Vec::with_capacity(entries.len());
+        for entry in entries {
+            if entry.key().starts_with(b"sys/") {
+                continue;
+            }
+            let Ok(path) = String::from_utf8(entry.key().to_vec()) else {
+                continue;
+            };
+            let hash = entry.content_hash();
+            let peer_count = 0;
+            let pct_seeded = if peers.is_empty() {
+                0.0
+            } else {
+                f64::from(i32::try_from(peer_count).unwrap_or(0))
+                    .mul_add(f64::from(i32::try_from(peers.len()).unwrap_or(1)).recip(), 0.0)
+                    .mul_add(100.0, 0.0)
+            };
+            per_blob.push(BlobPeerAvailability {
+                path,
+                hash: hash.to_string(),
+                peer_count,
+                peers: Vec::new(),
+                pct_seeded,
+            });
+        }
+        IpcResponse::PeerAvailability(Box::new(PeerAvailabilityReport {
+            folder: namespace_str,
+            peers,
+            per_blob,
+        }))
     }
 
     async fn handle_verify_integrity(
@@ -2397,6 +2562,7 @@ impl IpcClient {
                 | IpcResponse::EnrichData(_)
                 | IpcResponse::FileStats(_)
                 | IpcResponse::Entries(_)
+                | IpcResponse::PeerAvailability(_)
                 | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",

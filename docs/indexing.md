@@ -135,7 +135,7 @@ Content hashes prove integrity, but they do not prove accuracy, authorship, lega
 
 ### CLI Subcommands (`syncweb indexing`, `syncweb link`)
 *   `syncweb indexing enable <folder>` - Opt a folder into the indexing service.
-*   `syncweb publish catalog --catalog <name> <folder>` - Publish to a catalog.
+*   `syncweb indexing publish --catalog <name> <folder>` - Publish to a catalog.
 *   `syncweb search --kind catalog "query"` - Search across known catalogs (FTS).
  *   `syncweb indexing filter add <type> <value>` - Add a hash, device, or file to the local denylist.
  *   `syncweb indexing filter subscribe <url>` - Subscribe to a federated filter list.

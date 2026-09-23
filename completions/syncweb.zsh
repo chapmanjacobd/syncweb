@@ -1132,6 +1132,19 @@ _arguments "${_arguments_options[@]}" : \
 '::name -- Optional network name or ID to inspect:_default' \
 && ret=0
 ;;
+(peers)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::folder -- Optional folder path or namespace to inspect:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -1913,6 +1926,7 @@ _syncweb__subcmd__network_commands() {
 'events:Show recent network events' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'status:Show network membership and health, optionally limited to a single network by name' \
+'peers:Show peer availability for a folder\: which peers joined and how seeded its blobs are' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
 }
@@ -1950,6 +1964,11 @@ _syncweb__subcmd__network__subcmd__leave_commands() {
 _syncweb__subcmd__network__subcmd__list_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__peers_commands] )) ||
+_syncweb__subcmd__network__subcmd__peers_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network peers commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__status_commands] )) ||
 _syncweb__subcmd__network__subcmd__status_commands() {

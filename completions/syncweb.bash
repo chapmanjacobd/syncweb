@@ -193,6 +193,9 @@ _syncweb() {
             syncweb__subcmd__network,list)
                 cmd="syncweb__subcmd__network__subcmd__list"
                 ;;
+            syncweb__subcmd__network,peers)
+                cmd="syncweb__subcmd__network__subcmd__peers"
+                ;;
             syncweb__subcmd__network,status)
                 cmd="syncweb__subcmd__network__subcmd__status"
                 ;;
@@ -1265,7 +1268,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__network)
-            opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --help create join leave list invite kick events test-relay status"
+            opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --help create join leave list invite kick events test-relay status peers"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1399,6 +1402,24 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__network__subcmd__list)
+            opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__network__subcmd__peers)
             opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

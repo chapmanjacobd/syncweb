@@ -22,9 +22,9 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 - As a new user, I want to create a folder and have it sync with my phone
   automatically, so that I never think about the plumbing.
-- Today: `syncweb create ~/Documents` → prints a long
+- Today: `syncweb folders create ~/Documents` → prints a long
   `syncweb://folder/<ns>?ticket=...` URL. On the phone she must
-  `syncweb join <url>`, and unless she adds `--subscribe` and `--download`,
+  `syncweb folders join <url>`, and unless she adds `--subscribe` and `--download`,
   nothing actually lands on disk — `ls` shows entries, files stay remote. She has
   to learn lazy-fetch, tickets, subscriptions, and sync modes before her first
   successful sync.
@@ -32,10 +32,10 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
   download, receiveonly) that the default hides. Data dir defaults to
   `./.syncweb` (cwd-relative) while docs say `~/.config/syncweb` — confusion
   about where "my files" and "syncweb's files" live.
-- Improvement: `join` tracks the folder and shows metadata immediately (a
+- Improvement: `folders join` tracks the folder and shows metadata immediately (a
   human-readable one-liner "joined <ns>"), with live sync an explicit
-  `join --subscribe` and existing content bulk-downloaded only on an explicit
-  `join --download-existing` (alias `--download`), so the disk is never filled
+  `folders join --subscribe` and existing content bulk-downloaded only on an explicit
+  `folders join --download-existing` (alias `--download`), so the disk is never filled
   or spammed without consent.
 
 ### 2. Maya shares a folder without nuking it

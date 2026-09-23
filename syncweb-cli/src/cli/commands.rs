@@ -314,9 +314,12 @@ pub struct FolderJoin {
     pub network: Option<String>,
     #[arg(
         long,
+        default_value_t = true,
         help = "Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder"
     )]
     pub subscribe: bool,
+    #[arg(long, help = "Skip enabling live syncing on join")]
+    pub no_subscribe: bool,
     #[arg(long, help = "Only deliver entries ingested after live syncing is enabled")]
     pub ingest_only: bool,
     #[arg(long, help = "Ignore events emitted by this device's own writes")]
@@ -333,14 +336,29 @@ pub struct FolderJoin {
     pub max_size: Option<u64>,
     #[arg(
         long,
+        default_value_t = true,
         help = "Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)"
     )]
     pub download_all: bool,
+    #[arg(long, help = "Join without downloading existing content")]
+    pub no_download: bool,
     #[arg(
         long,
         help = "Do not opt the folder into local indexing (indexing is enabled by default)"
     )]
     pub no_indexing: bool,
+}
+
+impl FolderJoin {
+    #[must_use]
+    pub const fn effective_subscribe(&self) -> bool {
+        self.subscribe && !self.no_subscribe
+    }
+
+    #[must_use]
+    pub const fn effective_download_all(&self) -> bool {
+        self.download_all && !self.no_download
+    }
 }
 
 #[derive(Debug, Args)]
@@ -1052,4 +1070,62 @@ pub enum LinkCommand {
 pub enum ProviderCommand {
     #[command(about = "Register a blob ticket as an alternate provider")]
     Add { collection: String, provider: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+    use crate::cli::args::Cli;
+
+    fn parse_join(args: &[&str]) -> FolderJoin {
+        let mut clap_args = vec!["syncweb", "join", "ticket"];
+        clap_args.extend_from_slice(args);
+        let cli = Cli::try_parse_from(clap_args).expect("join args should parse");
+        if let Command::Join(join) = cli.command {
+            return join;
+        }
+        panic!("expected join command");
+    }
+
+    #[test]
+    fn join_defaults_to_eager_subscribe_and_download() {
+        let join = parse_join(&[]);
+        assert!(join.subscribe, "subscribe should default to true");
+        assert!(join.download_all, "download_all should default to true");
+        assert!(join.effective_subscribe());
+        assert!(join.effective_download_all());
+    }
+
+    #[test]
+    fn join_no_subscribe_disables_live_sync() {
+        let join = parse_join(&["--no-subscribe"]);
+        assert!(join.subscribe, "--subscribe stays accepted as an explicit opt-in");
+        assert!(join.no_subscribe);
+        assert!(!join.effective_subscribe());
+        assert!(join.effective_download_all());
+    }
+
+    #[test]
+    fn join_no_download_preserves_lazy_join() {
+        let join = parse_join(&["--no-download"]);
+        assert!(join.download_all, "--download-all stays accepted as an explicit opt-in");
+        assert!(join.no_download);
+        assert!(!join.effective_download_all());
+        assert!(join.effective_subscribe());
+    }
+
+    #[test]
+    fn join_conflicting_flags_resolve_to_no() {
+        let joined = parse_join(&["--subscribe", "--no-subscribe", "--download-all", "--no-download"]);
+        assert!(
+            !joined.effective_subscribe(),
+            "--no-subscribe should win over --subscribe"
+        );
+        assert!(
+            !joined.effective_download_all(),
+            "--no-download should win over --download-all"
+        );
+    }
 }

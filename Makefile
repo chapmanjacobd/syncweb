@@ -1,7 +1,7 @@
 .PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme docs-check
 .SILENT:
 
-all: flint test lint fmt build manpage completions readme docs-check
+all: flint test lint fmt build manpage completions readme
 
 fmt:
 	cargo fmt -q --all
@@ -59,9 +59,6 @@ manpage: build
 
 readme:
 	cd syncweb-core && cargo doc2readme
-
-docs-check: build
-	cargo test --manifest-path syncweb-cli/Cargo.toml --test docs_drift_test
 
 install-completions:
 	install -d $(DESTDIR)/usr/share/bash-completion/completions

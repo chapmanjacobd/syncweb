@@ -6,18 +6,18 @@ Depends on: plan 04 (revocation gets its prompts + `--yes`) · Fulfills story: #
 ## Goal
 
 Maya should be able to answer "who currently has access to my Documents, and
-can they write?" from **one command**, and revoke in place — the spreadsheet
+can they write?" from one command, and revoke in place — the spreadsheet
 she keeps mentally today (paste URL in chat → lose track → can't find the
 revoke) becomes a table.
 
 ## Evidence (verified in code)
 
-The data needed is **partially** present and split across four views, and one
+The data needed is partially present and split across four views, and one
 piece is missing:
 
 - Capabilities per folder live in `NodeDatabase` share records — surfaced by
   `share --list [<path>]` (`handle_share_list`, main.rs:2696-2734; the DB side
-  is `list_shares`, syncweb-core/src/storage/node_db.rs:1432). **Scope check:**
+  is `list_shares`, syncweb-core/src/storage/node_db.rs:1432). Scope check:
   the share list carries only `(namespace, access, ticket)` — no pins and no
   blob tickets, in both the embedded path (main.rs:2720-2732) and the daemon
   path (`handle_share_list`, ipc.rs:1707-1730). So a `Pinned?` column has no
@@ -25,19 +25,19 @@ piece is missing:
   (`blob_store.list_pins(public_blob_pin prefix)`, node/blob_store.rs:238).
 - Folder mode (`sendreceive`/`receiveonly`/`sendonly`) is shown in `folders`
   (`handle_folders`, main.rs:4201-4272) — the "what can that side do" signal —
-  but is **not correlated** with the share list. **Scope check:** the daemon
+  but is not correlated with the share list. Scope check: the daemon
   `FolderList` response uses `FolderStatusReport` (state.rs:80), which has no
   `mode` field; only the embedded (`--no-daemon`) `handle_folders` path prints
   mode. The `access` `Mode` column therefore needs mode added to the daemon
   `FolderStatusReport` (small core/IPC addition, contradicts "no daemon/core
-  changes") **or** `access` must gather mode from the embedded path. Decide in
+  changes") or `access` must gather mode from the embedded path. Decide in
   step 1; do not silently ship an empty `Mode` column.
 - Network membership lives in `network list` / `handle_networks`
   (main.rs:4294 → `handle_status_networks`, main.rs:4119); `network_manager`
   has `invite`/`kick`/`list` (syncweb-core/src/net/network_manager.rs).
-- **Gap:** there is no "who has *joined* a folder" (inbound peer) list anywhere
+- Gap: there is no "who has *joined* a folder" (inbound peer) list anywhere
   in the CLI or `node_db`. `handle_devices` (main.rs:4274-4292) only prints
-  **this device's own** iroh/Syncthing identities — it does **not** list known
+  this device's own iroh/Syncthing identities — it does not list known
   peers. (`docs/commands.md:476` claims `devices` = "List known peers +
   connection status", which is doc-drift; see plan 07.)
 
@@ -45,7 +45,7 @@ piece is missing:
 
 - Read/aggregate + a small `unshare`-driven revoke. Prefer reusing existing IPC
   (`share --list`, `folders`, `networks`).
-- **One permitted IPC addition:** the `Mode` column needs `mode` on the daemon
+- One permitted IPC addition: the `Mode` column needs `mode` on the daemon
   `FolderStatusReport` (state.rs:80). Two options, pick one in step 1: (a) add a
   `mode: String` field to `FolderStatusReport` populated by the daemon's folder
   registry (small, additive, backward-compatible `#[serde(default)]`), or (b)
@@ -53,7 +53,7 @@ piece is missing:
   recommended — it is the only place `access` needs data the daemon doesn't
   already serve, and it also fixes the `handle_folders` daemon path, which today
   silently omits mode.
-- The "who joined" (inbound peer) column is **deferred to plan 09**
+- The "who joined" (inbound peer) column is deferred to plan 09
   (`syncweb network peers`: a new read-only core/IPC peer-list surface, filed
   in 09). Until then, `access` reports outbound shares + network members, and
   leaves the `Devices` column empty with a clear "inbound peers not yet
@@ -72,7 +72,7 @@ piece is missing:
      `Pinned?` (blob-store pin list; see scope guard).
    - Merge three existing sources: `FolderManager.list` (folders, via
      `handle_folders` data path), `share --list` entries (access + ticket), and
-     `networks` membership. Do **not** assume the daemon `FolderList` already
+     `networks` membership. Do not assume the daemon `FolderList` already
      carries mode or that `share --list` carries pins — those two gaps are
      handled by the scope-guard decision, not by the merge.
 2. Add `--json` shape: `{folder, mode, write, shares: [{access, url, pinned}],
@@ -85,14 +85,14 @@ piece is missing:
    plan 04's write-access prompt (with `--yes` as the skip); `--read` maps to
    the plain unshare path, which per plan 04's scope choice is prompt-free (it
    removes the read share row and drops retention pins, not data).
-   **`UnshareArgs` has no `--read` flag** (only `--write` and `--blob`;
+   `UnshareArgs` has no `--read` flag (only `--write` and `--blob`;
    commands.rs:813-824 — there is no `--ticket`); map `--read` to the plain
    unshare path (no `--write`), which is the read-ticket revoke — and remember
    plain unshare also unpins
    (`unpin_all_content`, main.rs:2772-2774), so `access --revoke --read` has the
    same pinned-column effect plan 04's step 3 notes for read-only unshare.
 4. Fulfils Maya's asymmetric-access story end-to-end: invite a phone with a
-   **read-only** share, then when you later want to hand out edit rights,
+   read-only share, then when you later want to hand out edit rights,
    `access documents` shows the phone's share row without `Write`, and you issue
    a separate `--write` ticket rather than mutating the old one.
 

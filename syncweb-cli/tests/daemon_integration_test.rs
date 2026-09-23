@@ -1083,6 +1083,96 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_join_default_downloads_and_subscribes() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("join-default-alice")?;
+    let alice_folder = cli_test_dir("join-default-alice-folder")?;
+    let bob_data = cli_test_dir("join-default-bob")?;
+    let bob_folder = cli_test_dir("join-default-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon start should succeed");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "create",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
+    let namespace = create_out
+        .trim()
+        .strip_prefix("syncweb://folder/")
+        .and_then(|rest| rest.split('?').next())
+        .map(str::trim)
+        .context("create should output a namespace")?
+        .to_owned();
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = String::from_utf8(share.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "--no-daemon",
+        "join",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bare join should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+    let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
+    ensure!(
+        join_out.contains("live sync on"),
+        "bare join should report live sync enabled: {join_out}"
+    );
+    ensure!(
+        join_out.contains("downloaded:"),
+        "bare join should report a download count: {join_out}"
+    );
+    ensure!(
+        std::fs::read(bob_folder.join("hello.txt")).context("read materialized file")? == b"hello world",
+        "bare join should download matching content to disk"
+    );
+
+    let config = syncweb(&["--data-dir", bob_data_arg, "config", "show", "subscribe"])?;
+    ensure!(config.status.success(), "config show subscribe should succeed");
+    let config_out = String::from_utf8(config.stdout).context("UTF-8 output")?;
+    ensure!(
+        config_out.contains("enabled = true"),
+        "bare join should persist live sync: {config_out}"
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&alice_folder);
+    let _ = std::fs::remove_dir_all(&alice_data);
+    let _ = std::fs::remove_dir_all(&bob_folder);
+    let _ = std::fs::remove_dir_all(&bob_data);
+    Ok(())
+}
+
+#[test]
 fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
     let alice_data = cli_test_dir("lazy-ls-alice")?;
     let alice_folder = cli_test_dir("lazy-ls-alice-folder")?;
@@ -1136,6 +1226,7 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
         bob_data_arg,
         "join",
         "--subscribe",
+        "--no-download",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;

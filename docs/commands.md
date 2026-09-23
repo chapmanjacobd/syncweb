@@ -469,7 +469,7 @@ syncweb config set discovery.interface eth0
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
 | `create` | `create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
-| `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
+| `join` | `join` | Track folder via ticket; downloads existing content + enables live sync by default (`--no-subscribe`/`--no-download` opt out) |
 | `folders` | `folders` | List local docs + status |
 | `devices` | `devices` | Show this device's Iroh and Syncthing identities |
 | `ls` | `ls` | List doc entries (lazy): reads the metadata index, never scans the disk; `--local-only` forces a disk scan, `--remote-only` shows undownloaded rows, `--path-prefix`/`--path-glob` filter |
@@ -559,22 +559,27 @@ syncweb download --max-count 10 /path/to/files
 # Download with size limit
 syncweb download --size 1GB /path/to/files
 
-# Track a folder without live syncing (subscribe-changes defaults to off)
+# Join a folder: track it, download existing content, and enable live sync by
+# default (the receive-side symmetry to `create --import`)
 syncweb join <ticket> /path/to/folder
 
-# Track + enable live syncing (persisted), then exit
-syncweb join --subscribe <ticket> /path/to/folder
+# "Just want to look around": browse metadata lazily, fetch selective files later
+syncweb join --no-download --no-subscribe <ticket> /path/to/folder
+
+# Download content but leave live sync off
+syncweb join --no-subscribe <ticket> /path/to/folder
+
+# Track with live sync, but skip the one-shot download
+syncweb join --no-download <ticket> /path/to/folder
 
 # Live-sync filters: only files ingested after enabling, and ignore our own writes
-syncweb join --subscribe --ingest-only --ignore-self <ticket> /path/to/folder
+syncweb join --ingest-only --ignore-self <ticket> /path/to/folder
 
-# Join and download existing content in one step (receive-side symmetry to
-# `create --import`); honors the same prefix/glob/max filters
-syncweb join --download-all <ticket> /path/to/folder
-syncweb join --download-all --glob '*.md' <ticket> /path/to/folder
+# The one-shot download honors the same prefix/glob/max filters
+syncweb join --glob '*.md' <ticket> /path/to/folder
 
-# Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
-syncweb join --subscribe <folder>
+# Idempotent: enable live syncing on an already-tracked folder (subscribe is the default; or use the config toggle)
+syncweb join <folder>
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 

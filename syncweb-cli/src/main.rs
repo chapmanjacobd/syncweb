@@ -2449,18 +2449,20 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     let filters = subscribe_filters_from(&command);
+    let subscribe = command.effective_subscribe();
+    let download_all = command.effective_download_all();
     let effective_path = if let Some(prefix) = &command.prefix {
         prefix.join(&command.path)
     } else {
         command.path.clone()
     };
 
-    // `join <folder> --subscribe` on an already-tracked folder: idempotent enable.
+    // `join <folder>` (subscribe is on by default) on an already-tracked folder: idempotent enable.
     let is_new_ticket =
         command.ticket.parse::<iroh_docs::DocTicket>().is_ok() || command.ticket.trim_start().starts_with("syncweb://");
     if !is_new_ticket {
-        if !command.subscribe {
-            anyhow::bail!("folder already tracked — re-enable live syncing with `join <folder> --subscribe`");
+        if !subscribe {
+            anyhow::bail!("folder already tracked — re-enable live syncing with `join <folder>`");
         }
         return handle_join_existing(ctx, &command.ticket, &filters).await;
     }
@@ -2473,9 +2475,9 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                 ticket: command.ticket.clone(),
                 path: effective_path.clone(),
                 mode: SyncMode::from_str(&command.mode)?,
-                subscribe: command.subscribe,
+                subscribe,
                 filters: filters.clone(),
-                download: command.download_all,
+                download: download_all,
                 indexing: !command.no_indexing,
             }))
             .await?;
@@ -2496,23 +2498,30 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let namespace = folder.namespace_id().to_string();
     let node_db = open_node_db(data_dir)?;
     let mut config = node_db.load_app_config()?;
-    config.set_subscribe(&namespace, command.subscribe, &filters);
+    config.set_subscribe(&namespace, subscribe, &filters);
     node_db.save_app_config(&config)?;
     node_db.upsert_folder_mount(&namespace, &effective_path)?;
-    let downloaded = if command.download_all {
+    let (downloaded, downloaded_size) = if download_all {
         download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
     } else {
-        0
+        (0, 0)
     };
     if output_json {
         println!(
             "{}",
-            serde_json::json!({"status": "joined", "namespace": namespace, "downloaded": downloaded})
+            serde_json::json!({
+                "status": "joined",
+                "namespace": namespace,
+                "downloaded": downloaded,
+                "size": downloaded_size,
+            })
         );
     } else {
-        println!("joined: {namespace}");
-        if command.download_all {
-            println!("downloaded: {downloaded} files");
+        if download_all {
+            let live = if subscribe { " — live sync on;" } else { "" };
+            println!("joined: {namespace}{live} downloaded: {downloaded} files ({downloaded_size} bytes)");
+        } else {
+            println!("joined: {namespace}");
         }
     }
     node.stop().await?;
@@ -2525,24 +2534,34 @@ async fn download_joined_folder(
     folder: &syncweb_core::folder::SyncwebFolder,
     filters: &SubscribeFilters,
     destination: &Path,
-) -> Result<usize> {
+) -> Result<(usize, u64)> {
+    const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
     let sync = SyncEngine::from_node(node, manager);
     let strategy =
         FetchStrategy::Filter(FetchFilter::new().with_paths(filters.sync_prefix.clone().into_iter().collect()));
     let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
-    while let Some(event) = intent.next().await {
-        match event {
-            SyncEvent::Failed(message) => anyhow::bail!("join --download-all failed: {message}"),
-            SyncEvent::Finished => break,
-            SyncEvent::Started
-            | SyncEvent::Progress { .. }
-            | SyncEvent::Stats(_)
-            | SyncEvent::Paused
-            | SyncEvent::Resumed
-            | SyncEvent::Cancelled
-            | _ => {}
+    // The one-shot download is opportunistic: grab whatever a reachable peer
+    // has within a short window, then let live sync (when enabled) continue.
+    let _ = tokio::time::timeout(DOWNLOAD_TIMEOUT, async {
+        while let Some(event) = intent.next().await {
+            match event {
+                SyncEvent::Failed(message) => {
+                    tracing::warn!(%message, "join download could not reach a peer; existing content will arrive via live sync");
+                    break;
+                }
+                SyncEvent::Finished => break,
+                SyncEvent::Started
+                | SyncEvent::Progress { .. }
+                | SyncEvent::Stats(_)
+                | SyncEvent::Paused
+                | SyncEvent::Resumed
+                | SyncEvent::Cancelled
+                | _ => {}
+            }
         }
-    }
+    })
+    .await;
+    let _ = intent.cancel();
     let area = filters
         .sync_prefix
         .clone()
@@ -2551,6 +2570,7 @@ async fn download_joined_folder(
         .unwrap_or(AreaFilter::All);
     let entries = folder.list_entries().await?;
     let mut count = 0_usize;
+    let mut size = 0_u64;
     for entry in entries {
         let rel = Path::new(&entry.path);
         if !area.matches_path(rel) {
@@ -2562,8 +2582,9 @@ async fn download_joined_folder(
         }
         node.blob_store().export_to_path(entry.hash, &dest).await?;
         count = count.saturating_add(1);
+        size = size.saturating_add(entry.size);
     }
-    Ok(count)
+    Ok((count, size))
 }
 
 fn subscribe_filters_from(command: &crate::cli::commands::FolderJoin) -> SubscribeFilters {

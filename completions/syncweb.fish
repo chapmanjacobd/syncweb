@@ -142,9 +142,11 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l max-size -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l subscribe -d 'Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-subscribe -d 'Skip enabling live syncing on join'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ingest-only -d 'Only deliver entries ingested after live syncing is enabled'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ignore-self -d 'Ignore events emitted by this device\'s own writes'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l download-all -d 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-download -d 'Join without downloading existing content'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-indexing -d 'Do not opt the folder into local indexing (indexing is enabled by default)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l json -d 'Emit machine-readable JSON where supported'

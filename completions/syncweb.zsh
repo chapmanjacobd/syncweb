@@ -166,9 +166,11 @@ _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--subscribe[Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder]' \
+'--no-subscribe[Skip enabling live syncing on join]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
 '--download-all[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)]' \
+'--no-download[Join without downloading existing content]' \
 '--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \

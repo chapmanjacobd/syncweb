@@ -12,17 +12,17 @@ cross-cutting theme #6 (no unified progress/JSON)
 Maya should be able to answer "is my sync still running / how far along?"
 without grepping logs; Oli should trust `syncweb stats network` from cron/CI.
 Today progress exists only in scattered surfaces, and `--json` is global but
-**not shape-stable** — the actual gap Oli hit ("stats files" exists, but he had
+not shape-stable — the actual gap Oli hit ("stats files" exists, but he had
 to know it was `stats files`, and the JSON shape varies per command).
 
 ## Evidence (verified)
 
-- `--json` is a **global** flag (syncweb-cli/src/cli/args.rs:247-248) whose help
-  text itself reads *"Emit machine-readable JSON **where supported**"* — an
+- `--json` is a global flag (syncweb-cli/src/cli/args.rs:247-248) whose help
+  text itself reads *"Emit machine-readable JSON where supported"* — an
   implicit admission of inconsistency. Most handlers already branch on
   `ctx.output_json` (`handle_ls` main.rs:4322, `handle_find` :4425,
   `handle_sort` :4543, `handle_stat` :4691, `handle_devices` :4279,
-  `handle_stats_network` :1861), but the **shapes differ**: `ls`/`find`/`sort`
+  `handle_stats_network` :1861), but the shapes differ: `ls`/`find`/`sort`
   emit a bare JSON array of paths; `stat` emits a `StatOutput` object;
   `stats network` emits the raw `BandwidthStats` object; `status` emits the raw
   `StateFile` report. There is no stable envelope.
@@ -42,18 +42,18 @@ to know it was `stats files`, and the JSON shape varies per command).
 
 ## Scope guard
 
-- **Presentation layer + new `--json` shapes.** No daemon protocol change.
+- Presentation layer + new `--json` shapes. No daemon protocol change.
 - Keeps `--json` as the single machine contract; human output can wrap it.
 
 ## Steps
 
-1. **Persistent progress identity** — standardize `syncweb stats network --json`
+1. Persistent progress identity — standardize `syncweb stats network --json`
    so Oli can diff runs: document the `BandwidthStats` shape
    (`total_upload`, `total_download`, `per_folder`, `per_peer`, `period_start`)
    and add `--since`/`--period` consistent with the existing `period` field.
    (The field already exists and is "retained for compatibility"; make it real
    rather than a no-op.)
-2. **`syncweb status --json` aggregates** folders + devices + networks into one
+2. `syncweb status --json` aggregates folders + devices + networks into one
    envelope `{daemon, folders, devices, networks}` — the machine counterpart of
    Maya's happy line, upgrading `handle_status`'s current single-`StateFile`
    surface (main.rs:600-655). No new IPC: reuse the same
@@ -62,12 +62,12 @@ to know it was `stats files`, and the JSON shape varies per command).
     `syncweb network peers` peer surface ("inbound peers + per-blob
     availability") lands; keep the key present and empty rather than omitting
     it.)
-3. **Event feed for live progress** — `syncweb stats network --follow` /
+3. Event feed for live progress — `syncweb stats network --follow` /
    `--watch` that streams daemon sync events live using the existing
    `SyncEvent`/fetch-intent plumbing (main.rs:2527-2539); Oli gets a
    cron-safe one-shot (`--follow --once`: print the current snapshot and exit),
    Maya gets `--follow` so the phone shows "syncing …" without polling.
-4. **Stabilize `--json` as a global contract**: audit every `print` command's
+4. Stabilize `--json` as a global contract: audit every `print` command's
    JSON shape and normalize to a stable envelope (single object per command;
    arrays only inside a named key). Update the `--json` help text from "where
    supported" to a firm contract, and add a shape assertion per command (see
@@ -87,10 +87,10 @@ to know it was `stats files`, and the JSON shape varies per command).
 
 ## Risks / rollback
 
-- `--follow` streaming under `--json` must emit **one JSON object per line**
+- `--follow` streaming under `--json` must emit one JSON object per line
   (NDJSON) — document it; scripts that expect a single blob will break.
   Resolve the envelope tension explicitly: step 4's "single object per command"
-  contract applies to **non-streaming** commands; a **streaming** command
+  contract applies to non-streaming commands; a streaming command
   (`--follow`) is the documented exception and emits NDJSON lines under `--json`.
   Provide `--json` (NDJSON for the stream) and keep `--json <envelope>` off the
   table — offering two stream JSON modes invites drift. State the exception in

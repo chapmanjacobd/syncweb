@@ -745,3 +745,123 @@ fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn join_default_enables_live_sync() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("eager-subscribe-docs");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"eager")?;
+    alice.import(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-eager-subscribe");
+    let out = bob.join(&info.ticket, &bob_dir)?;
+    ensure!(
+        out.stdout().contains("live sync on"),
+        "bare join should report live sync enabled: {}",
+        out.stdout()
+    );
+
+    let config = bob.run_ok(&["config", "show", "subscribe"])?;
+    ensure!(
+        config.stdout().contains(&info.namespace),
+        "join should persist the namespace in subscribe config: {}",
+        config.stdout()
+    );
+    ensure!(
+        config.stdout().contains("enabled = true"),
+        "join should enable live sync by default: {}",
+        config.stdout()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn join_no_subscribe_skips_live_sync() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("no-subscribe-docs");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"lazy")?;
+    alice.import(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-no-subscribe");
+    let out = bob.join_with_options(&["--no-subscribe"], &info.ticket, &bob_dir)?;
+    ensure!(
+        !out.stdout().contains("live sync on"),
+        "--no-subscribe should drop the live-sync fragment: {}",
+        out.stdout()
+    );
+
+    let config = bob.run_ok(&["config", "show", "subscribe"])?;
+    ensure!(
+        config.stdout().contains("enabled = false"),
+        "--no-subscribe should leave live sync disabled: {}",
+        config.stdout()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn join_no_download_preserves_lazy() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("lazy-docs");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"lazy content")?;
+    alice.import(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-lazy");
+    let out = bob.join_with_options(&["--no-download"], &info.ticket, &bob_dir)?;
+    ensure!(
+        !out.stdout().contains("downloaded:"),
+        "--no-download should omit the download summary: {}",
+        out.stdout()
+    );
+    ensure!(
+        fs::read_dir(&bob_dir)?.next().is_none(),
+        "--no-download should leave no files on disk"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn join_already_tracked_folder_is_idempotent() -> anyhow::Result<()> {
+    let world = World::new(&["alice", "bob"])?;
+    let alice = world.device("alice")?;
+    let bob = world.device("bob")?;
+
+    let folder_dir = world.root().join("idem-docs");
+    let info = alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"idem")?;
+    alice.import(&folder_dir)?;
+
+    let bob_dir = world.root().join("bob-idem");
+    bob.join(&info.ticket, &bob_dir)?;
+
+    let second = bob.join(&info.ticket, &bob_dir)?;
+    ensure!(
+        second.stdout().contains("joined"),
+        "re-join of an already-tracked folder should succeed: {}",
+        second.stdout()
+    );
+
+    let config = bob.run_ok(&["config", "show", "subscribe"])?;
+    ensure!(
+        config.stdout().contains("enabled = true"),
+        "idempotent re-join should keep live sync enabled: {}",
+        config.stdout()
+    );
+
+    Ok(())
+}

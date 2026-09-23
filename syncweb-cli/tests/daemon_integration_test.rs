@@ -1051,13 +1051,13 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         bob_data_arg,
         "--no-daemon",
         "join",
-        "--download-all",
+        "--download-existing",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "join --download-all should succeed: {}",
+        "join --download-existing should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
@@ -1083,7 +1083,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_join_default_downloads_and_subscribes() -> anyhow::Result<()> {
+fn test_join_default_subscribes_without_download() -> anyhow::Result<()> {
     let alice_data = cli_test_dir("join-default-alice")?;
     let alice_folder = cli_test_dir("join-default-alice-folder")?;
     let bob_data = cli_test_dir("join-default-bob")?;
@@ -1146,12 +1146,12 @@ fn test_join_default_downloads_and_subscribes() -> anyhow::Result<()> {
         "bare join should report live sync enabled: {join_out}"
     );
     ensure!(
-        join_out.contains("downloaded:"),
-        "bare join should report a download count: {join_out}"
+        !join_out.contains("downloaded:"),
+        "bare join should not report a bulk download by default: {join_out}"
     );
     ensure!(
-        std::fs::read(bob_folder.join("hello.txt")).context("read materialized file")? == b"hello world",
-        "bare join should download matching content to disk"
+        !bob_folder.join("hello.txt").exists(),
+        "bare join should leave existing content off the disk until a download is requested"
     );
 
     let config = syncweb(&["--data-dir", bob_data_arg, "config", "show", "subscribe"])?;
@@ -1225,14 +1225,12 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "join",
-        "--subscribe",
-        "--no-download",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "bob join --subscribe should succeed: {}",
+        "bob join should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
 
@@ -1424,13 +1422,13 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "join",
-        "--download-all",
+        "--download-existing",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "daemon join --download-all should succeed: {}",
+        "daemon join --download-existing should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;

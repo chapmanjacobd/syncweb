@@ -24,18 +24,19 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
   automatically, so that I never think about the plumbing.
 - Today: `syncweb create ~/Documents` → prints a long
   `syncweb://folder/<ns>?ticket=...` URL. On the phone she must
-  `syncweb join <url>`, and unless she adds `--subscribe` and `--download-all`,
+  `syncweb join <url>`, and unless she adds `--subscribe` and `--download`,
   nothing actually lands on disk — `ls` shows entries, files stay remote. She has
   to learn lazy-fetch, tickets, subscriptions, and sync modes before her first
   successful sync.
 - Friction: the happy path requires ~4 concepts (ticket, subscribe,
-  download-all, receiveonly) that the default hides. Data dir defaults to
+  download, receiveonly) that the default hides. Data dir defaults to
   `./.syncweb` (cwd-relative) while docs say `~/.config/syncweb` — confusion
   about where "my files" and "syncweb's files" live.
-- Improvement: make `join` fetch everything by default and enable live sync
-  by default; keep `--no-download`/`--no-subscribe` as explicit opt-outs. Print a
-  human-readable one-liner ("Syncing 12 GB from laptop — files will appear here
-  as they arrive") instead of a bare URL.
+- Improvement: `join` enables live sync by default (persisted), so new files
+  arrive on their own; existing content is bulk-downloaded only on an explicit
+  `join --download-existing` (alias `--download`), so the disk is never filled
+  without consent. Print a human-readable one-liner ("joined <ns> — live sync
+  on; downloaded 5 files (12 GB)") instead of a bare URL.
 
 ### 2. Maya shares a folder without nuking it
 

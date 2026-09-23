@@ -747,7 +747,7 @@ fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
 }
 
 #[test]
-fn join_default_enables_live_sync() -> anyhow::Result<()> {
+fn join_default_enables_live_sync_without_download() -> anyhow::Result<()> {
     let world = World::new(&["alice", "bob"])?;
     let alice = world.device("alice")?;
     let bob = world.device("bob")?;
@@ -763,6 +763,15 @@ fn join_default_enables_live_sync() -> anyhow::Result<()> {
         out.stdout().contains("live sync on"),
         "bare join should report live sync enabled: {}",
         out.stdout()
+    );
+    ensure!(
+        !out.stdout().contains("downloaded:"),
+        "bare join should not bulk-download by default: {}",
+        out.stdout()
+    );
+    ensure!(
+        fs::read_dir(&bob_dir)?.next().is_none(),
+        "bare join should leave staged files off the disk until download is requested"
     );
 
     let config = bob.run_ok(&["config", "show", "subscribe"])?;
@@ -810,26 +819,29 @@ fn join_no_subscribe_skips_live_sync() -> anyhow::Result<()> {
 }
 
 #[test]
-fn join_no_download_preserves_lazy() -> anyhow::Result<()> {
+fn join_download_existing_runs_the_one_shot_download() -> anyhow::Result<()> {
     let world = World::new(&["alice", "bob"])?;
     let alice = world.device("alice")?;
     let bob = world.device("bob")?;
 
-    let folder_dir = world.root().join("lazy-docs");
+    let folder_dir = world.root().join("download-existing-docs");
     let info = alice.create(&folder_dir)?;
-    alice.write_file(&folder_dir.join("doc.txt"), b"lazy content")?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"download me")?;
     alice.import(&folder_dir)?;
 
-    let bob_dir = world.root().join("bob-lazy");
-    let out = bob.join_with_options(&["--no-download"], &info.ticket, &bob_dir)?;
+    let bob_dir = world.root().join("bob-download-existing");
+    let out = bob.join_with_options(&["--download-existing"], &info.ticket, &bob_dir)?;
     ensure!(
-        !out.stdout().contains("downloaded:"),
-        "--no-download should omit the download summary: {}",
+        out.stdout().contains("downloaded:"),
+        "--download-existing should run the one-shot download: {}",
         out.stdout()
     );
+
+    let config = bob.run_ok(&["config", "show", "subscribe"])?;
     ensure!(
-        fs::read_dir(&bob_dir)?.next().is_none(),
-        "--no-download should leave no files on disk"
+        config.stdout().contains("enabled = true"),
+        "--download-existing should keep live sync on: {}",
+        config.stdout()
     );
 
     Ok(())

@@ -2450,7 +2450,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let no_daemon = ctx.no_daemon;
     let filters = subscribe_filters_from(&command);
     let subscribe = command.effective_subscribe();
-    let download_all = command.effective_download_all();
+    let download_existing = command.download_existing;
     let effective_path = if let Some(prefix) = &command.prefix {
         prefix.join(&command.path)
     } else {
@@ -2477,7 +2477,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                 mode: SyncMode::from_str(&command.mode)?,
                 subscribe,
                 filters: filters.clone(),
-                download: download_all,
+                download: download_existing,
                 indexing: !command.no_indexing,
             }))
             .await?;
@@ -2501,7 +2501,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     config.set_subscribe(&namespace, subscribe, &filters);
     node_db.save_app_config(&config)?;
     node_db.upsert_folder_mount(&namespace, &effective_path)?;
-    let (downloaded, downloaded_size) = if download_all {
+    let (downloaded, downloaded_size) = if download_existing {
         download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
     } else {
         (0, 0)
@@ -2517,11 +2517,11 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
             })
         );
     } else {
-        if download_all {
-            let live = if subscribe { " — live sync on;" } else { "" };
+        let live = if subscribe { " — live sync on;" } else { "" };
+        if download_existing {
             println!("joined: {namespace}{live} downloaded: {downloaded} files ({downloaded_size} bytes)");
         } else {
-            println!("joined: {namespace}");
+            println!("joined: {namespace}{live}");
         }
     }
     node.stop().await?;
@@ -2580,9 +2580,21 @@ async fn download_joined_folder(
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        node.blob_store().export_to_path(entry.hash, &dest).await?;
-        count = count.saturating_add(1);
-        size = size.saturating_add(entry.size);
+        match node.blob_store().export_to_path(entry.hash, &dest).await {
+            Ok(_) => {
+                count = count.saturating_add(1);
+                size = size.saturating_add(entry.size);
+            }
+            Err(error) => {
+                // A blob may still be en route (or permanently unavailable) after
+                // the fetch window; skip it rather than failing the whole join.
+                tracing::warn!(
+                    %error,
+                    path = %rel.display(),
+                    "join download could not write entry; it will arrive via live sync"
+                );
+            }
+        }
     }
     Ok((count, size))
 }
@@ -4726,7 +4738,7 @@ fn render_entries(rows: &[LocalEntry], namespace: &str, selector: &Path, output_
 fn print_no_entries_nudge(namespace: &str) {
     println!(
         "folder {namespace} has no remote entries yet; files will appear as they sync — \
-         run `syncweb download-all` to fetch current content"
+         fetch current content with `syncweb download <path>`"
     );
 }
 

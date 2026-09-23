@@ -302,7 +302,7 @@ pub struct FolderCreate {
 
 #[derive(Debug, Args)]
 pub struct FolderJoin {
-    #[arg(help = "Iroh document ticket for a new folder, or a folder selector when using --subscribe")]
+    #[arg(help = "Iroh document ticket for a new folder, or a folder selector for an already-tracked folder")]
     pub ticket: String,
     #[arg(default_value = ".")]
     pub path: PathBuf,
@@ -336,12 +336,10 @@ pub struct FolderJoin {
     pub max_size: Option<u64>,
     #[arg(
         long,
-        default_value_t = true,
-        help = "Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)"
+        visible_alias = "download",
+        help = "Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can't fill your disk by accident"
     )]
-    pub download_all: bool,
-    #[arg(long, help = "Join without downloading existing content")]
-    pub no_download: bool,
+    pub download_existing: bool,
     #[arg(
         long,
         help = "Do not opt the folder into local indexing (indexing is enabled by default)"
@@ -353,11 +351,6 @@ impl FolderJoin {
     #[must_use]
     pub const fn effective_subscribe(&self) -> bool {
         self.subscribe && !self.no_subscribe
-    }
-
-    #[must_use]
-    pub const fn effective_download_all(&self) -> bool {
-        self.download_all && !self.no_download
     }
 }
 
@@ -1090,12 +1083,14 @@ mod tests {
     }
 
     #[test]
-    fn join_defaults_to_eager_subscribe_and_download() {
+    fn join_defaults_to_subscribe_without_download() {
         let join = parse_join(&[]);
         assert!(join.subscribe, "subscribe should default to true");
-        assert!(join.download_all, "download_all should default to true");
+        assert!(
+            !join.download_existing,
+            "download_existing should default to false (no bulk download)"
+        );
         assert!(join.effective_subscribe());
-        assert!(join.effective_download_all());
     }
 
     #[test]
@@ -1104,28 +1099,38 @@ mod tests {
         assert!(join.subscribe, "--subscribe stays accepted as an explicit opt-in");
         assert!(join.no_subscribe);
         assert!(!join.effective_subscribe());
-        assert!(join.effective_download_all());
+        assert!(
+            !join.download_existing,
+            "--no-subscribe alone should not trigger a download"
+        );
     }
 
     #[test]
-    fn join_no_download_preserves_lazy_join() {
-        let join = parse_join(&["--no-download"]);
-        assert!(join.download_all, "--download-all stays accepted as an explicit opt-in");
-        assert!(join.no_download);
-        assert!(!join.effective_download_all());
-        assert!(join.effective_subscribe());
+    fn join_download_existing_is_explicit_opt_in() {
+        let join = parse_join(&["--download-existing"]);
+        assert!(
+            join.download_existing,
+            "--download-existing should enable the one-shot download"
+        );
+        assert!(join.effective_subscribe(), "download keeps live sync on by default");
     }
 
     #[test]
-    fn join_conflicting_flags_resolve_to_no() {
-        let joined = parse_join(&["--subscribe", "--no-subscribe", "--download-all", "--no-download"]);
+    fn join_download_alias_parses() {
+        let alias = parse_join(&["--download"]);
+        assert!(alias.download_existing, "--download should alias --download-existing");
+    }
+
+    #[test]
+    fn join_no_subscribe_wins_and_download_stays_independent() {
+        let joined = parse_join(&["--subscribe", "--no-subscribe", "--download-existing"]);
         assert!(
             !joined.effective_subscribe(),
             "--no-subscribe should win over --subscribe"
         );
         assert!(
-            !joined.effective_download_all(),
-            "--no-download should win over --download-all"
+            joined.download_existing,
+            "--download-existing should stay independent of the subscribe pair"
         );
     }
 }

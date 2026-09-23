@@ -4,7 +4,7 @@
 .SH NAME
 join \- Join a folder from an Iroh document ticket
 .SH SYNOPSIS
-\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-subscribe\fR] [\fB\-\-no\-subscribe\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-\-download\-all\fR] [\fB\-\-no\-download\fR] [\fB\-\-no\-indexing\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
+\fBjoin\fR [\fB\-\-mode\fR] [\fB\-\-relay\-fallback\fR] [\fB\-\-network\fR] [\fB\-\-subscribe\fR] [\fB\-\-no\-subscribe\fR] [\fB\-\-ingest\-only\fR] [\fB\-\-ignore\-self\fR] [\fB\-\-prefix\fR] [\fB\-\-sync\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-max\-count\fR] [\fB\-\-max\-size\fR] [\fB\-\-download\-existing\fR] [\fB\-\-no\-indexing\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fITICKET\fR> [\fIPATH\fR] 
 .SH DESCRIPTION
 Join a folder from an Iroh document ticket
 .SH OPTIONS
@@ -45,11 +45,8 @@ Area prefix filter for subscription entries
 \fB\-\-max\-size\fR \fI<MAX_SIZE>\fR
 
 .TP
-\fB\-\-download\-all\fR
-Download matching existing content to the local folder after joining (one\-shot; uses the same prefix/glob/max filters)
-.TP
-\fB\-\-no\-download\fR
-Join without downloading existing content
+\fB\-\-download\-existing\fR
+Download matching existing content to the local folder after joining (one\-shot; uses the same prefix/glob/max filters). Off by default so a big folder can\*(Aqt fill your disk by accident
 .TP
 \fB\-\-no\-indexing\fR
 Do not opt the folder into local indexing (indexing is enabled by default)
@@ -58,7 +55,7 @@ Do not opt the folder into local indexing (indexing is enabled by default)
 Print help
 .TP
 <\fITICKET\fR>
-Iroh document ticket for a new folder, or a folder selector when using \-\-subscribe
+Iroh document ticket for a new folder, or a folder selector for an already\-tracked folder
 .TP
 [\fIPATH\fR] [default: .]
 

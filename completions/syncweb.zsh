@@ -169,8 +169,8 @@ _arguments "${_arguments_options[@]}" : \
 '--no-subscribe[Skip enabling live syncing on join]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
-'--download-all[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters)]' \
-'--no-download[Join without downloading existing content]' \
+'--download-existing[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can'\''t fill your disk by accident]' \
+'--download[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can'\''t fill your disk by accident]' \
 '--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
@@ -178,7 +178,7 @@ _arguments "${_arguments_options[@]}" : \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':ticket -- Iroh document ticket for a new folder, or a folder selector when using --subscribe:_default' \
+':ticket -- Iroh document ticket for a new folder, or a folder selector for an already-tracked folder:_default' \
 '::path:_files' \
 && ret=0
 ;;

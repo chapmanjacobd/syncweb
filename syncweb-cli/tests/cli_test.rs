@@ -514,7 +514,7 @@ fn test_ls_streaming() -> anyhow::Result<()> {
     std::fs::write(source.join("sub/b.txt"), b"b").context("write b")?;
 
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["ls", source.to_str().context("UTF-8 path")?])
+        .args(["ls", "--local-only", source.to_str().context("UTF-8 path")?])
         .output()
         .context("run syncweb ls")?;
 
@@ -539,7 +539,13 @@ fn test_ls_sort() -> anyhow::Result<()> {
     std::fs::write(source.join("small.txt"), b"s").context("write small")?;
 
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["ls", "--sort", "peers", source.to_str().context("UTF-8 path")?])
+        .args([
+            "ls",
+            "--local-only",
+            "--sort",
+            "peers",
+            source.to_str().context("UTF-8 path")?,
+        ])
         .output()
         .context("run syncweb ls --sort")?;
 
@@ -565,6 +571,7 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_regex = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
+            "--local-only",
             "--kind",
             "regex",
             r"report-\d+\.pdf",
@@ -579,6 +586,7 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_glob = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
+            "--local-only",
             "--kind",
             "glob",
             "*.txt",
@@ -596,6 +604,7 @@ fn test_find_regex_glob_exact() -> anyhow::Result<()> {
     let output_exact = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "find",
+            "--local-only",
             "--kind",
             "exact",
             "data",
@@ -623,7 +632,13 @@ fn test_sort_algorithms() -> anyhow::Result<()> {
 
     for algorithm in ["niche", "frecency", "peers", "random", "folder"] {
         let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-            .args(["sort", "--by", algorithm, source.to_str().context("UTF-8 path")?])
+            .args([
+                "sort",
+                "--local-only",
+                "--by",
+                algorithm,
+                source.to_str().context("UTF-8 path")?,
+            ])
             .output()
             .context("run syncweb sort")?;
         ensure!(
@@ -653,6 +668,7 @@ fn test_sort_with_enrich_flag() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args([
             "sort",
+            "--local-only",
             "--by",
             "peers",
             "--enrich",
@@ -1575,7 +1591,7 @@ fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
     std::fs::write(source.join("fix*.txt"), b"f").context("write literal asterisk name")?;
     let src = source.to_str().context("UTF-8 path")?;
 
-    let ci = syncweb(&["find", "REPORT", src, "--kind", "exact", "-i"])?;
+    let ci = syncweb(&["find", "--local-only", "REPORT", src, "--kind", "exact", "-i"])?;
     ensure!(
         ci.status.success(),
         "find -i should succeed: {}",
@@ -1587,7 +1603,7 @@ fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
         "-i should match case-insensitively: {out_insensitive}"
     );
 
-    let cs = syncweb(&["find", "report", src, "--kind", "exact", "-s"])?;
+    let cs = syncweb(&["find", "--local-only", "report", src, "--kind", "exact", "-s"])?;
     ensure!(cs.status.success());
     let out_sensitive = String::from_utf8(cs.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1595,7 +1611,7 @@ fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
         "-s should only match exact case: {out_sensitive}"
     );
 
-    let fixed = syncweb(&["find", "*.txt", src, "-F", "--kind", "exact"])?;
+    let fixed = syncweb(&["find", "--local-only", "*.txt", src, "-F", "--kind", "exact"])?;
     ensure!(fixed.status.success());
     let out_fixed = String::from_utf8(fixed.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1616,7 +1632,7 @@ fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
     std::fs::write(source.join(".hidden.txt"), b"h").context("write hidden")?;
     let src = source.to_str().context("UTF-8 path")?;
 
-    let full = syncweb(&["find", "2024", src, "-p", "--kind", "exact"])?;
+    let full = syncweb(&["find", "--local-only", "2024", src, "-p", "--kind", "exact"])?;
     ensure!(full.status.success());
     let out_full = String::from_utf8(full.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1624,7 +1640,7 @@ fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
         "-p should match the full relative path: {out_full}"
     );
 
-    let hidden = syncweb(&["find", "*", src, "-H"])?;
+    let hidden = syncweb(&["find", "--local-only", "*", src, "-H"])?;
     ensure!(hidden.status.success());
     let out_hidden = String::from_utf8(hidden.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1632,7 +1648,7 @@ fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
         "-H should include hidden files: {out_hidden}"
     );
 
-    let default = syncweb(&["find", "*", src])?;
+    let default = syncweb(&["find", "--local-only", "*", src])?;
     ensure!(default.status.success());
     let out_default = String::from_utf8(default.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1640,7 +1656,7 @@ fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
         "default find should exclude hidden files: {out_default}"
     );
 
-    let abs = syncweb(&["find", "file.md", src, "-a"])?;
+    let abs = syncweb(&["find", "--local-only", "file.md", src, "-a"])?;
     ensure!(abs.status.success());
     let out_abs = String::from_utf8(abs.stdout).context("UTF-8 output")?;
     let absolute = source.join("project-2024/sub/file.md");
@@ -1662,7 +1678,7 @@ fn find_depth_and_size_constraints() -> anyhow::Result<()> {
     std::fs::write(source.join("sub/deep/c.txt"), [0_u8; 1000]).context("write c")?;
     let src = source.to_str().context("UTF-8 path")?;
 
-    let depth = syncweb(&["find", "*", src, "--depth=-1"])?;
+    let depth = syncweb(&["find", "--local-only", "*", src, "--depth=-1"])?;
     ensure!(depth.status.success());
     let out_depth = String::from_utf8(depth.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1674,7 +1690,7 @@ fn find_depth_and_size_constraints() -> anyhow::Result<()> {
         "--depth=-1 should exclude sub/b.txt: {out_depth}"
     );
 
-    let min = syncweb(&["find", "*", src, "--min-depth", "2"])?;
+    let min = syncweb(&["find", "--local-only", "*", src, "--min-depth", "2"])?;
     ensure!(min.status.success());
     let out_min = String::from_utf8(min.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1686,7 +1702,7 @@ fn find_depth_and_size_constraints() -> anyhow::Result<()> {
         "--min-depth 2 should exclude a.txt: {out_min}"
     );
 
-    let min_size = syncweb(&["find", "*", src, "--sizes", "+50"])?;
+    let min_size = syncweb(&["find", "--local-only", "*", src, "--sizes", "+50"])?;
     ensure!(min_size.status.success());
     let out_min_size = String::from_utf8(min_size.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1698,7 +1714,7 @@ fn find_depth_and_size_constraints() -> anyhow::Result<()> {
         "--sizes +50 should exclude a.txt: {out_min_size}"
     );
 
-    let max_size = syncweb(&["find", "*", src, "--sizes=-500"])?;
+    let max_size = syncweb(&["find", "--local-only", "*", src, "--sizes=-500"])?;
     ensure!(max_size.status.success());
     let out_max_size = String::from_utf8(max_size.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1710,7 +1726,7 @@ fn find_depth_and_size_constraints() -> anyhow::Result<()> {
         "--sizes=-500 should exclude c.txt: {out_max_size}"
     );
 
-    let pct = syncweb(&["find", "*", src, "--sizes", "100%10"])?;
+    let pct = syncweb(&["find", "--local-only", "*", src, "--sizes", "100%10"])?;
     ensure!(pct.status.success());
     let out_pct = String::from_utf8(pct.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1734,13 +1750,13 @@ fn find_extension_and_type() -> anyhow::Result<()> {
     std::fs::write(source.join("b.md"), b"b").context("write b")?;
     let src = source.to_str().context("UTF-8 path")?;
 
-    let txt = syncweb(&["find", "*", src, "-e", "txt"])?;
+    let txt = syncweb(&["find", "--local-only", "*", src, "-e", "txt"])?;
     ensure!(txt.status.success());
     let out_txt = String::from_utf8(txt.stdout).context("UTF-8 output")?;
     ensure!(out_txt.contains("a.txt"), "-e txt should include a.txt: {out_txt}");
     ensure!(!out_txt.contains("b.md"), "-e txt should exclude b.md: {out_txt}");
 
-    let both = syncweb(&["find", "*", src, "-e", "txt", "-e", "md"])?;
+    let both = syncweb(&["find", "--local-only", "*", src, "-e", "txt", "-e", "md"])?;
     ensure!(both.status.success());
     let out_both = String::from_utf8(both.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1748,7 +1764,7 @@ fn find_extension_and_type() -> anyhow::Result<()> {
         "-e txt -e md should include both: {out_both}"
     );
 
-    let dirs = syncweb(&["find", "*", src, "--type", "d"])?;
+    let dirs = syncweb(&["find", "--local-only", "*", src, "--type", "d"])?;
     ensure!(dirs.status.success());
     let out_dirs = String::from_utf8(dirs.stdout).context("UTF-8 output")?;
     ensure!(out_dirs.contains("sub"), "--type d should list dirs: {out_dirs}");
@@ -1771,7 +1787,7 @@ fn find_follow_links_and_downloadable() -> anyhow::Result<()> {
     symlink(source.join("target.txt"), source.join("link.txt")).context("create symlink")?;
     let src = source.to_str().context("UTF-8 path")?;
 
-    let syms = syncweb(&["find", "*", src, "--type", "l"])?;
+    let syms = syncweb(&["find", "--local-only", "*", src, "--type", "l"])?;
     ensure!(syms.status.success());
     let out_syms = String::from_utf8(syms.stdout).context("UTF-8 output")?;
     ensure!(
@@ -1780,7 +1796,7 @@ fn find_follow_links_and_downloadable() -> anyhow::Result<()> {
     );
 
     for extra in [&["-L"][..], &["-d"][..], &["-L", "-d", "--threads", "2"][..]] {
-        let mut args = vec!["find", "*", src];
+        let mut args = vec!["find", "--local-only", "*", src];
         args.extend_from_slice(extra);
         let output = syncweb(&args)?;
         ensure!(
@@ -1815,7 +1831,7 @@ fn sort_additional_algorithms() -> anyhow::Result<()> {
         "folder-time",
         "count",
     ] {
-        let output = syncweb(&["sort", src, "--by", algorithm])?;
+        let output = syncweb(&["sort", "--local-only", src, "--by", algorithm])?;
         ensure!(
             output.status.success(),
             "sort --by {algorithm} should succeed: {}",
@@ -1842,6 +1858,7 @@ fn sort_filters_and_scoring_tuning() -> anyhow::Result<()> {
 
     let output = syncweb(&[
         "sort",
+        "--local-only",
         src,
         "--by",
         "size",

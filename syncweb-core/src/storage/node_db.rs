@@ -217,6 +217,11 @@ impl NodeDatabase {
             updated_at INTEGER NOT NULL,
             PRIMARY KEY(namespace_id)
         );
+        CREATE TABLE IF NOT EXISTS folder_mounts (
+            namespace_id TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS networks (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
@@ -688,6 +693,79 @@ impl NodeDatabase {
         connection
             .execute("DELETE FROM folder_status_reports", [])
             .map_err(|error| SyncwebError::operation("failed to remove folder status reports", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Record (or update) the mount directory for a folder namespace.
+    ///
+    /// The registry is advisory: `ls`/`find`/`sort` use it to resolve a
+    /// filesystem path back to a managed folder, but always filter by live
+    /// `FolderManager` membership before trusting a row.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn upsert_folder_mount(&self, namespace_id: &str, path: &Path) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO folder_mounts(namespace_id, path, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(namespace_id) DO UPDATE SET
+                    path = excluded.path,
+                    updated_at = excluded.updated_at",
+                params![namespace_id, path.to_string_lossy().as_ref(), now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save folder mount", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load all registered folder mount paths as `(namespace_id, path)` pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn load_folder_mounts(&self) -> Result<Vec<(String, PathBuf)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT namespace_id, path FROM folder_mounts")
+            .map_err(|error| SyncwebError::operation("failed to prepare folder mount query", error))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, PathBuf::from(row.get::<_, String>(1)?)))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query folder mounts", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read folder mount rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(rows)
+    }
+
+    /// Remove a folder's mount registration (e.g. on `leave`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn remove_folder_mount(&self, namespace_id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM folder_mounts WHERE namespace_id = ?1",
+                params![namespace_id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to remove folder mount", error))?;
         drop(connection);
         Ok(())
     }

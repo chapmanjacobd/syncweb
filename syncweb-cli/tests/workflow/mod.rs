@@ -1,5 +1,6 @@
 mod basic_sync;
 mod indexing;
+mod lazy_listing;
 mod transfer;
 
 use std::path::{Path, PathBuf};
@@ -138,7 +139,7 @@ impl Device {
     }
 
     pub fn ls(&self, path: &Path) -> anyhow::Result<Vec<String>> {
-        let output = self.run_ok(&["ls", path.to_str().context("UTF-8 path")?])?;
+        let output = self.run_ok(&["--no-daemon", "ls", path.to_str().context("UTF-8 path")?])?;
         Ok(output
             .stdout()
             .lines()
@@ -148,7 +149,7 @@ impl Device {
     }
 
     pub fn find(&self, pattern: &str, path: &Path) -> anyhow::Result<Vec<String>> {
-        let output = self.run_ok(&["find", pattern, path.to_str().context("UTF-8 path")?])?;
+        let output = self.run_ok(&["--no-daemon", "find", pattern, path.to_str().context("UTF-8 path")?])?;
         Ok(output
             .stdout()
             .lines()

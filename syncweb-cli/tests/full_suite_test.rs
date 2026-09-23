@@ -286,7 +286,7 @@ fn ls_find_sort_stat_workflow() -> anyhow::Result<()> {
     fs::write(source.join("data.txt"), b"data content")?;
     fs::write(source.join("sub/image.png"), b"png content")?;
 
-    let ls = run(&["ls", source.to_str().context("UTF-8 path")?])?;
+    let ls = run(&["ls", "--local-only", source.to_str().context("UTF-8 path")?])?;
     assert_success(&ls, "ls")?;
     let ls_out = stdout_string(&ls)?;
     ensure!(ls_out.contains("report-01.pdf"), "ls should find report: {ls_out}");
@@ -294,6 +294,7 @@ fn ls_find_sort_stat_workflow() -> anyhow::Result<()> {
 
     let find = run(&[
         "find",
+        "--local-only",
         "--kind",
         "regex",
         r"report-\d+\.pdf",
@@ -303,7 +304,13 @@ fn ls_find_sort_stat_workflow() -> anyhow::Result<()> {
     let find_out = stdout_string(&find)?;
     ensure!(find_out.contains("report-01.pdf"), "find should match: {find_out}");
 
-    let sort = run(&["sort", "--by", "peers", source.to_str().context("UTF-8 path")?])?;
+    let sort = run(&[
+        "sort",
+        "--local-only",
+        "--by",
+        "peers",
+        source.to_str().context("UTF-8 path")?,
+    ])?;
     assert_success(&sort, "sort")?;
     let sort_out = stdout_string(&sort)?;
     ensure!(sort_out.lines().count() == 3, "sort should list 3 files: {sort_out}");

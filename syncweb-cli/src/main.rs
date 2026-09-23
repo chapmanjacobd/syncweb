@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
@@ -15,25 +15,26 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        Command, ConfigCommand, ImportArgs, NetworkCommand, NetworkListArgs, PackageCommand, PublishCommand,
-        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, TransferAllocateArgs,
-        TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs,
-        TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
+        Command, ConfigCommand, ImportArgs, ListingFlags, NetworkCommand, NetworkListArgs, PackageCommand,
+        PublishCommand, ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
+        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
+        TransferMaterializeArgs, TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
     },
     output::{confirm_destructive, init_tracing, print_version},
 };
 use indicatif::{ProgressBar, ProgressStyle};
+use iroh_blobs::Hash as BlobHash;
 use n0_future::StreamExt;
 use rayon::prelude::*;
 use syncweb_core::{
     allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
     cancel_session,
-    daemon::{Daemon, DaemonConfig, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
+    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
-        DropImporter, FolderLike, FolderManager, PackageManager, SyncMode,
+        DropImporter, FolderLike, FolderManager, PackageManager, SyncMode, SyncwebFolder,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
     init::open_node,
@@ -43,7 +44,7 @@ use syncweb_core::{
         iroh_node::IrohNode,
     },
     schedule::{BandwidthWindowConfig, ScheduleManager, parse_rate},
-    search::{FindEngine, FindQuery},
+    search::{FindEngine, FindQuery, filter_entries},
     snapshot::SnapshotStore,
     sort::{SortConfig, SortEntry, Sorter},
     stat::{StatFormat, StatOutput},
@@ -190,10 +191,10 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Status => handle_status(&ctx).await?,
         Command::Devices => handle_devices(&ctx)?,
         Command::Networks(args) => handle_networks(&ctx, &args)?,
-        Command::Ls(command) => handle_ls(&ctx, command)?,
-        Command::Find(command) => handle_find(&ctx, command)?,
+        Command::Ls(command) => handle_ls(&ctx, command).await?,
+        Command::Find(command) => handle_find(&ctx, command).await?,
         Command::Search(args) => handle_search(&ctx, args).await?,
-        Command::Sort(command) => handle_sort(&ctx, &command)?,
+        Command::Sort(command) => handle_sort(&ctx, &command).await?,
         Command::Stat(command) => handle_stat(&ctx, command)?,
         Command::Download(command) => handle_download(&ctx, command).await?,
         Command::Import(command) => handle_import(&ctx, command).await?,
@@ -2318,6 +2319,8 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
             }
         }
         let namespace = created_namespace.ok_or_else(|| anyhow::anyhow!("daemon create did not report a namespace"))?;
+        let node_db = open_node_db(data_dir)?;
+        node_db.upsert_folder_mount(&namespace, &command.path)?;
         if do_share {
             let share = client
                 .send(IpcRequest::new(IpcCommand::Share {
@@ -2385,6 +2388,8 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
             importer.import_path(&command.path).await?;
         }
         let namespace = folder.namespace_id().to_string();
+        let node_db = open_node_db(data_dir)?;
+        node_db.upsert_folder_mount(&namespace, &command.path)?;
         if do_share {
             let db = open_node_db(data_dir)?;
             let result = syncweb_core::folder::share_folder(
@@ -2493,6 +2498,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let mut config = node_db.load_app_config()?;
     config.set_subscribe(&namespace, command.subscribe, &filters);
     node_db.save_app_config(&config)?;
+    node_db.upsert_folder_mount(&namespace, &effective_path)?;
     let downloaded = if command.download_all {
         download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
     } else {
@@ -2605,6 +2611,9 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     let mut config = node_db.load_app_config()?;
     config.set_subscribe(&namespace_str, true, filters);
     node_db.save_app_config(&config)?;
+    if let Ok(mount) = std::fs::canonicalize(selector) {
+        let _ = node_db.upsert_folder_mount(&namespace_str, &mount);
+    }
     if output_json {
         println!(
             "{}",
@@ -4179,6 +4188,9 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
     let namespace = manager.resolve_namespace(&command.folder).await?;
     let _ = cancel_session(namespace);
     manager.drop_when_ready(namespace).await?;
+    let namespace_str = namespace.to_string();
+    let node_db = open_node_db(data_dir)?;
+    node_db.remove_folder_mount(&namespace_str)?;
     if command.delete_files {
         let path = std::path::Path::new(&command.folder);
         if path.exists() {
@@ -4295,28 +4307,412 @@ fn handle_networks(ctx: &CliContext<'_>, args: &NetworkListArgs) -> Result<()> {
     handle_status_networks(ctx.data_dir, args.name.as_deref(), ctx.output_json)
 }
 
-fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs) -> Result<()> {
-    let output_json = ctx.output_json;
-    if let Some(criteria) = command.sort {
-        let sort_args = crate::cli::commands::SortArgs {
-            path: command.path,
-            by: criteria,
-            min_seeders: None,
-            max_seeders: None,
-            niche: None,
-            frecency_weight: None,
-            limit_size: None,
-            depth: Vec::new(),
-            min_depth: None,
-            max_depth: None,
-            threads: command.threads,
-            enrich: false,
-        };
-        return handle_sort(ctx, &sort_args);
+// ---------------------------------------------------------------------------
+// Metadata-first `ls`/`find`/`sort`
+// ---------------------------------------------------------------------------
+
+/// A single folder entry with disk metadata overlaid when the blob is local.
+#[derive(Clone, Debug)]
+struct LocalEntry {
+    path: String,
+    hash: BlobHash,
+    size: u64,
+    local: bool,
+    modified: Option<SystemTime>,
+}
+
+/// How a `ls`/`find`/`sort` selector resolved to a folder.
+struct ResolvedFolder {
+    namespace: String,
+    mount_root: Option<PathBuf>,
+    remainder: PathBuf,
+}
+
+/// The entry source for a listing: either the daemon (IPC) or an embedded node.
+enum ListingMode {
+    Daemon { client: IpcClient },
+    Embedded(Box<EmbeddedListing>),
+}
+
+/// An embedded node + its resolved folder, boxed to keep the listing mode small.
+struct EmbeddedListing {
+    node: IrohNode,
+    folder: SyncwebFolder,
+}
+
+/// Sort vocabulary for the metadata table (step 3 of plan 01).
+#[derive(Clone, Copy, Debug)]
+enum MetaSort {
+    Name,
+    Size,
+    Modified,
+    State,
+}
+
+fn parse_meta_sort(by: &str) -> Result<MetaSort> {
+    match by.to_ascii_lowercase().as_str() {
+        "name" => Ok(MetaSort::Name),
+        "size" => Ok(MetaSort::Size),
+        "modified" => Ok(MetaSort::Modified),
+        "state" => Ok(MetaSort::State),
+        other => anyhow::bail!(
+            "sort --by '{other}' is only valid with --local-only; on a synchronized folder \
+             use name, size, modified, or state"
+        ),
     }
-    let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
+}
+
+/// The metadata listing's shared entry walk: read doc entries, compute the
+/// local/remote `State`, and overlay the real disk `size`/`modified` on local
+/// rows. Never materializes blobs and never scans the directory.
+async fn enumerate_folder_entries(
+    folder: &SyncwebFolder,
+    mount_root: Option<&Path>,
+    enrich: bool,
+) -> Result<Vec<LocalEntry>> {
+    let entries = folder.list_entries().await?;
+    let mut rows = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let local = folder.has_local(entry.hash).await?;
+        let (size, modified) = if enrich
+            && local
+            && let Some(root) = mount_root
+            && let Ok(metadata) = std::fs::metadata(root.join(&entry.path))
+        {
+            (metadata.len(), metadata.modified().ok())
+        } else {
+            (entry.size, None)
+        };
+        rows.push(LocalEntry {
+            path: entry.path,
+            hash: entry.hash,
+            size,
+            local,
+            modified,
+        });
+    }
+    Ok(rows)
+}
+
+fn entry_row_to_local(row: EntryRow) -> LocalEntry {
+    LocalEntry {
+        path: row.path,
+        hash: row.hash,
+        size: row.size,
+        local: row.local,
+        modified: row.modified.map(|seconds| {
+            UNIX_EPOCH
+                .checked_add(Duration::from_secs(seconds))
+                .unwrap_or(UNIX_EPOCH)
+        }),
+    }
+}
+
+/// Fetch the entry rows for a resolved folder, stopping the embedded node when
+/// one was opened.
+async fn fetch_listing_rows(mode: ListingMode, resolved: &ResolvedFolder, enrich: bool) -> Result<Vec<LocalEntry>> {
+    match mode {
+        ListingMode::Daemon { client } => {
+            let response = client
+                .send(IpcRequest::new(IpcCommand::ListEntries {
+                    folder: resolved.namespace.clone(),
+                    enrich,
+                }))
+                .await?;
+            let IpcResponse::Entries(rows) = response else {
+                anyhow::bail!("daemon returned an unexpected response while listing entries");
+            };
+            Ok(rows.into_iter().map(entry_row_to_local).collect())
+        }
+        ListingMode::Embedded(listing) => {
+            let rows = enumerate_folder_entries(&listing.folder, resolved.mount_root.as_deref(), enrich).await?;
+            listing.node.stop().await?;
+            Ok(rows)
+        }
+    }
+}
+
+fn canonical_path(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            cwd.join(path)
+        }
+    })
+}
+
+/// Registered mount paths for live folders only (stale rows never resolve).
+async fn live_folder_mounts(data_dir: &Path, manager: &FolderManager) -> Result<Vec<(String, PathBuf)>> {
+    let live: std::collections::HashSet<String> = manager
+        .list()
+        .await?
+        .into_iter()
+        .map(|folder| folder.namespace_id().to_string())
+        .collect();
+    let node_db = open_node_db(data_dir)?;
+    Ok(node_db
+        .load_folder_mounts()?
+        .into_iter()
+        .filter(|(namespace, _)| live.contains(namespace))
+        .collect())
+}
+
+async fn resolve_selector_embedded(
+    data_dir: &Path,
+    manager: &FolderManager,
+    selector: &Path,
+) -> Result<(ResolvedFolder, SyncwebFolder)> {
+    let selector_str = selector.to_string_lossy();
+    if let Ok(namespace_id) = selector_str.parse::<iroh_docs::NamespaceId>() {
+        let folder = manager.get(namespace_id).await?;
+        let mount_root = live_folder_mounts(data_dir, manager)
+            .await?
+            .into_iter()
+            .find_map(|(namespace, path)| (namespace == selector_str).then_some(path));
+        return Ok((
+            ResolvedFolder {
+                namespace: namespace_id.to_string(),
+                mount_root,
+                remainder: PathBuf::new(),
+            },
+            folder,
+        ));
+    }
+    let mounts = live_folder_mounts(data_dir, manager).await?;
+    let canonical = canonical_path(selector);
+    let mut best: Option<(PathBuf, PathBuf)> = None;
+    for (_, root) in &mounts {
+        let root_canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+        if let Ok(remainder) = canonical.strip_prefix(&root_canonical) {
+            let better = best
+                .as_ref()
+                .is_none_or(|(best_root, _)| root_canonical.as_os_str().len() > best_root.as_os_str().len());
+            if better {
+                best = Some((root_canonical, remainder.to_path_buf()));
+            }
+        }
+    }
+    if let Some((root, remainder)) = best {
+        let Some(namespace) = mounts
+            .iter()
+            .find(|(_, mount)| std::fs::canonicalize(mount).unwrap_or_else(|_| mount.clone()) == root)
+            .map(|(namespace, _)| namespace.clone())
+        else {
+            anyhow::bail!("folder mount root resolved to a departed folder");
+        };
+        let namespace_id = namespace
+            .parse::<iroh_docs::NamespaceId>()
+            .map_err(|error| anyhow::anyhow!("invalid stored namespace {namespace:?}: {error}"))?;
+        let folder = manager.get(namespace_id).await?;
+        return Ok((
+            ResolvedFolder {
+                namespace,
+                mount_root: Some(root),
+                remainder,
+            },
+            folder,
+        ));
+    }
+    anyhow::bail!(
+        "{} is not inside of a Syncweb folder — run `syncweb ls --local-only {}` to list the disk directly",
+        selector.display(),
+        selector.display()
+    );
+}
+
+async fn resolve_selector_via_daemon(client: &IpcClient, selector: &Path) -> Result<ResolvedFolder> {
+    let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+    let IpcResponse::FolderList(folders) = response else {
+        anyhow::bail!("unexpected response from daemon while resolving folder");
+    };
+    let selector_str = selector.to_string_lossy();
+    if let Ok(_namespace_id) = selector_str.parse::<iroh_docs::NamespaceId>() {
+        let mount_root = folders
+            .iter()
+            .find(|folder| folder.namespace == selector_str)
+            .map(|folder| folder.path.clone());
+        return Ok(ResolvedFolder {
+            namespace: selector_str.into_owned(),
+            mount_root,
+            remainder: PathBuf::new(),
+        });
+    }
+    let canonical = canonical_path(selector);
+    let mut best: Option<(String, PathBuf, PathBuf)> = None;
+    for folder in &folders {
+        if folder.path.as_os_str().is_empty() {
+            continue;
+        }
+        let root = std::fs::canonicalize(&folder.path).unwrap_or_else(|_| folder.path.clone());
+        if let Ok(remainder) = canonical.strip_prefix(&root) {
+            let better = best
+                .as_ref()
+                .is_none_or(|(_, best_root, _)| root.as_os_str().len() > best_root.as_os_str().len());
+            if better {
+                best = Some((folder.namespace.clone(), root, remainder.to_path_buf()));
+            }
+        }
+    }
+    if let Some((namespace, root, remainder)) = best {
+        return Ok(ResolvedFolder {
+            namespace,
+            mount_root: Some(root),
+            remainder,
+        });
+    }
+    if !selector.exists() {
+        let matched = folders
+            .iter()
+            .find(|folder| folder.namespace.starts_with(&*selector_str))
+            .or_else(|| folders.first().filter(|_| folders.len() == 1))
+            .map(|folder| ResolvedFolder {
+                namespace: folder.namespace.clone(),
+                mount_root: (!folder.path.as_os_str().is_empty()).then(|| folder.path.clone()),
+                remainder: PathBuf::new(),
+            });
+        if let Some(resolved) = matched {
+            return Ok(resolved);
+        }
+    }
+    anyhow::bail!(
+        "{} is not inside of a Syncweb folder — run `syncweb ls --local-only {}` to list the disk directly",
+        selector.display(),
+        selector.display()
+    );
+}
+
+/// Resolve a selector to a folder listing source. Uses the daemon when one is
+/// running (no second embedded node is opened on the same `data_dir`); falls
+/// back to an embedded node otherwise.
+async fn resolve_entry_source(ctx: &CliContext<'_>, selector: &Path) -> Result<(ListingMode, ResolvedFolder)> {
+    if let Some(client) = syncweb_core::daemon::daemon_client(ctx.data_dir)? {
+        let resolved = resolve_selector_via_daemon(&client, selector).await?;
+        return Ok((ListingMode::Daemon { client }, resolved));
+    }
+    let node = open_node(ctx.data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let (resolved, folder) = resolve_selector_embedded(ctx.data_dir, &manager, selector).await?;
+    Ok((
+        ListingMode::Embedded(Box::new(EmbeddedListing { node, folder })),
+        resolved,
+    ))
+}
+
+fn entry_matches_path_filters(entry_path: &str, remainder: &Path, prefix: Option<&str>, glob: Option<&str>) -> bool {
+    if !remainder.as_os_str().is_empty() {
+        let remainder_str = remainder
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        if entry_path != remainder_str && !entry_path.starts_with(&format!("{remainder_str}/")) {
+            return false;
+        }
+    }
+    if let Some(path_prefix) = prefix
+        && entry_path != path_prefix
+        && !entry_path.starts_with(&format!("{path_prefix}/"))
+    {
+        return false;
+    }
+    if let Some(glob_pattern) = glob
+        && !globset::Glob::new(glob_pattern).is_ok_and(|compiled| compiled.compile_matcher().is_match(entry_path))
+    {
+        return false;
+    }
+    true
+}
+
+fn apply_listing_filters(rows: Vec<LocalEntry>, remainder: &Path, flags: &ListingFlags) -> Vec<LocalEntry> {
+    rows.into_iter()
+        .filter(|row| {
+            entry_matches_path_filters(
+                &row.path,
+                remainder,
+                flags.path_prefix.as_deref(),
+                flags.path_glob.as_deref(),
+            )
+        })
+        .filter(|row| !flags.remote_only || !row.local)
+        .collect()
+}
+
+fn sort_local_entries(rows: &mut [LocalEntry], by: MetaSort) {
+    match by {
+        MetaSort::Name => rows.sort_by_key(|row| row.path.clone()),
+        MetaSort::Size => rows.sort_by_key(|row| row.size),
+        MetaSort::Modified => rows.sort_by(|left, right| {
+            let left_key = left
+                .modified
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map_or(left.size, |duration| duration.as_secs());
+            let right_key = right
+                .modified
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map_or(right.size, |duration| duration.as_secs());
+            left_key.cmp(&right_key)
+        }),
+        MetaSort::State => rows.sort_by_key(|row| (!row.local, row.path.clone())),
+    }
+}
+
+fn local_entry_json(row: &LocalEntry) -> serde_json::Value {
+    serde_json::json!({
+        "path": row.path,
+        "size": row.size,
+        "hash": row.hash.to_string(),
+        "local": row.local,
+        "modified": row
+            .modified
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs()),
+    })
+}
+
+fn render_entries(rows: &[LocalEntry], namespace: &str, selector: &Path, output_json: bool) -> Result<()> {
+    if output_json {
+        let entries: Vec<serde_json::Value> = rows.iter().map(local_entry_json).collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "folder": namespace,
+                "path": selector.display().to_string(),
+                "entries": entries,
+            }))?
+        );
+        return Ok(());
+    }
+    let mut table = Table::new();
+    table.set_header(["Path", "Size", "Modified", "State"]);
+    for row in rows {
+        let modified = row
+            .modified
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map_or_else(|| "-".to_owned(), |duration| duration.as_secs().to_string());
+        table.add_row([
+            row.path.as_str(),
+            &format_bytes(row.size),
+            &modified,
+            if row.local { "local" } else { "remote" },
+        ]);
+    }
+    println!("{table}");
+    Ok(())
+}
+
+fn print_no_entries_nudge(namespace: &str) {
+    println!(
+        "folder {namespace} has no remote entries yet; files will appear as they sync — \
+         run `syncweb download-all` to fetch current content"
+    );
+}
+
+fn handle_ls_disk(path: &Path, threads: usize, output_json: bool) -> Result<()> {
+    let entries = ParallelScanner::new(path, Vec::<String>::new(), threads).scan()?;
     if entries.is_empty() && !output_json {
-        println!("No files found in {}", command.path.display());
+        println!("No files found in {}", path.display());
         return Ok(());
     }
     if output_json {
@@ -4333,42 +4729,69 @@ fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs)
     Ok(())
 }
 
-fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) -> Result<()> {
+async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPathArgs) -> Result<()> {
     let output_json = ctx.output_json;
+    if command.listing.local_only {
+        if let Some(criteria) = command.sort {
+            let sort_args = crate::cli::commands::SortArgs {
+                path: command.path,
+                by: criteria,
+                min_seeders: None,
+                max_seeders: None,
+                niche: None,
+                frecency_weight: None,
+                limit_size: None,
+                depth: Vec::new(),
+                min_depth: None,
+                max_depth: None,
+                threads: command.threads,
+                enrich: false,
+                listing: command.listing,
+            };
+            return handle_sort(ctx, &sort_args).await;
+        }
+        return handle_ls_disk(&command.path, command.threads, output_json);
+    }
+    let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
+    if rows.is_empty() {
+        if output_json {
+            render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
+        } else {
+            print_no_entries_nudge(&resolved.namespace);
+        }
+        return Ok(());
+    }
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+    if let Some(criteria) = command.sort {
+        let by = parse_meta_sort(&criteria)?;
+        sort_local_entries(&mut rows, by);
+    }
+    render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
+    Ok(())
+}
+
+fn build_find_query(command: &crate::cli::commands::FindArgs) -> Result<FindQuery> {
     let mut query = match command.kind.as_str() {
         "exact" => FindQuery::exact(&command.pattern),
         "regex" => FindQuery::regex(&command.pattern),
         _ => FindQuery::glob(&command.pattern),
     };
 
-    // Case sensitivity
     if command.ignore_case {
         query.case_sensitive = Some(false);
     }
     if command.case_sensitive && !command.ignore_case {
         query.case_sensitive = Some(true);
     }
-    // else: None means auto-detect
 
-    // Fixed strings mode
     query.fixed_strings = command.fixed_strings;
-
-    // Full path search
     query.full_path = command.full_path;
-
-    // Hidden files
     query.hidden = command.hidden;
-
-    // Follow links
     query.follow_links = command.follow_links;
-
-    // Absolute paths
     query.absolute_path = command.absolute_path;
-
-    // Downloadable filtering
     query.downloadable = command.downloadable;
 
-    // Depth constraints
     let (min_depth, max_depth) = syncweb_core::parsing::parse_depth_constraints(
         &command.depth,
         command.min_depth.unwrap_or(0),
@@ -4377,12 +4800,10 @@ fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) ->
     query.min_depth = Some(min_depth);
     query.max_depth = max_depth;
 
-    // Size constraints
     let (min_size, max_size) = FindQuery::parse_size_constraints(&command.sizes)?;
     query.min_size = min_size;
     query.max_size = max_size;
 
-    // Time constraints
     let (after, before) = FindQuery::parse_time_constraints(
         &command.modified_within,
         &command.modified_before,
@@ -4391,24 +4812,41 @@ fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) ->
     query.modified_after = after;
     query.modified_before = before;
 
-    // Extensions
     if !command.extension.is_empty() {
-        query.extensions = command.extension;
+        query.extensions.clone_from(&command.extension);
     }
-    // Single extension (for backward compatibility)
     if let Some(ref ext) = query.extension
         && !ext.is_empty()
     {
         query.extensions.push(ext.trim_start_matches('.').to_lowercase());
     }
 
-    // File type
-    query.file_type = command.file_type.map(|kind| match kind.as_str() {
+    query.file_type = command.file_type.clone().map(|kind| match kind.as_str() {
         "d" => FileType::Directory,
         "l" => FileType::Symlink,
         _ => FileType::File,
     });
+    Ok(query)
+}
 
+fn local_entry_to_file_entry(
+    entry: &LocalEntry,
+    mount_root: Option<&Path>,
+) -> std::result::Result<FileEntry, &'static str> {
+    let relative = PathBuf::from(&entry.path);
+    let path = mount_root.map_or_else(|| relative.clone(), |root| root.join(&entry.path));
+    FileEntry::builder()
+        .path(path)
+        .relative_path(relative)
+        .size(entry.size)
+        .modified(entry.modified.unwrap_or(UNIX_EPOCH))
+        .hash(blake3::Hash::from_bytes(*entry.hash.as_bytes()))
+        .file_type(FileType::File)
+        .build()
+}
+
+fn handle_find_disk(command: &crate::cli::commands::FindArgs, output_json: bool) -> Result<()> {
+    let query = build_find_query(command)?;
     let entries = FindEngine::new(&command.path)
         .with_threads(command.threads)
         .find(&query)?;
@@ -4446,7 +4884,75 @@ fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) ->
     Ok(())
 }
 
-fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -> Result<()> {
+async fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindArgs) -> Result<()> {
+    let output_json = ctx.output_json;
+    if command.listing.local_only {
+        return handle_find_disk(&command, output_json);
+    }
+    let query = build_find_query(&command)?;
+    let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
+    if rows.is_empty() {
+        if output_json {
+            render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
+        } else {
+            print_no_entries_nudge(&resolved.namespace);
+        }
+        return Ok(());
+    }
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+
+    let file_entries: Vec<FileEntry> = rows
+        .iter()
+        .filter_map(|entry| local_entry_to_file_entry(entry, resolved.mount_root.as_deref()).ok())
+        .collect();
+    let matched = filter_entries(&file_entries, &query);
+    let matched_rows: Vec<LocalEntry> = matched
+        .iter()
+        .filter_map(|file_entry| {
+            let relative = file_entry.relative_path.to_string_lossy().into_owned();
+            rows.iter().find(|row| row.path == relative).cloned()
+        })
+        .collect();
+
+    if matched_rows.is_empty() && !output_json {
+        println!(
+            "No files matching '{}' found in {}",
+            command.pattern,
+            command.path.display()
+        );
+        return Ok(());
+    }
+
+    if output_json {
+        let entries: Vec<serde_json::Value> = matched_rows.iter().map(local_entry_json).collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "folder": resolved.namespace,
+                "path": command.path.display().to_string(),
+                "entries": entries,
+            }))?
+        );
+    } else {
+        for row in &matched_rows {
+            if command.absolute_path {
+                println!(
+                    "{}",
+                    resolved.mount_root.as_ref().map_or_else(
+                        || row.path.clone(),
+                        |root| root.join(&row.path).to_string_lossy().into_owned()
+                    )
+                );
+            } else {
+                println!("{}", row.path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let data_dir = ctx.data_dir;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
@@ -4548,6 +5054,28 @@ fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -
             println!("{}", entry.path.display());
         }
     }
+    Ok(())
+}
+
+async fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortArgs) -> Result<()> {
+    let output_json = ctx.output_json;
+    if command.listing.local_only {
+        return handle_sort_disk(ctx, command);
+    }
+    let (mode, resolved) = resolve_entry_source(ctx, &command.path).await?;
+    let mut rows = fetch_listing_rows(mode, &resolved, !command.listing.no_enrich).await?;
+    if rows.is_empty() {
+        if output_json {
+            render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
+        } else {
+            print_no_entries_nudge(&resolved.namespace);
+        }
+        return Ok(());
+    }
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+    let by = parse_meta_sort(&command.by)?;
+    sort_local_entries(&mut rows, by);
+    render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
     Ok(())
 }
 
@@ -4694,4 +5222,161 @@ fn handle_stat(ctx: &CliContext<'_>, command: crate::cli::commands::StatArgs) ->
         println!("{}", output.display(format));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str, size: u64, local: bool, modified: Option<u64>) -> LocalEntry {
+        LocalEntry {
+            path: path.to_owned(),
+            hash: BlobHash::from_bytes(blake3::hash(path.as_bytes()).into()),
+            size,
+            local,
+            modified: modified.map(|seconds| {
+                UNIX_EPOCH
+                    .checked_add(Duration::from_secs(seconds))
+                    .unwrap_or(UNIX_EPOCH)
+            }),
+        }
+    }
+
+    #[test]
+    fn parse_meta_sort_accepts_folder_vocabulary() {
+        assert!(matches!(parse_meta_sort("name").unwrap(), MetaSort::Name));
+        assert!(matches!(parse_meta_sort("size").unwrap(), MetaSort::Size));
+        assert!(matches!(parse_meta_sort("modified").unwrap(), MetaSort::Modified));
+        assert!(matches!(parse_meta_sort("state").unwrap(), MetaSort::State));
+        assert!(matches!(parse_meta_sort("SIZE").unwrap(), MetaSort::Size));
+        let error = parse_meta_sort("niche").unwrap_err();
+        assert!(error.to_string().contains("--local-only"), "{error}");
+    }
+
+    #[test]
+    fn entry_matches_path_filters_applies_remainder_prefix_glob() {
+        let remainder = PathBuf::from("sub");
+        assert!(entry_matches_path_filters("sub/a.txt", &remainder, None, None));
+        assert!(entry_matches_path_filters("sub", &remainder, None, None));
+        assert!(!entry_matches_path_filters("other/a.txt", &remainder, None, None));
+        assert!(entry_matches_path_filters(
+            "sub/a.txt",
+            &PathBuf::new(),
+            Some("sub"),
+            None
+        ));
+        assert!(!entry_matches_path_filters(
+            "subtle/a.txt",
+            &PathBuf::new(),
+            Some("sub"),
+            None
+        ));
+        assert!(entry_matches_path_filters(
+            "a.txt",
+            &PathBuf::new(),
+            None,
+            Some("*.txt")
+        ));
+        assert!(!entry_matches_path_filters(
+            "a.md",
+            &PathBuf::new(),
+            None,
+            Some("*.txt")
+        ));
+    }
+
+    #[test]
+    fn apply_listing_filters_honors_remote_only() {
+        let rows = vec![
+            entry("a.txt", 1, true, None),
+            entry("b.txt", 2, false, None),
+            entry("c.txt", 3, true, None),
+        ];
+        let flags = ListingFlags {
+            remote_only: true,
+            ..ListingFlags::default()
+        };
+        let filtered = apply_listing_filters(rows, &PathBuf::new(), &flags);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered.first().unwrap().path, "b.txt");
+    }
+
+    #[test]
+    fn sort_local_entries_orders_by_name_size_state() {
+        let mut rows = vec![
+            entry("b.txt", 10, false, None),
+            entry("a.txt", 5, true, None),
+            entry("c.txt", 7, true, None),
+        ];
+        sort_local_entries(&mut rows, MetaSort::Name);
+        assert_eq!(rows.first().unwrap().path, "a.txt");
+        assert_eq!(rows.get(2).map(|row| row.path.as_str()), Some("c.txt"));
+
+        sort_local_entries(&mut rows, MetaSort::Size);
+        assert_eq!(rows.first().unwrap().path, "a.txt");
+        assert_eq!(rows.get(2).map(|row| row.path.as_str()), Some("b.txt"));
+
+        sort_local_entries(&mut rows, MetaSort::State);
+        // local rows sort before remote rows
+        assert_eq!(rows.first().unwrap().path, "a.txt");
+        assert_eq!(rows.get(2).map(|row| row.path.as_str()), Some("b.txt"));
+    }
+
+    #[test]
+    fn sort_local_entries_modified_falls_back_to_doc_size_for_remote() {
+        let mut rows = vec![
+            entry("old.txt", 100, true, Some(1000)),
+            entry("remote.txt", 5, false, None),
+        ];
+        sort_local_entries(&mut rows, MetaSort::Modified);
+        assert_eq!(rows.first().unwrap().path, "remote.txt");
+        assert_eq!(rows.get(1).map(|row| row.path.as_str()), Some("old.txt"));
+    }
+
+    #[test]
+    fn local_entry_json_emits_stable_envelope_fields() {
+        let row = entry("docs/a.txt", 42, true, Some(1234));
+        let value = local_entry_json(&row);
+        assert_eq!(value.get("path"), Some(&serde_json::json!("docs/a.txt")));
+        assert_eq!(value.get("size"), Some(&serde_json::json!(42)));
+        assert_eq!(value.get("local"), Some(&serde_json::json!(true)));
+        assert_eq!(value.get("modified"), Some(&serde_json::json!(1234)));
+        assert_eq!(
+            value.get("hash").and_then(serde_json::Value::as_str).map(str::len),
+            Some(64)
+        );
+
+        let remote = entry("docs/b.txt", 7, false, None);
+        assert_eq!(
+            local_entry_json(&remote).get("modified"),
+            Some(&serde_json::Value::Null)
+        );
+    }
+
+    #[test]
+    fn render_entries_json_wraps_entries_in_envelope() {
+        let row = entry("a.txt", 1, true, None);
+        let rows = std::slice::from_ref(&row);
+        let entries: Vec<serde_json::Value> = rows.iter().map(local_entry_json).collect();
+        let envelope = serde_json::json!({
+            "folder": "ns1",
+            "path": "/tmp/folder",
+            "entries": entries,
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
+        assert_eq!(parsed.get("folder"), Some(&serde_json::json!("ns1")));
+        assert_eq!(parsed.get("path"), Some(&serde_json::json!("/tmp/folder")));
+        let parsed_entries = parsed.get("entries").and_then(serde_json::Value::as_array).unwrap();
+        assert_eq!(parsed_entries.len(), 1);
+        assert_eq!(
+            parsed_entries.first().unwrap().get("path"),
+            Some(&serde_json::json!("a.txt"))
+        );
+    }
+
+    #[test]
+    fn canonical_path_resolves_relative_to_cwd() {
+        let absolute = canonical_path(Path::new("."));
+        assert!(absolute.is_absolute());
+    }
 }

@@ -39,6 +39,7 @@ indicatif = "0.18"
 bao-tree = "0.16"
 iroh-io = "0.6"
 fs4.workspace = true
+globset.workspace = true
 
 [lints]
 workspace = true

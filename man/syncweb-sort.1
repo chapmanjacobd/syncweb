@@ -4,7 +4,7 @@
 .SH NAME
 sort \- Sort local files by discovery criteria
 .SH SYNOPSIS
-\fBsort\fR [\fB\-\-by\fR] [\fB\-\-min\-seeders\fR] [\fB\-\-max\-seeders\fR] [\fB\-\-niche\fR] [\fB\-\-frecency\-weight\fR] [\fB\-\-limit\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-threads\fR] [\fB\-\-enrich\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBsort\fR [\fB\-\-by\fR] [\fB\-\-min\-seeders\fR] [\fB\-\-max\-seeders\fR] [\fB\-\-niche\fR] [\fB\-\-frecency\-weight\fR] [\fB\-\-limit\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-threads\fR] [\fB\-\-enrich\fR] [\fB\-\-remote\-only\fR] [\fB\-\-local\-only\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-no\-enrich\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Sort local files by discovery criteria
 .SH OPTIONS
@@ -77,6 +77,21 @@ Scanner threads (1 disables parallelism, 0 uses all available CPUs)
 .TP
 \fB\-\-enrich\fR
 Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting
+.TP
+\fB\-\-remote\-only\fR
+Show only entries not yet downloaded (State == remote)
+.TP
+\fB\-\-local\-only\fR
+Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)
+.TP
+\fB\-\-path\-prefix\fR \fI<PATH_PREFIX>\fR
+Only entries whose path starts with this prefix
+.TP
+\fB\-\-path\-glob\fR \fI<PATH_GLOB>\fR
+Only entries whose path matches this glob pattern
+.TP
+\fB\-\-no\-enrich\fR
+Skip per\-file disk metadata lookup (pure metadata listing)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

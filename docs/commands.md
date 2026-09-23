@@ -472,11 +472,11 @@ syncweb config set discovery.interface eth0
 | `join` | `join` | Track folder via ticket; `--subscribe` enables live syncing |
 | `folders` | `folders` | List local docs + status |
 | `devices` | `devices` | Show this device's Iroh and Syncthing identities |
-| `ls` | `ls` | List doc entries (lazy) |
-| `find` | `find` | Search doc entries (with filters) |
+| `ls` | `ls` | List doc entries (lazy): reads the metadata index, never scans the disk; `--local-only` forces a disk scan, `--remote-only` shows undownloaded rows, `--path-prefix`/`--path-glob` filter |
+| `find` | `find` | Search doc entries via the metadata index (pattern/size/depth/time/type), no blob download; `--local-only` scans the disk |
 | | `search` | Unified search across catalog content, packages, and editorial channels (`--kind`, `--channel`, `--limit`) |
 | `download` | `download` | Trigger lazy fetch for paths |
-| `sort` | `sort` | Sort results (uses peer tracker) |
+| `sort` | `sort` | Sort results (uses peer tracker); on a resolved folder `--by name\|size\|modified\|state` sorts the metadata table |
 | `stat` | `stat` | File metadata from doc + blob store |
 | `shutdown` | `shutdown` | Gracefully stop the daemon |
 | | `status` | Show daemon status |

@@ -355,6 +355,31 @@ pub struct LocalPathArgs {
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+    #[command(flatten)]
+    pub listing: ListingFlags,
+}
+
+/// Shared metadata-vs-disk listing switches for `ls`, `find`, and `sort`.
+#[derive(Debug, Args, Clone, Default)]
+pub struct ListingFlags {
+    #[arg(
+        long,
+        conflicts_with = "local_only",
+        help = "Show only entries not yet downloaded (State == remote)"
+    )]
+    pub remote_only: bool,
+    #[arg(
+        long,
+        conflicts_with = "remote_only",
+        help = "Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)"
+    )]
+    pub local_only: bool,
+    #[arg(long, help = "Only entries whose path starts with this prefix")]
+    pub path_prefix: Option<String>,
+    #[arg(long, alias = "glob", help = "Only entries whose path matches this glob pattern")]
+    pub path_glob: Option<String>,
+    #[arg(long, help = "Skip per-file disk metadata lookup (pure metadata listing)")]
+    pub no_enrich: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -482,6 +507,8 @@ pub struct FindArgs {
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
+    #[command(flatten)]
+    pub listing: ListingFlags,
 }
 
 #[derive(Debug, Args)]
@@ -533,6 +560,8 @@ pub struct SortArgs {
         help = "Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting"
     )]
     pub enrich: bool,
+    #[command(flatten)]
+    pub listing: ListingFlags,
 }
 
 #[derive(Debug, Args)]

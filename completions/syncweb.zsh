@@ -308,7 +308,12 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '--sort=[Collect and sort output instead of streaming it]:SORT:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
+'(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
+'--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -332,6 +337,8 @@ _arguments "${_arguments_options[@]}" : \
 '*--extension=[File extensions to include]:EXTENSION:_default' \
 '--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '(-s --case-sensitive)-i[Case insensitive search]' \
 '(-s --case-sensitive)--ignore-case[Case insensitive search]' \
@@ -349,6 +356,9 @@ _arguments "${_arguments_options[@]}" : \
 '--absolute-path[Print absolute paths]' \
 '-d[Exclude sendonly folders from search]' \
 '--download[Exclude sendonly folders from search]' \
+'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
+'(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
+'--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -389,8 +399,13 @@ _arguments "${_arguments_options[@]}" : \
 '--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
 '--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
+'--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
+'--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--enrich[Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting]' \
+'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
+'(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
+'--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \

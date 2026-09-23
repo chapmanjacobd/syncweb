@@ -1083,6 +1083,151 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("lazy-ls-alice")?;
+    let alice_folder = cli_test_dir("lazy-ls-alice-folder")?;
+    let bob_data = cli_test_dir("lazy-ls-bob")?;
+    let bob_folder = cli_test_dir("lazy-ls-bob-folder")?;
+    let plain = cli_test_dir("lazy-ls-plain")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "create",
+        "--no-share",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = String::from_utf8(create.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+    ensure!(!namespace.is_empty(), "create should print a namespace");
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = String::from_utf8(share.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "join",
+        "--subscribe",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bob join --subscribe should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+
+    // Bob's doc entries ingress while the mount directory stays empty: poll `ls`.
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+    let mut saw_entry = false;
+    for _ in 0..60 {
+        let ls = syncweb(&["--data-dir", bob_data_arg, "ls", bob_folder_arg])?;
+        if ls.status.success() && String::from_utf8_lossy(&ls.stdout).contains("hello.txt") {
+            saw_entry = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(saw_entry, "bob should list the entry before it is materialized to disk");
+
+    let ls_json = syncweb(&["--json", "--data-dir", bob_data_arg, "ls", bob_folder_arg])?;
+    ensure!(ls_json.status.success(), "bob ls --json should succeed");
+    let value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&ls_json.stdout))
+        .context("bob ls --json should be valid JSON")?;
+    ensure!(value.get("folder").is_some(), "envelope should carry folder: {value}");
+    ensure!(value.get("path").is_some(), "envelope should carry path: {value}");
+    let entries = value
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .context("entries array")?;
+    let hello = entries
+        .iter()
+        .find(|entry| entry["path"] == "hello.txt")
+        .context("hello.txt entry")?;
+    ensure!(
+        hello
+            .get("hash")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|h| !h.is_empty()),
+        "entry should carry a content hash: {hello:?}"
+    );
+    ensure!(
+        hello.get("local").is_some() && hello.get("size").is_some(),
+        "entry should carry local and size: {hello:?}"
+    );
+
+    let local = syncweb(&["--data-dir", bob_data_arg, "ls", "--local-only", bob_folder_arg])?;
+    ensure!(local.status.success());
+    ensure!(
+        !String::from_utf8_lossy(&local.stdout).contains("hello.txt"),
+        "--local-only should not list the still-unmaterialized entry: {}",
+        String::from_utf8_lossy(&local.stdout)
+    );
+
+    let ls_plain = syncweb(&["--data-dir", bob_data_arg, "ls", plain.to_str().context("UTF-8 path")?])?;
+    ensure!(!ls_plain.status.success(), "ls on a plain dir should error");
+    ensure!(
+        String::from_utf8_lossy(&ls_plain.stderr).contains("not inside of a Syncweb folder"),
+        "error should explain the folder rule: {}",
+        String::from_utf8_lossy(&ls_plain.stderr)
+    );
+
+    let find = syncweb(&["--data-dir", bob_data_arg, "find", "*.txt", bob_folder_arg])?;
+    ensure!(find.status.success());
+    ensure!(
+        String::from_utf8_lossy(&find.stdout).contains("hello.txt"),
+        "find should match the metadata index: {}",
+        String::from_utf8_lossy(&find.stdout)
+    );
+
+    let sort = syncweb(&["--data-dir", bob_data_arg, "sort", "--by", "size", bob_folder_arg])?;
+    ensure!(sort.status.success());
+    ensure!(
+        String::from_utf8_lossy(&sort.stdout).contains("hello.txt"),
+        "sort should include the entry: {}",
+        String::from_utf8_lossy(&sort.stdout)
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--force"])?;
+    ensure!(shutdown.status.success());
+    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "shutdown", "--force"])?;
+    ensure!(shutdown_b.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_folder, &alice_data, &bob_folder, &bob_data, &plain] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+#[test]
 fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("create-import-dl")?;
     let folder = cli_test_dir("create-import-dl-folder")?;

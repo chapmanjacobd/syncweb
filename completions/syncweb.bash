@@ -695,7 +695,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__find)
-            opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --depth --min-depth --max-depth --sizes --modified-within --modified-before --time-modified --extension --type --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --depth --min-depth --max-depth --sizes --modified-within --modified-before --time-modified --extension --type --threads --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -746,6 +746,14 @@ _syncweb() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1095,7 +1103,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__ls)
-            opts="-h --sort --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --sort --threads --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1106,6 +1114,14 @@ _syncweb() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1935,7 +1951,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__sort)
-            opts="-h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --depth --min-depth --max-depth --threads --enrich --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --depth --min-depth --max-depth --threads --enrich --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1978,6 +1994,14 @@ _syncweb() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

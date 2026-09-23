@@ -1,9 +1,11 @@
 # Plan 03 — One content-filter vocabulary: `find`, `sort`, `download`, `verify`, lazy `ls` agree
 
 Priority: HIGH · Status: Draft · Owner: `syncweb-cli`
-Depends on: plan 01 (metadata-first `ls`/`find`/`sort` add `--remote-only`,
-`--path-glob`) · Fulfills story: #4 (Ari) + cross-cutting theme #6 (no unified
-filters/progress/JSON)
+Depends on: — (plan 01, which this plan planned to build on, is **landed**:
+metadata-first `ls`/`find`/`sort` already expose `--remote-only`,
+`--local-only`, and the `ListEntries` IPC — the metadata vocabulary below is a
+rename/unification of what shipped) · Fulfills story: #4 (Ari) + cross-cutting
+theme #6 (no unified filters/progress/JSON)
 
 ## Goal
 

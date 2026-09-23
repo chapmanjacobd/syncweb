@@ -133,6 +133,11 @@ pub enum IpcCommand {
     StatsFiles {
         folder: PathBuf,
     },
+    ListEntries {
+        folder: String,
+        #[serde(default = "default_entry_enrich")]
+        enrich: bool,
+    },
     VerifyIntegrity {
         path: PathBuf,
         #[serde(default)]
@@ -230,7 +235,28 @@ pub enum IpcResponse {
     ExportComplete(Box<DropExportResult>),
     EnrichData(HashMap<String, usize>),
     FileStats(Box<FileStatsReport>),
+    Entries(Vec<EntryRow>),
     Error { message: String },
+}
+
+/// One row of a metadata-only folder listing returned by the daemon.
+///
+/// `size`/`modified` are the doc metadata unless the blob is local, in which
+/// case they are overlaid with the on-disk `stat` of the materialized file.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct EntryRow {
+    pub path: String,
+    pub hash: iroh_blobs::Hash,
+    pub size: u64,
+    pub local: bool,
+    pub modified: Option<u64>,
+}
+
+/// Serde default for `ListEntries.enrich`: enrichment stays on for callers
+/// that predate the `--no-enrich` flag.
+const fn default_entry_enrich() -> bool {
+    true
 }
 
 /// A managed folder summary returned by the daemon.
@@ -382,6 +408,12 @@ impl FolderRegistry {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.folders.is_empty() && self.subscriptions.is_empty()
+    }
+
+    /// Return the mount path registered for a folder namespace, if any.
+    #[must_use]
+    pub fn path_for(&self, namespace: &str) -> Option<PathBuf> {
+        self.folders.get(namespace).map(|entry| entry.path.clone())
     }
 
     pub fn record_import(&mut self, namespace: iroh_docs::NamespaceId, entries: u64, timestamp: u64) {
@@ -780,6 +812,7 @@ impl IpcServer {
             C::SubscribePublic { ticket } => self.handle_subscribe_public(ticket).await,
             C::CreateFolder { path, mode, indexing } => self.handle_create_folder(path, mode, indexing).await,
             C::StatsFiles { folder } => self.handle_stats_files(folder).await,
+            C::ListEntries { folder, enrich } => self.handle_list_entries(&folder, enrich).await,
             C::VerifyIntegrity {
                 path,
                 hash,
@@ -868,6 +901,11 @@ impl IpcServer {
                     let _ = node_db.save_app_config(&config);
                 }
                 let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
+                if let Some(ref node_db) = self.node_db
+                    && let Err(error) = node_db.remove_folder_mount(&namespace)
+                {
+                    tracing::warn!(%error, %namespace, "failed to remove folder mount");
+                }
                 if delete_files
                     && let Some(entry) = removed.as_ref()
                     && !entry.path.as_os_str().is_empty()
@@ -1125,6 +1163,24 @@ impl IpcServer {
             .await
     }
 
+    async fn register_folder(&self, namespace_id: iroh_docs::NamespaceId, namespace: &str, path: &Path) {
+        if self
+            .daemon_handle
+            .folder_registry
+            .write()
+            .await
+            .add(FolderEntry::new(namespace_id, path.to_path_buf()))
+            .is_err()
+        {
+            tracing::warn!(%namespace, "folder already in daemon registry");
+        }
+        if let Some(ref node_db) = self.node_db
+            && let Err(error) = node_db.upsert_folder_mount(namespace, path)
+        {
+            tracing::warn!(%error, %namespace, "failed to record folder mount");
+        }
+    }
+
     async fn handle_join(
         &self,
         ticket: String,
@@ -1153,57 +1209,69 @@ impl IpcServer {
         match manager.join(ticket, mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
+                self.register_folder(folder.namespace_id(), &namespace, &path).await;
                 if options.indexing
                     && let Some(indexing_service) = &context.indexing
                     && let Err(error) = indexing_service.enable_folder(&folder).await
                 {
                     tracing::warn!(%error, %namespace, "failed to enable indexing for joined folder");
                 }
-                if let Some(ref node_db) = self.node_db {
-                    let mut config = match node_db.load_app_config() {
-                        Ok(config) => config,
-                        Err(error) => return response_from_error(error),
-                    };
-                    config.set_subscribe(&namespace, options.subscribe, &filters);
-                    if let Err(error) = node_db.save_app_config(&config) {
-                        return response_from_error(error);
-                    }
-                }
-                if options.subscribe {
-                    let sync = SyncEngine::new(
-                        manager.clone(),
-                        context.node.blob_store().clone(),
-                        context.node.docs_engine().clone(),
-                        Some(context.node.topic_tracker().clone()),
-                    );
-                    let params = match SubscribeParams::from_filters(&filters) {
-                        Ok(params) => params,
-                        Err(error) => return response_from_error(error),
-                    };
-                    if let Err(error) = sync.subscribe(folder.namespace_id(), params).await {
-                        return response_from_error(error);
-                    }
-                }
-                let downloaded = if options.download {
-                    match self
-                        .materialize_folder(&context, &manager, &folder, &filters, &path)
-                        .await
-                    {
-                        Ok(count) => count,
-                        Err(error) => return response_from_error(error),
-                    }
-                } else {
-                    0
-                };
-                IpcResponse::Ok {
-                    message: if options.download {
-                        format!("joined: {namespace}\ndownloaded: {downloaded} files")
-                    } else {
-                        format!("joined: {namespace}")
-                    },
-                }
+                self.finalize_join(&context, &manager, &folder, &filters, &path, options)
+                    .await
             }
             Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn finalize_join(
+        &self,
+        context: &ArchiveContext,
+        manager: &FolderManager,
+        folder: &crate::folder::SyncwebFolder,
+        filters: &SubscribeFilters,
+        path: &Path,
+        options: JoinOptions,
+    ) -> IpcResponse {
+        let namespace = folder.namespace_id().to_string();
+        if let Some(ref node_db) = self.node_db {
+            let mut config = match node_db.load_app_config() {
+                Ok(config) => config,
+                Err(error) => return response_from_error(error),
+            };
+            config.set_subscribe(&namespace, options.subscribe, filters);
+            if let Err(error) = node_db.save_app_config(&config) {
+                return response_from_error(error);
+            }
+        }
+        if options.subscribe {
+            let sync = SyncEngine::new(
+                manager.clone(),
+                context.node.blob_store().clone(),
+                context.node.docs_engine().clone(),
+                Some(context.node.topic_tracker().clone()),
+            );
+            let params = match SubscribeParams::from_filters(filters) {
+                Ok(params) => params,
+                Err(error) => return response_from_error(error),
+            };
+            if let Err(error) = sync.subscribe(folder.namespace_id(), params).await {
+                return response_from_error(error);
+            }
+        }
+        let downloaded = if options.download {
+            match self.materialize_folder(context, manager, folder, filters, path).await {
+                Ok(count) => count,
+                Err(error) => return response_from_error(error),
+            }
+        } else {
+            0
+        };
+        IpcResponse::Ok {
+            message: if options.download {
+                format!("joined: {namespace}\ndownloaded: {downloaded} files")
+            } else {
+                format!("joined: {namespace}")
+            },
         }
     }
 
@@ -1388,23 +1456,13 @@ impl IpcServer {
         match manager.create(sync_mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
-                let namespace_id = folder.namespace_id();
                 if indexing
                     && let Some(indexing_service) = &context.indexing
                     && let Err(error) = indexing_service.enable_folder(&folder).await
                 {
                     tracing::warn!(%error, %namespace, "failed to enable indexing for new folder");
                 }
-                if self
-                    .daemon_handle
-                    .folder_registry
-                    .write()
-                    .await
-                    .add(FolderEntry::new(namespace_id, path))
-                    .is_err()
-                {
-                    tracing::warn!(%namespace, "folder already in daemon registry");
-                }
+                self.register_folder(folder.namespace_id(), &namespace, &path).await;
                 match folder.ticket(true).await {
                     Ok(_ticket) => IpcResponse::Ok {
                         message: format!("namespace: {namespace}"),
@@ -1439,6 +1497,66 @@ impl IpcServer {
             collector.add_entry_bytes_with_time(entry.key(), entry.content_len(), Some(entry.timestamp()));
         }
         IpcResponse::FileStats(Box::new(collector.report()))
+    }
+
+    async fn handle_list_entries(&self, namespace: &str, enrich: bool) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon list-entries IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(folder) => folder,
+            Err(error) => return response_from_error(error),
+        };
+        let mount_root = self.daemon_handle.folder_registry.read().await.path_for(namespace);
+        let entries = match folder.list_entries().await {
+            Ok(entries) => entries,
+            Err(error) => return response_from_error(error),
+        };
+        let mut rows = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let local = match folder.has_local(entry.hash).await {
+                Ok(local) => local,
+                Err(error) => return response_from_error(error),
+            };
+            let (size, modified) = if enrich
+                && local
+                && let Some(root) = mount_root.as_deref()
+                && let Ok(metadata) = std::fs::metadata(root.join(&entry.path))
+            {
+                (
+                    metadata.len(),
+                    metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_secs()),
+                )
+            } else {
+                (entry.size, None)
+            };
+            rows.push(EntryRow {
+                path: entry.path,
+                hash: entry.hash,
+                size,
+                local,
+                modified,
+            });
+        }
+        IpcResponse::Entries(rows)
     }
 
     async fn handle_enrich_sort(&self, path: PathBuf) -> IpcResponse {
@@ -2259,6 +2377,7 @@ impl IpcClient {
                 | IpcResponse::ExportComplete(_)
                 | IpcResponse::EnrichData(_)
                 | IpcResponse::FileStats(_)
+                | IpcResponse::Entries(_)
                 | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",

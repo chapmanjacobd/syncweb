@@ -11,7 +11,7 @@ mod transfers;
 pub use transfers::{TransferJobSummary, process_transfer_jobs};
 
 pub use ipc::{
-    DaemonHandle, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand, IpcListener, IpcRequest,
+    DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand, IpcListener, IpcRequest,
     IpcResponse, IpcServer,
 };
 pub use pool::ManagedPool;

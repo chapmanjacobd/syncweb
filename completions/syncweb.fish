@@ -188,7 +188,12 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand config; and __fish_seen_subcommand_from schedule" -f -a "folder" -d 'Set schedule overrides for a named folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l sort -d 'Collect and sort output instead of streaming it' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -208,6 +213,8 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l type -d 'Filter
 d\t''
 l\t''"
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s i -l ignore-case -d 'Case insensitive search'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s s -l case-sensitive -d 'Case sensitive search'
@@ -217,6 +224,9 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s H -l hidden -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s L -l follow-links -d 'Follow symbolic links'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s a -l absolute-path -d 'Print absolute paths'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s d -l download -d 'Exclude sendonly folders from search'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -257,8 +267,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l depth -d 'Const
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l min-depth -d 'Alternative min depth notation' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-depth -d 'Alternative max depth notation' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l enrich -d 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'

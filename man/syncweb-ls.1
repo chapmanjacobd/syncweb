@@ -4,7 +4,7 @@
 .SH NAME
 ls \- List files in a local folder
 .SH SYNOPSIS
-\fBls\fR [\fB\-\-sort\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBls\fR [\fB\-\-sort\fR] [\fB\-\-threads\fR] [\fB\-\-remote\-only\fR] [\fB\-\-local\-only\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-no\-enrich\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 List files in a local folder
 .SH OPTIONS
@@ -14,6 +14,21 @@ Collect and sort output instead of streaming it
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Scanner threads (1 disables parallelism, 0 uses all available CPUs)
+.TP
+\fB\-\-remote\-only\fR
+Show only entries not yet downloaded (State == remote)
+.TP
+\fB\-\-local\-only\fR
+Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)
+.TP
+\fB\-\-path\-prefix\fR \fI<PATH_PREFIX>\fR
+Only entries whose path starts with this prefix
+.TP
+\fB\-\-path\-glob\fR \fI<PATH_GLOB>\fR
+Only entries whose path matches this glob pattern
+.TP
+\fB\-\-no\-enrich\fR
+Skip per\-file disk metadata lookup (pure metadata listing)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

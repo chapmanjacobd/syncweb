@@ -125,38 +125,56 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 ### 4.1 `ls` Command
 
+`ls` now reads the doc metadata index (`list_entries()`), never a disk scan;
+the disk is touched only to overlay the real size/mtime of files that are
+already local. On a path that resolves to no Syncweb folder it errors with
+"not inside of a Syncweb folder" — use `--local-only` to list plain directories.
+
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb ls ./shared-docs` | Lists all entries (lazy, no blob download) | |
-| 2 | `syncweb ls --threads 1 ./shared-docs` | Sequential (slower) listing | Compare speed with default (parallel) |
-| 3 | `syncweb ls ./shared-docs/nested/` | Lists subdirectory entries | |
-| 4 | `syncweb ls --json ./shared-docs` | JSON output per entry | |
+| 1 | `syncweb ls ./shared-docs` | Lists all entries (lazy, no blob download), `State = local\|remote` | |
+| 2 | `syncweb ls --local-only ./shared-docs` | Forces today's disk scan (works on any path, even outside a folder) | |
+| 3 | `syncweb ls --remote-only ./shared-docs` | Only undownloaded rows (`State == remote`) | Contradicts `--local-only` |
+| 4 | `syncweb ls --path-prefix docs ./shared-docs` | Only entries under `docs/` | `--path-glob '*.md'` also available |
+| 5 | `syncweb ls --no-enrich ./shared-docs` | Pure metadata listing (no per-file stat; Size = doc size, Modified = `-`) | |
+| 6 | `syncweb ls --sort size ./shared-docs` | Sorts the metadata table by `name\|size\|modified\|state` | On a plain dir these values must run under `--local-only` |
+| 7 | `syncweb ls --json ./shared-docs` | Envelope `{folder, path, entries:[{path,size,hash,local,modified?}]}` | |
+| 8 | `syncweb ls /plain/dir` | Errors "not inside of a Syncweb folder" | Confirm `--local-only` suggestion in the message |
 
 ### 4.2 `find` Command
 
+`find` searches the same metadata index (Python parity); a selector that is not
+inside a Syncweb folder errors unless `--local-only` forces a disk scan.
+Pattern/size/depth/time/type predicates apply to the metadata rows.
+
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb find '.*\.txt$' ./shared-docs` | Regex find — shows all .txt files | |
+| 1 | `syncweb find '.*\.txt$' ./shared-docs` | Regex find — shows all .txt entries | |
 | 2 | `syncweb find '*.md' ./shared-docs` | Glob find | |
 | 3 | `syncweb find --fixed-strings 'report' ./shared-docs` | Substring/exact find | |
-| 4 | `syncweb find --type f --ext mp3 --min-size 10MB --max-size 500MB ./music` | Combined filters | |
-| 5 | `syncweb find 'report.*' --modified-within 7d ./shared-docs` | Time filter | |
+| 4 | `syncweb find --type f --ext mp3 --local-only ./music` | Combined filters on the disk | `--remote-only` narrows to undownloaded rows |
+| 5 | `syncweb find 'report.*' --modified-within 7d ./shared-docs` | Time filter | `--modified-within` applies to local rows |
 | 6 | `syncweb find --depth +2 --depth -5 'config' ./shared-docs` | Depth constraints | |
-| 7 | `syncweb find '.*\.txt$' --json ./shared-docs` | JSON output | |
+| 7 | `syncweb find '.*\.txt$' --json ./shared-docs` | Envelope `{folder, path, entries:[...]}` | |
 | 8 | `syncweb find --ignore-case 'README' ./shared-docs` | Case-insensitive | |
 
 ### 4.3 `sort` Command
 
+On a resolved folder `sort --by` takes the small metadata vocabulary
+`name\|size\|modified\|state` and sorts the entry table. The original
+`niche\|frecency\|peers\|...` algorithms (plus `--limit-size`, `--min-seeders`,
+`--enrich`) still run on the disk and require `--local-only`.
+
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb sort ./shared-docs` | Default sort (niche + frecency) | |
-| 2 | `syncweb sort --sort peers ./shared-docs` | Most-seeded first | |
-| 3 | `syncweb sort --sort niche ./shared-docs` | Files with ~N seeders ranked highest | |
-| 4 | `syncweb sort --sort +niche ./shared-docs` | Most niche first | |
-| 5 | `syncweb sort --sort -niche ./shared-docs` | Least niche first | |
-| 6 | `syncweb sort --sort frecency ./shared-docs` | Popular + recent first | |
-| 7 | `syncweb sort --sort peers --sort time ./shared-docs` | Multi-criteria | |
-| 8 | `syncweb sort --limit-size 10GB --min-seeders 2 ./shared-docs` | With limits | |
+| 1 | `syncweb sort --by size ./shared-docs` | Metadata table sorted by size | |
+| 2 | `syncweb sort --by name ./shared-docs` | Sorted by path | |
+| 3 | `syncweb sort --by modified ./shared-docs` | Local rows by mtime; remote rows fall back to doc size | |
+| 4 | `syncweb sort --by state ./shared-docs` | Local rows before remote | |
+| 5 | `syncweb sort --local-only --by peers ./shared-docs` | Most-seeded first (disk scan + peer tracker) | |
+| 6 | `syncweb sort --local-only --by niche ./shared-docs` | Files with ~N seeders ranked highest | |
+| 7 | `syncweb sort --local-only --limit-size 10GB --min-seeders 2 ./shared-docs` | With limits | |
+| 8 | `syncweb sort --no-enrich ./shared-docs` | Skip the per-file stat in the metadata table | |
 
 ### 4.4 `stat` Command
 

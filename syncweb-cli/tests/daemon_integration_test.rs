@@ -49,7 +49,7 @@ fn test_help_mentions_daemon_commands() -> anyhow::Result<()> {
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("daemon"));
-    ensure!(help.contains("shutdown"));
+    ensure!(help.contains("start"));
     Ok(())
 }
 
@@ -81,6 +81,7 @@ fn test_no_daemon_create_routes_embedded() -> anyhow::Result<()> {
         "--data-dir",
         data_dir_arg,
         "--no-daemon",
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -111,7 +112,7 @@ fn test_daemon_start_and_stop() -> anyhow::Result<()> {
     }
     ensure!(daemon_ready, "daemon should be running after start");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success(), "daemon shutdown should succeed");
 
     let mut daemon_stopped = false;
@@ -142,12 +143,13 @@ fn test_create_routes_through_daemon() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(create.status.success());
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -164,7 +166,7 @@ fn test_daemon_shutdown() -> anyhow::Result<()> {
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes"])?;
     ensure!(shutdown.status.success(), "shutdown should succeed");
 
     let mut stopped = false;
@@ -212,7 +214,7 @@ fn test_daemon_reload_via_ipc() -> anyhow::Result<()> {
     let reload = syncweb(&["--data-dir", data_dir_arg, "reload"])?;
     ensure!(reload.status.success(), "reload should succeed");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&data_dir);
@@ -221,17 +223,17 @@ fn test_daemon_reload_via_ipc() -> anyhow::Result<()> {
 
 #[test]
 fn test_daemon_sync_via_ipc() -> anyhow::Result<()> {
-    let data_dir = cli_test_dir("daemon-sync")?;
+    let data_dir = cli_test_dir("sync")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
 
     let start = daemon_start_bg(data_dir_arg)?;
     ensure!(start.status.success());
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync"])?;
+    let sync = syncweb(&["--data-dir", data_dir_arg, "sync"])?;
     ensure!(sync.status.success(), "daemon-sync should succeed");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&data_dir);
@@ -250,7 +252,7 @@ fn test_daemon_folders_via_ipc() -> anyhow::Result<()> {
     let folders = syncweb(&["--data-dir", data_dir_arg, "folders"])?;
     ensure!(folders.status.success(), "folders should succeed via daemon");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&data_dir);
@@ -270,6 +272,7 @@ fn test_daemon_create_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -277,7 +280,7 @@ fn test_daemon_create_via_ipc() -> anyhow::Result<()> {
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("syncweb://"));
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -298,6 +301,7 @@ fn test_daemon_health_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -320,7 +324,7 @@ fn test_daemon_health_via_ipc() -> anyhow::Result<()> {
         );
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -341,6 +345,7 @@ fn test_daemon_multiple_ipc_commands() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -355,10 +360,10 @@ fn test_daemon_multiple_ipc_commands() -> anyhow::Result<()> {
     let reload = syncweb(&["--data-dir", data_dir_arg, "reload"])?;
     ensure!(reload.status.success());
 
-    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync"])?;
+    let sync = syncweb(&["--data-dir", data_dir_arg, "sync"])?;
     ensure!(sync.status.success());
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -379,6 +384,7 @@ fn test_cli_default_is_daemon_mode() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -389,7 +395,7 @@ fn test_cli_default_is_daemon_mode() -> anyhow::Result<()> {
     let stdout = String::from_utf8(folders.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("Namespace") || stdout.contains("namespace"));
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -410,6 +416,7 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -423,11 +430,19 @@ fn test_daemon_subscribe_via_ipc() -> anyhow::Result<()> {
         .map(str::trim);
 
     if let Some(ns) = namespace {
-        let subscribe = syncweb(&["--data-dir", data_dir_arg, "join", "--subscribe", "--ingest-only", ns])?;
+        let subscribe = syncweb(&[
+            "--data-dir",
+            data_dir_arg,
+            "folders",
+            "join",
+            "--subscribe",
+            "--ingest-only",
+            ns,
+        ])?;
         ensure!(subscribe.status.success(), "join --subscribe should succeed via daemon");
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -448,6 +463,7 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -470,7 +486,7 @@ fn test_daemon_publish_via_ipc() -> anyhow::Result<()> {
         );
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -491,6 +507,7 @@ fn test_daemon_leave_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -504,11 +521,11 @@ fn test_daemon_leave_via_ipc() -> anyhow::Result<()> {
         .map(str::trim);
 
     if let Some(ns) = namespace {
-        let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns])?;
+        let leave = syncweb(&["--data-dir", data_dir_arg, "folders", "leave", ns])?;
         ensure!(leave.status.success(), "leave should succeed via daemon");
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -529,6 +546,7 @@ fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -546,7 +564,15 @@ fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
     std::fs::write(dir.join("file.txt"), b"content")?;
     ensure!(dir.exists(), "folder directory should exist before leave");
 
-    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", "--delete-files", "--yes", ns])?;
+    let leave = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "leave",
+        "--delete-files",
+        "--yes",
+        ns,
+    ])?;
     ensure!(
         leave.status.success(),
         "leave --delete-files should succeed, got: {}",
@@ -558,7 +584,7 @@ fn test_daemon_leave_delete_files_via_ipc() -> anyhow::Result<()> {
         "folder directory should be deleted after leave --delete-files"
     );
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -579,6 +605,7 @@ fn test_daemon_verify_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -596,7 +623,7 @@ fn test_daemon_verify_via_ipc() -> anyhow::Result<()> {
         ensure!(verify.status.success(), "verify should succeed via daemon");
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -617,6 +644,7 @@ fn test_daemon_snapshot_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -637,7 +665,7 @@ fn test_daemon_snapshot_via_ipc() -> anyhow::Result<()> {
         );
     }
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -656,7 +684,7 @@ fn test_help_mentions_daemon_mode() -> anyhow::Result<()> {
 
 #[test]
 fn test_create_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["create", "--help"])?;
+    let output = syncweb(&["folders", "create", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -692,7 +720,7 @@ fn test_download_help_mentions_daemon_routing() -> anyhow::Result<()> {
 
 #[test]
 fn test_subscribe_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["join", "--help"])?;
+    let output = syncweb(&["folders", "join", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -701,7 +729,7 @@ fn test_subscribe_help_mentions_daemon_routing() -> anyhow::Result<()> {
 
 #[test]
 fn test_publish_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["publish", "--help"])?;
+    let output = syncweb(&["indexing", "publish", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -710,7 +738,7 @@ fn test_publish_help_mentions_daemon_routing() -> anyhow::Result<()> {
 
 #[test]
 fn test_import_help_mentions_daemon_routing() -> anyhow::Result<()> {
-    let output = syncweb(&["import", "--help"])?;
+    let output = syncweb(&["folders", "import", "--help"])?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--no-daemon") || help.contains("daemon"));
@@ -730,6 +758,7 @@ fn test_daemon_leave_untracks_via_ipc() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -744,10 +773,10 @@ fn test_daemon_leave_untracks_via_ipc() -> anyhow::Result<()> {
     ensure!(namespace.is_some(), "create should output a namespace");
     let ns = namespace.unwrap();
 
-    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync"])?;
+    let sync = syncweb(&["--data-dir", data_dir_arg, "sync"])?;
     ensure!(sync.status.success(), "triggering daemon-sync should succeed");
 
-    let leave = syncweb(&["--data-dir", data_dir_arg, "leave", ns])?;
+    let leave = syncweb(&["--data-dir", data_dir_arg, "folders", "leave", ns])?;
     ensure!(
         leave.status.success(),
         "leave via namespace ID should succeed, got: {}",
@@ -762,7 +791,7 @@ fn test_daemon_leave_untracks_via_ipc() -> anyhow::Result<()> {
         "left namespace should not appear in folder list"
     );
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -790,7 +819,7 @@ fn test_daemon_two_instances_cannot_start() -> anyhow::Result<()> {
         "second start should report daemon already running, got: {stderr}"
     );
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&data_dir);
@@ -807,6 +836,7 @@ fn test_cli_no_daemon_flag_bypasses_daemon() -> anyhow::Result<()> {
         "--data-dir",
         data_dir_arg,
         "--no-daemon",
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -867,7 +897,7 @@ fn test_global_network_flag_scopes_data_dir() -> anyhow::Result<()> {
         data_dir_arg,
         "--network",
         "home",
-        "shutdown",
+        "stop",
         "--yes",
         "--force",
     ])?;
@@ -897,7 +927,7 @@ fn test_start_with_log_file_writes_log() -> anyhow::Result<()> {
 
     wait_for_daemon_ready(data_dir_arg)?;
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success(), "shutdown should succeed");
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
 
@@ -957,7 +987,7 @@ fn test_start_discovery_and_media_tuning_flags_accepted() -> anyhow::Result<()> 
     let stdout = String::from_utf8(status.stdout).context("UTF-8 output")?;
     ensure!(stdout.contains("daemon: running"), "daemon should be running");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&data_dir);
@@ -977,6 +1007,7 @@ fn test_daemon_sync_scoped_to_namespace() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         dir.to_str().context("UTF-8 path")?,
     ])?;
@@ -991,10 +1022,10 @@ fn test_daemon_sync_scoped_to_namespace() -> anyhow::Result<()> {
         .context("create should output a namespace")?
         .to_owned();
 
-    let sync = syncweb(&["--data-dir", data_dir_arg, "daemon-sync", &namespace])?;
+    let sync = syncweb(&["--data-dir", data_dir_arg, "sync", &namespace])?;
     ensure!(sync.status.success(), "daemon-sync --namespace should succeed");
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&dir);
@@ -1026,6 +1057,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "create",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1048,6 +1080,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     let import = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "import",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1058,6 +1091,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "--no-daemon",
+        "folders",
         "join",
         "--download-existing",
         &ticket,
@@ -1080,7 +1114,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
         "materialized content should match source, got: {content:?}"
     );
 
-    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&alice_folder);
@@ -1105,6 +1139,7 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
     let create = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "create",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1129,6 +1164,7 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
     let import = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "import",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1139,6 +1175,7 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
         "--data-dir",
         bob_data_arg,
         "--no-daemon",
+        "folders",
         "join",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
@@ -1170,7 +1207,7 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
         "bare join should persist live sync as disabled: {config_out}"
     );
 
-    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&alice_folder);
@@ -1197,6 +1234,7 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "create",
         "--no-share",
         alice_folder.to_str().context("UTF-8 path")?,
@@ -1212,6 +1250,7 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
     let import = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "import",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1232,6 +1271,7 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
     let join = syncweb(&[
         "--data-dir",
         bob_data_arg,
+        "folders",
         "join",
         "--subscribe",
         &ticket,
@@ -1314,9 +1354,9 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
         String::from_utf8_lossy(&sort.stdout)
     );
 
-    let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
-    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown_b.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     for dir in [&alice_folder, &alice_data, &bob_folder, &bob_data, &plain] {
@@ -1341,6 +1381,7 @@ fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         data_dir_arg,
+        "folders",
         "create",
         folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1372,7 +1413,7 @@ fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
         "daemon create should have imported a.txt, got: {report_value}"
     );
 
-    let shutdown = syncweb(&["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])?;
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
     ensure!(shutdown.status.success());
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&folder);
@@ -1399,6 +1440,7 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     let create = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "create",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1421,6 +1463,7 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     let import = syncweb(&[
         "--data-dir",
         alice_data_arg,
+        "folders",
         "import",
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
@@ -1430,6 +1473,7 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     let join = syncweb(&[
         "--data-dir",
         bob_data_arg,
+        "folders",
         "join",
         "--download-existing",
         &ticket,
@@ -1452,8 +1496,8 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
         "materialized content should match source, got: {content:?}"
     );
 
-    let _ = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--yes", "--force"]);
-    let _ = syncweb(&["--data-dir", bob_data_arg, "shutdown", "--yes", "--force"]);
+    let _ = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"]);
+    let _ = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"]);
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
     let _ = std::fs::remove_dir_all(&alice_folder);
     let _ = std::fs::remove_dir_all(&alice_data);

@@ -116,7 +116,12 @@ fn two_nodes_relay_connection() -> anyhow::Result<()> {
     let data_b = test_dir("interop-node-b");
 
     let create_a = cli()
-        .args(["--data-dir", data_a.to_str().context("UTF-8 path")?, "create"])
+        .args([
+            "--data-dir",
+            data_a.to_str().context("UTF-8 path")?,
+            "folders",
+            "create",
+        ])
         .output()
         .context("create folder A")?;
     ensure!(
@@ -134,6 +139,7 @@ fn two_nodes_relay_connection() -> anyhow::Result<()> {
         .args([
             "--data-dir",
             data_b.to_str().context("UTF-8 path")?,
+            "folders",
             "join",
             &url,
             join_dir.to_str().context("UTF-8 path")?,

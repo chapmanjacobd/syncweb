@@ -21,10 +21,10 @@
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Run `syncweb create ./test-folder` | Creates `./test-folder/`, prints path, namespace, ticket, and `syncweb://` share URL | Check dir exists: `ls -la test-folder/` |
-| 2 | Run `syncweb create --mode sendonly ./test-sendonly` | Creates folder with SendOnly mode | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM folder_configs;"` |
-| 3 | Run `syncweb create --network home ./test-network` | Creates folder linked to network "home" | Verify with `syncweb config show networks` |
-| 4 | Run `syncweb create --mode receiveencrypted ./test-encrypted` | Creates ReceiveEncrypted folder | Check folder list: `syncweb folders` |
+| 1 | Run `syncweb folders create ./test-folder` | Creates `./test-folder/`, prints path, namespace, ticket, and `syncweb://` share URL | Check dir exists: `ls -la test-folder/` |
+| 2 | Run `syncweb folders create --mode sendonly ./test-sendonly` | Creates folder with SendOnly mode | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM folder_configs;"` |
+| 3 | Run `syncweb folders create --network home ./test-network` | Creates folder linked to network "home" | Verify with `syncweb config show networks` |
+| 4 | Run `syncweb folders create --mode receiveencrypted ./test-encrypted` | Creates ReceiveEncrypted folder | Check folder list: `syncweb folders` |
 
 ### 1.2 Config Management
 
@@ -58,19 +58,19 @@
 | 2 | Ctrl+C on daemon | Graceful shutdown, logs "daemon stopped" | Check lifecycle: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_lifecycle;"` |
 | 3 | `syncweb start` (background) | Daemon forks to background, returns to prompt | |
 | 4 | `syncweb status` | Shows PID, uptime, bandwidth rates, folder statuses | Manual DB check: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_status;"` |
-| 5 | `syncweb shutdown` | Prompts "Are you sure…?" (default no); confirm stops daemon, status shows "not running" | `syncweb status` returns error or "no daemon" |
-| 6 | Start daemon, then `syncweb shutdown --force` | Force kills daemon after the same confirmation | Check PID gone: `ps aux | grep syncweb` |
-| 7 | `syncweb shutdown --yes` in a script/pipe | Skips the prompt and stops the daemon; without `--yes` non-interactive runs abort ("aborted") and the daemon stays up — `--json` does not skip the prompt | `syncweb status` after aborted run still shows "daemon: running" |
+| 5 | `syncweb stop` | Prompts "Are you sure…?" (default no); confirm stops daemon, status shows "not running" | `syncweb status` returns error or "no daemon" |
+| 6 | Start daemon, then `syncweb stop --force` | Force kills daemon after the same confirmation | Check PID gone: `ps aux | grep syncweb` |
+| 7 | `syncweb stop --yes` in a script/pipe | Skips the prompt and stops the daemon; without `--yes` non-interactive runs abort ("aborted") and the daemon stays up — `--json` does not skip the prompt | `syncweb status` after aborted run still shows "daemon: running" |
 
 ### 2.2 Reload & Sync Commands
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Daemon running, change config.toml, then `syncweb reload` | Daemon reloads config, no restart needed | Check logs for "config reloaded" |
-| 2 | `syncweb daemon-sync` | Triggers sync for all folders | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM sync_checkpoints ORDER BY last_updated_at DESC LIMIT 5;"` |
-| 3 | `syncweb daemon-sync <ns>` | Triggers sync for a specific folder; warns and does nothing if it is not live | |
-| 4 | `syncweb create ./new-folder` | Creates folder and adds it to the running daemon | `syncweb folders` shows new folder |
-| 5 | `syncweb leave <namespace-id>` | Removes folder from daemon | `syncweb folders` no longer shows it |
+| 2 | `syncweb sync` | Triggers sync for all folders | `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM sync_checkpoints ORDER BY last_updated_at DESC LIMIT 5;"` |
+| 3 | `syncweb sync <ns>` | Triggers sync for a specific folder; warns and does nothing if it is not live | |
+| 4 | `syncweb folders create ./new-folder` | Creates folder and adds it to the running daemon | `syncweb folders` shows new folder |
+| 5 | `syncweb folders leave <namespace-id>` | Removes folder from daemon | `syncweb folders` no longer shows it |
 
 ---
 
@@ -82,35 +82,35 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb create --mode sendreceive ./shared-docs` | Creates folder, prints URL | Save the URL |
+| 1 | Alice: `syncweb folders create --mode sendreceive ./shared-docs` | Creates folder, prints URL | Save the URL |
 | 2 | Alice: `echo "hello world" > shared-docs/test.txt` | File created | |
-| 3 | Alice: `syncweb import ./shared-docs` | Imports file into blob store | `syncweb ls ./shared-docs` shows test.txt |
-| 4 | Bob: `syncweb join <alice-url> ./bob-shared` | Joins folder, starts syncing | Wait for discovery (~5-30s) |
+| 3 | Alice: `syncweb folders import ./shared-docs` | Imports file into blob store | `syncweb ls ./shared-docs` shows test.txt |
+| 4 | Bob: `syncweb folders join <alice-url> ./bob-shared` | Joins folder, starts syncing | Wait for discovery (~5-30s) |
 | 5 | Bob: `syncweb ls ./bob-shared` | Shows test.txt (lazy, no blob yet) | |
 | 6 | Bob: `syncweb download ./bob-shared/test.txt` | Downloads the blob | Check: `cat bob-shared/test.txt` shows "hello world" |
-| 7 | Bob: `echo "bob edit" >> bob-shared/test.txt && syncweb import ./bob-shared` | Bob imports change | |
+| 7 | Bob: `echo "bob edit" >> bob-shared/test.txt && syncweb folders import ./bob-shared` | Bob imports change | |
 | 8 | Alice: wait, then `syncweb download ./shared-docs/test.txt` | Gets Bob's edit | `cat shared-docs/test.txt` shows both lines |
 
 ### 3.2 Sync Modes
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb create --mode sendonly ./sendonly` | SendOnly folder | |
-| 2 | Alice: create file, `syncweb import` | File available remotely | |
-| 3 | Bob: `join` the folder | Can read but writes are rejected | Bob tries: `echo "x" > sendonly/x.txt && syncweb import` → error |
-| 4 | Alice: `syncweb create --mode receiveonly ./recvonly` | ReceiveOnly folder | |
+| 1 | Alice: `syncweb folders create --mode sendonly ./sendonly` | SendOnly folder | |
+| 2 | Alice: create file, `syncweb folders import` | File available remotely | |
+| 3 | Bob: `join` the folder | Can read but writes are rejected | Bob tries: `echo "x" > sendonly/x.txt && syncweb folders import` → error |
+| 4 | Alice: `syncweb folders create --mode receiveonly ./recvonly` | ReceiveOnly folder | |
 | 5 | Bob: `join` the folder | Can write but Alice ignores Bob's writes | |
-| 6 | Alice: `syncweb create --mode receiveencrypted ./enc` | ReceiveEncrypted folder | |
+| 6 | Alice: `syncweb folders create --mode receiveencrypted ./enc` | ReceiveEncrypted folder | |
 | 7 | Bob: `join` the folder | Can write, but blobs are encrypted at rest | |
 
 ### 3.3 Leave
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb leave ./shared-docs` | Leaves the folder | `syncweb folders` no longer shows it |
-| 2 | Alice: `syncweb leave --delete-files ./shared-docs` | Prompts "Are you sure…?" (default no); confirming deletes local files | Folder directory is removed |
-| 3 | Alice: `syncweb leave --delete-files --yes ./shared-docs` in a script | Skips the prompt and deletes local files; without `--yes` non-interactive runs abort and files stay | `syncweb leave --delete-files` (non-TTY, no `--yes`) prints "aborted" |
-| 4 | Alice: `syncweb join <url> ./shared-docs` again | Can rejoin | |
+| 1 | Alice: `syncweb folders leave ./shared-docs` | Leaves the folder | `syncweb folders` no longer shows it |
+| 2 | Alice: `syncweb folders leave --delete-files ./shared-docs` | Prompts "Are you sure…?" (default no); confirming deletes local files | Folder directory is removed |
+| 3 | Alice: `syncweb folders leave --delete-files --yes ./shared-docs` in a script | Skips the prompt and deletes local files; without `--yes` non-interactive runs abort and files stay | `syncweb folders leave --delete-files` (non-TTY, no `--yes`) prints "aborted" |
+| 4 | Alice: `syncweb folders join <url> ./shared-docs` again | Can rejoin | |
 | 5 | Alice: `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
 
 ### 3.4 Folders & Devices Listing
@@ -208,10 +208,10 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | `syncweb import ./shared-docs/` | Scans + imports all files | `syncweb ls ./shared-docs` shows new entries |
-| 2 | `syncweb import --threads 1 ./shared-docs/` | Sequential import | |
-| 3 | Create nested dir structure, then `syncweb import ./shared-docs/` | Respects directory structure | |
-| 4 | `syncweb import /tmp/new-files ./shared-docs/` | Import from different source path | |
+| 1 | `syncweb folders import ./shared-docs/` | Scans + imports all files | `syncweb ls ./shared-docs` shows new entries |
+| 2 | `syncweb folders import --threads 1 ./shared-docs/` | Sequential import | |
+| 3 | Create nested dir structure, then `syncweb folders import ./shared-docs/` | Respects directory structure | |
+| 4 | `syncweb folders import /tmp/new-files ./shared-docs/` | Import from different source path | |
 
 ### 5.3 Package Export
 
@@ -241,12 +241,12 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Alice: `syncweb share ./shared-docs` | Creates read-only share ticket/URL | Save the ticket |
-| 2 | Bob: `syncweb join <ticket> ./bob-public` | Tracks metadata only; NO live sync and NO bulk download by default | `syncweb ls ./bob-public` shows entries; folder dir starts empty; `config show subscribe` → `enabled = false` |
-| 3 | Bob: `syncweb join --subscribe <ticket> ./bob-public` (fresh folder) | Tracks folder + enables live syncing (persisted); NO bulk download by default | `syncweb ls ./bob-public` shows entries; `config show subscribe` → `enabled = true` |
-| 3 | Bob: `syncweb download ./bob-public/` (or `syncweb join --download-existing <ticket> ./bob-public` on a fresh folder) | Downloads existing content explicitly | Files appear in the folder |
-| 4 | Alice: `syncweb unshare ./shared-docs` | Stops sharing (removes pin, stops announcing); read-only unshare is prompt-free | Bob can no longer see updates |
-| 5 | Alice: `syncweb unshare --write ./shared-docs` | Prompts "Are you sure…?" (default no); confirming revokes write access | `syncweb share --list` no longer shows `access: write` |
-| 6 | Alice: `syncweb unshare --blob <hash> ./shared-docs` | Prompts before removing the shared blob pin | `syncweb unshare --blob <hash>` (non-TTY, no `--yes`) prints "aborted" |
+| 2 | Bob: `syncweb folders join <ticket> ./bob-public` | Tracks metadata only; NO live sync and NO bulk download by default | `syncweb ls ./bob-public` shows entries; folder dir starts empty; `config show subscribe` → `enabled = false` |
+| 3 | Bob: `syncweb folders join --subscribe <ticket> ./bob-public` (fresh folder) | Tracks folder + enables live syncing (persisted); NO bulk download by default | `syncweb ls ./bob-public` shows entries; `config show subscribe` → `enabled = true` |
+| 3 | Bob: `syncweb download ./bob-public/` (or `syncweb folders join --download-existing <ticket> ./bob-public` on a fresh folder) | Downloads existing content explicitly | Files appear in the folder |
+| 4 | Alice: `syncweb access --revoke ./shared-docs` | Stops sharing (removes pin, stops announcing); read-only unshare is prompt-free | Bob can no longer see updates |
+| 5 | Alice: `syncweb access --revoke --write ./shared-docs` | Prompts "Are you sure…?" (default no); confirming revokes write access | `syncweb share --list` no longer shows `access: write` |
+| 6 | Alice: `syncweb access --revoke --blob <hash> ./shared-docs` | Prompts before removing the shared blob pin | `syncweb access --revoke --blob <hash>` (non-TTY, no `--yes`) prints "aborted" |
 
 ### 7.2 Access Dashboard
 
@@ -332,7 +332,7 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
-| 1 | Alice: `syncweb create --network home ./nw-docs` | Creates folder in "home" network | `syncweb network ls home` shows the folder |
+| 1 | Alice: `syncweb folders create --network home ./nw-docs` | Creates folder in "home" network | `syncweb network ls home` shows the folder |
 | 2 | Alice imports files, Bob joins the folder | Bob gets auto-discovery via network gossip | |
 | 3 | Alice: `syncweb network kick home <bob-device-id>` | Removes Bob from network | Bob disconnects |
 
@@ -352,7 +352,7 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 |------|--------|-----------------|-------|
 | 1 | `syncweb indexing enable ./shared-docs` | Enables FTS5 index for folder | Check indexing db exists: `ls ~/.local/share/syncweb/indexing.sqlite` |
 | 2 | `syncweb search --kind catalog "test"` | Full-text search results | |
-| 3 | `syncweb publish catalog ./shared-docs --catalog <name>` | Publishes to catalog namespace | |
+| 3 | `syncweb indexing publish catalog ./shared-docs --catalog <name>` | Publishes to catalog namespace | |
 | 4 | `syncweb indexing disable ./shared-docs` | Disables indexing | |
 
 ---
@@ -508,8 +508,8 @@ match = { name = "*.tmp" }
 | 3 | `syncweb --no-color devices` | Output without ANSI color | |
 | 4 | `syncweb --data-dir /tmp/syncweb-test folders` | Uses custom data dir | Check files in /tmp/syncweb-test/ |
 | 5 | `syncweb --network home folders` | Shows folders in "home" network context | |
-| 6 | `syncweb --help` | Shows help | |
-| 7 | `syncweb <command> --help` | Command-specific help | |
+| 6 | `syncweb --help` | Grouped help shows the full major-release surface: 25 functional verbs (`start`, `stop`, `status`, `reload`, `sync`, `folders`, `ls`, `stat`, `find`, `search`, `sort`, `download`, `verify`, `transfer`, `share`, `access`, `link`, `package`, `network`, `watch`, `snapshot`, `indexing`, `stats`, `db`, `config`) plus `version`/`devices`/`completions`/`manpages`/`help`. Re-homed verbs (`create`, `join`, `leave`, `import`, `networks`, `publish`, `unshare`, `provider`) no longer parse | `syncweb folders create --help` still works |
+| 7 | `syncweb <command> --help` | Command-specific help, including subcommands (`folders create`, `share list`, `network status`, `indexing publish`) | |
 
 ---
 
@@ -543,7 +543,7 @@ match = { name = "*.tmp" }
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Time `syncweb start` (cold start) | < 500ms | `time syncweb start --foreground` |
-| 2 | Create 10000 files, time `syncweb import` | < 3s (default parallel) | Compare with `--threads 1` |
+| 2 | Create 10000 files, time `syncweb folders import` | < 3s (default parallel) | Compare with `--threads 1` |
 | 3 | Time `syncweb ls` on 10000 entries | < 500ms | |
 | 4 | Sync a 10GB folder over LAN | > 500 MB/s throughput | Monitor: `syncweb stats network` |
 | 5 | `syncweb stats seeding --folder .` on folder with 1000+ entries | < 1s | |

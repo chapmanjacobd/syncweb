@@ -8,25 +8,25 @@ manage sharing and publishing explicitly.
 
 | Level | Command | Access | What you get |
 |-------|---------|--------|--------------|
-| Create | `create <path>` | Public, read-only access (default) | Creates the folder and prints a `syncweb://folder/<ns>?ticket=...` share URL. Pins + persists the share. |
-| Create | `create --write <path>` | Public, write access | Same, but the ticket grants write access. |
-| Create | `create --no-share <path>` | Local | Prints only the namespace. Content is private until you share or publish it. |
-| Create | `create --no-import <path>` | Local | Skips scanning existing files in the directory. |
+| Create | `folders create <path>` | Public, read-only access (default) | Creates the folder and prints a `syncweb://folder/<ns>?ticket=...` share URL. Pins + persists the share. |
+| Create | `folders create --write <path>` | Public, write access | Same, but the ticket grants write access. |
+| Create | `folders create --no-share <path>` | Local | Prints only the namespace. Content is private until you share or publish it. |
+| Create | `folders create --no-import <path>` | Local | Skips scanning existing files in the directory. |
 | Share | `share <path>` | Public, read-only access (default) | A read-only share URL anyone can use to fetch content. Persisted + pins folder blobs. |
 | Share | `share <path> --write` | Public, write access | A write-access share URL; holders can edit. Persisted + pins folder blobs. |
 | Share | `share <path> --blob <hash>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
-| Share | `share --list` / `share --list <path>` | — | List persisted shares, optionally filtered by a folder path/namespace. |
-| Unshare | `unshare <path>` / `unshare <path> --blob <hash>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
-| Publish | `publish catalog <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
+| Share | `share list` / `share list <path>` | — | List persisted shares, optionally filtered by a folder path/namespace. |
+| Unshare | `access --revoke <path>` / `access --revoke --blob <hash>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
+| Publish | `indexing publish <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
 
 Key distinction: `create` provisions a folder and shares it by default, printing a
 `syncweb://folder/<ns>?ticket=...` URL. Hand a `--write` ticket only to collaborators you
 trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 `--no-share` when you only want a local folder. `share` persists the record (see
-`share --list` / `unshare`) and pins the folder's blobs by default (`--no-pin` to skip,
+`share list` / `access --revoke`) and pins the folder's blobs by default (`--no-pin` to skip,
 `--no-persist` to avoid saving). `share --blob` publishes a single immutable content hash
-(always pinned, never persisted). `join` accepts either the `syncweb://...` URL or a bare
+(always pinned, never persisted). `folders join` accepts either the `syncweb://...` URL or a bare
 ticket.
 
 ## `find` Command Design
@@ -346,9 +346,9 @@ syncweb sort --sort niche music/ | syncweb download -
 
 ---
 
-## `create`/`config` Command Design
+## `folders create`/`config` Command Design
 
-The `create` command provisions a local folder and prints only its `path` and `namespace`.
+The `folders create` command provisions a local folder and prints only its `path` and `namespace`.
 It does not emit a ticket or URL — sharing is a separate step via `share` (see the
 sharing-model section above). The `config` command manages local configuration (data dir,
 default paths, sync modes, filters).
@@ -468,8 +468,8 @@ syncweb config set discovery.interface eth0
 
 | syncweb-py | syncweb | Notes |
 |------------|----------------|-------|
-| `create` | `create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
-| `join` | `join` | Track folder via ticket (metadata only by default); live sync with `--subscribe`, bulk download of existing content with `--download-existing` (`--download` alias) |
+| `create` | `folders create` | Create folder + doc + blob store + read-only share ticket/URL (`--write`, `--no-share`) |
+| `join` | `folders join` | Track folder via ticket (metadata only by default); live sync with `--subscribe`, bulk download of existing content with `--download-existing` (`--download` alias) |
 | `folders` | `folders` | List local docs + status |
 | `devices` | `devices` | Show this device's Iroh and Syncthing identities |
 | `ls` | `ls` | List doc entries (lazy): reads the metadata index, never scans the disk; `--local-only` forces a disk scan, `--remote-only` shows undownloaded rows, `--path-prefix`/`--path-glob` filter |
@@ -478,21 +478,20 @@ syncweb config set discovery.interface eth0
 | `download` | `download` | Trigger lazy fetch for paths |
 | `sort` | `sort` | Sort results (uses peer tracker); on a resolved folder `--by name\|size\|modified\|state` sorts the metadata table |
 | `stat` | `stat` | File metadata from doc + blob store |
-| `shutdown` | `shutdown` | Gracefully stop the daemon |
+| `stop` | `stop` | Gracefully stop the daemon (alias `shutdown`) |
 | | `status` | Show daemon status |
-| | `networks` | Show networks and their health |
-| | `daemon-sync` | Ask the daemon to trigger synchronization |
+| | `sync` | Ask the daemon to trigger synchronization (alias `daemon-sync`) |
 | `config` | `config` | Show/modify local configuration |
 | `start` | `start` | Start the daemon |
 | `version` | `version` | Show versions |
-| (implicit) | `import` | Import local files to blob store + doc entries |
+| (implicit) | `folders import` | Import local files to blob store + doc entries |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
-| | `share --list` | List persisted folder shares, optionally filtered by selectors |
-| | `unshare` | Stop sharing a folder (unpins folder blobs) |
+| | `share list` | List persisted folder shares, optionally filtered by selectors |
 | | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets, and network membership; `access --revoke <path> [--read\|--write]` revokes in place |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
-| | `unshare --blob` | Remove a shared blob pin |
-| | `publish catalog` | Publish folder metadata to a catalog |
+| | `access --revoke --blob` | Remove a shared blob pin |
+| | `indexing publish` | Publish folder metadata to a catalog |
+| | `share provider add` | Register a blob ticket as an alternate provider |
 | | `package add` | Scan one or more paths into a package manifest (idempotent; creates it if missing) |
 | | `package add` | Re-scan paths and update the manifest |
 | | `package bump` | Create a new package version with changelog |
@@ -522,7 +521,8 @@ syncweb config set discovery.interface eth0
 | | `snapshot restore` | Restore folder from snapshot |
 | | `snapshot list` | List available snapshots |
 | | `network create` | Create named network group |
-| | `network ls` | List networks or network details |
+| | `network list` | List networks |
+| | `network status` | List networks and their health |
 | | `network join` | Join a network via ticket |
 | | `network leave` | Leave a network |
 | | `network invite` | Invite device to a network |
@@ -563,27 +563,27 @@ syncweb download --size -1GB /path/to/files
 # Join a folder: track metadata only by default. No live sync and no bulk
 # download, so a big folder can't fill your disk by accident — new files and
 # existing content are fetched explicitly (see below)
-syncweb join <ticket> /path/to/folder
+syncweb folders join <ticket> /path/to/folder
 
 # Opt in to live syncing: new files arrive as the peers add them
-syncweb join --subscribe <ticket> /path/to/folder
+syncweb folders join --subscribe <ticket> /path/to/folder
 
 # Also pull everything that already exists (one-shot; the receive-side symmetry
-# to `create --import`) — the explicit, disk-space-conscious opt-in
-syncweb join --subscribe --download-existing <ticket> /path/to/folder
+# to `folders create --import`) — the explicit, disk-space-conscious opt-in
+syncweb folders join --subscribe --download-existing <ticket> /path/to/folder
 
 # Live-sync filters: only files ingested after enabling, and ignore our own writes
-syncweb join --subscribe --ingest-only --ignore-self <ticket> /path/to/folder
+syncweb folders join --subscribe --ingest-only --ignore-self <ticket> /path/to/folder
 
 # The one-shot download honors the same prefix/glob/max filters
-syncweb join --subscribe --download-existing --glob '*.md' <ticket> /path/to/folder
+syncweb folders join --subscribe --download-existing --glob '*.md' <ticket> /path/to/folder
 
 # "Just want to look around": track metadata only, no live sync, no download;
 # fetch selective files later with `syncweb download` (this is the default)
-syncweb join <ticket> /path/to/folder
+syncweb folders join <ticket> /path/to/folder
 
 # Idempotent: enable live syncing on an already-tracked folder (or use the config toggle)
-syncweb join --subscribe <folder>
+syncweb folders join --subscribe <folder>
 syncweb config set <namespace>.subscribe on
 syncweb config set <namespace>.subscribe off
 
@@ -593,16 +593,16 @@ syncweb share /path/to/folder
 syncweb share --write /path/to/folder
 syncweb share <namespace-id>
 syncweb share <namespace-id> --blob <hash>
-syncweb publish catalog --catalog <name> --tag music /path/to/folder
+syncweb indexing publish --catalog <name> --tag music /path/to/folder
 
 # List and remove persisted shares; remove a shared blob pin
-syncweb share --list
-syncweb share --list <namespace-id>
-syncweb unshare --write /path/to/folder
-syncweb unshare <namespace-id> --blob <hash>
+syncweb share list
+syncweb share list <namespace-id>
+syncweb access --revoke --write /path/to/folder
+syncweb access --revoke <namespace-id> --blob <hash>
 
-# Removed: `syncweb publish --limit 100 --size 10GB /path/to/folder`
-# (size/limit filters live on `syncweb download`, not `publish`)
+# Removed: `syncweb indexing publish --limit 100 --size 10GB /path/to/folder`
+# (size/limit filters live on `syncweb download`, not `indexing publish`)
 
 # Scan with all available CPUs (the default)
 syncweb ls

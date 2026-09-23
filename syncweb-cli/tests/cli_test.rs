@@ -33,6 +33,15 @@ fn version_command_outputs_version() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The subcommand names rendered in the grouped-help body (before `Options:`).
+fn grouped_help_names(stdout: &str) -> std::collections::HashSet<String> {
+    let body = stdout.split("Options:").next().unwrap_or(stdout);
+    body.lines()
+        .filter_map(|line| line.strip_prefix("  "))
+        .map(|line| line.split_whitespace().next().unwrap_or_default().to_owned())
+        .collect()
+}
+
 #[test]
 fn help_output_lists_available_commands() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -42,26 +51,108 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
 
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
-    ensure!(help.contains("version"));
-    ensure!(help.contains("create"));
-    ensure!(help.contains("join"));
-    ensure!(help.contains("leave"));
-    ensure!(help.contains("folders"));
-    ensure!(help.contains("status"));
-    ensure!(help.contains("network"));
-    ensure!(help.contains("config"));
+    let names = grouped_help_names(&help);
+    // The major-release surface: every top-level verb is listed.
+    for canonical in [
+        "start",
+        "stop",
+        "status",
+        "reload",
+        "sync",
+        "devices",
+        "folders",
+        "ls",
+        "stat",
+        "find",
+        "search",
+        "sort",
+        "download",
+        "verify",
+        "transfer",
+        "share",
+        "access",
+        "link",
+        "package",
+        "network",
+        "watch",
+        "snapshot",
+        "indexing",
+        "stats",
+        "db",
+        "config",
+        "version",
+        "completions",
+        "manpages",
+        "help",
+    ] {
+        ensure!(names.contains(canonical), "grouped help should list '{canonical}'");
+    }
+    // Re-homed verbs are gone from the top level.
+    for removed in [
+        "create", "join", "leave", "import", "networks", "publish", "unshare", "provider",
+    ] {
+        ensure!(!names.contains(removed), "grouped help should not list '{removed}'");
+    }
+    Ok(())
+}
+
+#[test]
+fn rehomed_verbs_no_longer_parse() -> anyhow::Result<()> {
+    let cases: &[&[&str]] = &[
+        &["create", "."],
+        &["join", "ticket"],
+        &["leave", "."],
+        &["import", "."],
+        &["networks", ""],
+        &["publish", "."],
+        &["unshare", "."],
+        &["provider", "add", "c", "p"],
+        &["daemon-sync", ""],
+    ];
+    for args in cases {
+        let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(*args)
+            .output()
+            .with_context(|| format!("run syncweb {args:?}"))?;
+        ensure!(!output.status.success(), "re-homed verb should fail: {args:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn stop_is_an_alias_of_shutdown() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-stop-{}", uuid::Uuid::new_v4()));
+    let data_dir = directory.join("data");
+    std::fs::create_dir_all(&data_dir).context("create data dir")?;
+
+    let run = |verb: &str| -> anyhow::Result<std::process::Output> {
+        let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(["--data-dir", data_dir.to_str().context("UTF-8 path")?, "--yes", verb])
+            .output()
+            .with_context(|| format!("run syncweb {verb}"))?;
+        Ok(output)
+    };
+    let stop = run("stop")?;
+    let shutdown = run("shutdown")?;
+    ensure!(
+        stop.status.code() == shutdown.status.code(),
+        "stop and shutdown should fail identically (no daemon)"
+    );
+    ensure!(
+        stop.stdout == shutdown.stdout && stop.stderr == shutdown.stderr,
+        "shutdown should dispatch to the stop handler"
+    );
     Ok(())
 }
 
 #[test]
 fn publish_aliases_are_not_available() -> anyhow::Result<()> {
-    for args in [["collection", "publish", "--help"], ["indexing", "publish", "--help"]] {
-        let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-            .args(args)
-            .output()
-            .with_context(|| format!("run syncweb {args:?}"))?;
-        ensure!(!output.status.success(), "removed alias should fail: {args:?}");
-    }
+    let args = ["collection", "publish", "--help"];
+    let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(args)
+        .output()
+        .with_context(|| format!("run syncweb {args:?}"))?;
+    ensure!(!output.status.success(), "removed alias should fail: {args:?}");
     Ok(())
 }
 
@@ -153,17 +244,18 @@ fn test_create_command() -> anyhow::Result<()> {
             directory.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             "--no-import",
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
 
     std::fs::remove_dir_all(&directory).context("remove test directory")?;
 
     ensure!(
         output.status.success(),
-        "create should succeed: {:?}",
+        "folders create should succeed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
@@ -202,9 +294,16 @@ fn test_folders_command_lists_created() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--no-daemon", "create", "--no-import"])
+        .args([
+            "--data-dir",
+            &data_dir,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-import",
+        ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create_output.status.success());
 
     let folders_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -229,9 +328,16 @@ fn test_join_command() -> anyhow::Result<()> {
     let data_dir = directory.to_str().context("UTF-8 path")?.to_owned();
 
     let create_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", &data_dir, "--no-daemon", "create", "--no-import"])
+        .args([
+            "--data-dir",
+            &data_dir,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-import",
+        ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create_output.status.success());
     let share_output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--data-dir", &data_dir, "--no-daemon", "--json", "share", "--write"])
@@ -253,18 +359,19 @@ fn test_join_command() -> anyhow::Result<()> {
             "--data-dir",
             &data_dir,
             "--no-daemon",
+            "folders",
             "join",
             &ticket,
             join_dir.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb join")?;
+        .context("run syncweb folders join")?;
 
     std::fs::remove_dir_all(&directory).context("remove test directory")?;
 
     ensure!(
         join_output.status.success(),
-        "join should succeed: {:?}",
+        "folders join should succeed: {:?}",
         String::from_utf8_lossy(&join_output.stderr)
     );
     let stdout = String::from_utf8(join_output.stdout).context("UTF-8 output")?;
@@ -282,7 +389,7 @@ fn commands_and_json_version_are_available() -> anyhow::Result<()> {
     let help_text = String::from_utf8(help.stdout).context("UTF-8 help")?;
     ensure!(help_text.contains("watch"));
     ensure!(help_text.contains("stats"));
-    ensure!(help_text.contains("verify"));
+    ensure!(help_text.contains("download"));
     ensure!(help_text.contains("config"));
 
     let version = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -791,8 +898,8 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
         .args(["--data-dir", data_dir_arg, "status"])
         .output()
         .context("query auto-started daemon")?;
-    let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])
+    let stop = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "stop", "--yes", "--force"])
         .output()
         .context("stop auto-started daemon")?;
     for _ in 0..50 {
@@ -818,7 +925,7 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
             .context("status UTF-8 error")?
             .contains("daemon: running")
     );
-    ensure!(shutdown.status.success());
+    ensure!(stop.status.success());
     Ok(())
 }
 
@@ -833,18 +940,19 @@ fn test_create_outputs_url() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
 
     ensure!(
         output.status.success(),
-        "create should succeed: {:?}",
+        "folders create should succeed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
@@ -871,20 +979,21 @@ fn test_create_no_share_skips_ticket() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             "--no-share",
             "--no-import",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb create --no-share")?;
+        .context("run syncweb folders create --no-share")?;
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
 
     ensure!(
         output.status.success(),
-        "create --no-share should succeed: {:?}",
+        "folders create --no-share should succeed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
@@ -913,20 +1022,21 @@ fn test_create_write_shares_writable() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             "--write",
             "--no-import",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb create --write")?;
+        .context("run syncweb folders create --write")?;
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
 
     ensure!(
         output.status.success(),
-        "create --write should succeed: {:?}",
+        "folders create --write should succeed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
@@ -949,12 +1059,13 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "folders",
             "create",
             "--no-import",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create.status.success());
 
     let read = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1000,15 +1111,15 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            "--list",
+            "list",
         ])
         .output()
-        .context("run syncweb share --list")?;
+        .context("run syncweb share list")?;
     ensure!(list.status.success());
     let list_out = String::from_utf8(list.stdout).context("UTF-8 output")?;
     ensure!(
         list_out.contains("access: read") && list_out.contains("access: write"),
-        "share --list should show both shares: {list_out}"
+        "share list should show both shares: {list_out}"
     );
 
     let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1016,13 +1127,14 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "unshare",
+            "access",
+            "--revoke",
             "--write",
             "--yes",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb unshare --write")?;
+        .context("run syncweb access --revoke --write")?;
     ensure!(rm.status.success());
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
@@ -1042,12 +1154,13 @@ fn leave_delete_files_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir_str,
             "--no-daemon",
+            "folders",
             "create",
             "--no-import",
             dir_str,
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create.status.success());
     std::fs::write(directory.join("file.txt"), b"content")?;
 
@@ -1056,16 +1169,17 @@ fn leave_delete_files_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir_str,
             "--no-daemon",
+            "folders",
             "leave",
             "--delete-files",
             dir_str,
         ])
         .output()
-        .context("run syncweb leave --delete-files without --yes")?;
+        .context("run syncweb folders leave --delete-files without --yes")?;
     ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
     ensure!(
         directory.join("file.txt").exists(),
-        "leave --delete-files must not delete files when confirmation is skipped"
+        "folders leave --delete-files must not delete files when confirmation is skipped"
     );
 
     let leave = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1073,17 +1187,18 @@ fn leave_delete_files_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir_str,
             "--no-daemon",
+            "folders",
             "leave",
             "--delete-files",
             "--yes",
             dir_str,
         ])
         .output()
-        .context("run syncweb leave --delete-files --yes")?;
+        .context("run syncweb folders leave --delete-files --yes")?;
     ensure!(leave.status.success());
     ensure!(
         !directory.exists(),
-        "leave --delete-files --yes should delete the folder directory"
+        "folders leave --delete-files --yes should delete the folder directory"
     );
 
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
@@ -1102,12 +1217,13 @@ fn json_does_not_auto_approve_destructive() -> anyhow::Result<()> {
             "--data-dir",
             data_dir_str,
             "--no-daemon",
+            "folders",
             "create",
             "--no-import",
             dir_str,
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create.status.success());
     std::fs::write(directory.join("file.txt"), b"content")?;
 
@@ -1117,12 +1233,13 @@ fn json_does_not_auto_approve_destructive() -> anyhow::Result<()> {
             data_dir_str,
             "--no-daemon",
             "--json",
+            "folders",
             "leave",
             "--delete-files",
             dir_str,
         ])
         .output()
-        .context("run syncweb --json leave --delete-files without --yes")?;
+        .context("run syncweb --json folders leave --delete-files without --yes")?;
     ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
     ensure!(
         String::from_utf8(abort.stdout)
@@ -1150,12 +1267,13 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "folders",
             "create",
             "--no-import",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb create")?;
+        .context("run syncweb folders create")?;
     ensure!(create.status.success());
 
     let write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1177,12 +1295,13 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "unshare",
+            "access",
+            "--revoke",
             "--write",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb unshare --write without --yes")?;
+        .context("run syncweb access --revoke --write without --yes")?;
     ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1191,15 +1310,15 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            "--list",
+            "list",
         ])
         .output()
-        .context("run syncweb share --list after aborted unshare")?;
+        .context("run syncweb share list after aborted revoke")?;
     ensure!(
         String::from_utf8(list.stdout)
             .context("UTF-8 output")?
             .contains("access: write"),
-        "unshare --write must not revoke write when confirmation is skipped"
+        "access --revoke --write must not revoke write when confirmation is skipped"
     );
 
     let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1207,13 +1326,14 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "unshare",
+            "access",
+            "--revoke",
             "--write",
             "--yes",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .context("run syncweb unshare --write --yes")?;
+        .context("run syncweb access --revoke --write --yes")?;
     ensure!(rm.status.success());
 
     let list_after = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1222,15 +1342,15 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "share",
-            "--list",
+            "list",
         ])
         .output()
-        .context("run syncweb share --list after unshare --yes")?;
+        .context("run syncweb share list after revoke --yes")?;
     ensure!(
         !String::from_utf8(list_after.stdout)
             .context("UTF-8 output")?
             .contains("access: write"),
-        "unshare --write --yes should revoke write access"
+        "access --revoke --write --yes should revoke write access"
     );
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
@@ -1262,15 +1382,15 @@ fn shutdown_aborts_without_yes_on_non_tty() -> anyhow::Result<()> {
     ensure!(running, "daemon should have auto-started");
 
     let abort = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "shutdown"])
+        .args(["--data-dir", data_dir_arg, "stop"])
         .output()
-        .context("run syncweb shutdown without --yes")?;
+        .context("run syncweb stop without --yes")?;
     ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
     ensure!(
         String::from_utf8(abort.stdout)
             .context("UTF-8 output")?
             .contains("aborted"),
-        "non-TTY shutdown should abort at the prompt"
+        "non-TTY stop should abort at the prompt"
     );
 
     let still = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1282,9 +1402,9 @@ fn shutdown_aborts_without_yes_on_non_tty() -> anyhow::Result<()> {
     );
 
     let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "shutdown", "--yes"])
+        .args(["--data-dir", data_dir_arg, "stop", "--yes"])
         .output()
-        .context("run syncweb shutdown --yes")?;
+        .context("run syncweb stop --yes")?;
     ensure!(shutdown.status.success());
 
     for _ in 0..50 {
@@ -1316,8 +1436,8 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .context("run syncweb help")?;
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("watch"));
-    ensure!(help.contains("join"));
-    ensure!(help.contains("leave"));
+    ensure!(help.contains("folders"));
+    ensure!(help.contains("share"));
 
     let network = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["network", "--help"])
@@ -1344,7 +1464,7 @@ fn network_create_and_list_persist() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create.stderr)
     );
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "networks"])
+        .args(["--data-dir", data_dir, "network", "status"])
         .output()
         .context("list networks")?;
     std::fs::remove_dir_all(directory).context("cleanup")?;
@@ -1384,9 +1504,9 @@ fn watch_dry_run_uses_filter_engine() -> anyhow::Result<()> {
 #[test]
 fn subscribe_help_lists_options() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["join", "--help"])
+        .args(["folders", "join", "--help"])
         .output()
-        .context("run join --help")?;
+        .context("run folders join --help")?;
     ensure!(output.status.success());
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("--subscribe"), "should list --subscribe: {help}");
@@ -1457,7 +1577,7 @@ fn network_list_inspects_single_network() -> anyhow::Result<()> {
     ensure!(create.status.success());
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "networks", "inspect-me"])
+        .args(["--data-dir", data_dir, "network", "status", "inspect-me"])
         .output()
         .context("inspect network")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1557,7 +1677,7 @@ fn network_leave_removes_from_list() -> anyhow::Result<()> {
     );
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "networks"])
+        .args(["--data-dir", data_dir, "network", "status"])
         .output()
         .context("list after leave")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1599,6 +1719,7 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             data_dir,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             "--network",
             "team-net",
@@ -1610,7 +1731,7 @@ fn create_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
 
     ensure!(
         create.status.success(),
-        "create --network should succeed: {}",
+        "folders create --network should succeed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
     let stdout = String::from_utf8(create.stdout).context("UTF-8 output")?;
@@ -1631,7 +1752,14 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
     ensure!(net.status.success());
 
     let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "--no-daemon", "create", "--no-import"])
+        .args([
+            "--data-dir",
+            data_dir,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-import",
+        ])
         .output()
         .context("create folder for ticket")?;
     ensure!(create.status.success());
@@ -1656,6 +1784,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
             "--data-dir",
             data_dir,
             "--no-daemon",
+            "folders",
             "join",
             "--network",
             "join-net",
@@ -1668,7 +1797,7 @@ fn join_with_network_flag_adds_folder_to_network() -> anyhow::Result<()> {
 
     ensure!(
         join.status.success(),
-        "join --network should succeed: {}",
+        "folders join --network should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_stdout = String::from_utf8(join.stdout).context("UTF-8 output")?;
@@ -1815,16 +1944,17 @@ fn test_provider_add_with_valid_ticket() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
+            "share",
             "provider",
             "add",
             &hash.to_string(),
             &ticket_str,
         ])
         .output()
-        .context("run syncweb provider add")?;
+        .context("run syncweb share provider add")?;
     ensure!(
         output.status.success(),
-        "provider add should succeed: {}",
+        "share provider add should succeed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).context("UTF-8 output")?;
@@ -2254,12 +2384,13 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
         data_dir_s,
         "--no-daemon",
         "--json",
+        "folders",
         "create",
         managed.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         create.status.success(),
-        "create failed: {}",
+        "folders create failed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
     let create_value: serde_json::Value = serde_json::from_slice(&create.stdout).context("create JSON")?;
@@ -2273,6 +2404,7 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
         "--data-dir",
         data_dir_s,
         "--no-daemon",
+        "folders",
         "import",
         src_dir.join("new.txt").to_str().context("UTF-8 path")?,
         "--folder",
@@ -2283,7 +2415,7 @@ fn import_folder_threads_enrich() -> anyhow::Result<()> {
     ])?;
     ensure!(
         import.status.success(),
-        "import with options should succeed: {}",
+        "folders import with options should succeed: {}",
         String::from_utf8_lossy(&import.stderr)
     );
     let import_out = String::from_utf8(import.stdout).context("UTF-8 output")?;
@@ -2349,10 +2481,18 @@ fn verify_fix_and_filters() -> anyhow::Result<()> {
     let data_dir_s = data_dir.to_str().context("UTF-8 path")?;
     let managed_s = managed.to_str().context("UTF-8 path")?;
 
-    let create = syncweb(&["--data-dir", data_dir_s, "--no-daemon", "--json", "create", managed_s])?;
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_s,
+        "--no-daemon",
+        "--json",
+        "folders",
+        "create",
+        managed_s,
+    ])?;
     ensure!(
         create.status.success(),
-        "create failed: {}",
+        "folders create failed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
     let create_value: serde_json::Value = serde_json::from_slice(&create.stdout).context("create JSON")?;
@@ -2366,6 +2506,7 @@ fn verify_fix_and_filters() -> anyhow::Result<()> {
         "--data-dir",
         data_dir_s,
         "--no-daemon",
+        "folders",
         "import",
         src_dir.join("file.txt").to_str().context("UTF-8 path")?,
         "--folder",
@@ -2461,8 +2602,12 @@ fn manpages_generate_markdown() -> anyhow::Result<()> {
         "should contain syncweb.1: {names:?}"
     );
     ensure!(
-        names.contains(&"syncweb-create.1".to_string()),
+        names.contains(&"syncweb-download.1".to_string()),
         "should contain per-command manpages: {names:?}"
+    );
+    ensure!(
+        !names.contains(&"syncweb-create.1".to_string()),
+        "hidden legacy verbs should not produce manpages: {names:?}"
     );
     ensure!(
         !names.contains(&"syncweb-completions.1".to_string()),

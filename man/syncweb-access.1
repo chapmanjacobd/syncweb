@@ -4,19 +4,22 @@
 .SH NAME
 access \- Show who can read/write each folder in one table, and revoke access in place (\-\-revoke)
 .SH SYNOPSIS
-\fBaccess\fR [\fB\-\-revoke\fR] [\fB\-\-write\fR] [\fB\-\-read\fR] [\fB\-\-full\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBaccess\fR [\fB\-\-revoke\fR] [\fB\-\-write\fR] [\fB\-\-read\fR] [\fB\-\-blob\fR] [\fB\-\-full\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 Show who can read/write each folder in one table, and revoke access in place (\-\-revoke)
 .SH OPTIONS
 .TP
 \fB\-\-revoke\fR
-Revoke a share instead of listing access (requires the positional path)
+Revoke a share instead of listing access (requires the positional path or \-\-blob)
 .TP
 \fB\-\-write\fR
 Revoke the write share (default: the read share)
 .TP
 \fB\-\-read\fR
 Revoke the read share (the default, prompt\-free path)
+.TP
+\fB\-\-blob\fR \fI<BLOB>\fR
+Revoke a blob share by content hash (unpins and unannounces the blob) instead of a folder share; requires \-\-revoke
 .TP
 \fB\-\-full\fR
 Show every shared\-with row instead of capping the list

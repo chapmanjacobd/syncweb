@@ -16,11 +16,11 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        AccessArgs, Command, ConfigCommand, ImportArgs, ListingFlags, NetworkCommand, NetworkListArgs, PackageCommand,
-        PublishCommand, ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand,
+        AccessArgs, Command, ConfigCommand, FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand,
+        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
         SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
         TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
+        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{AccessRow, confirm_destructive, init_tracing, print_version, render_access_json, render_access_table},
@@ -187,39 +187,31 @@ async fn execute_cli(cli: Cli) -> Result<()> {
                 print_version();
             }
         }
-        Command::Create(command) => handle_create(&ctx, command).await?,
-        Command::Join(command) => handle_join(&ctx, command).await?,
-        Command::Leave(command) => handle_leave(&ctx, command).await?,
-        Command::Folders => handle_folders(&ctx).await?,
+        Command::Folders { command } => handle_folders(&ctx, command).await?,
         Command::Status => handle_status(&ctx).await?,
         Command::Devices => handle_devices(&ctx)?,
-        Command::Networks(args) => handle_networks(&ctx, &args)?,
         Command::Ls(command) => handle_ls(&ctx, command).await?,
         Command::Find(command) => handle_find(&ctx, command).await?,
         Command::Search(args) => handle_search(&ctx, args).await?,
         Command::Sort(command) => handle_sort(&ctx, &command).await?,
         Command::Stat(command) => handle_stat(&ctx, command)?,
         Command::Download(command) => Box::pin(handle_download(&ctx, command)).await?,
-        Command::Import(command) => handle_import(&ctx, command).await?,
         Command::Snapshot { command } => {
             handle_snapshot(&ctx, command).await?;
         }
         Command::Transfer { command } => handle_transfer(&ctx, command).await?,
         Command::Verify(command) => handle_verify(&ctx, command).await?,
-        Command::Publish { command } => handle_publish(&ctx, command).await?,
         Command::Share(args) => handle_share(&ctx, args).await?,
-        Command::Unshare(args) => handle_unshare(&ctx, args).await?,
         Command::Access(args) => handle_access(&ctx, args).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Stats { command } => handle_stats(&ctx, command).await?,
         Command::Indexing { command } => cli::indexing::handle_indexing(&ctx, command).await?,
         Command::Link { command } => cli::indexing::handle_link(&ctx, command).await?,
-        Command::Provider { command } => cli::indexing::handle_provider(&ctx, command)?,
         Command::Start(_)
-        | Command::Shutdown(_)
+        | Command::Stop(_)
         | Command::Reload
-        | Command::DaemonSync(_)
+        | Command::Sync(_)
         | Command::Watch(_)
         | Command::Config { .. }
         | Command::Completions { .. }
@@ -234,9 +226,9 @@ const fn is_auxiliary_command(command: &Command) -> bool {
     matches!(
         command,
         Command::Start(_)
-            | Command::Shutdown(_)
+            | Command::Stop(_)
             | Command::Reload
-            | Command::DaemonSync(_)
+            | Command::Sync(_)
             | Command::Watch(_)
             | Command::Config { .. }
             | Command::Completions { .. }
@@ -284,13 +276,13 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         }
         return handle_start(&daemon_ctx, args).await;
     }
-    if let Command::Shutdown(args) = command {
+    if let Command::Stop(args) = command {
         return handle_shutdown(&ctx, args).await;
     }
     if matches!(&command, Command::Reload) {
         return handle_reload(&ctx).await;
     }
-    if let Command::DaemonSync(args) = command {
+    if let Command::Sync(args) = command {
         return handle_daemon_sync(&ctx, args.namespace).await;
     }
     if let Command::Watch(watch) = command {
@@ -418,7 +410,7 @@ fn generate_manpages(dir: &std::path::Path) -> Result<()> {
     println!("Generated: syncweb.1");
     for subcommand in command.get_subcommands() {
         let name = subcommand.get_name();
-        if name == "help" || name == "completions" || name == "manpages" {
+        if name == "help" || name == "completions" || name == "manpages" || subcommand.is_hide_set() {
             continue;
         }
         let subcommand_man = clap_mangen::Man::new(subcommand.clone());
@@ -2761,17 +2753,12 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     Ok(())
 }
 
-async fn handle_publish(ctx: &CliContext<'_>, command: PublishCommand) -> Result<()> {
-    match command {
-        PublishCommand::Catalog(args) => cli::indexing::handle_catalog_publish(ctx, args).await,
-    }
-}
-
 async fn handle_share(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
-    if args.list {
-        return handle_share_list(ctx, Some(&args.path)).await;
+    match args.command {
+        None => handle_share_add(ctx, &args).await,
+        Some(ShareCommand::List { path }) => handle_share_list(ctx, path.as_deref()).await,
+        Some(ShareCommand::Provider { command }) => cli::indexing::handle_provider(ctx, command),
     }
-    handle_share_add(ctx, &args).await
 }
 
 async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> {
@@ -2878,17 +2865,21 @@ async fn handle_share_list(ctx: &CliContext<'_>, filter: Option<&std::path::Path
     Ok(())
 }
 
-async fn handle_unshare(ctx: &CliContext<'_>, args: UnshareArgs) -> Result<()> {
+async fn handle_unshare(
+    ctx: &CliContext<'_>,
+    selector: &std::path::Path,
+    blob: Option<String>,
+    write: bool,
+) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
-    let selector = args.path.to_string_lossy();
-    let operation = if args.write {
-        Some(format!("revoke write access to folder {selector}"))
+    let selector_str = selector.to_string_lossy();
+    let operation = if write {
+        Some(format!("revoke write access to folder {selector_str}"))
     } else {
-        args.blob
-            .as_ref()
-            .map(|blob| format!("remove the pin for shared blob {blob}"))
+        blob.as_ref()
+            .map(|hash| format!("remove the pin for shared blob {hash}"))
     };
     if let Some(prompt) = operation
         && !confirm_destructive(&prompt, ctx.yes)?
@@ -2897,35 +2888,35 @@ async fn handle_unshare(ctx: &CliContext<'_>, args: UnshareArgs) -> Result<()> {
         return Ok(());
     }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
+        let namespace = resolve_namespace_via_daemon(&client, &selector_str).await?;
         let response = client
             .send(IpcRequest::new(IpcCommand::Unshare {
                 namespace,
-                blob: args.blob.clone(),
-                writable: args.write,
+                blob: blob.clone(),
+                writable: write,
             }))
             .await?;
         return print_daemon_message(response, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let namespace = manager.resolve_namespace(&selector).await?;
-    if let Some(blob) = &args.blob {
-        let hash = blob.parse()?;
+    let namespace = manager.resolve_namespace(&selector_str).await?;
+    if let Some(hash) = &blob {
+        let parsed_hash: iroh_blobs::Hash = hash.parse()?;
         let folder = manager.get(namespace).await?;
-        folder.unpublish_blob(hash).await?;
+        folder.unpublish_blob(parsed_hash).await?;
         if output_json {
             println!(
                 "{}",
-                serde_json::json!({"status": "unshared", "namespace": namespace, "blob": blob})
+                serde_json::json!({"status": "unshared", "namespace": namespace, "blob": hash})
             );
         } else {
-            println!("unshared: {namespace} (blob {blob})");
+            println!("unshared: {namespace} (blob {hash})");
         }
         node.stop().await?;
         return Ok(());
     }
-    let access = if args.write { "write" } else { "read" };
+    let access = if write { "write" } else { "read" };
     open_node_db(data_dir)?.remove_share(&namespace.to_string(), access)?;
     if let Ok(folder) = manager.get(namespace).await {
         let _ = folder.unpin_all_content().await;
@@ -2950,19 +2941,11 @@ struct AccessFolder {
 
 async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
     if args.revoke {
-        let selector = args
-            .path
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("access --revoke requires a folder path or namespace"))?;
-        return handle_unshare(
-            ctx,
-            UnshareArgs {
-                path: selector.clone(),
-                blob: None,
-                write: args.write,
-            },
-        )
-        .await;
+        let selector = args.path.clone().unwrap_or_else(|| std::path::PathBuf::from("."));
+        if args.blob.is_none() && selector.as_os_str() == "." {
+            anyhow::bail!("access --revoke requires a folder path or namespace, or --blob <hash>");
+        }
+        return handle_unshare(ctx, &selector, args.blob.clone(), args.write).await;
     }
 
     let data_dir = ctx.data_dir;
@@ -4247,6 +4230,9 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("relay reachable: {relay_url}");
             }
         }
+        NetworkCommand::Status { name } => {
+            handle_status_networks(data_dir, name.as_deref(), output_json)?;
+        }
     }
     Ok(())
 }
@@ -4499,7 +4485,18 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
 }
 
 #[async_recursion]
-async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
+async fn handle_folders(ctx: &CliContext<'_>, command: Option<FoldersCommand>) -> Result<()> {
+    match command {
+        None => handle_folders_list(ctx).await,
+        Some(FoldersCommand::Create(create)) => handle_create(ctx, create).await,
+        Some(FoldersCommand::Join(join)) => handle_join(ctx, join).await,
+        Some(FoldersCommand::Leave(leave)) => handle_leave(ctx, leave).await,
+        Some(FoldersCommand::Import(import)) => handle_import(ctx, import).await,
+    }
+}
+
+#[async_recursion]
+async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
@@ -4550,7 +4547,7 @@ async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
         if output_json {
             println!("[]");
         } else {
-            println!("No folders found. Create one with `syncweb create [path]`");
+            println!("No folders found. Create one with `syncweb folders create [path]`");
         }
         node.stop().await?;
         return Ok(());
@@ -4596,10 +4593,6 @@ fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
         println!("syncthing: {}", device_id.to_syncthing());
     }
     Ok(())
-}
-
-fn handle_networks(ctx: &CliContext<'_>, args: &NetworkListArgs) -> Result<()> {
-    handle_status_networks(ctx.data_dir, args.name.as_deref(), ctx.output_json)
 }
 
 // ---------------------------------------------------------------------------

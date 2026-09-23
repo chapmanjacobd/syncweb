@@ -97,6 +97,7 @@ impl Device {
         let output = self.run_ok(&[
             "--json",
             "--no-daemon",
+            "folders",
             "create",
             "--write",
             path.to_str().context("UTF-8 path")?,
@@ -105,11 +106,17 @@ impl Device {
     }
 
     pub fn join(&self, ticket: &str, path: &Path) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "join", ticket, path.to_str().context("UTF-8 path")?])
+        self.run_ok(&[
+            "--no-daemon",
+            "folders",
+            "join",
+            ticket,
+            path.to_str().context("UTF-8 path")?,
+        ])
     }
 
     pub fn join_with_options(&self, args: &[&str], ticket: &str, path: &Path) -> anyhow::Result<CmdOutput> {
-        let mut all = vec!["--no-daemon", "join"];
+        let mut all = vec!["--no-daemon", "folders", "join"];
         all.extend_from_slice(args);
         all.push(ticket);
         all.push(path.to_str().context("UTF-8 path")?);
@@ -117,12 +124,12 @@ impl Device {
     }
 
     pub fn leave(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "leave", namespace])
+        self.run_ok(&["--no-daemon", "folders", "leave", namespace])
     }
 
     #[expect(dead_code, reason = "part of DSL public API")]
     pub fn leave_delete_files(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "leave", "--delete-files", "--yes", namespace])
+        self.run_ok(&["--no-daemon", "folders", "leave", "--delete-files", "--yes", namespace])
     }
 
     #[expect(clippy::unused_self, reason = "API consistency")]
@@ -135,7 +142,7 @@ impl Device {
     }
 
     pub fn import(&self, path: &Path) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "import", path.to_str().context("UTF-8 path")?])
+        self.run_ok(&["--no-daemon", "folders", "import", path.to_str().context("UTF-8 path")?])
     }
 
     pub fn ls(&self, path: &Path) -> anyhow::Result<Vec<String>> {
@@ -194,7 +201,7 @@ impl Device {
     }
 
     pub fn network_list(&self) -> anyhow::Result<Vec<String>> {
-        let output = self.run_ok(&["networks"])?;
+        let output = self.run_ok(&["network", "status"])?;
         Ok(output
             .stdout()
             .lines()

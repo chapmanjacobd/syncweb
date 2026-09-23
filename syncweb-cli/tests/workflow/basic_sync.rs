@@ -90,6 +90,7 @@ fn create_with_mode() -> anyhow::Result<()> {
     let output = alice.run_ok(&[
         "--json",
         "--no-daemon",
+        "folders",
         "create",
         "--mode",
         "sendonly",
@@ -470,6 +471,7 @@ fn create_with_relay_fallback() -> anyhow::Result<()> {
     let info = alice.run_ok(&[
         "--json",
         "--no-daemon",
+        "folders",
         "create",
         "--relay-fallback",
         folder_dir.to_str().context("UTF-8 path")?,
@@ -510,7 +512,7 @@ fn join_subscribe_help_lists_new_options() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let help = alice.run_ok(&["join", "--help"])?;
+    let help = alice.run_ok(&["folders", "join", "--help"])?;
     let text = help.stdout();
     ensure!(
         text.contains("--ignore-self"),
@@ -570,7 +572,7 @@ fn network_events_and_health() -> anyhow::Result<()> {
         events.stdout()
     );
 
-    let health = alice.run_ok(&["networks", id])?;
+    let health = alice.run_ok(&["network", "status", id])?;
     ensure!(
         health.stdout().contains("events:"),
         "should report event count: {}",
@@ -669,6 +671,7 @@ fn create_no_import_skips_scanning() -> anyhow::Result<()> {
     let output = alice.run_ok(&[
         "--json",
         "--no-daemon",
+        "folders",
         "create",
         "--no-import",
         folder_dir.to_str().context("UTF-8 path")?,
@@ -699,7 +702,12 @@ fn import_on_unknown_path_errors_without_creating_folder() -> anyhow::Result<()>
     std::fs::create_dir_all(&folder_dir)?;
     alice.write_file(&folder_dir.join("x.txt"), b"x")?;
 
-    let output = alice.run(&["--no-daemon", "import", folder_dir.to_str().context("UTF-8 path")?])?;
+    let output = alice.run(&[
+        "--no-daemon",
+        "folders",
+        "import",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
     ensure!(
         !output.success(),
         "import on an unknown path should fail rather than auto-create a folder: {}",

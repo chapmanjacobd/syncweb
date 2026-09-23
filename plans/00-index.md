@@ -48,20 +48,47 @@ daemon `folders` path that previously omitted mode. Pin status and inbound-peer
 lists are deferred to plan 09 and called out in `access` output rather than
 guessed.
 
+Plan 06 (command collapse) is done — the visible surface is now 12 functional
+verbs (`start`, `folders`, `ls`, `find`, `download`, `share`, `snapshot`,
+`network`, `watch`, `stats`, `indexing`, `config`) plus 5 meta commands
+(`version`, `devices`, `completions`, `manpages`, `help`). Every legacy spelling
+(`create`, `join`, `sort`, `db`, `access`, …) is a retained `Command` variant
+marked `#[command(hide = true)]` — fully functional, just dropped from grouped
+help, man pages, and clap's own help. `stop` is a pure alias of `shutdown`.
+`--show-legacy` re-lists hidden verbs in grouped help; all legacy man pages for
+hidden verbs were removed and grouped-help/man/completions regenerate from
+`Cli::command()`. No core/IPC changes. This hide phase is the transition to
+plan 10's deletion for the major release.
+
+Plan 07 (docs drift) is done — stale man pages/completions and
+doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`,
+`pending`, `deleted`, `undelete`, `policy`, `public list`) were removed from the
+surfaces, so docs match reality ahead of the major release.
+
+Plan 10 (command re-home) is done — for the major release the hidden legacy
+surface is deleted and re-homed: `create`/`join`/`leave`/`import` → `folders`,
+`networks` → `network status`, `publish` → `indexing publish`, `unshare` →
+`access --revoke` (+ `--blob`), `provider` → `share provider add`,
+`shutdown` → `stop` (alias `shutdown`), `daemon-sync` → `sync`. The remaining
+hidden verbs became visible; `--show-legacy` was removed. The surface is now 30
+top-level verbs (25 functional + 5 meta), `folders`/`share` are subcommand
+containers, and man/completions/docs/tests were regenerated. See
+[10-command-rehome.md](10-command-rehome.md).
+
 ## Plans
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
-| 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`, `policy`, `public list`) | — |
 | 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | 02 |
 | 09 | [09-peer-availability.md](09-peer-availability.md) | LOW | Read-only per-folder peer surface: `network peers` (per-blob avail + inbound-peer list) that plans 05/08 defer to | 05, 08 |
+| 10 | [10-command-rehome.md](10-command-rehome.md) | HIGH | Major release: delete hidden legacy commands, re-home under noun-group verbs, 30-verb surface | 06, 07 |
 
 Notes on dependencies:
 
 - Plan 08's dependency on plan 02 (eager `join`) is satisfied.
-- Plan 05 landed `access` as a canonical top-level verb; plan 06 must keep it
-  (canonical verb or alias) when collapsing the surface.
+- Plan 05 landed `access` as a canonical top-level verb; plan 06 kept it as a
+  retained (hidden) `Command` variant folded under `share` when collapsing the
+  surface — still fully functional.
 - Plan 08's universal `--json` contract builds on plan 01's `ListEntries` IPC
   (the listing the filters run over) and plan 03's shared
   `ContentFilterArgs`; the work should land once, in the order 03 → 08.

@@ -29,7 +29,7 @@ fn indexing_enable_disable_uses_persistent_folder_namespace() -> Result<()> {
     fs::create_dir_all(&folder)?;
 
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
-    let created = run(alice, &["--json", "create", "--no-indexing", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", "--no-indexing", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -75,7 +75,7 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
     fs::create_dir_all(&folder)?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -83,7 +83,7 @@ fn indexing_publish_and_search_round_trip() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let published = run(alice, &["publish", "catalog", "--catalog", "test-catalog", &namespace])?;
+    let published = run(alice, &["indexing", "publish", "--catalog", "test-catalog", &namespace])?;
     ensure!(
         published.stdout().contains("published:"),
         "publish output should confirm publication"
@@ -147,7 +147,7 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
     fs::write(&file, b"hello publish blob")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -158,6 +158,7 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
     let _imported = run(
         alice,
         &[
+            "folders",
             "import",
             "--folder",
             &namespace,
@@ -175,7 +176,10 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
         "share --blob should emit a blob ticket"
     );
 
-    let unpublished = run(alice, &["--json", "--yes", "unshare", "--blob", &hash_str, &namespace])?;
+    let unpublished = run(
+        alice,
+        &["--json", "--yes", "access", "--revoke", "--blob", &hash_str, &namespace],
+    )?;
     ensure!(
         json_output(&unpublished)?.get("status") == Some(&Value::from("unshared")),
         "unshare --blob should confirm the pin was removed"
@@ -193,7 +197,7 @@ fn publish_collection_with_sequence_and_bootstrap() -> Result<()> {
     fs::write(folder.join("readme.txt"), b"readme")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -247,7 +251,7 @@ fn publish_catalog_with_tags() -> Result<()> {
     fs::write(folder.join("clip.mp4"), b"video")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -258,8 +262,8 @@ fn publish_catalog_with_tags() -> Result<()> {
     let published = run(
         alice,
         &[
+            "indexing",
             "publish",
-            "catalog",
             "--catalog",
             "tagged",
             "--tag",
@@ -287,7 +291,7 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
     fs::create_dir_all(&folder)?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -400,7 +404,10 @@ fn link_resolve_fetches_local_content_by_default() -> Result<()> {
     let folder = alice.data_dir().join("content");
     fs::create_dir_all(&folder)?;
     alice.write_file(&folder.join("payload.txt"), b"link resolve content")?;
-    let _created = run(alice, &["create", folder.to_str().context("folder not UTF-8")?])?;
+    let _created = run(
+        alice,
+        &["folders", "create", folder.to_str().context("folder not UTF-8")?],
+    )?;
     alice.import(&folder)?;
 
     let content = alice.file_content(&folder.join("payload.txt"))?;
@@ -461,7 +468,7 @@ fn indexing_search_with_limit() -> Result<()> {
     fs::write(folder.join("test-file.txt"), b"searchable content")?;
     let folder_path = folder.to_str().context("folder path is not UTF-8")?;
 
-    let created = run(alice, &["--json", "create", folder_path])?;
+    let created = run(alice, &["--json", "folders", "create", folder_path])?;
     let namespace = json_output(&created)?
         .get("namespace")
         .context("create output missing namespace")?
@@ -469,7 +476,7 @@ fn indexing_search_with_limit() -> Result<()> {
         .context("namespace is not a string")?
         .to_owned();
 
-    let _published = run(alice, &["publish", "catalog", "--catalog", "library", &namespace])?;
+    let _published = run(alice, &["indexing", "publish", "--catalog", "library", &namespace])?;
 
     let searched = run(alice, &["--json", "search", "--limit", "5", "test"])?;
     let search_json = json_output(&searched)?;

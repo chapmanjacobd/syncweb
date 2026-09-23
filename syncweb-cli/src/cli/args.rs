@@ -50,59 +50,49 @@ macro_rules! help_categories {
 help_categories! {
     "Daemon" => [
         Command::Start(_) => "start",
-        Command::Shutdown(_) => "shutdown",
+        Command::Stop(_) => "stop",
         Command::Status => "status",
-        Command::Devices => "devices",
         Command::Reload => "reload",
-        Command::DaemonSync(_) => "daemon-sync",
+        Command::Sync(_) => "sync",
+        Command::Devices => "devices",
     ];
     "Folders" => [
-        Command::Create(_) => "create",
-        Command::Join(_) => "join",
-        Command::Leave(_) => "leave",
-        Command::Folders => "folders",
+        Command::Folders { .. } => "folders",
     ];
     "Files" => [
         Command::Ls(_) => "ls",
+        Command::Stat(_) => "stat",
         Command::Find(_) => "find",
         Command::Search(_) => "search",
         Command::Sort(_) => "sort",
-        Command::Stat(_) => "stat",
         Command::Download(_) => "download",
-        Command::Import(_) => "import",
         Command::Verify(_) => "verify",
-    ];
-    "Automation" => [
-        Command::Watch(_) => "watch",
-    ];
-    "Sharing & Publishing" => [
-        Command::Publish { .. } => "publish",
-        Command::Share(_) => "share",
-        Command::Unshare(_) => "unshare",
-        Command::Access(_) => "access",
-        Command::Provider { .. } => "provider",
-        Command::Link { .. } => "link",
-    ];
-    "Content" => [
-        Command::Snapshot { .. } => "snapshot",
         Command::Transfer { .. } => "transfer",
+    ];
+    "Sharing & Access" => [
+        Command::Share(_) => "share",
+        Command::Access(_) => "access",
+        Command::Link { .. } => "link",
         Command::Package { .. } => "package",
     ];
     "Network" => [
         Command::Network { .. } => "network",
-        Command::Networks(_) => "networks",
+    ];
+    "Automation" => [
+        Command::Watch(_) => "watch",
+        Command::Snapshot { .. } => "snapshot",
+    ];
+    "Indexing" => [
+        Command::Indexing { .. } => "indexing",
     ];
     "Statistics" => [
         Command::Stats { .. } => "stats",
     ];
-    "Configuration" => [
-        Command::Config { .. } => "config",
-    ];
     "Maintenance" => [
         Command::Db { .. } => "db",
     ];
-    "Indexing" => [
-        Command::Indexing { .. } => "indexing",
+    "Configuration" => [
+        Command::Config { .. } => "config",
     ];
     "Tooling" => [
         Command::Version => "version",
@@ -159,32 +149,40 @@ fn spec_tail(arg: &clap::Arg) -> String {
     tail
 }
 
-/// Print the top-level help with subcommands grouped by category.
-pub fn print_grouped_help() {
+/// Build the top-level help with subcommands grouped by category.
+fn build_grouped_help() -> String {
+    use std::fmt::Write as _;
     let mut cmd = Cli::command();
     cmd.build();
     let subcommands: std::collections::HashMap<&str, &clap::Command> =
         cmd.get_subcommands().map(|sc| (sc.get_name(), sc)).collect();
 
+    let mut out = String::new();
     if let Some(about) = cmd.get_about() {
-        println!("{about}");
-        println!();
+        let _ = writeln!(out, "{about}");
+        out.push('\n');
     }
-    println!("Usage: {} [OPTIONS] <COMMAND>", cmd.get_name());
-    println!();
+    let _ = writeln!(out, "Usage: {} [OPTIONS] <COMMAND>", cmd.get_name());
+    out.push('\n');
 
     for (heading, names) in COMMAND_CATEGORIES {
-        println!("{heading}:");
-        for name in *names {
-            if let Some(sc) = subcommands.get(name) {
-                let about = sc.get_about().unwrap_or_default();
-                println!("  {name:<16} {about}");
-            }
+        let visible: Vec<(&str, &clap::Command)> = names
+            .iter()
+            .filter_map(|name| subcommands.get(name).map(|sc| (*name, *sc)))
+            .filter(|(_, sc)| !sc.is_hide_set())
+            .collect();
+        if visible.is_empty() {
+            continue;
         }
-        println!();
+        let _ = writeln!(out, "{heading}:");
+        for (name, sc) in visible {
+            let about = sc.get_about().unwrap_or_default();
+            let _ = writeln!(out, "  {name:<16} {about}");
+        }
+        out.push('\n');
     }
 
-    println!("Options:");
+    out.push_str("Options:\n");
     let options: Vec<(String, String)> = cmd
         .get_arguments()
         .map(|arg| {
@@ -195,12 +193,20 @@ pub fn print_grouped_help() {
         .collect();
     let width = options.iter().map(|(s, _)| s.len()).max().unwrap_or(0);
     for (spec, help) in options {
-        println!("  {spec:<width$} {help}");
+        let _ = writeln!(out, "  {spec:<width$} {help}");
     }
+    out
+}
+
+/// Print the top-level help with subcommands grouped by category.
+pub fn print_grouped_help() {
+    print!("{}", build_grouped_help());
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -232,6 +238,71 @@ mod tests {
                 "subcommand '{}' is missing from COMMAND_CATEGORIES",
                 sc.get_name()
             );
+        }
+    }
+
+    /// Extract the subcommand names rendered in the grouped help body (before
+    /// the `Options:` block), one `  name ...` line at a time.
+    fn grouped_help_command_names() -> HashSet<String> {
+        let help = build_grouped_help();
+        let body = help.split("Options:").next().unwrap_or(&help);
+        body.lines()
+            .filter_map(|line| line.strip_prefix("  "))
+            .map(|line| line.split_whitespace().next().unwrap_or_default().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn grouped_help_lists_the_whole_surface() {
+        let surface: HashSet<&str> = [
+            "start",
+            "stop",
+            "status",
+            "reload",
+            "sync",
+            "devices",
+            "folders",
+            "ls",
+            "stat",
+            "find",
+            "search",
+            "sort",
+            "download",
+            "verify",
+            "transfer",
+            "share",
+            "access",
+            "link",
+            "package",
+            "network",
+            "watch",
+            "snapshot",
+            "indexing",
+            "stats",
+            "db",
+            "config",
+            "version",
+            "completions",
+            "manpages",
+            "help",
+        ]
+        .into_iter()
+        .collect();
+        let visible = grouped_help_command_names();
+        assert_eq!(
+            visible,
+            surface.iter().map(|s| (*s).to_owned()).collect::<HashSet<_>>(),
+            "grouped help should show exactly the major-release surface"
+        );
+    }
+
+    #[test]
+    fn grouped_help_omits_rehomed_verbs() {
+        let visible = grouped_help_command_names();
+        for removed in [
+            "create", "join", "leave", "import", "networks", "publish", "unshare", "provider",
+        ] {
+            assert!(!visible.contains(removed), "re-homed verb '{removed}' should be gone");
         }
     }
 }

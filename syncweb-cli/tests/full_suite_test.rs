@@ -57,35 +57,52 @@ fn full_help_lists_all_commands() -> anyhow::Result<()> {
     let output = run(&["--help"])?;
     assert_success(&output, "help")?;
     let help = stdout_string(&output)?;
+    // The major-release surface: every top-level verb is discoverable; re-homed
+    // verbs are gone from the top level.
+    let body = help.split("Options:").next().unwrap_or(&help);
+    let names: std::collections::HashSet<&str> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("  "))
+        .map(|line| line.split_whitespace().next().unwrap_or_default())
+        .collect();
     for cmd in [
-        "version",
-        "create",
-        "join",
-        "leave",
-        "folders",
+        "start",
+        "stop",
         "status",
-        "config",
+        "reload",
+        "sync",
+        "devices",
+        "folders",
         "ls",
-        "find",
-        "sort",
         "stat",
+        "find",
+        "search",
+        "sort",
         "download",
-        "import",
-        "snapshot",
-        "watch",
-        "stats",
         "verify",
-        "publish",
+        "transfer",
         "share",
+        "access",
+        "link",
         "package",
         "network",
+        "watch",
+        "snapshot",
         "indexing",
-        "link",
-        "provider",
+        "stats",
+        "db",
+        "config",
+        "version",
         "completions",
         "manpages",
+        "help",
     ] {
-        ensure!(help.contains(cmd), "help should list '{cmd}'");
+        ensure!(names.contains(cmd), "grouped help should list '{cmd}'");
+    }
+    for removed in [
+        "create", "join", "leave", "import", "networks", "publish", "unshare", "provider",
+    ] {
+        ensure!(!names.contains(removed), "grouped help should not list '{removed}'");
     }
     Ok(())
 }
@@ -187,8 +204,12 @@ fn manpages_generate_dot_one_files() -> anyhow::Result<()> {
         "should contain syncweb.1: {names:?}"
     );
     ensure!(
-        names.contains(&"syncweb-create.1".to_string()),
+        names.contains(&"syncweb-download.1".to_string()),
         "should contain per-command manpages: {names:?}"
+    );
+    ensure!(
+        !names.contains(&"syncweb-create.1".to_string()),
+        "hidden legacy verbs should not produce manpages: {names:?}"
     );
     ensure!(
         !names.contains(&"syncweb-help.1".to_string()),
@@ -261,8 +282,11 @@ fn help_subcommand_reports_specific_and_grouped_help() -> anyhow::Result<()> {
 #[test]
 fn create_folders_list_works() -> anyhow::Result<()> {
     let data_dir = test_dir("create-folders");
-    let output = run_with_data(&data_dir, &["--no-daemon", "--json", "create", "--no-import"])?;
-    assert_success(&output, "create")?;
+    let output = run_with_data(
+        &data_dir,
+        &["--no-daemon", "--json", "folders", "create", "--no-import"],
+    )?;
+    assert_success(&output, "folders create")?;
     let stdout = stdout_string(&output)?;
     let value: serde_json::Value = serde_json::from_str(&stdout)?;
     ensure!(value.get("namespace").is_some(), "should print namespace: {stdout}");
@@ -621,11 +645,12 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         &[
             "--json",
             "--no-daemon",
+            "folders",
             "create",
             folder_dir.to_str().context("UTF-8 folder path")?,
         ],
     )?;
-    assert_success(&created, "create")?;
+    assert_success(&created, "folders create")?;
     let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
     let namespace = created_json
         .get("namespace")
@@ -781,11 +806,12 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
         &[
             "--json",
             "--no-daemon",
+            "folders",
             "create",
             folder_dir.to_str().context("UTF-8 folder path")?,
         ],
     )?;
-    assert_success(&created, "create")?;
+    assert_success(&created, "folders create")?;
     let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
     let namespace = created_json
         .get("namespace")
@@ -891,14 +917,15 @@ fn create_outputs_all_fields() -> anyhow::Result<()> {
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
             "--json",
+            "folders",
             "create",
             folder_dir.to_str().context("UTF-8 path")?,
         ])
         .output()
-        .with_context(|| "run syncweb create --no-daemon")?;
+        .with_context(|| "run syncweb folders create --no-daemon")?;
     let _ = fs::remove_dir_all(&folder_dir);
     let _ = fs::remove_dir_all(&data_dir);
-    assert_success(&output, "create")?;
+    assert_success(&output, "folders create")?;
     let stdout = stdout_string(&output)?;
     let value: serde_json::Value = serde_json::from_str(&stdout)?;
     ensure!(value.get("path").is_some(), "should print path: {stdout}");
@@ -917,8 +944,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let create_out = stdout_string(&create)?;
     ensure!(create_out.contains("created:"), "should print created: {create_out}");
 
-    let list = run_with_data(&data_dir, &["networks"])?;
-    assert_success(&list, "networks")?;
+    let list = run_with_data(&data_dir, &["network", "status"])?;
+    assert_success(&list, "network status")?;
     let list_out = stdout_string(&list)?;
     ensure!(list_out.contains("team"), "should list team: {list_out}");
 
@@ -933,8 +960,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let leave = run_with_data(&data_dir, &["network", "leave", "--yes", "team"])?;
     assert_success(&leave, "network leave")?;
 
-    let list_after = run_with_data(&data_dir, &["networks"])?;
-    assert_success(&list_after, "networks after leave")?;
+    let list_after = run_with_data(&data_dir, &["network", "status"])?;
+    assert_success(&list_after, "network status after leave")?;
     let list_after_out = stdout_string(&list_after)?;
     ensure!(
         !list_after_out.contains("team"),

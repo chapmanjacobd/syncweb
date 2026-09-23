@@ -4,111 +4,93 @@ use clap::{Args, Subcommand};
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[command(about = "Show syncweb version information")]
-    Version,
     #[command(about = "Start the local syncweb daemon")]
     Start(StartArgs),
-    #[command(about = "Stop the local syncweb node")]
-    Shutdown(ShutdownArgs),
+    #[command(about = "Stop the local syncweb daemon", alias = "shutdown")]
+    Stop(ShutdownArgs),
     #[command(about = "Show local daemon status")]
     Status,
-    #[command(about = "Show this device's Iroh and Syncthing identities")]
-    Devices,
-    #[command(about = "Show networks and their health")]
-    Networks(NetworkListArgs),
     #[command(about = "Ask the local daemon to reload configuration")]
     Reload,
     #[command(about = "Ask the local daemon to trigger synchronization")]
-    DaemonSync(DaemonSyncArgs),
-    #[command(
-        about = "Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)"
-    )]
-    Create(FolderCreate),
-    #[command(about = "Join a folder from an Iroh document ticket")]
-    Join(FolderJoin),
-    #[command(about = "Leave a synchronized folder, optionally deleting its local files")]
-    Leave(LeaveArgs),
-    #[command(about = "List managed folders")]
-    Folders,
-    #[command(about = "Show or update local configuration")]
-    Config {
+    Sync(DaemonSyncArgs),
+    #[command(about = "Show this device's Iroh and Syncthing identities")]
+    Devices,
+    #[command(about = "Manage synchronized folders (bare: list managed folders)")]
+    Folders {
         #[command(subcommand)]
-        command: Option<ConfigCommand>,
+        command: Option<FoldersCommand>,
     },
     #[command(about = "List files in a local folder")]
     Ls(LocalPathArgs),
+    #[command(about = "Show detailed metadata for a local file")]
+    Stat(StatArgs),
     #[command(about = "Search local files")]
     Find(FindArgs),
     #[command(about = "Search catalog content, packages, and editorial channels")]
     Search(SearchArgs),
     #[command(about = "Sort local files by discovery criteria")]
     Sort(SortArgs),
-    #[command(about = "Show detailed metadata for a local file")]
-    Stat(StatArgs),
     #[command(about = "Download folder content or copy a local file")]
     Download(DownloadArgs),
-    #[command(about = "Import local files into a synchronized folder")]
-    Import(ImportArgs),
-    #[command(about = "Manage content-addressed snapshots", alias = "snapshots")]
-    Snapshot {
-        #[command(subcommand)]
-        command: SnapshotCommand,
-    },
+    #[command(about = "Re-check local folder blob integrity")]
+    Verify(VerifyArgs),
     #[command(about = "Inspect and control durable transfer jobs")]
     Transfer {
         #[command(subcommand)]
         command: TransferCommand,
     },
-    #[command(about = "Watch a folder and import filesystem changes")]
-    Watch(WatchArgs),
-    #[command(about = "Show statistics for folders and files")]
-    Stats {
-        #[command(subcommand)]
-        command: StatsCommand,
-    },
-    #[command(about = "Re-check local folder blob integrity")]
-    Verify(VerifyArgs),
-    #[command(about = "Publish folder metadata to a catalog")]
-    Publish {
-        #[command(subcommand)]
-        command: PublishCommand,
-    },
-    #[command(about = "Share a folder, printing a ticket (read-only by default, --write for write access)")]
+    #[command(
+        about = "Share a folder, printing a ticket (read-only by default, --write for write access)",
+        args_conflicts_with_subcommands = true
+    )]
     Share(ShareArgs),
-    #[command(about = "Stop sharing a folder or blob (removes pins and announcements)")]
-    Unshare(UnshareArgs),
     #[command(about = "Show who can read/write each folder in one table, and revoke access in place (--revoke)")]
     Access(AccessArgs),
+    #[command(about = "Create and resolve stable syncweb links")]
+    Link {
+        #[command(subcommand)]
+        command: LinkCommand,
+    },
     #[command(about = "Create, version, publish, and manage collection packages")]
     Package {
         #[command(subcommand)]
         command: PackageCommand,
     },
-    #[command(about = "Network connectivity utilities")]
+    #[command(about = "Manage networks and membership")]
     Network {
         #[command(subcommand)]
         command: NetworkCommand,
     },
-    #[command(about = "Database maintenance: check, vacuum, stats, backup")]
-    Db {
+    #[command(about = "Watch a folder and import filesystem changes")]
+    Watch(WatchArgs),
+    #[command(about = "Manage content-addressed snapshots", alias = "snapshots")]
+    Snapshot {
         #[command(subcommand)]
-        command: DbCommand,
+        command: SnapshotCommand,
     },
     #[command(about = "Manage opt-in indexing, catalogs, and metadata")]
     Indexing {
         #[command(subcommand)]
         command: IndexingCommand,
     },
-    #[command(about = "Create and resolve stable syncweb links")]
-    Link {
+    #[command(about = "Show statistics for folders and files")]
+    Stats {
         #[command(subcommand)]
-        command: LinkCommand,
+        command: StatsCommand,
     },
-    #[command(about = "Manage blob provider registrations")]
-    Provider {
+    #[command(about = "Database maintenance: check, vacuum, stats, backup")]
+    Db {
         #[command(subcommand)]
-        command: ProviderCommand,
+        command: DbCommand,
     },
+    #[command(about = "Show or update local configuration")]
+    Config {
+        #[command(subcommand)]
+        command: Option<ConfigCommand>,
+    },
+    #[command(about = "Show syncweb version information")]
+    Version,
     #[command(about = "Generate shell completions")]
     Completions {
         #[arg(value_enum)]
@@ -126,16 +108,40 @@ pub enum Command {
     },
 }
 
+/// Sub-operations for the `folders` verb. Bare `folders` lists managed folders.
+#[derive(Debug, Subcommand)]
+pub enum FoldersCommand {
+    #[command(
+        about = "Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)"
+    )]
+    Create(FolderCreate),
+    #[command(about = "Join a folder from an Iroh document ticket")]
+    Join(FolderJoin),
+    #[command(about = "Leave a synchronized folder, optionally deleting its local files")]
+    Leave(LeaveArgs),
+    #[command(about = "Import local files into a synchronized folder")]
+    Import(ImportArgs),
+}
+
+/// Sub-operations for the `share` verb. Bare `share <path>` prints a ticket.
+#[derive(Debug, Subcommand)]
+pub enum ShareCommand {
+    #[command(about = "List persisted shares, optionally filtered by path")]
+    List {
+        #[arg(help = "Folder path or namespace to filter persisted shares")]
+        path: Option<PathBuf>,
+    },
+    #[command(about = "Manage blob provider registrations")]
+    Provider {
+        #[command(subcommand)]
+        command: ProviderCommand,
+    },
+}
+
 #[derive(Debug, Args)]
 pub struct DaemonSyncArgs {
     #[arg(help = "Namespace of a live folder to sync now; omit it to sync every enabled folder")]
     pub namespace: Option<String>,
-}
-
-#[derive(Debug, Args)]
-pub struct NetworkListArgs {
-    #[arg(value_name = "NAME", help = "Limit to a single network by name or ID")]
-    pub name: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -747,12 +753,6 @@ pub enum ScheduleCommand {
     },
 }
 
-#[derive(Debug, Subcommand)]
-pub enum PublishCommand {
-    #[command(about = "Publish folder metadata to a catalog")]
-    Catalog(PublishCatalogArgs),
-}
-
 #[derive(Debug, Args)]
 pub struct PublishCatalogArgs {
     pub folder: PathBuf,
@@ -777,25 +777,8 @@ pub struct ShareArgs {
     pub no_pin: bool,
     #[arg(long, help = "Skip persisting the share record")]
     pub no_persist: bool,
-    #[arg(
-        long = "list",
-        help = "List persisted shares, optionally filtered by the positional path"
-    )]
-    pub list: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct UnshareArgs {
-    #[arg(default_value = ".", help = "Folder path or namespace")]
-    pub path: PathBuf,
-    #[arg(long, help = "Stop sharing a single content hash (unpins and unannounces the blob)")]
-    pub blob: Option<String>,
-    #[arg(
-        long = "write",
-        alias = "writable",
-        help = "Remove the write share (default: read-only)"
-    )]
-    pub write: bool,
+    #[command(subcommand)]
+    pub command: Option<ShareCommand>,
 }
 
 #[derive(Debug, Args)]
@@ -804,7 +787,7 @@ pub struct AccessArgs {
     pub path: Option<PathBuf>,
     #[arg(
         long,
-        help = "Revoke a share instead of listing access (requires the positional path)"
+        help = "Revoke a share instead of listing access (requires the positional path or --blob)"
     )]
     pub revoke: bool,
     #[arg(
@@ -819,6 +802,12 @@ pub struct AccessArgs {
         help = "Revoke the read share (the default, prompt-free path)"
     )]
     pub read: bool,
+    #[arg(
+        long,
+        requires = "revoke",
+        help = "Revoke a blob share by content hash (unpins and unannounces the blob) instead of a folder share; requires --revoke"
+    )]
+    pub blob: Option<String>,
     #[arg(long, help = "Show every shared-with row instead of capping the list")]
     pub full: bool,
 }
@@ -962,6 +951,11 @@ pub enum NetworkCommand {
         #[arg(long = "relay-url")]
         relay_url: String,
     },
+    #[command(about = "Show network membership and health, optionally limited to a single network by name")]
+    Status {
+        #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
+        name: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -975,6 +969,8 @@ pub enum IndexingCommand {
         #[command(subcommand)]
         command: FilterCommand,
     },
+    #[command(about = "Publish folder metadata to a catalog")]
+    Publish(PublishCatalogArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -1033,13 +1029,16 @@ mod tests {
     use crate::cli::args::Cli;
 
     fn parse_join(args: &[&str]) -> FolderJoin {
-        let mut clap_args = vec!["syncweb", "join", "ticket"];
+        let mut clap_args = vec!["syncweb", "folders", "join", "ticket"];
         clap_args.extend_from_slice(args);
         let cli = Cli::try_parse_from(clap_args).expect("join args should parse");
-        if let Command::Join(join) = cli.command {
+        if let Command::Folders {
+            command: Some(FoldersCommand::Join(join)),
+        } = cli.command
+        {
             return join;
         }
-        panic!("expected join command");
+        panic!("expected folders join command");
     }
 
     #[test]

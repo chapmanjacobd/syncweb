@@ -58,6 +58,7 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
         IndexingCommand::Filter {
             command: filter_command,
         } => handle_filter(ctx, filter_command)?,
+        IndexingCommand::Publish(args) => handle_catalog_publish(ctx, args).await?,
     }
     Ok(())
 }

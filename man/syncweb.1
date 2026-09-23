@@ -31,47 +31,32 @@ Network name for scoped operations (uses data_dir/<network>/). Defaults to \*(Aq
 Print help
 .SH SUBCOMMANDS
 .TP
-syncweb\-version(1)
-Show syncweb version information
-.TP
 syncweb\-start(1)
 Start the local syncweb daemon
 .TP
-syncweb\-shutdown(1)
-Stop the local syncweb node
+syncweb\-stop(1)
+Stop the local syncweb daemon
 .TP
 syncweb\-status(1)
 Show local daemon status
 .TP
-syncweb\-devices(1)
-Show this device\*(Aqs Iroh and Syncthing identities
-.TP
-syncweb\-networks(1)
-Show networks and their health
-.TP
 syncweb\-reload(1)
 Ask the local daemon to reload configuration
 .TP
-syncweb\-daemon\-sync(1)
+syncweb\-sync(1)
 Ask the local daemon to trigger synchronization
 .TP
-syncweb\-create(1)
-Create a synchronized folder and print a read\-only join ticket/URL (\-\-write for write access, \-\-no\-share to skip)
-.TP
-syncweb\-join(1)
-Join a folder from an Iroh document ticket
-.TP
-syncweb\-leave(1)
-Leave a synchronized folder, optionally deleting its local files
+syncweb\-devices(1)
+Show this device\*(Aqs Iroh and Syncthing identities
 .TP
 syncweb\-folders(1)
-List managed folders
-.TP
-syncweb\-config(1)
-Show or update local configuration
+Manage synchronized folders (bare: list managed folders)
 .TP
 syncweb\-ls(1)
 List files in a local folder
+.TP
+syncweb\-stat(1)
+Show detailed metadata for a local file
 .TP
 syncweb\-find(1)
 Search local files
@@ -82,59 +67,50 @@ Search catalog content, packages, and editorial channels
 syncweb\-sort(1)
 Sort local files by discovery criteria
 .TP
-syncweb\-stat(1)
-Show detailed metadata for a local file
-.TP
 syncweb\-download(1)
 Download folder content or copy a local file
-.TP
-syncweb\-import(1)
-Import local files into a synchronized folder
-.TP
-syncweb\-snapshot(1)
-Manage content\-addressed snapshots
-.TP
-syncweb\-transfer(1)
-Inspect and control durable transfer jobs
-.TP
-syncweb\-watch(1)
-Watch a folder and import filesystem changes
-.TP
-syncweb\-stats(1)
-Show statistics for folders and files
 .TP
 syncweb\-verify(1)
 Re\-check local folder blob integrity
 .TP
-syncweb\-publish(1)
-Publish folder metadata to a catalog
+syncweb\-transfer(1)
+Inspect and control durable transfer jobs
 .TP
 syncweb\-share(1)
 Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .TP
-syncweb\-unshare(1)
-Stop sharing a folder or blob (removes pins and announcements)
-.TP
 syncweb\-access(1)
 Show who can read/write each folder in one table, and revoke access in place (\-\-revoke)
+.TP
+syncweb\-link(1)
+Create and resolve stable syncweb links
 .TP
 syncweb\-package(1)
 Create, version, publish, and manage collection packages
 .TP
 syncweb\-network(1)
-Network connectivity utilities
+Manage networks and membership
 .TP
-syncweb\-db(1)
-Database maintenance: check, vacuum, stats, backup
+syncweb\-watch(1)
+Watch a folder and import filesystem changes
+.TP
+syncweb\-snapshot(1)
+Manage content\-addressed snapshots
 .TP
 syncweb\-indexing(1)
 Manage opt\-in indexing, catalogs, and metadata
 .TP
-syncweb\-link(1)
-Create and resolve stable syncweb links
+syncweb\-stats(1)
+Show statistics for folders and files
 .TP
-syncweb\-provider(1)
-Manage blob provider registrations
+syncweb\-db(1)
+Database maintenance: check, vacuum, stats, backup
+.TP
+syncweb\-config(1)
+Show or update local configuration
+.TP
+syncweb\-version(1)
+Show syncweb version information
 .TP
 syncweb\-completions(1)
 Generate shell completions

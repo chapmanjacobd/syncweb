@@ -197,7 +197,7 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | 1 | `syncweb download ./shared-docs/test.txt` | Downloads single file | Check file exists: `cat ./shared-docs/test.txt` |
 | 2 | `syncweb download ./shared-docs/` | Downloads entire folder | `ls -la ./shared-docs/` shows all files |
 | 3 | `syncweb download --max-count 10 ./shared-docs/` | Downloads at most 10 entries | |
-| 4 | `syncweb download --size 1GB ./shared-docs/` | Skips blobs >1GB | |
+| 4 | `syncweb download --size -1GB ./shared-docs/` | Only entries ≤ 1GB; blobs over 1GB are excluded | |
 | 5 | `syncweb download --threads 1 ./shared-docs/` | Sequential download (no parallelism) | Compare speed with default |
 | 6 | Piped: `syncweb find '*.iso' ./shared-docs \| syncweb download -` | Pipe from stdin | |
 

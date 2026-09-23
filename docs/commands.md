@@ -556,8 +556,8 @@ syncweb config schedule folder --active "01:00-05:00" media
 # Download with limits (max entries)
 syncweb download --max-count 10 /path/to/files
 
-# Download with size limit
-syncweb download --size 1GB /path/to/files
+# Download with size limit (only entries up to 1GB)
+syncweb download --size -1GB /path/to/files
 
 # Join a folder: track metadata only by default. No live sync and no bulk
 # download, so a big folder can't fill your disk by accident — new files and

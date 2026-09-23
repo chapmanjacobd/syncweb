@@ -19,14 +19,21 @@ Plan 02 (eager `join`) is done — bare `join` is metadata-only: it tracks the
 folder but live sync is opt-in via `join --subscribe` (one-line summary with
 count + size, `size` in `--json`), and bulk download is opt-in via
 `join --download-existing` (alias `--download`) so a big folder can't fill
-your disk by accident. Start with `03-unified-filters.md`. Safety and
+your disk by accident.
+
+Plan 03 (one content-filter vocabulary) is done — `ls`/`find`/`sort`/`download`/
+`verify` share a flattened `ContentFilterArgs` group (`--ext`, `--size`,
+`--depth`, `--type`, `--modified-*`, `--remote-only`) in
+`syncweb-cli/src/cli/filter.rs`, with hidden aliases (`--extension`, `--levels`,
+`--sizes`, `-S`, `--changed-*`) for old spellings, `--path-glob` replacing the
+`--glob` spelling on the content surface, and client-side selection on
+`download`/`verify` (find/sort parity is pinned by a workflow test). Safety and
 command-collapse follow; docs drift last.
 
 ## Plans
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 03 | [03-unified-filters.md](03-unified-filters.md) | HIGH | One filter vocabulary (`--ext`, `--size`, `--depth`, `--type`…) shared by `find`/`sort`/`download`/`verify`/`ls` | — |
 | 04 | [04-safety-confirmations.md](04-safety-confirmations.md) | HIGH | Real (safe-by-default) prompts before `leave --delete-files`, `unshare --write`, `unshare --blob`; add `--yes` | — |
 | 05 | [05-access-dashboard.md](05-access-dashboard.md) | HIGH | One view of who can read/write each folder + revoke (tickets, `share --list`, `networks`) | 04 |
 | 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
@@ -41,10 +48,9 @@ Notes on dependencies:
 - Plan 08's dependency on plan 02 (eager `join`) is satisfied.
 - Plan 05 introduces a new top-level verb `access`; plan 06 must account for
   it when collapsing the surface (either as a canonical verb or an alias).
-- Plan 03's shared `ContentFilterArgs` builds on plan 01's `ListEntries` IPC
-  (the listing the filters run over) and its `--path-prefix`/`--path-glob`
-  spellings. Plans 03 and 08 both mention a universal `--json` contract; the
-  work should land once, in the order 03 → 08.
+- Plan 08's universal `--json` contract builds on plan 01's `ListEntries` IPC
+  (the listing the filters run over) and plan 03's shared
+  `ContentFilterArgs`; the work should land once, in the order 03 → 08.
 - Plan 01's `ListEntries` IPC is now additive and stable (daemon-computed
   `local`/enriched size/mtime); plan 03 filters in the daemon before shipping
   rows.

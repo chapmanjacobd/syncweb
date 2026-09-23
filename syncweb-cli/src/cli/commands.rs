@@ -365,17 +365,17 @@ pub struct LocalPathArgs {
     pub threads: usize,
     #[command(flatten)]
     pub listing: ListingFlags,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilterArgs,
 }
 
-/// Shared metadata-vs-disk listing switches for `ls`, `find`, and `sort`.
+// Shared metadata-vs-disk listing switches for `ls`, `find`, and `sort`.
+//
+// Content predicates (`--ext`, `--size`, `--depth`, `--type`, `--modified-*`,
+// `--remote-only`) live in [`super::filter::ContentFilterArgs`], flattened
+// alongside this group so every folder command shares one vocabulary.
 #[derive(Debug, Args, Clone, Default)]
 pub struct ListingFlags {
-    #[arg(
-        long,
-        conflicts_with = "local_only",
-        help = "Show only entries not yet downloaded (State == remote)"
-    )]
-    pub remote_only: bool,
     #[arg(
         long,
         conflicts_with = "remote_only",
@@ -455,68 +455,14 @@ pub struct FindArgs {
     pub downloadable: bool,
     #[arg(
         long,
-        alias = "depth",
-        alias = "levels",
-        action = clap::ArgAction::Append,
-        help = "Depth constraints: N, +N (min), -N (max)"
-    )]
-    pub depth: Vec<String>,
-    #[arg(long, help = "Alternative min depth notation")]
-    pub min_depth: Option<usize>,
-    #[arg(long, help = "Alternative max depth notation")]
-    pub max_depth: Option<usize>,
-    #[arg(
-        long,
-        alias = "size",
-        alias = "S",
-        action = clap::ArgAction::Append,
-        help = "Size constraints: N, -N, +N, N%10, +5GB, etc."
-    )]
-    pub sizes: Vec<String>,
-    #[arg(
-        long,
-        alias = "changed-within",
-        action = clap::ArgAction::Append,
-        help = "Newer than: '3 days', '2 weeks'"
-    )]
-    pub modified_within: Vec<String>,
-    #[arg(
-        long,
-        alias = "changed-before",
-        action = clap::ArgAction::Append,
-        help = "Older than: '3 years', '1 month'"
-    )]
-    pub modified_before: Vec<String>,
-    #[arg(
-        long,
-        action = clap::ArgAction::Append,
-        help = "Time modified: '-3 days' (newer), '+3 days' (older)"
-    )]
-    pub time_modified: Vec<String>,
-    #[arg(
-        short = 'e',
-        long,
-        alias = "ext",
-        alias = "exts",
-        alias = "extensions",
-        action = clap::ArgAction::Append,
-        help = "File extensions to include"
-    )]
-    pub extension: Vec<String>,
-    #[arg(
-        long = "type",
-        value_parser = ["f", "d", "l"],
-        help = "Filter by type: f=file, d=dir, l=symlink"
-    )]
-    pub file_type: Option<String>,
-    #[arg(
-        long,
         default_value_t = 0,
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
     pub threads: usize,
     #[command(flatten)]
     pub listing: ListingFlags,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilterArgs,
 }
 
 #[derive(Debug, Args)]
@@ -547,18 +493,6 @@ pub struct SortArgs {
     pub limit_size: Option<String>,
     #[arg(
         long,
-        alias = "d",
-        alias = "levels",
-        action = clap::ArgAction::Append,
-        help = "Constrain folder aggregates by depth: N, +N (min), -N (max)"
-    )]
-    pub depth: Vec<String>,
-    #[arg(long, help = "Alternative min depth notation")]
-    pub min_depth: Option<usize>,
-    #[arg(long, help = "Alternative max depth notation")]
-    pub max_depth: Option<usize>,
-    #[arg(
-        long,
         default_value_t = 0,
         help = "Scanner threads (1 disables parallelism, 0 uses all available CPUs)"
     )]
@@ -570,6 +504,8 @@ pub struct SortArgs {
     pub enrich: bool,
     #[command(flatten)]
     pub listing: ListingFlags,
+    #[command(flatten)]
+    pub filter: super::filter::ContentFilterArgs,
 }
 
 #[derive(Debug, Args)]

@@ -4,7 +4,7 @@
 .SH NAME
 ls \- List files in a local folder
 .SH SYNOPSIS
-\fBls\fR [\fB\-\-sort\fR] [\fB\-\-threads\fR] [\fB\-\-remote\-only\fR] [\fB\-\-local\-only\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-no\-enrich\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+\fBls\fR [\fB\-\-sort\fR] [\fB\-\-threads\fR] [\fB\-\-local\-only\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-no\-enrich\fR] [\fB\-\-remote\-only\fR] [\fB\-e\fR|\fB\-\-ext\fR] [\fB\-\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-type\fR] [\fB\-\-modified\-within\fR] [\fB\-\-modified\-before\fR] [\fB\-\-time\-modified\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
 .SH DESCRIPTION
 List files in a local folder
 .SH OPTIONS
@@ -14,9 +14,6 @@ Collect and sort output instead of streaming it
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Scanner threads (1 disables parallelism, 0 uses all available CPUs)
-.TP
-\fB\-\-remote\-only\fR
-Show only entries not yet downloaded (State == remote)
 .TP
 \fB\-\-local\-only\fR
 Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)
@@ -29,6 +26,48 @@ Only entries whose path matches this glob pattern
 .TP
 \fB\-\-no\-enrich\fR
 Skip per\-file disk metadata lookup (pure metadata listing)
+.TP
+\fB\-\-remote\-only\fR
+Show only entries not yet downloaded (State == remote)
+.TP
+\fB\-e\fR, \fB\-\-ext\fR \fI<EXT>\fR
+File extensions to include (can repeat)
+.TP
+\fB\-\-size\fR \fI<SIZE>\fR
+Size constraints: N, \-N, +N, N%10, +5GB, etc. (can repeat)
+.TP
+\fB\-\-depth\fR \fI<DEPTH>\fR
+Depth constraints: N, +N (min), \-N (max) (can repeat)
+.TP
+\fB\-\-min\-depth\fR \fI<MIN_DEPTH>\fR
+Alternative min depth notation
+.TP
+\fB\-\-max\-depth\fR \fI<MAX_DEPTH>\fR
+Alternative max depth notation
+.TP
+\fB\-\-type\fR \fI<FILE_TYPE>\fR
+Filter by type: f=file, d=dir, l=symlink
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+f
+.IP \(bu 2
+d
+.IP \(bu 2
+l
+.RE
+.TP
+\fB\-\-modified\-within\fR \fI<MODIFIED_WITHIN>\fR
+Newer than: \*(Aq3 days\*(Aq, \*(Aq2 weeks\*(Aq (can repeat)
+.TP
+\fB\-\-modified\-before\fR \fI<MODIFIED_BEFORE>\fR
+Older than: \*(Aq3 years\*(Aq, \*(Aq1 month\*(Aq (can repeat)
+.TP
+\fB\-\-time\-modified\fR \fI<TIME_MODIFIED>\fR
+Time modified: \*(Aq\-3 days\*(Aq (newer), \*(Aq+3 days\*(Aq (older) (can repeat)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

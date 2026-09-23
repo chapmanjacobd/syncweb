@@ -32,7 +32,7 @@ grouped help + man pages + completions regenerate from one source.
   regenerates all four surfaces.
 - Overlapping verbs (verified dispatch):
   - `ls`(LocalPathArgs) / `find`(FindArgs) / `search`(SearchArgs) / `sort`(SortArgs):
-    different arg structs, different filter dialects → plan 03 merges the
+    different arg structs, different filter dialects → plan 03 merged the
     vocabulary, this plan merges the surface.
   - `share`/`publish`/`package`/`link`/`provider` + plan 05's `access`: distinct
     capabilities that all mean "get content to someone else" or "control access".

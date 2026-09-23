@@ -21,6 +21,7 @@ use cli::{
         TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
         TransferMaterializeArgs, TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
     },
+    filter::{ContentFilter, ContentFilterArgs},
     output::{confirm_destructive, init_tracing, print_version},
 };
 use indicatif::{ProgressBar, ProgressStyle};
@@ -196,7 +197,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Search(args) => handle_search(&ctx, args).await?,
         Command::Sort(command) => handle_sort(&ctx, &command).await?,
         Command::Stat(command) => handle_stat(&ctx, command)?,
-        Command::Download(command) => handle_download(&ctx, command).await?,
+        Command::Download(command) => Box::pin(handle_download(&ctx, command)).await?,
         Command::Import(command) => handle_import(&ctx, command).await?,
         Command::Snapshot { command } => {
             handle_snapshot(&ctx, command).await?;
@@ -799,8 +800,36 @@ async fn download_via_daemon_or_node(
     no_daemon: bool,
     network: Option<&str>,
     command: &crate::cli::commands::DownloadArgs,
+    matched: Option<&[LocalEntry]>,
 ) -> Result<()> {
+    if let Some(paths) = matched
+        && paths.is_empty()
+    {
+        if output_json {
+            println!("{}", serde_json::json!({"matched": 0, "downloaded": 0}));
+        } else {
+            println!("no entries match the download filters");
+        }
+        return Ok(());
+    }
+    let file_paths: Option<Vec<std::path::PathBuf>> =
+        matched.map(|paths| paths.iter().map(|row| std::path::PathBuf::from(&row.path)).collect());
+    let (restricted_min, restricted_max) = if matched.is_some() && !command.filter.content.size.is_empty() {
+        FindQuery::parse_size_constraints(&command.filter.content.size)?
+    } else {
+        (None, None)
+    };
+    let restricted = matched.is_some();
     let mut filter = FetchFilter::new();
+    if let Some(paths) = file_paths {
+        filter = filter.with_paths(paths);
+    }
+    if let Some(min_size) = restricted_min {
+        filter = filter.with_min_size(min_size);
+    }
+    if let Some(max_size) = restricted_max {
+        filter = filter.with_max_size(max_size);
+    }
     if let Some(peers) = command.min_peers {
         filter = filter.with_min_peers(peers);
     }
@@ -813,8 +842,9 @@ async fn download_via_daemon_or_node(
     if let Some(count) = command.max_count {
         filter = filter.with_max_count(count);
     }
-    let strategy = if command.max_peers.is_some()
+    let strategy = if restricted
         || command.min_peers.is_some()
+        || command.max_peers.is_some()
         || command.min_count.is_some()
         || command.max_count.is_some()
     {
@@ -915,9 +945,9 @@ async fn download_with_node(
 
 async fn handle_download(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
     if command.source.as_os_str() == "-" {
-        return download_from_stdin(ctx, command).await;
+        return Box::pin(download_from_stdin(ctx, command)).await;
     }
-    download_one(ctx, command).await
+    Box::pin(download_one(ctx, command)).await
 }
 
 async fn download_from_stdin(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
@@ -995,16 +1025,43 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
         {
             anyhow::bail!("fetch filters require a folder source without a destination");
         }
-        copy_path(&command.source, &destination, command.threads)?;
+        let copied = copy_path(&command.source, &destination, command.threads, Some(&command.filter))?;
         if ctx.output_json {
-            println!("{}", serde_json::json!({"destination": destination}));
+            println!("{}", serde_json::json!({"destination": destination, "copied": copied}));
+        } else if copied == 0 && !command.filter.is_empty() {
+            println!("no entries match the download filters");
         } else {
             println!("{}", destination.display());
         }
         return Ok(());
     }
 
-    download_via_daemon_or_node(ctx.data_dir, ctx.output_json, ctx.no_daemon, ctx.network, &command).await
+    // A folder fetch with content filters selected the entry set client-side
+    // (the daemon/core fetch filters cannot express the shared group).
+    let matched = if command.filter.is_empty() {
+        None
+    } else {
+        let matched = select_content_entries(ctx, &command.source, &command.filter).await?;
+        if matched.is_empty() {
+            if ctx.output_json {
+                println!("{}", serde_json::json!({"matched": 0, "downloaded": 0}));
+            } else {
+                println!("no entries match the download filters for {}", command.source.display());
+            }
+            return Ok(());
+        }
+        Some(matched)
+    };
+
+    download_via_daemon_or_node(
+        ctx.data_dir,
+        ctx.output_json,
+        ctx.no_daemon,
+        ctx.network,
+        &command,
+        matched.as_deref(),
+    )
+    .await
 }
 
 #[async_recursion]
@@ -1662,13 +1719,41 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+
+    // A content filter selects the exact entry set client-side. The daemon and
+    // core verify filters cannot express the shared group, so the surviving
+    // hashes are passed into the verify call instead (exact, by hashes).
+    let selected: Option<Vec<String>> = if command.filter.is_empty() {
+        None
+    } else {
+        let matched = select_content_entries(ctx, &command.path, &command.filter).await?;
+        let hashes: Vec<String> = matched.iter().map(|row| row.hash.to_string()).collect();
+        if hashes.is_empty() {
+            let empty = syncweb_core::verify::VerifyResult::default();
+            if output_json {
+                println!("{}", serde_json::to_string_pretty(&empty)?);
+            } else {
+                print_verify_result_text(&empty);
+            }
+            return Ok(());
+        }
+        Some(hashes)
+    };
+
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let filtered = selected.is_some();
+        let hash = selected.unwrap_or_else(|| command.filter.hash.clone());
+        let (path_filter, glob_filter) = if filtered {
+            (None, None)
+        } else {
+            (command.filter.path_prefix.clone(), command.filter.path_glob.clone())
+        };
         let response = client
             .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
                 path: command.path.clone(),
-                hash: command.filter.hash.clone(),
-                path_filter: command.filter.path_prefix.clone(),
-                glob_filter: command.filter.glob.clone(),
+                hash,
+                path_filter,
+                glob_filter,
                 fix: command.fix,
                 from: command.providers.from.clone(),
             }))
@@ -1680,16 +1765,26 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let folder = manager.resolve(&command.path).await?;
     let checker = IntegrityChecker::new(node.blob_store().clone(), node.docs_engine().clone());
 
-    let filter: Option<syncweb_core::verify::VerifyFilter> = if command.filter.is_empty() {
-        None
-    } else {
-        match syncweb_core::verify::VerifyFilter::try_from(&command.filter) {
+    let filter: Option<syncweb_core::verify::VerifyFilter> = match selected {
+        Some(hashes) => match hashes
+            .iter()
+            .map(|h| h.parse::<BlobHash>())
+            .collect::<std::result::Result<Vec<_>, _>>()
+        {
+            Ok(parsed) => Some(syncweb_core::verify::VerifyFilter::new().with_hashes(parsed)),
+            Err(e) => {
+                node.stop().await?;
+                anyhow::bail!("invalid content hash: {e}");
+            }
+        },
+        None if command.filter.is_empty() => None,
+        _ => match syncweb_core::verify::VerifyFilter::try_from(&command.filter) {
             Ok(f) => Some(f),
             Err(e) => {
                 node.stop().await?;
                 anyhow::bail!("{e}");
             }
-        }
+        },
     };
 
     if command.fix {
@@ -4659,18 +4754,35 @@ fn entry_matches_path_filters(entry_path: &str, remainder: &Path, prefix: Option
     true
 }
 
-fn apply_listing_filters(rows: Vec<LocalEntry>, remainder: &Path, flags: &ListingFlags) -> Vec<LocalEntry> {
-    rows.into_iter()
-        .filter(|row| {
-            entry_matches_path_filters(
-                &row.path,
-                remainder,
-                flags.path_prefix.as_deref(),
-                flags.path_glob.as_deref(),
-            )
-        })
-        .filter(|row| !flags.remote_only || !row.local)
-        .collect()
+fn apply_listing_filters(
+    rows: Vec<LocalEntry>,
+    remainder: &Path,
+    listing: &ListingFlags,
+    content: &ContentFilterArgs,
+) -> Result<Vec<LocalEntry>> {
+    let query = content.to_find_query()?;
+    let mut filtered = Vec::with_capacity(rows.len());
+    for row in rows {
+        if !entry_matches_path_filters(
+            &row.path,
+            remainder,
+            listing.path_prefix.as_deref(),
+            listing.path_glob.as_deref(),
+        ) {
+            continue;
+        }
+        if content.remote_only && row.local {
+            continue;
+        }
+        let Ok(entry) = local_entry_to_file_entry(&row, None) else {
+            filtered.push(row);
+            continue;
+        };
+        if !filter_entries(std::slice::from_ref(&entry), &query).is_empty() {
+            filtered.push(row);
+        }
+    }
+    Ok(filtered)
 }
 
 fn sort_local_entries(rows: &mut [LocalEntry], by: MetaSort) {
@@ -4775,12 +4887,10 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
                 niche: None,
                 frecency_weight: None,
                 limit_size: None,
-                depth: Vec::new(),
-                min_depth: None,
-                max_depth: None,
                 threads: command.threads,
                 enrich: false,
                 listing: command.listing,
+                filter: command.filter,
             };
             return handle_sort(ctx, &sort_args).await;
         }
@@ -4796,7 +4906,7 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
         }
         return Ok(());
     }
-    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
     if let Some(criteria) = command.sort {
         let by = parse_meta_sort(&criteria)?;
         sort_local_entries(&mut rows, by);
@@ -4826,40 +4936,7 @@ fn build_find_query(command: &crate::cli::commands::FindArgs) -> Result<FindQuer
     query.absolute_path = command.absolute_path;
     query.downloadable = command.downloadable;
 
-    let (min_depth, max_depth) = syncweb_core::parsing::parse_depth_constraints(
-        &command.depth,
-        command.min_depth.unwrap_or(0),
-        command.max_depth,
-    );
-    query.min_depth = Some(min_depth);
-    query.max_depth = max_depth;
-
-    let (min_size, max_size) = FindQuery::parse_size_constraints(&command.sizes)?;
-    query.min_size = min_size;
-    query.max_size = max_size;
-
-    let (after, before) = FindQuery::parse_time_constraints(
-        &command.modified_within,
-        &command.modified_before,
-        &command.time_modified,
-    )?;
-    query.modified_after = after;
-    query.modified_before = before;
-
-    if !command.extension.is_empty() {
-        query.extensions.clone_from(&command.extension);
-    }
-    if let Some(ref ext) = query.extension
-        && !ext.is_empty()
-    {
-        query.extensions.push(ext.trim_start_matches('.').to_lowercase());
-    }
-
-    query.file_type = command.file_type.clone().map(|kind| match kind.as_str() {
-        "d" => FileType::Directory,
-        "l" => FileType::Symlink,
-        _ => FileType::File,
-    });
+    command.filter.apply_to(&mut query)?;
     Ok(query)
 }
 
@@ -4877,6 +4954,65 @@ fn local_entry_to_file_entry(
         .hash(blake3::Hash::from_bytes(*entry.hash.as_bytes()))
         .file_type(FileType::File)
         .build()
+}
+
+/// Whether a listing row satisfies the content filter: hash, path
+/// prefix/glob, `--remote-only`, and the shared `--ext`/`--size`/`--depth`/
+/// `--type`/`--modified-*` group.
+fn local_entry_matches_content(row: &LocalEntry, content: &ContentFilter, include_remote_only: bool) -> Result<bool> {
+    if !content.hash.is_empty() {
+        let mut hashes = std::collections::HashSet::new();
+        for hash in &content.hash {
+            let parsed = hash
+                .parse::<BlobHash>()
+                .map_err(|e| anyhow::anyhow!("invalid content hash {hash}: {e}"))?;
+            hashes.insert(parsed);
+        }
+        if !hashes.contains(&row.hash) {
+            return Ok(false);
+        }
+    }
+    if !entry_matches_path_filters(
+        &row.path,
+        Path::new(""),
+        content.path_prefix.as_deref(),
+        content.path_glob.as_deref(),
+    ) {
+        return Ok(false);
+    }
+    if include_remote_only && content.content.remote_only && row.local {
+        return Ok(false);
+    }
+    if !content.content.is_empty() {
+        let query = content.content.to_find_query()?;
+        let Ok(entry) = local_entry_to_file_entry(row, None) else {
+            return Ok(true);
+        };
+        if filter_entries(std::slice::from_ref(&entry), &query).is_empty() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// List the source's entries client-side and keep the rows that satisfy the
+/// content filter. Used by `download`/`verify` to select exact match sets that
+/// the daemon/core fetch and verify filters cannot express (`--ext`,
+/// `--size`, `--depth`, `--type`, `--modified-*`, `--remote-only`).
+async fn select_content_entries(
+    ctx: &CliContext<'_>,
+    source: &Path,
+    content: &ContentFilter,
+) -> Result<Vec<LocalEntry>> {
+    let (mode, resolved) = resolve_entry_source(ctx, source).await?;
+    let rows = fetch_listing_rows(mode, &resolved, true).await?;
+    let mut matched = Vec::new();
+    for row in rows {
+        if local_entry_matches_content(&row, content, true)? {
+            matched.push(row);
+        }
+    }
+    Ok(matched)
 }
 
 fn handle_find_disk(command: &crate::cli::commands::FindArgs, output_json: bool) -> Result<()> {
@@ -4934,7 +5070,7 @@ async fn handle_find(ctx: &CliContext<'_>, command: crate::cli::commands::FindAr
         }
         return Ok(());
     }
-    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
 
     let file_entries: Vec<FileEntry> = rows
         .iter()
@@ -5009,19 +5145,34 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
         .as_deref()
         .map(SortConfig::parse_limit_size)
         .transpose()?;
-    config.min_depth = command.min_depth;
-    config.max_depth = command.max_depth;
+    config.min_depth = command.filter.min_depth;
+    config.max_depth = command.filter.max_depth;
     config.enrich = command.enrich;
 
-    // Parse depth constraints
-    if !command.depth.is_empty() {
+    // Parse depth constraints (--depth drives folder aggregation on the disk path)
+    if !command.filter.depth.is_empty() {
         let (min_depth, max_depth) = syncweb_core::parsing::parse_depth_constraints(
-            &command.depth,
+            &command.filter.depth,
             config.min_depth.unwrap_or(0),
             config.max_depth,
         );
         config.min_depth = Some(min_depth);
         config.max_depth = max_depth;
+    }
+
+    // Apply the shared content predicates (--ext/--size/--type/--modified-*) to
+    // the walked entries. --depth is intentionally excluded: on the disk path it
+    // still drives folder aggregation through the sort config above.
+    if !command.filter.is_empty() {
+        let mut content_query = command.filter.to_find_query()?;
+        content_query.min_depth = None;
+        content_query.max_depth = None;
+        let file_entries: Vec<FileEntry> = sortable.iter().map(sort_entry_to_file_entry).collect::<Result<_>>()?;
+        let kept: std::collections::HashSet<String> = filter_entries(&file_entries, &content_query)
+            .into_iter()
+            .map(|entry| entry.relative_path.to_string_lossy().into_owned())
+            .collect();
+        sortable.retain(|entry| kept.contains(&entry.path.to_string_lossy().into_owned()));
     }
 
     let sorter = Sorter::new(config);
@@ -5106,7 +5257,7 @@ async fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortA
         }
         return Ok(());
     }
-    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing);
+    rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
     let by = parse_meta_sort(&command.by)?;
     sort_local_entries(&mut rows, by);
     render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
@@ -5124,63 +5275,169 @@ fn sort_entry(entry: FileEntry) -> SortEntry {
         .with_size(entry.size)
 }
 
-fn copy_path(source: &std::path::Path, destination: &std::path::Path, threads: usize) -> Result<()> {
-    if source.is_dir() {
-        let source_root = std::fs::canonicalize(source)?;
-        if let Some(parent) = destination.parent() {
-            std::fs::create_dir_all(parent)?;
+fn sort_entry_to_file_entry(entry: &SortEntry) -> anyhow::Result<FileEntry> {
+    FileEntry::builder()
+        .path(entry.path.clone())
+        .relative_path(entry.path.clone())
+        .size(entry.size)
+        .modified(entry.modified)
+        .hash(blake3::Hash::from([0_u8; 32]))
+        .file_type(FileType::File)
+        .build()
+        .map_err(|message| anyhow::anyhow!("{message}"))
+}
+
+fn copy_path(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+    threads: usize,
+    content: Option<&ContentFilter>,
+) -> Result<usize> {
+    if !source.is_dir() {
+        return copy_single_path(source, destination, content);
+    }
+    let source_root = std::fs::canonicalize(source)?;
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let destination_root = if destination.exists() {
+        std::fs::canonicalize(destination)?
+    } else {
+        let parent = destination.parent().unwrap_or_else(|| std::path::Path::new("."));
+        std::fs::canonicalize(parent)?.join(
+            destination
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("destination has no final path component: {}", destination.display()))?,
+        )
+    };
+    if destination_root.starts_with(&source_root) {
+        anyhow::bail!("cannot download a directory into itself: {}", destination.display());
+    }
+    let mut walked = Vec::new();
+    collect_copy_files(source, destination, &mut walked)?;
+    // When content filters are set, keep only the walked entries that satisfy
+    // the path prefix/glob and the shared group predicates. --remote-only is
+    // intentionally not applied here: a local copy is not a sync fetch, so
+    // every scanned entry counts as already-local.
+    let files = match content {
+        Some(content_filter) => {
+            let query = content_filter.content.to_find_query()?;
+            let mut kept = Vec::new();
+            for (src, dest) in walked {
+                let Some(rel) = src.strip_prefix(&source_root).ok() else {
+                    continue;
+                };
+                if !entry_matches_path_filters(
+                    &rel.to_string_lossy(),
+                    Path::new(""),
+                    content_filter.path_prefix.as_deref(),
+                    content_filter.path_glob.as_deref(),
+                ) {
+                    continue;
+                }
+                let Ok(meta) = std::fs::metadata(&src) else {
+                    continue;
+                };
+                let Ok(entry) = FileEntry::builder()
+                    .path(rel.to_path_buf())
+                    .relative_path(rel.to_path_buf())
+                    .size(meta.len())
+                    .modified(meta.modified().unwrap_or(UNIX_EPOCH))
+                    .hash(blake3::Hash::from([0_u8; 32]))
+                    .file_type(FileType::File)
+                    .build()
+                else {
+                    continue;
+                };
+                if !filter_entries(std::slice::from_ref(&entry), &query).is_empty() {
+                    kept.push((src, dest));
+                }
+            }
+            kept
         }
-        let destination_root =
-            if destination.exists() {
-                std::fs::canonicalize(destination)?
-            } else {
-                let parent = destination.parent().unwrap_or_else(|| std::path::Path::new("."));
-                std::fs::canonicalize(parent)?.join(destination.file_name().ok_or_else(|| {
-                    anyhow::anyhow!("destination has no final path component: {}", destination.display())
-                })?)
-            };
-        if destination_root.starts_with(&source_root) {
-            anyhow::bail!("cannot download a directory into itself: {}", destination.display());
-        }
-        let mut files = Vec::new();
-        collect_copy_files(source, destination, &mut files)?;
-        let copy_files = || {
-            files.par_iter().try_for_each(|(src, dest)| {
+        None => walked,
+    };
+    let copied = files.len();
+    let copy_files = || {
+        files.par_iter().try_for_each(|(src, dest)| {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(src, dest)?;
+            Ok::<_, anyhow::Error>(())
+        })
+    };
+    match threads.cmp(&1) {
+        std::cmp::Ordering::Equal => {
+            files.iter().try_for_each(|(src, dest)| {
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
                 std::fs::copy(src, dest)?;
                 Ok::<_, anyhow::Error>(())
-            })
-        };
-        match threads.cmp(&1) {
-            std::cmp::Ordering::Equal => {
-                files.iter().try_for_each(|(src, dest)| {
-                    if let Some(parent) = dest.parent() {
-                        std::fs::create_dir_all(parent)?;
-                    }
-                    std::fs::copy(src, dest)?;
-                    Ok::<_, anyhow::Error>(())
-                })?;
-            }
-            std::cmp::Ordering::Greater => {
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(threads)
-                    .build()
-                    .context("failed to create download thread pool")?
-                    .install(copy_files)?;
-            }
-            std::cmp::Ordering::Less => {
-                copy_files()?;
-            }
+            })?;
         }
-    } else {
-        if let Some(parent) = destination.parent() {
-            std::fs::create_dir_all(parent)?;
+        std::cmp::Ordering::Greater => {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .context("failed to create download thread pool")?
+                .install(copy_files)?;
         }
-        std::fs::copy(source, destination)?;
+        std::cmp::Ordering::Less => {
+            copy_files()?;
+        }
     }
-    Ok(())
+    Ok(copied)
+}
+
+/// Copy a single (non-directory) source, honoring the content filter against
+/// the file name/size when one is supplied.
+fn copy_single_path(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+    content: Option<&ContentFilter>,
+) -> Result<usize> {
+    let rel = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if let Some(content_filter) = content {
+        let rel_ok = entry_matches_path_filters(
+            &rel,
+            Path::new(""),
+            content_filter.path_prefix.as_deref(),
+            content_filter.path_glob.as_deref(),
+        );
+        let group_ok = if content_filter.content.is_empty() {
+            true
+        } else {
+            let query = content_filter.content.to_find_query()?;
+            let Ok(meta) = std::fs::metadata(source) else {
+                return Ok(0);
+            };
+            let Ok(entry) = FileEntry::builder()
+                .path(PathBuf::from(&rel))
+                .relative_path(PathBuf::from(&rel))
+                .size(meta.len())
+                .modified(meta.modified().unwrap_or(UNIX_EPOCH))
+                .hash(blake3::Hash::from([0_u8; 32]))
+                .file_type(FileType::File)
+                .build()
+            else {
+                return Ok(0);
+            };
+            !filter_entries(std::slice::from_ref(&entry), &query).is_empty()
+        };
+        if !rel_ok || !group_ok {
+            return Ok(0);
+        }
+    }
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(source, destination)?;
+    Ok(1)
 }
 
 fn collect_copy_files(
@@ -5326,13 +5583,31 @@ mod tests {
             entry("b.txt", 2, false, None),
             entry("c.txt", 3, true, None),
         ];
-        let flags = ListingFlags {
+        let flags = ListingFlags::default();
+        let content = ContentFilterArgs {
             remote_only: true,
-            ..ListingFlags::default()
+            ..ContentFilterArgs::default()
         };
-        let filtered = apply_listing_filters(rows, &PathBuf::new(), &flags);
+        let filtered = apply_listing_filters(rows, &PathBuf::new(), &flags, &content).unwrap();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered.first().unwrap().path, "b.txt");
+    }
+
+    #[test]
+    fn apply_listing_filters_honors_extension() {
+        let rows = vec![
+            entry("movie.mp4", 600_000_000, false, None),
+            entry("song.mp3", 10, false, None),
+        ];
+        let flags = ListingFlags::default();
+        let content = ContentFilterArgs {
+            ext: vec!["mp4".to_owned()],
+            size: vec!["+500MB".to_owned()],
+            ..ContentFilterArgs::default()
+        };
+        let filtered = apply_listing_filters(rows, &PathBuf::new(), &flags, &content).unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered.first().unwrap().path, "movie.mp4");
     }
 
     #[test]

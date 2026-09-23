@@ -4,7 +4,7 @@
 .SH NAME
 download \- Download folder content or copy a local file
 .SH SYNOPSIS
-\fBdownload\fR [\fB\-\-hash\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-glob\fR] [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
+\fBdownload\fR [\fB\-\-hash\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-remote\-only\fR] [\fB\-e\fR|\fB\-\-ext\fR] [\fB\-\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-type\fR] [\fB\-\-modified\-within\fR] [\fB\-\-modified\-before\fR] [\fB\-\-time\-modified\fR] [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
 .SH DESCRIPTION
 Download folder content or copy a local file
 .SH OPTIONS
@@ -15,8 +15,50 @@ Content hash(es) to select (can repeat)
 \fB\-\-path\-prefix\fR \fI<PATH_PREFIX>\fR
 Only entries whose path starts with this prefix
 .TP
-\fB\-\-glob\fR \fI<GLOB>\fR
+\fB\-\-path\-glob\fR \fI<PATH_GLOB>\fR
 Only entries whose path matches this glob pattern
+.TP
+\fB\-\-remote\-only\fR
+Show only entries not yet downloaded (State == remote)
+.TP
+\fB\-e\fR, \fB\-\-ext\fR \fI<EXT>\fR
+File extensions to include (can repeat)
+.TP
+\fB\-\-size\fR \fI<SIZE>\fR
+Size constraints: N, \-N, +N, N%10, +5GB, etc. (can repeat)
+.TP
+\fB\-\-depth\fR \fI<DEPTH>\fR
+Depth constraints: N, +N (min), \-N (max) (can repeat)
+.TP
+\fB\-\-min\-depth\fR \fI<MIN_DEPTH>\fR
+Alternative min depth notation
+.TP
+\fB\-\-max\-depth\fR \fI<MAX_DEPTH>\fR
+Alternative max depth notation
+.TP
+\fB\-\-type\fR \fI<FILE_TYPE>\fR
+Filter by type: f=file, d=dir, l=symlink
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+f
+.IP \(bu 2
+d
+.IP \(bu 2
+l
+.RE
+.TP
+\fB\-\-modified\-within\fR \fI<MODIFIED_WITHIN>\fR
+Newer than: \*(Aq3 days\*(Aq, \*(Aq2 weeks\*(Aq (can repeat)
+.TP
+\fB\-\-modified\-before\fR \fI<MODIFIED_BEFORE>\fR
+Older than: \*(Aq3 years\*(Aq, \*(Aq1 month\*(Aq (can repeat)
+.TP
+\fB\-\-time\-modified\fR \fI<TIME_MODIFIED>\fR
+Time modified: \*(Aq\-3 days\*(Aq (newer), \*(Aq+3 days\*(Aq (older) (can repeat)
 .TP
 \fB\-\-from\fR \fI<FROM>\fR
 Blob ticket(s) for providers (can repeat)

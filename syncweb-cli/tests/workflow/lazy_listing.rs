@@ -124,6 +124,68 @@ fn find_and_sort_over_metadata_table() -> anyhow::Result<()> {
 }
 
 #[test]
+fn find_and_sort_agree_on_shared_content_group() -> anyhow::Result<()> {
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let folder_dir = world.root().join("parity-folder");
+    alice.create(&folder_dir)?;
+    alice.write_file(&folder_dir.join("movie.mp4"), &vec![7_u8; 2_000_000])?;
+    alice.write_file(&folder_dir.join("clip.mp4"), &vec![7_u8; 500_000])?;
+    alice.write_file(&folder_dir.join("notes.txt"), &vec![7_u8; 2_000_000])?;
+    alice.write_file(&folder_dir.join("song.mp3"), &vec![7_u8; 3_000_000])?;
+    alice.import(&folder_dir)?;
+
+    let find = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "find",
+        "*",
+        "--ext",
+        "mp4",
+        "--size",
+        "+1MB",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
+    let sort = alice.run_ok(&[
+        "--json",
+        "--no-daemon",
+        "sort",
+        "--by",
+        "size",
+        "--ext",
+        "mp4",
+        "--size",
+        "+1MB",
+        folder_dir.to_str().context("UTF-8 path")?,
+    ])?;
+
+    let find_paths = paths_from_envelope(&find.stdout()).context("find --json envelope has entries")?;
+    let sort_paths = paths_from_envelope(&sort.stdout()).context("sort --json envelope has entries")?;
+    ensure!(
+        find_paths == sort_paths && find_paths == std::iter::once("movie.mp4".to_owned()).collect(),
+        "find and sort must select the same set with --ext mp4 --size +1MB: \
+         find={find_paths:?} sort={sort_paths:?}"
+    );
+    Ok(())
+}
+
+/// The metadata commands wrap `--json` listings in a `{folder, path, entries}`
+/// envelope; pull out the `entries[].path` values for comparison.
+fn paths_from_envelope(stdout: &str) -> anyhow::Result<std::collections::HashSet<String>> {
+    let value: serde_json::Value = serde_json::from_str(stdout).context("listing --json parses as JSON")?;
+    let entries = value
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .context("listing --json envelope has entries")?;
+    Ok(entries
+        .iter()
+        .filter_map(|entry| entry.get("path").and_then(serde_json::Value::as_str))
+        .map(String::from)
+        .collect())
+}
+
+#[test]
 fn ls_path_prefix_filters_entries() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;

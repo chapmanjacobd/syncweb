@@ -311,10 +311,20 @@ _arguments "${_arguments_options[@]}" : \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
+'*-e+[File extensions to include (can repeat)]:EXT:_default' \
+'*--ext=[File extensions to include (can repeat)]:EXT:_default' \
+'*--size=[Size constraints\: N, -N, +N, N%10, +5GB, etc. (can repeat)]:SIZE:_default' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max) (can repeat)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'' (can repeat)]:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'' (can repeat)]:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older) (can repeat)]:TIME_MODIFIED:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
 '--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
+'--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -327,19 +337,19 @@ _arguments "${_arguments_options[@]}" : \
 (find)
 _arguments "${_arguments_options[@]}" : \
 '--kind=[]:KIND:(exact glob regex)' \
-'*--depth=[Depth constraints\: N, +N (min), -N (max)]:DEPTH:_default' \
-'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
-'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
-'*--sizes=[Size constraints\: N, -N, +N, N%10, +5GB, etc.]:SIZES:_default' \
-'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'']:MODIFIED_WITHIN:_default' \
-'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'']:MODIFIED_BEFORE:_default' \
-'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older)]:TIME_MODIFIED:_default' \
-'*-e+[File extensions to include]:EXTENSION:_default' \
-'*--extension=[File extensions to include]:EXTENSION:_default' \
-'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
+'*-e+[File extensions to include (can repeat)]:EXT:_default' \
+'*--ext=[File extensions to include (can repeat)]:EXT:_default' \
+'*--size=[Size constraints\: N, -N, +N, N%10, +5GB, etc. (can repeat)]:SIZE:_default' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max) (can repeat)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'' (can repeat)]:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'' (can repeat)]:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older) (can repeat)]:TIME_MODIFIED:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '(-s --case-sensitive)-i[Case insensitive search]' \
 '(-s --case-sensitive)--ignore-case[Case insensitive search]' \
@@ -357,9 +367,9 @@ _arguments "${_arguments_options[@]}" : \
 '--absolute-path[Print absolute paths]' \
 '-d[Exclude sendonly folders from search]' \
 '--download[Exclude sendonly folders from search]' \
-'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
 '--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
+'--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -396,17 +406,24 @@ _arguments "${_arguments_options[@]}" : \
 '--niche=[Ideal popularity (peer count) for niche scoring]:NICHE:_default' \
 '--frecency-weight=[Divisor for recency weighting in frecency calculation]:FRECENCY_WEIGHT:_default' \
 '--limit-size=[Quit after printing N bytes of files]:LIMIT_SIZE:_default' \
-'*--depth=[Constrain folder aggregates by depth\: N, +N (min), -N (max)]:DEPTH:_default' \
-'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
-'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
 '--threads=[Scanner threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
 '--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
+'*-e+[File extensions to include (can repeat)]:EXT:_default' \
+'*--ext=[File extensions to include (can repeat)]:EXT:_default' \
+'*--size=[Size constraints\: N, -N, +N, N%10, +5GB, etc. (can repeat)]:SIZE:_default' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max) (can repeat)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'' (can repeat)]:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'' (can repeat)]:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older) (can repeat)]:TIME_MODIFIED:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--enrich[Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting]' \
-'(--local-only)--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '(--remote-only)--local-only[Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)]' \
 '--no-enrich[Skip per-file disk metadata lookup (pure metadata listing)]' \
+'--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON where supported]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
@@ -435,7 +452,17 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
-'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
+'--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
+'*-e+[File extensions to include (can repeat)]:EXT:_default' \
+'*--ext=[File extensions to include (can repeat)]:EXT:_default' \
+'*--size=[Size constraints\: N, -N, +N, N%10, +5GB, etc. (can repeat)]:SIZE:_default' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max) (can repeat)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'' (can repeat)]:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'' (can repeat)]:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older) (can repeat)]:TIME_MODIFIED:_default' \
 '*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
 '*--provider=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
 '--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
@@ -445,6 +472,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-count=[Maximum number of blobs to fetch]:MAX_COUNT:_default' \
 '--threads=[Copy threads (1 disables parallelism, 0 uses all available CPUs)]:THREADS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--no-sharing[Do not share or seed downloaded content]' \
 '--no-seeding[Do not share or seed downloaded content]' \
 '--verbose[Enable verbose structured logging]' \
@@ -795,11 +823,22 @@ esac
 _arguments "${_arguments_options[@]}" : \
 '*--hash=[Content hash(es) to select (can repeat)]:HASH:_default' \
 '--path-prefix=[Only entries whose path starts with this prefix]:PATH_PREFIX:_default' \
-'--glob=[Only entries whose path matches this glob pattern]:GLOB:_default' \
+'--path-glob=[Only entries whose path matches this glob pattern]:PATH_GLOB:_default' \
+'*-e+[File extensions to include (can repeat)]:EXT:_default' \
+'*--ext=[File extensions to include (can repeat)]:EXT:_default' \
+'*--size=[Size constraints\: N, -N, +N, N%10, +5GB, etc. (can repeat)]:SIZE:_default' \
+'*--depth=[Depth constraints\: N, +N (min), -N (max) (can repeat)]:DEPTH:_default' \
+'--min-depth=[Alternative min depth notation]:MIN_DEPTH:_default' \
+'--max-depth=[Alternative max depth notation]:MAX_DEPTH:_default' \
+'--type=[Filter by type\: f=file, d=dir, l=symlink]:FILE_TYPE:(f d l)' \
+'*--modified-within=[Newer than\: '\''3 days'\'', '\''2 weeks'\'' (can repeat)]:MODIFIED_WITHIN:_default' \
+'*--modified-before=[Older than\: '\''3 years'\'', '\''1 month'\'' (can repeat)]:MODIFIED_BEFORE:_default' \
+'*--time-modified=[Time modified\: '\''-3 days'\'' (newer), '\''+3 days'\'' (older) (can repeat)]:TIME_MODIFIED:_default' \
 '*--from=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
 '*--provider=[Blob ticket(s) for providers (can repeat)]:FROM:_default' \
 '--min-providers=[Minimum providers for healthy replication]:MIN_PROVIDERS:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--fix[Attempt to repair corrupted blobs by re-downloading from peers]' \
 '--no-sharing[Do not share or seed downloaded content]' \
 '--no-seeding[Do not share or seed downloaded content]' \

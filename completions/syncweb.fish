@@ -190,10 +190,21 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l sort -d 'Collect 
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -s e -l ext -d 'File extensions to include (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l size -d 'Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l depth -d 'Depth constraints: N, +N (min), -N (max) (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l min-depth -d 'Alternative min depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l max-depth -d 'Alternative max depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l modified-before -d 'Older than: \'3 years\', \'1 month\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older) (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -201,20 +212,20 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -s h -l help -d 'Pri
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l kind -r -f -a "exact\t''
 glob\t''
 regex\t''"
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l depth -d 'Depth constraints: N, +N (min), -N (max)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l min-depth -d 'Alternative min depth notation' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l max-depth -d 'Alternative max depth notation' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l sizes -d 'Size constraints: N, -N, +N, N%10, +5GB, etc.' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\'' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l modified-before -d 'Older than: \'3 years\', \'1 month\'' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s e -l extension -d 'File extensions to include' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
-d\t''
-l\t''"
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s e -l ext -d 'File extensions to include (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l size -d 'Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l depth -d 'Depth constraints: N, +N (min), -N (max) (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l min-depth -d 'Alternative min depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l max-depth -d 'Alternative max depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l modified-before -d 'Older than: \'3 years\', \'1 month\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older) (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s i -l ignore-case -d 'Case insensitive search'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s s -l case-sensitive -d 'Case sensitive search'
@@ -224,9 +235,9 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s H -l hidden -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s L -l follow-links -d 'Follow symbolic links'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s a -l absolute-path -d 'Print absolute paths'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -s d -l download -d 'Exclude sendonly folders from search'
-complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand find" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -263,17 +274,25 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-seeders -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l niche -d 'Ideal popularity (peer count) for niche scoring' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l frecency-weight -d 'Divisor for recency weighting in frecency calculation' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l limit-size -d 'Quit after printing N bytes of files' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l depth -d 'Constrain folder aggregates by depth: N, +N (min), -N (max)' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l min-depth -d 'Alternative min depth notation' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-depth -d 'Alternative max depth notation' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -s e -l ext -d 'File extensions to include (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l size -d 'Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l depth -d 'Depth constraints: N, +N (min), -N (max) (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l min-depth -d 'Alternative min depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-depth -d 'Alternative max depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l modified-before -d 'Older than: \'3 years\', \'1 month\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older) (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l enrich -d 'Query daemon for peer counts and frequency data to enrich niche/frecency/peers sorting'
-complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l local-only -d 'Scan the local disk instead of the metadata index (works on any path, even outside a Syncweb folder)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l no-enrich -d 'Skip per-file disk metadata lookup (pure metadata listing)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l json -d 'Emit machine-readable JSON where supported'
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
@@ -288,7 +307,18 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -l no-daemon -l em
 complete -c syncweb -n "__fish_syncweb_using_subcommand stat" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l hash -d 'Content hash(es) to select (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -s e -l ext -d 'File extensions to include (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l size -d 'Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l depth -d 'Depth constraints: N, +N (min), -N (max) (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-depth -d 'Alternative min depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l max-depth -d 'Alternative max depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l modified-before -d 'Older than: \'3 years\', \'1 month\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older) (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l from -l provider -d 'Blob ticket(s) for providers (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-providers -d 'Minimum providers for healthy replication' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l max-peers -d 'Fetch only blobs with at most N observed peers' -r
@@ -297,6 +327,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l min-count -
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l max-count -d 'Maximum number of blobs to fetch' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l threads -d 'Copy threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-sharing -l no-seeding -d 'Do not share or seed downloaded content'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l json -d 'Emit machine-readable JSON where supported'
@@ -477,10 +508,22 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from files" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l hash -d 'Content hash(es) to select (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l path-glob -d 'Only entries whose path matches this glob pattern' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -s e -l ext -d 'File extensions to include (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l size -d 'Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l depth -d 'Depth constraints: N, +N (min), -N (max) (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l min-depth -d 'Alternative min depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l max-depth -d 'Alternative max depth notation' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l type -d 'Filter by type: f=file, d=dir, l=symlink' -r -f -a "f\t''
+d\t''
+l\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l modified-within -d 'Newer than: \'3 days\', \'2 weeks\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l modified-before -d 'Older than: \'3 years\', \'1 month\' (can repeat)' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l time-modified -d 'Time modified: \'-3 days\' (newer), \'+3 days\' (older) (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l from -l provider -d 'Blob ticket(s) for providers (can repeat)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l min-providers -d 'Minimum providers for healthy replication' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l fix -d 'Attempt to repair corrupted blobs by re-downloading from peers'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l no-sharing -l no-seeding -d 'Do not share or seed downloaded content'
 complete -c syncweb -n "__fish_syncweb_using_subcommand verify" -l verbose -d 'Enable verbose structured logging'

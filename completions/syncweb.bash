@@ -633,7 +633,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__download)
-            opts="-h --hash --path-prefix --glob --provider --from --min-providers --no-seeding --no-sharing --max-peers --min-peers --min-count --max-count --threads --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-e -h --hash --path-prefix --path-glob --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --provider --from --min-providers --no-seeding --no-sharing --max-peers --min-peers --min-count --max-count --threads --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -647,7 +647,47 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --glob)
+                --path-glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ext)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -e)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
+                    return 0
+                    ;;
+                --modified-within)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --modified-before)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --time-modified)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -695,7 +735,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__find)
-            opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --depth --min-depth --max-depth --sizes --modified-within --modified-before --time-modified --extension --type --threads --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-i -s -F -p -H -L -a -d -e -h --kind --ignore-case --case-sensitive --fixed-strings --full-path --hidden --follow-links --absolute-path --download --threads --local-only --path-prefix --path-glob --no-enrich --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -703,6 +743,30 @@ _syncweb() {
             case "${prev}" in
                 --kind)
                     COMPREPLY=($(compgen -W "exact glob regex" -- "${cur}"))
+                    return 0
+                    ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ext)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -e)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --size)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --depth)
@@ -717,8 +781,8 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --sizes)
-                    COMPREPLY=($(compgen -f "${cur}"))
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
                     return 0
                     ;;
                 --modified-within)
@@ -730,30 +794,6 @@ _syncweb() {
                     return 0
                     ;;
                 --time-modified)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --extension)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                -e)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --type)
-                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
-                    return 0
-                    ;;
-                --threads)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --path-prefix)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --path-glob)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1103,7 +1143,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__ls)
-            opts="-h --sort --threads --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-e -h --sort --threads --local-only --path-prefix --path-glob --no-enrich --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1122,6 +1162,46 @@ _syncweb() {
                     return 0
                     ;;
                 --path-glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ext)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -e)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
+                    return 0
+                    ;;
+                --modified-within)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --modified-before)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --time-modified)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1951,7 +2031,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__sort)
-            opts="-h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --depth --min-depth --max-depth --threads --enrich --remote-only --local-only --path-prefix --path-glob --no-enrich --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-e -h --by --min-seeders --max-seeders --niche --frecency-weight --limit-size --threads --enrich --local-only --path-prefix --path-glob --no-enrich --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1981,6 +2061,30 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path-glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ext)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -e)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --depth)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -1993,15 +2097,19 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --threads)
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
+                    return 0
+                    ;;
+                --modified-within)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --path-prefix)
+                --modified-before)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --path-glob)
+                --time-modified)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -2461,7 +2569,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__verify)
-            opts="-h --hash --path-prefix --glob --fix --provider --from --min-providers --no-seeding --no-sharing --verbose --json --embedded --no-daemon --data-dir --help"
+            opts="-e -h --hash --path-prefix --path-glob --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --fix --provider --from --min-providers --no-seeding --no-sharing --verbose --json --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2475,7 +2583,47 @@ _syncweb() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --glob)
+                --path-glob)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ext)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -e)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --min-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-depth)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --type)
+                    COMPREPLY=($(compgen -W "f d l" -- "${cur}"))
+                    return 0
+                    ;;
+                --modified-within)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --modified-before)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --time-modified)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

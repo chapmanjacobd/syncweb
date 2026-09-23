@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH access 1  "access " 
+.SH NAME
+access \- Show who can read/write each folder in one table, and revoke access in place (\-\-revoke)
+.SH SYNOPSIS
+\fBaccess\fR [\fB\-\-revoke\fR] [\fB\-\-write\fR] [\fB\-\-read\fR] [\fB\-\-full\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] 
+.SH DESCRIPTION
+Show who can read/write each folder in one table, and revoke access in place (\-\-revoke)
+.SH OPTIONS
+.TP
+\fB\-\-revoke\fR
+Revoke a share instead of listing access (requires the positional path)
+.TP
+\fB\-\-write\fR
+Revoke the write share (default: the read share)
+.TP
+\fB\-\-read\fR
+Revoke the read share (the default, prompt\-free path)
+.TP
+\fB\-\-full\fR
+Show every shared\-with row instead of capping the list
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPATH\fR]
+Folder path or namespace (omit to show every folder)

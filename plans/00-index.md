@@ -39,11 +39,19 @@ prompt), and prompts are wired into `leave --delete-files`,
 `unshare` and plain `leave` stay prompt-free. Tests that previously relied on
 silent non-TTY execution now pass `--yes`.
 
+Plan 05 (access dashboard) is done — `syncweb access [<path-or-ns>]` merges
+folder mode, outbound share tickets, and network membership into one table
+(plus `--json`), and `access --revoke <ns> [--read|--write]` revokes in place
+reusing plan 04's confirmation. The one permitted core/IPC change landed:
+`FolderStatusReport.mode` (additive, `#[serde(default)]`), which also fixes the
+daemon `folders` path that previously omitted mode. Pin status and inbound-peer
+lists are deferred to plan 09 and called out in `access` output rather than
+guessed.
+
 ## Plans
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 05 | [05-access-dashboard.md](05-access-dashboard.md) | HIGH | One view of who can read/write each folder + revoke (tickets, `share --list`, `networks`) | 04 |
 | 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
 | 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`, `policy`, `public list`) | — |
 | 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | 02 |
@@ -51,11 +59,9 @@ silent non-TTY execution now pass `--yes`.
 
 Notes on dependencies:
 
-- Plan 05's `--revoke` path reuses plan 04's confirmation + `--yes` (now
-  landed). Its read-only aggregation is independent of it.
 - Plan 08's dependency on plan 02 (eager `join`) is satisfied.
-- Plan 05 introduces a new top-level verb `access`; plan 06 must account for
-  it when collapsing the surface (either as a canonical verb or an alias).
+- Plan 05 landed `access` as a canonical top-level verb; plan 06 must keep it
+  (canonical verb or alias) when collapsing the surface.
 - Plan 08's universal `--json` contract builds on plan 01's `ListEntries` IPC
   (the listing the filters run over) and plan 03's shared
   `ContentFilterArgs`; the work should land once, in the order 03 → 08.

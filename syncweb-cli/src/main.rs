@@ -4,6 +4,7 @@ use async_recursion::async_recursion;
 use comfy_table::Table;
 
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
@@ -15,14 +16,14 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        Command, ConfigCommand, ImportArgs, ListingFlags, NetworkCommand, NetworkListArgs, PackageCommand,
+        AccessArgs, Command, ConfigCommand, ImportArgs, ListingFlags, NetworkCommand, NetworkListArgs, PackageCommand,
         PublishCommand, ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShutdownArgs, SnapshotCommand,
         SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
         TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
         TransferMaterializeArgs, TransferRootArgs, UnshareArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
-    output::{confirm_destructive, init_tracing, print_version},
+    output::{AccessRow, confirm_destructive, init_tracing, print_version, render_access_json, render_access_table},
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use iroh_blobs::Hash as BlobHash;
@@ -208,6 +209,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         Command::Publish { command } => handle_publish(&ctx, command).await?,
         Command::Share(args) => handle_share(&ctx, args).await?,
         Command::Unshare(args) => handle_unshare(&ctx, args).await?,
+        Command::Access(args) => handle_access(&ctx, args).await?,
         Command::Package { command } => handle_package(&ctx, command).await?,
         Command::Network { command } => handle_network(&ctx, command).await?,
         Command::Stats { command } => handle_stats(&ctx, command).await?,
@@ -2940,6 +2942,137 @@ async fn handle_unshare(ctx: &CliContext<'_>, args: UnshareArgs) -> Result<()> {
     Ok(())
 }
 
+struct AccessFolder {
+    namespace: String,
+    path: Option<PathBuf>,
+    mode: String,
+}
+
+async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
+    if args.revoke {
+        let selector = args
+            .path
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("access --revoke requires a folder path or namespace"))?;
+        return handle_unshare(
+            ctx,
+            UnshareArgs {
+                path: selector.clone(),
+                blob: None,
+                write: args.write,
+            },
+        )
+        .await;
+    }
+
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let no_daemon = ctx.no_daemon;
+
+    let mut folders: Vec<AccessFolder> = Vec::new();
+    let mut filter: Option<String> = None;
+    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        if let Some(path) = args.path.as_ref().filter(|path| path.as_os_str() != ".") {
+            filter = Some(resolve_namespace_via_daemon(&client, &path.to_string_lossy()).await?);
+        }
+        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        let IpcResponse::FolderList(list) = response else {
+            return print_daemon_message(response, output_json);
+        };
+        for folder in list.into_iter().filter(|folder| folder.kind == "folder") {
+            folders.push(AccessFolder {
+                namespace: folder.namespace,
+                path: (!folder.path.as_os_str().is_empty()).then_some(folder.path),
+                mode: folder.mode,
+            });
+        }
+    } else {
+        let node = open_node(data_dir).await?;
+        let manager = FolderManager::new(&node);
+        if let Some(path) = args.path.as_ref().filter(|path| path.as_os_str() != ".") {
+            filter = Some(manager.resolve_namespace(&path.to_string_lossy()).await?.to_string());
+        }
+        let mounts: std::collections::HashMap<String, PathBuf> =
+            open_node_db(data_dir)?.load_folder_mounts()?.into_iter().collect();
+        for folder in manager.list().await? {
+            let namespace = folder.namespace_id().to_string();
+            let path = mounts.get(&namespace).cloned();
+            folders.push(AccessFolder {
+                namespace,
+                path,
+                mode: folder.mode().to_string(),
+            });
+        }
+        node.stop().await?;
+    }
+
+    let shares = open_node_db(data_dir)?.list_shares()?;
+    let networks = open_network_manager(data_dir)?
+        .list()
+        .into_iter()
+        .map(|network| {
+            (
+                network.name.clone(),
+                network.folders.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut rows: BTreeMap<String, AccessRow> = BTreeMap::new();
+    for folder in folders {
+        if filter
+            .as_deref()
+            .is_some_and(|wanted| wanted != folder.namespace.as_str())
+        {
+            continue;
+        }
+        let row = rows.entry(folder.namespace).or_default();
+        row.path = folder.path;
+        row.mode = folder.mode;
+    }
+    for (namespace, access, ticket) in shares {
+        if filter.as_deref().is_some_and(|wanted| wanted != namespace.as_str()) {
+            continue;
+        }
+        rows.entry(namespace).or_default().shares.push((access, ticket));
+    }
+    for (name, namespaces) in &networks {
+        for namespace in namespaces {
+            if filter.as_deref().is_some_and(|wanted| wanted != namespace.as_str()) {
+                continue;
+            }
+            let row = rows.entry(namespace.clone()).or_default();
+            if !row.networks.contains(name) {
+                row.networks.push(name.clone());
+            }
+        }
+    }
+    for row in rows.values_mut() {
+        row.networks.sort();
+    }
+
+    if rows.is_empty() {
+        if output_json {
+            println!("[]");
+        } else {
+            println!("no access records");
+        }
+        return Ok(());
+    }
+
+    if output_json {
+        println!("{}", render_access_json(&rows));
+        return Ok(());
+    }
+
+    println!("{}", render_access_table(&rows, args.full));
+    println!("note: inbound peers (who joined a folder) are not surfaced yet; see `syncweb network peers`");
+    println!(
+        "note: pin status is not shown (it needs a local node); `syncweb share --list` reports what was pinned at share time"
+    );
+    Ok(())
+}
+
 #[async_recursion]
 async fn handle_package_add(
     ctx: &CliContext<'_>,
@@ -4378,11 +4511,17 @@ async fn handle_folders(ctx: &CliContext<'_>) -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&folders)?);
                 } else {
                     let mut table = Table::new();
-                    table.set_header(["Namespace", "Path", "Active", "Last Sync", "Entries", "Errors"]);
+                    table.set_header(["Namespace", "Mode", "Path", "Active", "Last Sync", "Entries", "Errors"]);
                     for folder in &folders {
                         let active_label = if folder.session_active { "yes" } else { "no" };
+                        let mode_label = if folder.mode.is_empty() {
+                            "-".to_owned()
+                        } else {
+                            folder.mode.clone()
+                        };
                         table.add_row([
                             &folder.namespace,
+                            &mode_label,
                             &folder.path.display().to_string(),
                             &active_label.to_string(),
                             &folder.last_sync_at.map_or_else(|| "-".to_owned(), |v| v.to_string()),

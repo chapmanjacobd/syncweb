@@ -77,6 +77,8 @@ pub enum Command {
     Share(ShareArgs),
     #[command(about = "Stop sharing a folder or blob (removes pins and announcements)")]
     Unshare(UnshareArgs),
+    #[command(about = "Show who can read/write each folder in one table, and revoke access in place (--revoke)")]
+    Access(AccessArgs),
     #[command(about = "Create, version, publish, and manage collection packages")]
     Package {
         #[command(subcommand)]
@@ -794,6 +796,31 @@ pub struct UnshareArgs {
         help = "Remove the write share (default: read-only)"
     )]
     pub write: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct AccessArgs {
+    #[arg(help = "Folder path or namespace (omit to show every folder)")]
+    pub path: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Revoke a share instead of listing access (requires the positional path)"
+    )]
+    pub revoke: bool,
+    #[arg(
+        long,
+        conflicts_with = "read",
+        help = "Revoke the write share (default: the read share)"
+    )]
+    pub write: bool,
+    #[arg(
+        long,
+        conflicts_with = "write",
+        help = "Revoke the read share (the default, prompt-free path)"
+    )]
+    pub read: bool,
+    #[arg(long, help = "Show every shared-with row instead of capping the list")]
+    pub full: bool,
 }
 
 #[derive(Debug, Subcommand)]

@@ -79,6 +79,7 @@ help_categories! {
         Command::Publish { .. } => "publish",
         Command::Share(_) => "share",
         Command::Unshare(_) => "unshare",
+        Command::Access(_) => "access",
         Command::Provider { .. } => "provider",
         Command::Link { .. } => "link",
     ];

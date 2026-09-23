@@ -971,6 +971,23 @@ _arguments "${_arguments_options[@]}" : \
 '::path -- Folder path or namespace:_files' \
 && ret=0
 ;;
+(access)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--revoke[Revoke a share instead of listing access (requires the positional path)]' \
+'(--read)--write[Revoke the write share (default\: the read share)]' \
+'(--write)--read[Revoke the read share (the default, prompt-free path)]' \
+'--full[Show every shared-with row instead of capping the list]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON where supported]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Folder path or namespace (omit to show every folder):_files' \
+&& ret=0
+;;
 (package)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1673,6 +1690,7 @@ _syncweb_commands() {
 'publish:Publish folder metadata to a catalog' \
 'share:Share a folder, printing a ticket (read-only by default, --write for write access)' \
 'unshare:Stop sharing a folder or blob (removes pins and announcements)' \
+'access:Show who can read/write each folder in one table, and revoke access in place (--revoke)' \
 'package:Create, version, publish, and manage collection packages' \
 'network:Network connectivity utilities' \
 'db:Database maintenance\: check, vacuum, stats, backup' \
@@ -1684,6 +1702,11 @@ _syncweb_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'syncweb commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__access_commands] )) ||
+_syncweb__subcmd__access_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb access commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__completions_commands] )) ||
 _syncweb__subcmd__completions_commands() {

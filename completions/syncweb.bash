@@ -16,6 +16,9 @@ _syncweb() {
             ",$1")
                 cmd="syncweb"
                 ;;
+            syncweb,access)
+                cmd="syncweb__subcmd__access"
+                ;;
             syncweb,completions)
                 cmd="syncweb__subcmd__completions"
                 ;;
@@ -305,7 +308,7 @@ _syncweb() {
 
     case "${cmd}" in
         syncweb)
-            opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --network --help version start shutdown status devices networks reload daemon-sync create join leave folders config ls find search sort stat download import snapshot transfer watch stats verify publish share unshare package network db indexing link provider completions manpages help"
+            opts="-h --verbose --json --yes --embedded --no-daemon --data-dir --network --help version start shutdown status devices networks reload daemon-sync create join leave folders config ls find search sort stat download import snapshot transfer watch stats verify publish share unshare access package network db indexing link provider completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -316,6 +319,24 @@ _syncweb() {
                     return 0
                     ;;
                 --network)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        syncweb__subcmd__access)
+            opts="-h --revoke --write --read --full --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

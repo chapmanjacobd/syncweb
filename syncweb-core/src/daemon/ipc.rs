@@ -267,6 +267,7 @@ pub use crate::daemon::state::FolderStatusReport as FolderStatus;
 pub struct FolderEntry {
     pub namespace: iroh_docs::NamespaceId,
     pub path: PathBuf,
+    pub mode: String,
     pub session: Option<ActiveSession>,
     pub last_sync_at: Option<u64>,
     pub sync_count: u64,
@@ -280,6 +281,7 @@ impl FolderEntry {
         Self {
             namespace,
             path,
+            mode: String::new(),
             session: None,
             last_sync_at: None,
             sync_count: 0,
@@ -288,12 +290,20 @@ impl FolderEntry {
         }
     }
 
+    /// Attach the folder's sync mode (empty when unknown).
+    #[must_use]
+    pub fn with_mode(mut self, mode: impl Into<String>) -> Self {
+        self.mode = mode.into();
+        self
+    }
+
     #[must_use]
     pub fn status(&self) -> FolderStatusReport {
         FolderStatusReport {
             namespace: self.namespace.to_string(),
             path: self.path.clone(),
             kind: "folder".to_owned(),
+            mode: self.mode.clone(),
             session_active: self.session.is_some() || crate::sync::is_active(self.namespace),
             last_sync_at: self.last_sync_at,
             sync_count: self.sync_count,
@@ -383,6 +393,7 @@ impl FolderRegistry {
                 namespace: sub.namespace_id(),
                 path: PathBuf::new(),
                 kind: "subscription".to_owned(),
+                mode: String::new(),
                 session_active: false,
                 last_sync_at: None,
                 sync_count: 0,
@@ -1163,13 +1174,19 @@ impl IpcServer {
             .await
     }
 
-    async fn register_folder(&self, namespace_id: iroh_docs::NamespaceId, namespace: &str, path: &Path) {
+    async fn register_folder(
+        &self,
+        namespace_id: iroh_docs::NamespaceId,
+        namespace: &str,
+        path: &Path,
+        mode: SyncMode,
+    ) {
         if self
             .daemon_handle
             .folder_registry
             .write()
             .await
-            .add(FolderEntry::new(namespace_id, path.to_path_buf()))
+            .add(FolderEntry::new(namespace_id, path.to_path_buf()).with_mode(mode.to_string()))
             .is_err()
         {
             tracing::warn!(%namespace, "folder already in daemon registry");
@@ -1209,7 +1226,8 @@ impl IpcServer {
         match manager.join(ticket, mode).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
-                self.register_folder(folder.namespace_id(), &namespace, &path).await;
+                self.register_folder(folder.namespace_id(), &namespace, &path, mode)
+                    .await;
                 if options.indexing
                     && let Some(indexing_service) = &context.indexing
                     && let Err(error) = indexing_service.enable_folder(&folder).await
@@ -1462,7 +1480,8 @@ impl IpcServer {
                 {
                     tracing::warn!(%error, %namespace, "failed to enable indexing for new folder");
                 }
-                self.register_folder(folder.namespace_id(), &namespace, &path).await;
+                self.register_folder(folder.namespace_id(), &namespace, &path, sync_mode)
+                    .await;
                 match folder.ticket(true).await {
                     Ok(_ticket) => IpcResponse::Ok {
                         message: format!("namespace: {namespace}"),

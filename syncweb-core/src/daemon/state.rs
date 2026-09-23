@@ -82,6 +82,9 @@ pub struct FolderStatusReport {
     pub path: PathBuf,
     #[serde(default = "default_kind")]
     pub kind: String,
+    /// Sync mode (`sendreceive`/`receiveonly`/`sendonly`), empty when unknown.
+    #[serde(default)]
+    pub mode: String,
     pub session_active: bool,
     pub last_sync_at: Option<u64>,
     #[serde(default)]
@@ -108,6 +111,7 @@ impl FolderStatusReport {
             namespace: namespace.into(),
             path: path.into(),
             kind: "folder".to_owned(),
+            mode: String::new(),
             session_active,
             last_sync_at,
             sync_count: 0,

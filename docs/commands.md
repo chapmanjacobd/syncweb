@@ -489,6 +489,7 @@ syncweb config set discovery.interface eth0
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
 | | `share --list` | List persisted folder shares, optionally filtered by selectors |
 | | `unshare` | Stop sharing a folder (unpins folder blobs) |
+| | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets, and network membership; `access --revoke <path> [--read\|--write]` revokes in place |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
 | | `unshare --blob` | Remove a shared blob pin |
 | | `publish catalog` | Publish folder metadata to a catalog |

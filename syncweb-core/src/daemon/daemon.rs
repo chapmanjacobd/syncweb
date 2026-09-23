@@ -1017,7 +1017,9 @@ impl Daemon {
                 .iter()
                 .any(|status| status.namespace == namespace_key)
             {
-                registry.add(FolderEntry::new(folder.namespace_id(), PathBuf::new()))?;
+                registry.add(
+                    FolderEntry::new(folder.namespace_id(), PathBuf::new()).with_mode(folder.mode().to_string()),
+                )?;
             }
         }
         drop(registry);

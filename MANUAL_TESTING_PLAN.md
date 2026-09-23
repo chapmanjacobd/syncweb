@@ -248,6 +248,16 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | 5 | Alice: `syncweb unshare --write ./shared-docs` | Prompts "Are you sure…?" (default no); confirming revokes write access | `syncweb share --list` no longer shows `access: write` |
 | 6 | Alice: `syncweb unshare --blob <hash> ./shared-docs` | Prompts before removing the shared blob pin | `syncweb unshare --blob <hash>` (non-TTY, no `--yes`) prints "aborted" |
 
+### 7.2 Access Dashboard
+
+| Step | Action | Expected Result | Debug |
+|------|--------|-----------------|-------|
+| 1 | Alice: `syncweb access ./shared-docs` | One table: `Folder · Mode · Write? · Shared with · Networks`; the folder appears once with `Mode` (e.g. `sendreceive`) and its share rows under `Shared with` | Table includes the `Write?`/`Mode` headers |
+| 2 | Alice: `syncweb access --json` | Array of `{folder, mode, write, shares:[{access, url}], networks:[...]}`; no `pinned` key | `jq '.[] | .folder'` lists every folder |
+| 3 | Alice: `syncweb access --revoke ./shared-docs --write --yes` | Revokes the write share (same as `unshare --write --yes`) | `syncweb access --json` now shows `"write": false` |
+| 4 | Alice: `syncweb access --revoke ./shared-docs` (no `--yes`) | Read-only revoke is prompt-free and removes the read share + retention pins | `syncweb share --list` no longer shows `access: read` |
+| 5 | Alice: `syncweb access --revoke ./shared-docs --write` (non-TTY, no `--yes`) | Prints `aborted`; write share stays | `syncweb access --json` still shows `"write": true` |
+
 ---
 
 ## 8. Snapshots

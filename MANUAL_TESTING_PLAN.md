@@ -58,8 +58,9 @@
 | 2 | Ctrl+C on daemon | Graceful shutdown, logs "daemon stopped" | Check lifecycle: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_lifecycle;"` |
 | 3 | `syncweb start` (background) | Daemon forks to background, returns to prompt | |
 | 4 | `syncweb status` | Shows PID, uptime, bandwidth rates, folder statuses | Manual DB check: `sqlite3 ~/.local/share/syncweb/node.db "SELECT * FROM daemon_status;"` |
-| 5 | `syncweb shutdown` | Daemon stops, status shows "not running" | `syncweb status` returns error or "no daemon" |
-| 6 | Start daemon, then `syncweb shutdown --force` | Force kills daemon | Check PID gone: `ps aux | grep syncweb` |
+| 5 | `syncweb shutdown` | Prompts "Are you sure…?" (default no); confirm stops daemon, status shows "not running" | `syncweb status` returns error or "no daemon" |
+| 6 | Start daemon, then `syncweb shutdown --force` | Force kills daemon after the same confirmation | Check PID gone: `ps aux | grep syncweb` |
+| 7 | `syncweb shutdown --yes` in a script/pipe | Skips the prompt and stops the daemon; without `--yes` non-interactive runs abort ("aborted") and the daemon stays up — `--json` does not skip the prompt | `syncweb status` after aborted run still shows "daemon: running" |
 
 ### 2.2 Reload & Sync Commands
 
@@ -107,8 +108,10 @@ Setup: Node A (alice) and Node B (bob), each with `syncweb` installed.
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Alice: `syncweb leave ./shared-docs` | Leaves the folder | `syncweb folders` no longer shows it |
-| 2 | Alice: `syncweb join <url> ./shared-docs` again | Can rejoin | |
-| 3 | Alice: `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
+| 2 | Alice: `syncweb leave --delete-files ./shared-docs` | Prompts "Are you sure…?" (default no); confirming deletes local files | Folder directory is removed |
+| 3 | Alice: `syncweb leave --delete-files --yes ./shared-docs` in a script | Skips the prompt and deletes local files; without `--yes` non-interactive runs abort and files stay | `syncweb leave --delete-files` (non-TTY, no `--yes`) prints "aborted" |
+| 4 | Alice: `syncweb join <url> ./shared-docs` again | Can rejoin | |
+| 5 | Alice: `syncweb devices` | Shows this device's Iroh and Syncthing identities | |
 
 ### 3.4 Folders & Devices Listing
 
@@ -241,7 +244,9 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | 2 | Bob: `syncweb join <ticket> ./bob-public` | Tracks metadata only; NO live sync and NO bulk download by default | `syncweb ls ./bob-public` shows entries; folder dir starts empty; `config show subscribe` → `enabled = false` |
 | 3 | Bob: `syncweb join --subscribe <ticket> ./bob-public` (fresh folder) | Tracks folder + enables live syncing (persisted); NO bulk download by default | `syncweb ls ./bob-public` shows entries; `config show subscribe` → `enabled = true` |
 | 3 | Bob: `syncweb download ./bob-public/` (or `syncweb join --download-existing <ticket> ./bob-public` on a fresh folder) | Downloads existing content explicitly | Files appear in the folder |
-| 4 | Alice: `syncweb unshare ./shared-docs` | Stops sharing (removes pin, stops announcing) | Bob can no longer see updates |
+| 4 | Alice: `syncweb unshare ./shared-docs` | Stops sharing (removes pin, stops announcing); read-only unshare is prompt-free | Bob can no longer see updates |
+| 5 | Alice: `syncweb unshare --write ./shared-docs` | Prompts "Are you sure…?" (default no); confirming revokes write access | `syncweb share --list` no longer shows `access: write` |
+| 6 | Alice: `syncweb unshare --blob <hash> ./shared-docs` | Prompts before removing the shared blob pin | `syncweb unshare --blob <hash>` (non-TTY, no `--yes`) prints "aborted" |
 
 ---
 

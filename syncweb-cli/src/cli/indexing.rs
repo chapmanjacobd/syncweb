@@ -170,7 +170,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             )?;
         }
         LinkCommand::Revoke { link } => {
-            if !confirm_destructive("revoke this link", output_json)? {
+            if !confirm_destructive("revoke this link", ctx.yes)? {
                 println!("aborted");
                 return Ok(());
             }

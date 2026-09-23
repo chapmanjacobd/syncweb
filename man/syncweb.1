@@ -4,7 +4,7 @@
 .SH NAME
 syncweb \- Delay\-tolerant web surfing
 .SH SYNOPSIS
-\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-no\-daemon\fR] [\fB\-\-data\-dir\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+\fBsyncweb\fR [\fB\-\-verbose\fR] [\fB\-\-json\fR] [\fB\-\-yes\fR] [\fB\-\-no\-daemon\fR] [\fB\-\-data\-dir\fR] [\fB\-\-network\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Delay\-tolerant web surfing
 .SH OPTIONS
@@ -14,6 +14,9 @@ Enable verbose structured logging
 .TP
 \fB\-\-json\fR
 Emit machine\-readable JSON where supported
+.TP
+\fB\-\-yes\fR
+Assume yes to every destructive\-operation prompt
 .TP
 \fB\-\-no\-daemon\fR
 Bypass the daemon and use an embedded node for supported commands

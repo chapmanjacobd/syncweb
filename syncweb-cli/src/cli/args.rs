@@ -10,6 +10,7 @@ pub struct CliContext<'a> {
     pub output_json: bool,
     pub no_daemon: bool,
     pub network: Option<&'a str>,
+    pub yes: bool,
 }
 
 pub fn effective_data_dir(data_dir: &Path, network: Option<&str>) -> PathBuf {
@@ -246,6 +247,9 @@ pub struct Cli {
 
     #[arg(long, global = true, help = "Emit machine-readable JSON where supported")]
     pub json: bool,
+
+    #[arg(long, global = true, help = "Assume yes to every destructive-operation prompt")]
+    pub yes: bool,
 
     #[arg(
         long,

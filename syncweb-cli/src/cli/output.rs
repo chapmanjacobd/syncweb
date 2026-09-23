@@ -20,14 +20,16 @@ pub fn print_version() {
     println!("syncweb {}", env!("CARGO_PKG_VERSION"));
 }
 
-/// Require interactive confirmation for destructive operations. Skips the prompt
-/// for JSON output and non-interactive stdin.
-pub fn confirm_destructive(operation: &str, output_json: bool) -> Result<bool> {
-    if output_json {
+/// Require interactive confirmation for destructive operations. Auto-approves
+/// only when the caller passes `--yes`, and aborts the operation when stdin is
+/// not interactive, so non-interactive automation cannot run a destructive
+/// command silently (not even with `--json`).
+pub fn confirm_destructive(operation: &str, assume_yes: bool) -> Result<bool> {
+    if assume_yes {
         return Ok(true);
     }
     if !std::io::stdin().is_terminal() {
-        return Ok(true);
+        return Ok(false);
     }
     Ok(Confirm::new()
         .with_prompt(format!("Are you sure you want to {operation}?"))

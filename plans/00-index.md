@@ -30,11 +30,19 @@ Plan 03 (one content-filter vocabulary) is done — `ls`/`find`/`sort`/`download
 `download`/`verify` (find/sort parity is pinned by a workflow test). Safety and
 command-collapse follow; docs drift last.
 
+Plan 04 (safety confirmations) is done — destructive CLI ops are safe by
+default: `confirm_destructive` now aborts when stdin is not a TTY, `--yes` is a
+global opt-in and the only auto-approve path (`--json` no longer bypasses the
+prompt), and prompts are wired into `leave --delete-files`,
+`unshare --write`/`--blob`, plus the existing `shutdown`, `snapshot delete`,
+`package remove`, `network leave`/`kick`, and `link revoke` sites. Read-only
+`unshare` and plain `leave` stay prompt-free. Tests that previously relied on
+silent non-TTY execution now pass `--yes`.
+
 ## Plans
 
 | #  | Plan | Priority | Goal | Depends on |
 |----|------|----------|------|------------|
-| 04 | [04-safety-confirmations.md](04-safety-confirmations.md) | HIGH | Real (safe-by-default) prompts before `leave --delete-files`, `unshare --write`, `unshare --blob`; add `--yes` | — |
 | 05 | [05-access-dashboard.md](05-access-dashboard.md) | HIGH | One view of who can read/write each folder + revoke (tickets, `share --list`, `networks`) | 04 |
 | 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
 | 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`, `policy`, `public list`) | — |
@@ -43,8 +51,8 @@ command-collapse follow; docs drift last.
 
 Notes on dependencies:
 
-- Plan 05 depends on plan 04 only for its `--revoke` path (which reuses plan 04's
-  confirmation + `--yes`). Its read-only aggregation is independent of plan 04.
+- Plan 05's `--revoke` path reuses plan 04's confirmation + `--yes` (now
+  landed). Its read-only aggregation is independent of it.
 - Plan 08's dependency on plan 02 (eager `join`) is satisfied.
 - Plan 05 introduces a new top-level verb `access`; plan 06 must account for
   it when collapsing the surface (either as a canonical verb or an alias).

@@ -792,7 +792,7 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
         .output()
         .context("query auto-started daemon")?;
     let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir_arg, "shutdown", "--force"])
+        .args(["--data-dir", data_dir_arg, "shutdown", "--yes", "--force"])
         .output()
         .context("stop auto-started daemon")?;
     for _ in 0..50 {
@@ -1018,6 +1018,7 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--no-daemon",
             "unshare",
             "--write",
+            "--yes",
             directory.to_str().context("UTF-8 path")?,
         ])
         .output()
@@ -1026,6 +1027,284 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
 
     std::fs::remove_dir_all(&directory).context("cleanup folder")?;
     std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    Ok(())
+}
+
+#[test]
+fn leave_delete_files_aborts_without_yes() -> anyhow::Result<()> {
+    let directory = cli_test_dir("leave-del-confirm");
+    let data_dir = cli_test_dir("leave-del-confirm-data");
+    let dir_str = directory.to_str().context("UTF-8 path")?;
+    let data_dir_str = data_dir.to_str().context("UTF-8 path")?;
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir_str,
+            "--no-daemon",
+            "create",
+            "--no-import",
+            dir_str,
+        ])
+        .output()
+        .context("run syncweb create")?;
+    ensure!(create.status.success());
+    std::fs::write(directory.join("file.txt"), b"content")?;
+
+    let abort = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir_str,
+            "--no-daemon",
+            "leave",
+            "--delete-files",
+            dir_str,
+        ])
+        .output()
+        .context("run syncweb leave --delete-files without --yes")?;
+    ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
+    ensure!(
+        directory.join("file.txt").exists(),
+        "leave --delete-files must not delete files when confirmation is skipped"
+    );
+
+    let leave = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir_str,
+            "--no-daemon",
+            "leave",
+            "--delete-files",
+            "--yes",
+            dir_str,
+        ])
+        .output()
+        .context("run syncweb leave --delete-files --yes")?;
+    ensure!(leave.status.success());
+    ensure!(
+        !directory.exists(),
+        "leave --delete-files --yes should delete the folder directory"
+    );
+
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    Ok(())
+}
+
+#[test]
+fn json_does_not_auto_approve_destructive() -> anyhow::Result<()> {
+    let directory = cli_test_dir("json-no-yes");
+    let data_dir = cli_test_dir("json-no-yes-data");
+    let dir_str = directory.to_str().context("UTF-8 path")?;
+    let data_dir_str = data_dir.to_str().context("UTF-8 path")?;
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir_str,
+            "--no-daemon",
+            "create",
+            "--no-import",
+            dir_str,
+        ])
+        .output()
+        .context("run syncweb create")?;
+    ensure!(create.status.success());
+    std::fs::write(directory.join("file.txt"), b"content")?;
+
+    let abort = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir_str,
+            "--no-daemon",
+            "--json",
+            "leave",
+            "--delete-files",
+            dir_str,
+        ])
+        .output()
+        .context("run syncweb --json leave --delete-files without --yes")?;
+    ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
+    ensure!(
+        String::from_utf8(abort.stdout)
+            .context("UTF-8 output")?
+            .contains("aborted"),
+        "--json alone must not auto-approve a destructive operation"
+    );
+    ensure!(
+        directory.join("file.txt").exists(),
+        "files must survive --json without --yes"
+    );
+
+    std::fs::remove_dir_all(&directory).context("cleanup folder")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    Ok(())
+}
+
+#[test]
+fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
+    let directory = cli_test_dir("unshare-confirm");
+    let data_dir = cli_test_dir("unshare-confirm-data");
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "create",
+            "--no-import",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb create")?;
+    ensure!(create.status.success());
+
+    let write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "--json",
+            "share",
+            "--write",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb share --write")?;
+    ensure!(write.status.success());
+
+    let abort = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "unshare",
+            "--write",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb unshare --write without --yes")?;
+    ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
+
+    let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            "--list",
+        ])
+        .output()
+        .context("run syncweb share --list after aborted unshare")?;
+    ensure!(
+        String::from_utf8(list.stdout)
+            .context("UTF-8 output")?
+            .contains("access: write"),
+        "unshare --write must not revoke write when confirmation is skipped"
+    );
+
+    let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "unshare",
+            "--write",
+            "--yes",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb unshare --write --yes")?;
+    ensure!(rm.status.success());
+
+    let list_after = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            "--list",
+        ])
+        .output()
+        .context("run syncweb share --list after unshare --yes")?;
+    ensure!(
+        !String::from_utf8(list_after.stdout)
+            .context("UTF-8 output")?
+            .contains("access: write"),
+        "unshare --write --yes should revoke write access"
+    );
+
+    std::fs::remove_dir_all(&directory).context("cleanup folder")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup data")?;
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn shutdown_aborts_without_yes_on_non_tty() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("shutdown-confirm");
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let _start = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "download", "not-a-namespace"])
+        .output()
+        .context("auto-start daemon")?;
+    let mut running = false;
+    for _ in 0..50 {
+        let poll = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(["--data-dir", data_dir_arg, "status"])
+            .output()?;
+        if poll.status.success() && String::from_utf8_lossy(&poll.stdout).contains("daemon: running") {
+            running = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    ensure!(running, "daemon should have auto-started");
+
+    let abort = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "shutdown"])
+        .output()
+        .context("run syncweb shutdown without --yes")?;
+    ensure!(abort.status.success(), "non-TTY abort should exit cleanly");
+    ensure!(
+        String::from_utf8(abort.stdout)
+            .context("UTF-8 output")?
+            .contains("aborted"),
+        "non-TTY shutdown should abort at the prompt"
+    );
+
+    let still = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "status"])
+        .output()?;
+    ensure!(
+        String::from_utf8_lossy(&still.stdout).contains("daemon: running"),
+        "daemon should still be running after the aborted shutdown"
+    );
+
+    let shutdown = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "shutdown", "--yes"])
+        .output()
+        .context("run syncweb shutdown --yes")?;
+    ensure!(shutdown.status.success());
+
+    for _ in 0..50 {
+        let poll = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args(["--data-dir", data_dir_arg, "status"])
+            .output()?;
+        if poll.status.success() && String::from_utf8_lossy(&poll.stdout).contains("daemon not running") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let final_status = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "status"])
+        .output()?;
+    ensure!(
+        String::from_utf8_lossy(&final_status.stdout).contains("daemon not running"),
+        "daemon should be stopped after shutdown --yes"
+    );
+
+    std::fs::remove_dir_all(&data_dir).context("cleanup")?;
     Ok(())
 }
 
@@ -1244,6 +1523,7 @@ fn network_kick_nonexistent_device_fails() -> anyhow::Result<()> {
             data_dir,
             "network",
             "kick",
+            "--yes",
             "kick-net",
             "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         ])
@@ -1267,7 +1547,7 @@ fn network_leave_removes_from_list() -> anyhow::Result<()> {
     ensure!(create.status.success());
 
     let leave = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "leave", "leave-net"])
+        .args(["--data-dir", data_dir, "network", "leave", "--yes", "leave-net"])
         .output()
         .context("leave network")?;
     ensure!(

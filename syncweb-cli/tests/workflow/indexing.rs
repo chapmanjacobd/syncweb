@@ -124,7 +124,7 @@ fn link_create_private_and_revoke() -> Result<()> {
         "private link should use capability URI"
     );
 
-    let revoked = run(alice, &["link", "revoke", &link])?;
+    let revoked = run(alice, &["link", "revoke", "--yes", &link])?;
     ensure!(
         revoked.stdout().contains("revoked:"),
         "revoke output should confirm revocation"
@@ -175,7 +175,7 @@ fn publish_blob_and_unpublish_round_trip() -> Result<()> {
         "share --blob should emit a blob ticket"
     );
 
-    let unpublished = run(alice, &["--json", "unshare", "--blob", &hash_str, &namespace])?;
+    let unpublished = run(alice, &["--json", "--yes", "unshare", "--blob", &hash_str, &namespace])?;
     ensure!(
         json_output(&unpublished)?.get("status") == Some(&Value::from("unshared")),
         "unshare --blob should confirm the pin was removed"
@@ -439,7 +439,7 @@ fn link_revoke_persists_locally() -> Result<()> {
         .context("link output missing link")?
         .to_owned();
 
-    let revoked = run(alice, &["link", "revoke", &link])?;
+    let revoked = run(alice, &["link", "revoke", "--yes", &link])?;
     ensure!(
         revoked.stdout().contains("revoked:"),
         "revoke output should confirm revocation"

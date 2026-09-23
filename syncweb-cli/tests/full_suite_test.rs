@@ -698,7 +698,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
         "{switch_json}"
     );
 
-    let remove = run_with_data(&data_dir, &["--json", "package", "remove", &collection, "2.0.0"])?;
+    let remove = run_with_data(
+        &data_dir,
+        &["--json", "--yes", "package", "remove", &collection, "2.0.0"],
+    )?;
     assert_success(&remove, "package remove")?;
     let remove_json: serde_json::Value = serde_json::from_slice(&remove.stdout)?;
     ensure!(
@@ -927,7 +930,7 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
         "should output ticket: {invite_out}"
     );
 
-    let leave = run_with_data(&data_dir, &["network", "leave", "team"])?;
+    let leave = run_with_data(&data_dir, &["network", "leave", "--yes", "team"])?;
     assert_success(&leave, "network leave")?;
 
     let list_after = run_with_data(&data_dir, &["networks"])?;

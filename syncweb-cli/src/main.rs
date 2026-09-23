@@ -176,6 +176,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         output_json: cli.json,
         no_daemon: cli.no_daemon,
         network: cli.network.as_deref(),
+        yes: cli.yes,
     };
     match cli.command {
         Command::Version => {
@@ -249,6 +250,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         json: output_json,
         no_daemon,
         network,
+        yes,
         ..
     } = cli;
     let effective = effective_data_dir(&data_dir, network.as_deref());
@@ -257,6 +259,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         output_json,
         no_daemon,
         network: network.as_deref(),
+        yes,
     };
     if let Command::Start(args) = command {
         let base = args.data_dir.as_ref().unwrap_or(&data_dir);
@@ -266,6 +269,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
             output_json,
             no_daemon,
             network: network.as_deref(),
+            yes,
         };
         if args.bg && !args.media_only {
             let child = spawn_daemon_process(base, &args, network.as_deref())?;
@@ -479,7 +483,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
 async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    if !confirm_destructive("stop the daemon", output_json)? {
+    if !confirm_destructive("stop the daemon", ctx.yes)? {
         println!("aborted");
         return Ok(());
     }
@@ -1229,7 +1233,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             Ok(())
         }
         SnapshotCommand::Delete { path: _, snapshot } => {
-            if !confirm_destructive("delete this snapshot", output_json)? {
+            if !confirm_destructive("delete this snapshot", ctx.yes)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -2877,6 +2881,19 @@ async fn handle_unshare(ctx: &CliContext<'_>, args: UnshareArgs) -> Result<()> {
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     let selector = args.path.to_string_lossy();
+    let operation = if args.write {
+        Some(format!("revoke write access to folder {selector}"))
+    } else {
+        args.blob
+            .as_ref()
+            .map(|blob| format!("remove the pin for shared blob {blob}"))
+    };
+    if let Some(prompt) = operation
+        && !confirm_destructive(&prompt, ctx.yes)?
+    {
+        println!("aborted");
+        return Ok(());
+    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
         let response = client
@@ -3117,7 +3134,7 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
         PackageCommand::Remove {
             collection: collection_id,
             version,
-        } => handle_package_remove(&packages, &collection_id, &version, output_json)?,
+        } => handle_package_remove(&packages, &collection_id, &version, output_json, ctx.yes)?,
         PackageCommand::Verify { collection, version } => {
             handle_package_verify(&packages, &collection, version.as_deref(), output_json)?;
         }
@@ -3222,8 +3239,9 @@ fn handle_package_remove(
     collection_id: &str,
     version: &str,
     output_json: bool,
+    assume_yes: bool,
 ) -> Result<()> {
-    if !confirm_destructive("remove this package version", output_json)? {
+    if !confirm_destructive("remove this package version", assume_yes)? {
         println!("aborted");
         return Ok(());
     }
@@ -4027,7 +4045,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Leave { name } => {
-            if !confirm_destructive("leave this network", output_json)? {
+            if !confirm_destructive("leave this network", ctx.yes)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -4060,7 +4078,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Kick { name, device } => {
-            if !confirm_destructive("kick this device from the network", output_json)? {
+            if !confirm_destructive("kick this device from the network", ctx.yes)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -4302,6 +4320,15 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    if command.delete_files
+        && !confirm_destructive(
+            &format!("permanently delete all local files for folder {}", command.folder),
+            ctx.yes,
+        )?
+    {
+        println!("aborted");
+        return Ok(());
+    }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &command.folder).await?;
         let response = client

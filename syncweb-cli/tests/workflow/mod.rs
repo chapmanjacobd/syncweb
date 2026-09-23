@@ -122,7 +122,7 @@ impl Device {
 
     #[expect(dead_code, reason = "part of DSL public API")]
     pub fn leave_delete_files(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "leave", "--delete-files", namespace])
+        self.run_ok(&["--no-daemon", "leave", "--delete-files", "--yes", namespace])
     }
 
     #[expect(clippy::unused_self, reason = "API consistency")]
@@ -208,7 +208,7 @@ impl Device {
     }
 
     pub fn network_leave(&self, name: &str) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["network", "leave", name])
+        self.run_ok(&["network", "leave", "--yes", name])
     }
 
     pub fn snapshot_create(&self, path: &Path) -> anyhow::Result<CmdOutput> {
@@ -272,6 +272,7 @@ impl Device {
             "--no-daemon",
             "snapshot",
             "delete",
+            "--yes",
             path.to_str().context("UTF-8 path")?,
             snapshot_id,
         ])

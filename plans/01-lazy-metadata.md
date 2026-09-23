@@ -98,7 +98,10 @@ after `join`).
     scan. If the stat fails (file vanished between check and read), fall back
     to the doc metadata silently.
   - Columns (human): `Path`, `Size`, `Modified`, `State` (`local` if the blob
-    is in the blob store, `remote` otherwise).
+    is in the blob store, `remote` otherwise). `Modified` is available only for
+    local rows (from the disk stat); the Rust doc index (`EntryLike`) carries no
+    mtime, so remote rows print `-` for `Modified` — unlike Python's Syncthing
+    `db/file` metadata, which does include it.
   - JSON: `{folder, path, entries: [{path, size, hash, local, modified?}]}`
     (plan 08 single-object envelope; bare array today at main.rs:4322-4327).
   - **Peer availability is deliberately absent.** Doc entries carry only
@@ -166,7 +169,10 @@ after `join`).
   - `--no-enrich`: skip even the per-entry `stat` (pure metadata listing).
   - `--sort <by>`: on a resolved folder, sorts the metadata table
     (name/size/modified/state) instead of early-dispatching to `handle_sort`
-    (main.rs:4300) — see step 5.
+    (main.rs:4300) — see step 5. Note the value set is a new, smaller
+    vocabulary (`name`/`size`/`modified`/`state`), not `handle_sort`'s
+    `--by` set (niche/frecency/peers/…); the flag name is shared but the two
+    modes accept different values, so document the split in the man page.
 - Files: syncweb-cli/src/main.rs, syncweb-cli/src/cli/commands.rs.
 
 ### 4. Guard the no-metadata state
@@ -257,7 +263,7 @@ after `join`).
 - Do **not** regress the `ls --sort`→`handle_sort` dispatch for non-folder
   selectors (main.rs:4300); only folder selections move to the table sort.
 - `FolderManager.create`/`join`/`accept` call sites in main.rs:
-  `handle_create` (main.rs:~3010), `handle_join` (main.rs:~2457),
+  `handle_create` (main.rs:2280), `handle_join` (main.rs:2442),
   daemon join-download (ipc.rs:1235) — registry upsert goes where the folder's
   mount dir is known in **each** path (embedded + daemon).
 - Man pages `syncweb-ls.1`, `syncweb-find.1`, `syncweb-sort.1` and

@@ -82,9 +82,10 @@ piece is missing:
 3. Add `access --revoke <ns> [--read|--write]` sugar that dispatches to
    `handle_unshare` (main.rs:2737) with the appropriate flags — i.e. one verb to
    both see and revoke, with plan 04's confirmation + `--yes` running underneath.
-   **`UnshareArgs` has no `--read` flag** (only `--write`, `--blob`,
-   `--ticket`); map `--read` to the plain unshare path (no `--write`), which is
-   the read-ticket revoke — and remember plain unshare also unpins
+   **`UnshareArgs` has no `--read` flag** (only `--write` and `--blob`;
+   commands.rs:813-824 — there is no `--ticket`); map `--read` to the plain
+   unshare path (no `--write`), which is the read-ticket revoke — and remember
+   plain unshare also unpins
    (`unpin_all_content`, main.rs:2772-2774), so `access --revoke --read` has the
    same pinned-column effect plan 04's step 3 notes for read-only unshare.
 4. Fulfils Maya's asymmetric-access story end-to-end: invite a phone with a

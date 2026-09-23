@@ -68,8 +68,10 @@ subscribes nothing — the user must already know the two hidden flags
   the suggested command is wrong; drop the `--subscribe` from the message.
 - Files: `syncweb-cli/src/cli/commands.rs` (the two `#[arg]` default changes +
   the two new companion fields). `main.rs` `handle_join` gains the two
-  effective-value lines above and then passes them through unchanged — the rest
-  of the handler (and its `IpcCommand::Join` wiring) stays the same.
+  effective-value lines above; the two `IpcCommand::Join` fields (main.rs:2471
+  `subscribe:`, :2473 `download:`) must bind to those effective locals
+  (`subscribe`/`download_all`) instead of the raw `command.*` fields. Nothing
+  else in the handler changes.
 - Result: first `join` prints namespace, accepts, subscribes for live sync, and
   downloads all current content — in one command, no flags learned.
 

@@ -13,7 +13,8 @@ Start with `01-lazy-metadata.md` (the highest-impact gap: **the documented lazy
 `ls`/`find` metadata view doesn't exist** — `ls/find/sort` are local-disk
 scanners via `ParallelScanner`/`FindEngine` (main.rs:4317, 4412, 4452), and
 remote doc metadata listing (`folder.list_entries()` — a `SyncwebFolder`
-method, used only at main.rs:2546) is never surfaced to the user). The plan
+method, used only at main.rs:2546 and the daemon's join-download handler at
+ipc.rs:1235) is never surfaced to the user). The plan
 flips the bias to match the original Python client (`syncweb-py`): `ls`, `find`,
 `sort` read the doc metadata index and the filesystem is touched only to enrich
 a row (`--local-only` preserves today's disk scans). Then `02-eager-join.md`

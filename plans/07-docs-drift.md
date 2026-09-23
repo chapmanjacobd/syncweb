@@ -53,10 +53,15 @@ error at dispatch or behave differently than promised.
   - **Additional absent commands (first-audit miss, re-verified):** `policy`
     (`docs/commands.md:493`), `public list` (:494), and the `export`
     walkthrough (:621-622 `syncweb export …`) are **not** `Command` variants
-    either — treat like `repl` (remove the rows). Also
+    either — treat like `repl` (remove the rows). Top-level `export` is stale
+    in two more places too: `docs/commands.md:827` ("parallel is default for
+    ls, import, export") and `MANUAL_TESTING_PLAN.md:201-202` (`syncweb export
+    …`) — `export` only exists as `package export` (commands.rs:873), so rewrite
+    those to `syncweb package export` or delete them. Also
     `docs/overview.md:204` references an "undelete" feature, and
     `MANUAL_TESTING_PLAN.md` has `conflicts` rows (:429-433) and `pending` rows
-    (:444-446) — pick all three up in the same sweep as the other absent verbs.
+    (:444-446) — pick all of these up in the same sweep as the other absent
+    verbs.
   - **Flag-level drift (docs advertise flags the commands don't take):**
     `download --limit` (:564) / `download --size` (:567),
     `folders --limit-upload` (:642), `devices --peer-limit` (:643),
@@ -97,9 +102,12 @@ error at dispatch or behave differently than promised.
    - `repl` → remove from docs and the CLI README quick-start (no
      implementation): docs/commands.md:491, docs/overview.md:53,
      docs/phases.md:14, docs/testing.md:108, syncweb-cli/README.md:30.
-   - `policy` / `public list` / `export` → same treatment as `repl`: no
-     implementation behind any plan, so remove the rows and the export example
-     (docs/commands.md:493-494, :621-622).
+   - `policy` / `public list` / `export` → `policy` and `public list` have no
+     implementation behind any plan, so remove their rows (docs/commands.md:493-494).
+     Top-level `export` (docs/commands.md:621-622, :827; MANUAL_TESTING_PLAN.md:201-202)
+     is a stale spelling — the real command is `package export` — so rewrite the
+     references to `syncweb package export` rather than dropping the (implemented)
+     feature.
    - `conflicts`/`pending`/`deleted`/`undelete` rows in
      MANUAL_TESTING_PLAN.md (:429-433, :444-446) and the `docs/overview.md:204`
      "undelete" mention → remove alongside their docs/commands.md rows above.
@@ -123,12 +131,14 @@ error at dispatch or behave differently than promised.
    - Wire the check into CI (Makefile `docs-check` target if present).
 4. Update `docs/commands.md`'s command-mapping table to exactly match the
     implemented verb set (plan 06's verbs + aliases), deleting the
-    `accept/drop/conflicts/pending/deleted/undelete/repl/policy/public list/export`
-    rows, keeping the `ls`/`find` rows as-is (accurate after plan 01's
-    metadata-first port), correcting only the `devices` description and the
-    flag-drift rows from Evidence. Also remove the `syncweb drop` row and the
-    `conflicts`/`pending` rows in MANUAL_TESTING_PLAN.md (:112, :429-433,
-    :444-446).
+    `accept/drop/conflicts/pending/deleted/undelete/repl/policy/public list`
+    rows (the `export` references are prose/walkthrough, not mapping-table rows;
+    those are handled in step 2), keeping the `ls`/`find` rows as-is (accurate
+    after plan 01's metadata-first port), correcting only the `devices`
+    description and the flag-drift rows from Evidence. Also remove the
+    `syncweb drop` row, the top-level `export` rows, and the
+    `conflicts`/`pending` rows in MANUAL_TESTING_PLAN.md (:112, :201-202,
+    :429-433, :444-446).
 
 ## Tests
 

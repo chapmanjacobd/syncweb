@@ -129,8 +129,9 @@ grouped help + man pages + completions regenerate from one source.
 - Scripts relying on `syncweb <legacy>` must keep working: keeping every legacy
   name as a `Command` variant (just `hide = true`) is stronger than an alias —
   no positional call site can break, and each legacy verb keeps its own arg
-  struct. Pure synonym aliases (`stop`, `networks`) must be added so their
-  positional forms also parse.
+  struct. Only pure synonyms that are **not** already `Command` variants need a
+  clap alias (e.g. `stop` → `shutdown`); `networks` is already a `Command`
+  variant and must NOT be re-added as an alias (step 2's rule).
 - Plan 05's `access` must not be orphaned — it is folded under `share` here; if
   plan 05 lands after this collapse, add `access` as a visible `share`
   subcommand/alias in the same step.

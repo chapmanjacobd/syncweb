@@ -1,7 +1,8 @@
 # Plan 03 — One content-filter vocabulary: `find`, `sort`, `download`, `verify`, lazy `ls` agree
 
 Priority: HIGH · Status: Draft · Owner: `syncweb-cli`
-Depends on: plan 01 (lazy `ls` adds `--remote-only`) · Replaces story: #3 (Ari)
+Depends on: plan 01 (lazy `ls` adds `--remote-only`) · Fulfills story: #4 (Ari) +
+cross-cutting theme #6 (no unified filters/progress/JSON)
 
 ## Goal
 
@@ -53,10 +54,14 @@ content-fetch commands (`download`/`verify`) have almost no filters at all.
      aliases)
    - `--type <f|d|l>`
    - `--modified-within/--modified-before` (repeatable)
-2. Flatten the group into `FindArgs`/`SortArgs` (`#[command(flatten)]`) and keep
-   the old flags as hidden aliases (`--extension`, `--levels`, `--sizes`).
-   `SortArgs` gains `--ext/--size/--type/--modified-*`; `FindArgs` keeps its
-   match semantics (`--kind exact|glob|regex` stays find-only).
+2. Flatten the group into `FindArgs`/`SortArgs` (`#[command(flatten)]`) by
+   **replacing** the per-command fields that overlap (there can be only one
+   `--ext`/`--size`/`--depth` per command — a flattened group next to an
+   existing field with the same long name is a clap conflict). The old
+   spellings move onto the group's args as hidden aliases
+   (`--extension`, `--levels`, `--sizes`, `-S`). `SortArgs` gains
+   `--ext/--size/--type/--modified-*`; `FindArgs` keeps its match semantics
+   (`--kind exact|glob|regex` stays find-only).
 3. Start a verified `ContentFilterArgs → FindQuery` converter in
    syncweb-cli/src/cli/filter.rs so every command builds the same `FindQuery`
    from one group (mirrors the existing `ContentFilter → VerifyFilter`
@@ -69,6 +74,20 @@ content-fetch commands (`download`/`verify`) have almost no filters at all.
    `ContentFilter` + `ProviderSelector`, `verify` keeps `VerifyFilter` +
    `--fix`. Add `ContentFilterArgs → ContentFilter` so the new fields map onto
    the download/verify filter without breaking their existing hash/path filters.
+   **Where the filtering happens (scope-guard constraint):** the daemon-side
+   filter (`build_ipc_verify_filter`, ipc.rs:1503) only understands
+   hash/path-prefix/glob, so ext/size/type/modified must be applied **client-side
+   to the entry list before the fetch/verify call** (list doc entries via
+   `folder.list_entries()`, filter by the new predicates, then pass the matched
+   hashes/paths through the existing hash/path filters). This keeps
+   "no daemon/core protocol changes" true; extending `VerifyFilter` (core) is
+   explicitly out of scope here. **Underspecification fix:** `download`'s
+   `source` is not always a managed folder — it can be a plain local path
+   (`handle_download`'s local-copy branch walks the filesystem directly). The
+   client-side predicates apply to **doc entries when the source resolves to a
+   folder** and to the **scanned local entries otherwise**; state the branch so
+   an implementer doesn't assume `folder.list_entries()` exists for every
+   download.
 5. **Resolve the `glob` naming trap.** `ContentFilter.glob` (filter.rs:17,
    help: "Only entries whose path matches this glob pattern") matches an entry
    **path**; `find` has no `--glob` flag — it matches a positional `pattern`
@@ -76,14 +95,21 @@ content-fetch commands (`download`/`verify`) have almost no filters at all.
    `--kind glob|regex|exact`. Same word, two meanings across commands. Rename
    the content-side flag to `--path-glob` (keep `--glob` as a hidden alias on
    download/verify), and document `find`'s positional pattern as filename
-   matching.
+   matching. Apply the same rename to plan 01's `ls --glob` (added in
+   step 2 of that plan — spell it `--path-glob` there too, reusing the shared
+   group) so download/verify/ls agree from day one. Note `join`'s `--glob`
+   (commands.rs:329) is a **subscribe-filter** path glob, not part of this
+   rename; it keeps its spelling.
 
 ### Phase C — wire the group into lazy `ls` once plan 01 lands
 
 6. `ls --remote-only` (plan 01) plus `find/sort/download/verify` all consume the
    same `ContentFilterArgs`. Also accept `--remote-only` on `find`/`download`
    once plan 01 proves lazy browsing (same "not yet on disk" predicate), as a
-   shared flag in the group rather than per-command.
+   shared flag in the group rather than per-command. This is the point where
+   `find` gains plan 01's folder-aware listing (`print_remote_entries`) —
+   `--remote-only` on `find` is only meaningful once `find` can see remote doc
+   entries, which plan 01 explicitly keeps local-only until then.
 
 ## Tests
 

@@ -12,9 +12,10 @@ Source of truth for stories/voids: `docs/user-stories.md`.
 Start with `01-lazy-metadata.md` (the highest-impact gap: **the documented lazy
 `ls`/`find` metadata view doesn't exist** — `ls/find/sort` are local-disk
 scanners via `ParallelScanner`/`FindEngine` (main.rs:4317, 4412, 4452), and
-remote doc metadata listing (`FolderManager::list_entries`, used only at
-main.rs:2546) is never surfaced to the user). Then `02-eager-join.md` and
-`03-unified-filters.md`. Safety and command-collapse follow; docs drift last.
+remote doc metadata listing (`folder.list_entries()` — a `SyncwebFolder`
+method, used only at main.rs:2546) is never surfaced to the user). Then
+`02-eager-join.md` and `03-unified-filters.md`. Safety and command-collapse
+follow; docs drift last.
 
 ## Plans
 
@@ -26,8 +27,8 @@ main.rs:2546) is never surfaced to the user). Then `02-eager-join.md` and
 | 04 | [04-safety-confirmations.md](04-safety-confirmations.md) | HIGH | Real (safe-by-default) prompts before `leave --delete-files`, `unshare --write`, `unshare --blob`; add `--yes` | — |
 | 05 | [05-access-dashboard.md](05-access-dashboard.md) | HIGH | One view of who can read/write each folder + revoke (tickets, `share --list`, `networks`) | 04 |
 | 06 | [06-command-collapse.md](06-command-collapse.md) | MEDIUM | Collapse 37 top-level commands into ~12 verbs with aliases; unify filters + `--json` | — |
-| 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`) | — |
-| 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | — |
+| 07 | [07-docs-drift.md](07-docs-drift.md) | MEDIUM | Kill stale man pages/completions + doc-listed-but-absent commands (`mirror`, `repl`, `accept`, `drop`, `conflicts`, `pending`, `deleted`, `undelete`, `policy`, `public list`) | — |
+| 08 | [08-progress-json.md](08-progress-json.md) | MEDIUM | Progress/status surfaces: `stats network`, persistent transfer + event feed, `--json` everywhere | 01, 02 |
 
 Notes on dependencies:
 

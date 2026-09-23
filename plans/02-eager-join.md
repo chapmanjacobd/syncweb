@@ -37,18 +37,39 @@ subscribes nothing — the user must already know the two hidden flags
 
 ### 1. Flip the two defaults
 
-- `subscribe: bool` → `#[arg(long, default_value_t = true, overrides_with = "no_subscribe")]`
-  and a new companion `no_subscribe: bool` → `#[arg(long, overrides_with = "subscribe")]`.
-- `download_all: bool` → `#[arg(long, default_value_t = true, overrides_with = "no_download")]`
-  and a new companion `no_download: bool` → `#[arg(long, overrides_with = "download_all")]`.
+- **Clap gotcha to avoid**: `#[arg(default_value_t = true, overrides_with = "no_subscribe")]`
+  does **not** work as an opt-out — verified: when an arg with a default value
+  is overridden, clap restores the default, so `--no-subscribe` alone still
+  yields `subscribe == true`. Do not use `overrides_with` here.
+- Instead, give both flags a default of `true` with **no** `overrides_with`,
+  add plain companion `--no-*` bools, and compute the effective value in
+  `handle_join`:
+  - `subscribe: bool` → `#[arg(long, default_value_t = true)]` + new
+    `no_subscribe: bool` → `#[arg(long, help = "Skip enabling live syncing on join")]`
+  - `download_all: bool` → `#[arg(long, default_value_t = true)]` + new
+    `no_download: bool` → `#[arg(long, help = "Join without downloading existing content")]`
+  - Effective values (computed once at the top of `handle_join`, then used at
+    main.rs:2457, 2471, 2473, 2494, 2496 — 2471 and 2473 are the two
+    `IpcCommand::Join` fields sent to the daemon fork, `subscribe: command.subscribe`
+    and `download: command.download_all`, so the **effective** values — not the
+    paired raw flags — must be what the fork passes): `let subscribe = command.subscribe && !command.no_subscribe;`
+    and `let download_all = command.download_all && !command.no_download;`.
+  - Verified behavior: no flags → both `true`; `--no-subscribe` → subscribe
+    `false`; `--no-download` → download_all `false`; both conflicting flags →
+    `no_*` wins (deterministic).
 - Both become **opt-out, not opt-in**:
   - `--no-subscribe` / `--no-download` are the only ways to keep the old lazy
     behavior.
 - Keep `--subscribe` / `--download-all` as accepted no-ops for backward compat
-  (existing scripts that pass them still work; they're already default-true).
-- Files: `syncweb-cli/src/cli/commands.rs` (the two `#[arg]` + the two new
-  companion fields). `main.rs` `handle_join` stays the same code — it just now
-  runs with `true` by default.
+  (existing scripts that pass them still work; they're default-true).
+- Out-of-date message to update while there: the bail at main.rs:2458
+  ("re-enable live syncing with `join <folder> --subscribe`") fires only on the
+  `--no-subscribe` path now, but bare `join <folder>` already re-subscribes — so
+  the suggested command is wrong; drop the `--subscribe` from the message.
+- Files: `syncweb-cli/src/cli/commands.rs` (the two `#[arg]` default changes +
+  the two new companion fields). `main.rs` `handle_join` gains the two
+  effective-value lines above and then passes them through unchanged — the rest
+  of the handler (and its `IpcCommand::Join` wiring) stays the same.
 - Result: first `join` prints namespace, accepts, subscribes for live sync, and
   downloads all current content — in one command, no flags learned.
 
@@ -56,11 +77,19 @@ subscribes nothing — the user must already know the two hidden flags
 
 - When the joined folder has content and `download_all` is now default-true,
   print a one-line progress summary at the end of join:
-  `joined <ns> — live sync on; downloaded <n> files (<size>)`.
+  `joined <ns> — live sync on; downloaded <n> files (<size>)`. Print the
+  `— live sync on;` fragment only when the effective `subscribe` is true
+  (`--no-subscribe` drops it), and print the summary itself only when the
+  effective `download_all` ran (omit it under `--no-download` — the existing
+  human branch at main.rs:2508-2510 must switch from `command.download_all` to
+  the effective value so `--no-download` doesn't print `downloaded: 0 files`).
   Reuse existing progress-state affordances from plan 08 (progress/`--json`) —
   this plan only adds the final summary line, not a spinner. The existing
-  `--json` branch (main.rs:2501-2505) already emits `{"status":"joined", ...,
-  "downloaded": n}`; add the file count there too.
+  `--json` branch (main.rs:2501-2505) already emits
+  `{"status":"joined", ..., "downloaded": n}`; if the human line shows
+  `(<size>)`, add `size` to the JSON too — `download_joined_folder` currently
+  returns only a file **count**, so summing entry sizes needs a small change to
+  that helper (it already walks `folder.list_entries()`, main.rs:2546-2560).
 
 ### 3. Preserve the lazy escape hatch in docs
 
@@ -76,8 +105,25 @@ subscribes nothing — the user must already know the two hidden flags
   - `join <ticket> --no-subscribe` → assert `subscribe` not enabled.
   - `join <ticket> --no-download` → assert no files on disk (lazy preserved).
   - regression: `join` of an already-tracked folder stays idempotent.
-- Unit: `args.rs` `spec_tail` — both flags now show `[default: true]` in help
-  (this exercises the grouped help formatting; existing tests at args.rs:205).
+- Unit (`syncweb-cli/src/cli/args.rs` or `commands.rs` `#[cfg(test)]`):
+  parse-level assertion that `FolderJoin` parses with `subscribe`/`download_all`
+  `true` by default, and that the effective-value computation
+  (`subscribe && !no_subscribe`, `download_all && !no_download`) yields `false`
+  for each `--no-*` flag and deterministic "no-wins" when both spellings are
+  passed. Note: bool flags never render `[default: true]` in the grouped help —
+  `spec_tail` (args.rs:142-144) skips args whose action takes no values
+  (`ArgAction::SetTrue`), so the grouped-help formatting test cannot assert a
+  `[default:]` tail on these flags.
+- **Existing tests become download-bearing:** every current non-TTY `join`
+  invocation now downloads by default — including the `workflow` helpers
+  `join`/`join_with_options` (tests/workflow/mod.rs:106-116, used across
+  `basic_sync.rs` and friends) and the daemon-mode join at
+  daemon_integration_test.rs:426 (`join --subscribe --ingest-only`, which
+  currently stays lazy; the existing `--download-all` joins at :1049/:1187 are
+  unaffected). They assert on folder tracking / capability, not on absence of
+  files, so they keep passing — but any lazy-focused scenario (plan 01's tests)
+  must pin `--no-download`, and the suite gets slower. Note this in the PR
+  description rather than modifying every helper.
 
 ## Risks / rollback
 
@@ -86,8 +132,9 @@ subscribes nothing — the user must already know the two hidden flags
   (`--no-download`) and plan 01's lazy listing. A size/path filter on join
   already exists (`--max-size`, `--sync-prefix`, `--glob` on `FolderJoin`), so
   `join --no-download --glob 'no/movies'` stays available via subscribe filters.
-- Rollback: revert the two `default_value_t = true` lines + remove the two
-  companion fields. Everything else is unchanged.
+- Rollback: revert the two `default_value_t = true` changes, remove the two
+  companion fields, and drop the two effective-value lines in `handle_join`.
+  Everything else is unchanged.
 
 ## Handoff notes
 

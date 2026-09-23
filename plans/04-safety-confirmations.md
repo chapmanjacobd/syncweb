@@ -1,7 +1,8 @@
 # Plan 04 — Real safety prompts for destructive ops (`leave --delete-files`, `unshare --write`, `unshare --blob`)
 
 Priority: HIGH · Status: Draft · Owner: `syncweb-cli`
-Depends on: — · Fulfills stories: #2 (Maya, "stop sharing / don't nuke"), #4 (Oli)
+Depends on: — · Fulfills story: #2 (Maya, "stop sharing / don't nuke") +
+cross-cutting theme #5 (safety needs friction)
 
 ## Goal
 
@@ -66,7 +67,7 @@ matching the visual weight their consequences deserve.
 ### 2. Wire the prompt into `leave`
 
 - In `handle_leave` (main.rs:4163), when `command.delete_files` is set, call
-  `confirm_destructive(&format!("permanently delete all local files for folder {selector}"), output_json)?`
+  `confirm_destructive(&format!("permanently delete all local files for folder {selector}"), output_json || ctx.yes)?`
   **before** the `daemon_client_or_start` fork (main.rs:4167) so both the daemon
   and embedded branches get the same guard.
 - Plain `leave` (no `--delete-files`) stays prompt-free.
@@ -80,15 +81,29 @@ matching the visual weight their consequences deserve.
   - `"remove the pin for shared blob {hash}"`
   Branch on which sub-flag is present; prompt only the affected capability, not
   both.
-- Read-only `unshare` (no `--write`, no `--blob`) stays prompt-free.
+- Read-only `unshare` (no `--write`, no `--blob`) stays prompt-free. Note the
+  code path for read-only unshare also calls `unpin_all_content` (main.rs:2772-2774),
+  so it drops retention pins too; this is a deliberate scope choice — revoking a
+  read ticket + pins is not a data loss ("blobs remain, just unpinned"), unlike
+  `leave --delete-files`. If reviewers want pin-removal guarded too, add a third
+  prompt string for the plain-unshare path in the same step.
 
 ### 4. Add a global `--yes` (skip-all-prompts) flag
 
 - Add `yes: bool` to `Cli` (syncweb-cli/src/cli/args.rs, `#[arg(long, global = true, help = "Assume yes to every destructive-operation prompt")]`).
-- Plumb `--yes` through `CliContext` so handlers can pass it; treat it as the
-  explicit "I know what I'm doing" automation escape hatch. `--yes` sets the
-  same `Ok(true)` branch as `output_json` for `confirm_destructive`, but is
-  available on plain-TTY automation too.
+- Plumb it through `CliContext` (add a `yes: bool` field, args.rs:7-13) so
+  handlers can pass it. `confirm_destructive`'s signature becomes
+  `confirm_destructive(operation: &str, assume_yes: bool)` where the caller
+  passes `ctx.output_json || ctx.yes`. Update the existing call sites
+  (main.rs:480 `shutdown` and 1174 `snapshot delete` use `ctx` directly; 3892
+  `network leave` and 3925 `network kick` are inside `handle_network(ctx, …)`,
+  main.rs:3854, so they can too — but **`package remove` is different**:
+  `handle_package_remove(&packages, &collection_id, &version, output_json)`
+  (main.rs:3082) takes only `output_json`, no `ctx`, so combine at its call
+  site (main.rs:2982): `handle_package_remove(..., output_json || ctx.yes)`).
+  Otherwise `--yes` would be ignored there. Treat `--yes` as the explicit
+  "I know what I'm doing" automation escape hatch: it sets the same `Ok(true)`
+  branch as `output_json`, but is available on plain-TTY automation too.
 - Keep `--json`'s auto-approve; `--yes` is for automation that doesn't want JSON
   but still wants no interaction.
 
@@ -101,11 +116,33 @@ matching the visual weight their consequences deserve.
   - `unshare --write --yes` → revoked.
   - `shutdown` under non-TTY → **does not** shut down (regression on the 5
     existing sites now aborting); `shutdown --yes` → shuts down.
-- Existing workflow tests that rely on non-TTY destructive commands (e.g.
-  `snapshot delete`, `package remove`, `network leave/kick`) must add `--yes`
-  to those invocations; update them in the same PR. Verify by running the full
-  suite — any test that hangs is a missed prompt; any test that now aborts is a
-  missed `--yes`.
+- Existing tests that invoke destructive commands non-TTY will now abort and
+  must add `--yes`. Enumerate them so none is missed (grep `shutdown|unshare|
+  "network", "leave"|"network", "kick"`):
+  - `daemon_integration_test.rs`: **26** `shutdown` invocations (lines 114,
+    150, 167, 215, 234, 253, 280, 323, 361, 392, 430, 473, 511, 561, 599, 640,
+    765, 793, 865, 892, 952, 989, 1075, 1132, 1212-1213) — the `syncweb()` test
+    helper makes this a mechanical `--yes` addition per call. (Re-verified: the
+    count is exactly 26, matching this list.)
+  - `daemon_integration_test.rs:549` (inside
+    `test_daemon_leave_delete_files_via_ipc`, :520): `leave --delete-files <ns>` —
+    asserts the directory is deleted on success (:556-559); without `--yes` it
+    now aborts and the assert flips. (The plain `leave` calls at :507/:750 are
+    unaffected.) The workflow helper `leave_delete_files` (mod.rs:123) is
+    currently `#[expect(dead_code)]` — not called, so nothing to migrate there.
+  - `cli_test.rs`: `shutdown --force` (:779), `unshare --write` (:998),
+    `network leave` (:1253), `network kick` (:1225 — this test expects the kick
+    to *fail*; without `--yes` the non-TTY abort exits 0 and flips the
+    assertion).
+  - `workflow/basic_sync.rs`: network leave (:216) and `snapshot delete` (:286)
+    both run non-TTY and now abort; the workflow helpers `network_leave`
+    (mod.rs:209) and `snapshot_delete` (mod.rs:269-277) take no `--json`/
+    `--yes`, so add `--yes` in the helper (or at these two call sites).
+  - `full_suite_test.rs:923`: `network leave` (plain `Command`, non-TTY, no
+    `--json`) — unaffected by the `--json` branch but hit by the non-TTY abort;
+    add `--yes`. (The `package remove --json` at :694 auto-approves, unchanged.)
+  - Verify by running the full suite — any test that hangs is a missed prompt;
+  any test that now aborts (or asserts on the aborted exit) is a missed `--yes`.
 
 ## Risks / rollback
 

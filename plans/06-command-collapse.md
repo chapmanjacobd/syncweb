@@ -1,7 +1,8 @@
 # Plan 06 — Collapse 37 top-level commands into ~12 verbs (aliases keep scripts green)
 
 Priority: MEDIUM · Status: Draft · Owner: `syncweb-cli`
-Depends on: — · Fulfills story: #3 (Ari, surface sprawl), #6 (Oli, "which man page do I read")
+Depends on: — · Fulfills story: #3 (Dev, surface sprawl) + cross-cutting theme
+#3 (35+ top-level commands → ~12 verbs)
 
 ## Goal
 
@@ -9,9 +10,9 @@ Depends on: — · Fulfills story: #3 (Ari, surface sprawl), #6 (Oli, "which man
 Grouped help helps, but it doesn't answer "which verb do I learn?" — Ari and Oli
 each face a wall of nearly-identical surface verbs (`ls` vs `find` vs `search`
 vs `sort`, `share` vs `publish` vs `package` vs `link` vs `provider`). Collapse
-the functional surface to ~12 stable verbs, keep every legacy spelling as an
-invisible alias, and make grouped help + man pages + completions regenerate from
-one source.
+the visible functional surface to ~12 stable verbs, keep every legacy spelling
+as a **hidden** variant (never a rename — scripts keep working), and make
+grouped help + man pages + completions regenerate from one source.
 
 ## Evidence (verified in code)
 
@@ -39,8 +40,9 @@ one source.
 ## Scope guard
 
 - **CLI surface + help/completions/man only.** No daemon/core protocol changes.
-- Every collapse is a **verb + alias**, never a rename: legacy scripts keep
-  working byte-for-byte because aliases resolve to the same handler.
+- Every collapse keeps the legacy spelling **functional**: legacy `Command`
+  variants are hidden, not deleted, and pure synonyms are clap aliases — so
+  scripts keep working byte-for-byte.
 
 ## Steps
 
@@ -63,38 +65,76 @@ one source.
 
    Meta/utility commands stay top-level and are **not** counted in the 12:
    `version`, `devices`, `completions`, `manpages`, `help`.
-2. Implement as clap **aliases on the retained verbs** (`visible_alias` for the
-   legacy spellings → old scripts and muscle memory both work; new help shows
-   only the canonical verbs, with the full legacy listing behind
-   `--show-legacy`). Keep `all_subcommands_are_categorized` green by listing
-   alias→category in the macro.
-3. `stats file` and `db` stay reachable (power surfaces used by ops/backup
+2. **Mechanism (keep every legacy spelling byte-for-byte working).** Clap
+   subcommand **aliases cannot merge incompatible arg structs** — aliasing
+   `create` onto `folders` does not make `folders` accept `FolderCreate` args.
+   So the collapse is implemented as:
+   - Keep every legacy `Command` variant in `commands.rs` and mark the
+     non-canonical ones `#[command(hide = true)]` so they stay fully functional
+     but drop out of the grouped help. This is the "aliases, not renames" rule:
+     `syncweb create ./docs`, `syncweb sort music/`, `syncweb unshare --write`
+     all keep their exact handlers.
+   - Add clap `alias`/`visible_alias` **only** for pure synonyms that are not
+     already `Command` variants (e.g. `stop` → `shutdown`).
+   - **Do not use `visible_alias` for the hidden legacy verbs** — a visible
+     alias would re-add them to `--help`, defeating the collapse. Use `hide`.
+     (The earlier draft said `visible_alias`; that contradicts "new help shows
+     only the canonical verbs".)
+   - **Underspecification fix — do *not* delete legacy rows from
+     `help_categories!`.** The macro generates **both** `COMMAND_CATEGORIES`
+     (display list) **and** `category_of` — an **exhaustive** `match command`
+     over all 37 variants (args.rs:41-45, verified exhaustive today). Removing
+     a legacy verb's row drops its `category_of` arm → non-exhaustive match →
+     **compile error**, and `all_subcommands_are_categorized`'s reverse checks
+     (args.rs:220-233 — it compares the counted set against *all* subcommands,
+     hidden or not) fail. Instead: **keep all 37 rows in the macro** and drive
+     visibility purely from display code —
+     1. mark legacy verbs `#[command(hide = true)]` (stays parseable; clap
+        `--help` omits them), and
+     2. make `print_grouped_help` **skip hidden subcommands**
+        (`if sc.is_hidden() { continue; }` at args.rs:174-183) so the grouped
+        help shows only the 12 + 5 names. `--show-legacy` re-lists the hidden
+        ones in that loop.
+     With this, `all_subcommands_are_categorized` stays **unchanged and
+     green** — every variant remains categorized (compile-checked) and the
+     display list is a strict subset. If you prefer the smaller
+     `COMMAND_CATEGORIES`, split the macro into a display list + separate
+     exhaustive category match; do not claim "the macro lists only 17" without
+     that split.
+3. `stats files` and `db` stay reachable (power surfaces used by ops/backup
    agents; plan 08 keeps them scriptable) — they live under `stats`, not as
-   their own top-level verbs.
-4. Regenerate man pages + completions; delete the orphaned generation paths that
-   a collapse would otherwise leave behind (see plan 07 for the doc-drift loop).
+   their own top-level verbs. (The subcommand is `stats files`, not `stats file`.)
+4. Regenerate man pages + completions from `Cli::command()` after the
+   hide/alias changes; hidden verbs must not produce orphaned `.1` files that
+   plan 07's `--check` would flag (man/completions for hidden subcommands are
+   intentionally dropped or kept only under `--show-legacy`).
 
 ## Tests
 
 - `syncweb-cli/src/cli/args.rs` `#[cfg(test)] all_subcommands_are_categorized`
-  still passes (proves no orphaned/UNCATEGORIZED verb after collapse).
-- `syncweb-cli/tests/cli_test.rs`: legacy spellings (`syncweb create`,
-  `syncweb unshare --write`, `syncweb sort`) each run to the same handler as
-  their canonical verb via alias dispatch (assert identical `--json` output for
-  the canonical + legacy spelling).
+  updated to assert every **visible** subcommand is categorized (hidden legacy
+  verbs exempt) and still passes — proves no orphaned/UNCATEGORIZED visible
+  verb after collapse.
+- `syncweb-cli/tests/cli_test.rs`: legacy spellings still parse and run —
+  `syncweb create <dir>`, `syncweb sort <dir>`, `syncweb unshare --write <ns>`
+  each succeed with their existing output (they are retained `Command`
+  variants, just hidden). Pure aliases dispatch to the same handler: assert
+  `syncweb stop` and `syncweb shutdown` produce identical output.
 - `syncweb-cli/src/cli/args.rs` unit: `print_grouped_help` shows exactly the 12
-  functional verbs (plus the 5 meta) in the top block; `completions`/man pages
-  list aliases but not removed top-level verbs.
+  functional verbs (plus the 5 meta) in the top block; hidden legacy verbs do
+  not appear there, and `--show-legacy` lists them.
 
 ## Risks / rollback
 
-- Scripts relying on `syncweb <legacy>` subcommand **positional** matching must
-  keep working: keep **all** legacy names as top-level aliases in addition to
-  their canonical homes, so no positional call site breaks.
+- Scripts relying on `syncweb <legacy>` must keep working: keeping every legacy
+  name as a `Command` variant (just `hide = true`) is stronger than an alias —
+  no positional call site can break, and each legacy verb keeps its own arg
+  struct. Pure synonym aliases (`stop`, `networks`) must be added so their
+  positional forms also parse.
 - Plan 05's `access` must not be orphaned — it is folded under `share` here; if
-  plan 05 lands after this collapse, add `access` as a `share` subcommand/alias
-  in the same step.
-- Rollback: revert the alias table (commands.rs) + macro rows. No core change
+  plan 05 lands after this collapse, add `access` as a visible `share`
+  subcommand/alias in the same step.
+- Rollback: revert the `hide = true` annotations + macro rows. No core change
   to revert.
 
 ## Handoff notes

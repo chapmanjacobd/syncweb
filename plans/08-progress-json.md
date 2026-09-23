@@ -2,8 +2,8 @@
 
 Priority: MEDIUM · Status: Draft · Owner: `syncweb-cli`
 Depends on: plan 01 (lazy `ls` adds a remote dimension), plan 02 (eager join
-needs a progress summary) · Fulfills story: #5 (Maya, phone status), #6 (Oli,
-headless server)
+needs a progress summary) · Fulfills story: #6 (Oli, headless server) +
+cross-cutting theme #6 (no unified progress/JSON)
 
 ## Goal
 
@@ -62,8 +62,8 @@ to know it was `stats files`, and the JSON shape varies per command).
 3. **Event feed for live progress** — `syncweb stats network --follow` /
    `--watch` that streams daemon sync events live using the existing
    `SyncEvent`/fetch-intent plumbing (main.rs:2527-2539); Oli gets a
-   `cron`-safe `-1` run, Maya gets `--follow` so the phone shows "syncing …"
-   without polling.
+   cron-safe one-shot (`--follow --once`: print the current snapshot and exit),
+   Maya gets `--follow` so the phone shows "syncing …" without polling.
 4. **Stabilize `--json` as a global contract**: audit every `print` command's
    JSON shape and normalize to a stable envelope (single object per command;
    arrays only inside a named key). Update the `--json` help text from "where
@@ -85,9 +85,13 @@ to know it was `stats files`, and the JSON shape varies per command).
 ## Risks / rollback
 
 - `--follow` streaming under `--json` must emit **one JSON object per line**
-  (NDJSON) — document it; scripts that expect a single blob will break. Provide
-  `--follow --json-lines` vs `--follow --json <envelope>` and default the
-  generic `--json` to NDJSON since it's a stream.
+  (NDJSON) — document it; scripts that expect a single blob will break.
+  Resolve the envelope tension explicitly: step 4's "single object per command"
+  contract applies to **non-streaming** commands; a **streaming** command
+  (`--follow`) is the documented exception and emits NDJSON lines under `--json`.
+  Provide `--json` (NDJSON for the stream) and keep `--json <envelope>` off the
+  table — offering two stream JSON modes invites drift. State the exception in
+  the updated `--json` help text.
 - Rollback: `--follow` and aggregated `status --json` are additive; removing
   them restores today's surface with no daemon change.
 
@@ -95,7 +99,7 @@ to know it was `stats files`, and the JSON shape varies per command).
 
 - The original draft cited the "where supported" phrase to `docs/commands.md:186`
   and `README.md`; it is actually in the CLI's own `--json` help string
-  (args.rs:248). Fix the flag help, not just the docs.
+  (args.rs:247, not 248). Fix the flag help, not just the docs.
 - `stats network --json` field names are `total_upload`/`total_download`
   (not `upload_total`/`download_total`); do not rename them — scripts may
   already depend on the current `BandwidthStats` serialization.

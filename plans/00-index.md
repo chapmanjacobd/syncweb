@@ -15,12 +15,12 @@ row, a `folder_mounts` registry plus the `ListEntries` IPC resolve paths in
 both embedded and daemon modes, and `--local-only` preserves today's disk
 scans.
 
-Plan 02 (eager `join`) is done — bare `join` enables live sync by default
-(one-line summary with count + size, `size` in `--json`), but bulk download is
-opt-in via `join --download-existing` (alias `--download`) so a big folder
-can't fill your disk by accident; `--no-subscribe` is the metadata-only "look
-around" mode. Start with `03-unified-filters.md`. Safety and command-collapse
-follow; docs drift last.
+Plan 02 (eager `join`) is done — bare `join` is metadata-only: it tracks the
+folder but live sync is opt-in via `join --subscribe` (one-line summary with
+count + size, `size` in `--json`), and bulk download is opt-in via
+`join --download-existing` (alias `--download`) so a big folder can't fill
+your disk by accident. Start with `03-unified-filters.md`. Safety and
+command-collapse follow; docs drift last.
 
 ## Plans
 

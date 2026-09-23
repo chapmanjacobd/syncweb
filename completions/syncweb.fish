@@ -141,8 +141,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l max-count -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l max-size -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l subscribe -d 'Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l no-subscribe -d 'Skip enabling live syncing on join'
+complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l subscribe -d 'Track + enable live syncing (persisted subscribe-changes); off by default, idempotent on an existing folder'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ingest-only -d 'Only deliver entries ingested after live syncing is enabled'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l ignore-self -d 'Ignore events emitted by this device\'s own writes'
 complete -c syncweb -n "__fish_syncweb_using_subcommand join" -l download-existing -l download -d 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can\'t fill your disk by accident'

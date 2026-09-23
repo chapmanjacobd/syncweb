@@ -2457,12 +2457,13 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         command.path.clone()
     };
 
-    // `join <folder>` (subscribe is on by default) on an already-tracked folder: idempotent enable.
+    // `join --subscribe <folder>` (subscribe is an explicit opt-in) on an already-tracked
+    // folder: idempotent enable. Without it there is nothing left for join to do.
     let is_new_ticket =
         command.ticket.parse::<iroh_docs::DocTicket>().is_ok() || command.ticket.trim_start().starts_with("syncweb://");
     if !is_new_ticket {
         if !subscribe {
-            anyhow::bail!("folder already tracked — re-enable live syncing with `join <folder>`");
+            anyhow::bail!("folder already tracked — enable live syncing with `join --subscribe <folder>`");
         }
         return handle_join_existing(ctx, &command.ticket, &filters).await;
     }

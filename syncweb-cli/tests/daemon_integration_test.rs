@@ -1083,7 +1083,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_join_default_subscribes_without_download() -> anyhow::Result<()> {
+fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()> {
     let alice_data = cli_test_dir("join-default-alice")?;
     let alice_folder = cli_test_dir("join-default-alice-folder")?;
     let bob_data = cli_test_dir("join-default-bob")?;
@@ -1142,8 +1142,8 @@ fn test_join_default_subscribes_without_download() -> anyhow::Result<()> {
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
     ensure!(
-        join_out.contains("live sync on"),
-        "bare join should report live sync enabled: {join_out}"
+        !join_out.contains("live sync on"),
+        "bare join should not report live sync enabled: {join_out}"
     );
     ensure!(
         !join_out.contains("downloaded:"),
@@ -1158,8 +1158,8 @@ fn test_join_default_subscribes_without_download() -> anyhow::Result<()> {
     ensure!(config.status.success(), "config show subscribe should succeed");
     let config_out = String::from_utf8(config.stdout).context("UTF-8 output")?;
     ensure!(
-        config_out.contains("enabled = true"),
-        "bare join should persist live sync: {config_out}"
+        config_out.contains("enabled = false"),
+        "bare join should persist live sync as disabled: {config_out}"
     );
 
     let shutdown = syncweb(&["--data-dir", alice_data_arg, "shutdown", "--force"])?;
@@ -1225,12 +1225,13 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
         "--data-dir",
         bob_data_arg,
         "join",
+        "--subscribe",
         &ticket,
         bob_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(
         join.status.success(),
-        "bob join should succeed: {}",
+        "bob join --subscribe should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
 

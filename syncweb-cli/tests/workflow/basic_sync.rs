@@ -747,21 +747,21 @@ fn path_selector_resolves_like_namespace() -> anyhow::Result<()> {
 }
 
 #[test]
-fn join_default_enables_live_sync_without_download() -> anyhow::Result<()> {
+fn join_defaults_to_metadata_only_without_download() -> anyhow::Result<()> {
     let world = World::new(&["alice", "bob"])?;
     let alice = world.device("alice")?;
     let bob = world.device("bob")?;
 
-    let folder_dir = world.root().join("eager-subscribe-docs");
+    let folder_dir = world.root().join("metadata-docs");
     let info = alice.create(&folder_dir)?;
-    alice.write_file(&folder_dir.join("doc.txt"), b"eager")?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"lazy")?;
     alice.import(&folder_dir)?;
 
-    let bob_dir = world.root().join("bob-eager-subscribe");
+    let bob_dir = world.root().join("bob-metadata-only");
     let out = bob.join(&info.ticket, &bob_dir)?;
     ensure!(
-        out.stdout().contains("live sync on"),
-        "bare join should report live sync enabled: {}",
+        !out.stdout().contains("live sync on"),
+        "bare join should not report live sync enabled: {}",
         out.stdout()
     );
     ensure!(
@@ -781,8 +781,8 @@ fn join_default_enables_live_sync_without_download() -> anyhow::Result<()> {
         config.stdout()
     );
     ensure!(
-        config.stdout().contains("enabled = true"),
-        "join should enable live sync by default: {}",
+        config.stdout().contains("enabled = false"),
+        "bare join should leave live sync disabled by default: {}",
         config.stdout()
     );
 
@@ -790,28 +790,28 @@ fn join_default_enables_live_sync_without_download() -> anyhow::Result<()> {
 }
 
 #[test]
-fn join_no_subscribe_skips_live_sync() -> anyhow::Result<()> {
+fn join_subscribe_enables_live_sync() -> anyhow::Result<()> {
     let world = World::new(&["alice", "bob"])?;
     let alice = world.device("alice")?;
     let bob = world.device("bob")?;
 
-    let folder_dir = world.root().join("no-subscribe-docs");
+    let folder_dir = world.root().join("subscribe-docs");
     let info = alice.create(&folder_dir)?;
-    alice.write_file(&folder_dir.join("doc.txt"), b"lazy")?;
+    alice.write_file(&folder_dir.join("doc.txt"), b"eager")?;
     alice.import(&folder_dir)?;
 
-    let bob_dir = world.root().join("bob-no-subscribe");
-    let out = bob.join_with_options(&["--no-subscribe"], &info.ticket, &bob_dir)?;
+    let bob_dir = world.root().join("bob-subscribe");
+    let out = bob.join_with_options(&["--subscribe"], &info.ticket, &bob_dir)?;
     ensure!(
-        !out.stdout().contains("live sync on"),
-        "--no-subscribe should drop the live-sync fragment: {}",
+        out.stdout().contains("live sync on"),
+        "--subscribe should keep the live-sync fragment: {}",
         out.stdout()
     );
 
     let config = bob.run_ok(&["config", "show", "subscribe"])?;
     ensure!(
-        config.stdout().contains("enabled = false"),
-        "--no-subscribe should leave live sync disabled: {}",
+        config.stdout().contains("enabled = true"),
+        "--subscribe should enable live syncing: {}",
         config.stdout()
     );
 
@@ -830,7 +830,7 @@ fn join_download_existing_runs_the_one_shot_download() -> anyhow::Result<()> {
     alice.import(&folder_dir)?;
 
     let bob_dir = world.root().join("bob-download-existing");
-    let out = bob.join_with_options(&["--download-existing"], &info.ticket, &bob_dir)?;
+    let out = bob.join_with_options(&["--subscribe", "--download-existing"], &info.ticket, &bob_dir)?;
     ensure!(
         out.stdout().contains("downloaded:"),
         "--download-existing should run the one-shot download: {}",
@@ -859,9 +859,9 @@ fn join_already_tracked_folder_is_idempotent() -> anyhow::Result<()> {
     alice.import(&folder_dir)?;
 
     let bob_dir = world.root().join("bob-idem");
-    bob.join(&info.ticket, &bob_dir)?;
+    bob.join_with_options(&["--subscribe"], &info.ticket, &bob_dir)?;
 
-    let second = bob.join(&info.ticket, &bob_dir)?;
+    let second = bob.join_with_options(&["--subscribe"], &info.ticket, &bob_dir)?;
     ensure!(
         second.stdout().contains("joined"),
         "re-join of an already-tracked folder should succeed: {}",

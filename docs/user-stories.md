@@ -32,11 +32,11 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
   download, receiveonly) that the default hides. Data dir defaults to
   `./.syncweb` (cwd-relative) while docs say `~/.config/syncweb` — confusion
   about where "my files" and "syncweb's files" live.
-- Improvement: `join` enables live sync by default (persisted), so new files
-  arrive on their own; existing content is bulk-downloaded only on an explicit
+- Improvement: `join` tracks the folder and shows metadata immediately (a
+  human-readable one-liner "joined <ns>"), with live sync an explicit
+  `join --subscribe` and existing content bulk-downloaded only on an explicit
   `join --download-existing` (alias `--download`), so the disk is never filled
-  without consent. Print a human-readable one-liner ("joined <ns> — live sync
-  on; downloaded 5 files (12 GB)") instead of a bare URL.
+  or spammed without consent.
 
 ### 2. Maya shares a folder without nuking it
 

@@ -238,7 +238,8 @@ On a resolved folder `sort --by` takes the small metadata vocabulary
 | Step | Action | Expected Result | Debug |
 |------|--------|-----------------|-------|
 | 1 | Alice: `syncweb share ./shared-docs` | Creates read-only share ticket/URL | Save the ticket |
-| 2 | Bob: `syncweb join <ticket> ./bob-public` | Tracks folder + enables live syncing (persisted); NO bulk download by default | `syncweb ls ./bob-public` shows entries; folder dir starts empty; `config show subscribe` → `enabled = true` |
+| 2 | Bob: `syncweb join <ticket> ./bob-public` | Tracks metadata only; NO live sync and NO bulk download by default | `syncweb ls ./bob-public` shows entries; folder dir starts empty; `config show subscribe` → `enabled = false` |
+| 3 | Bob: `syncweb join --subscribe <ticket> ./bob-public` (fresh folder) | Tracks folder + enables live syncing (persisted); NO bulk download by default | `syncweb ls ./bob-public` shows entries; `config show subscribe` → `enabled = true` |
 | 3 | Bob: `syncweb download ./bob-public/` (or `syncweb join --download-existing <ticket> ./bob-public` on a fresh folder) | Downloads existing content explicitly | Files appear in the folder |
 | 4 | Alice: `syncweb unshare ./shared-docs` | Stops sharing (removes pin, stops announcing) | Bob can no longer see updates |
 

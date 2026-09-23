@@ -165,8 +165,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-size=[]:MAX_SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \
-'--subscribe[Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder]' \
-'--no-subscribe[Skip enabling live syncing on join]' \
+'--subscribe[Track + enable live syncing (persisted subscribe-changes); off by default, idempotent on an existing folder]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
 '--download-existing[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can'\''t fill your disk by accident]' \

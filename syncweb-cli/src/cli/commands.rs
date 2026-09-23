@@ -314,12 +314,9 @@ pub struct FolderJoin {
     pub network: Option<String>,
     #[arg(
         long,
-        default_value_t = true,
-        help = "Track + enable live syncing (persisted subscribe-changes); idempotent on an existing folder"
+        help = "Track + enable live syncing (persisted subscribe-changes); off by default, idempotent on an existing folder"
     )]
     pub subscribe: bool,
-    #[arg(long, help = "Skip enabling live syncing on join")]
-    pub no_subscribe: bool,
     #[arg(long, help = "Only deliver entries ingested after live syncing is enabled")]
     pub ingest_only: bool,
     #[arg(long, help = "Ignore events emitted by this device's own writes")]
@@ -350,7 +347,7 @@ pub struct FolderJoin {
 impl FolderJoin {
     #[must_use]
     pub const fn effective_subscribe(&self) -> bool {
-        self.subscribe && !self.no_subscribe
+        self.subscribe
     }
 }
 
@@ -1083,25 +1080,24 @@ mod tests {
     }
 
     #[test]
-    fn join_defaults_to_subscribe_without_download() {
+    fn join_defaults_to_no_subscribe_without_download() {
         let join = parse_join(&[]);
-        assert!(join.subscribe, "subscribe should default to true");
+        assert!(!join.subscribe, "subscribe should default to off");
         assert!(
             !join.download_existing,
             "download_existing should default to false (no bulk download)"
         );
-        assert!(join.effective_subscribe());
+        assert!(!join.effective_subscribe());
     }
 
     #[test]
-    fn join_no_subscribe_disables_live_sync() {
-        let join = parse_join(&["--no-subscribe"]);
-        assert!(join.subscribe, "--subscribe stays accepted as an explicit opt-in");
-        assert!(join.no_subscribe);
-        assert!(!join.effective_subscribe());
+    fn join_subscribe_is_explicit_opt_in() {
+        let join = parse_join(&["--subscribe"]);
+        assert!(join.subscribe, "--subscribe should enable live syncing");
+        assert!(join.effective_subscribe());
         assert!(
             !join.download_existing,
-            "--no-subscribe alone should not trigger a download"
+            "--subscribe alone should not trigger a download"
         );
     }
 
@@ -1112,7 +1108,10 @@ mod tests {
             join.download_existing,
             "--download-existing should enable the one-shot download"
         );
-        assert!(join.effective_subscribe(), "download keeps live sync on by default");
+        assert!(
+            !join.effective_subscribe(),
+            "--download-existing should not imply live syncing"
+        );
     }
 
     #[test]
@@ -1122,15 +1121,15 @@ mod tests {
     }
 
     #[test]
-    fn join_no_subscribe_wins_and_download_stays_independent() {
-        let joined = parse_join(&["--subscribe", "--no-subscribe", "--download-existing"]);
+    fn join_subscribe_and_download_stay_independent() {
+        let joined = parse_join(&["--subscribe", "--download-existing"]);
         assert!(
-            !joined.effective_subscribe(),
-            "--no-subscribe should win over --subscribe"
+            joined.effective_subscribe(),
+            "--subscribe should still enable live syncing alongside a download"
         );
         assert!(
             joined.download_existing,
-            "--download-existing should stay independent of the subscribe pair"
+            "--download-existing should stay independent of --subscribe"
         );
     }
 }

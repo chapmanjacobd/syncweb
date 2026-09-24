@@ -190,6 +190,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--download-existing', '--download-existing', [CompletionResultType]::ParameterName, 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can''t fill your disk by accident')
             [CompletionResult]::new('--download', '--download', [CompletionResultType]::ParameterName, 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can''t fill your disk by accident')
             [CompletionResult]::new('--no-indexing', '--no-indexing', [CompletionResultType]::ParameterName, 'Do not opt the folder into local indexing (indexing is enabled by default)')
+            [CompletionResult]::new('--metadata-only', '--metadata-only', [CompletionResultType]::ParameterName, 'Track folder metadata without downloading content into the store; fetch content later with `download`')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Assume yes to every destructive-operation prompt')
@@ -386,6 +387,8 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--remote-only', '--remote-only', [CompletionResultType]::ParameterName, 'Show only entries not yet downloaded (State == remote)')
             [CompletionResult]::new('--no-sharing', '--no-sharing', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
             [CompletionResult]::new('--no-seeding', '--no-seeding', [CompletionResultType]::ParameterName, 'Do not share or seed downloaded content')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything')
+            [CompletionResult]::new('--preview', '--preview', [CompletionResultType]::ParameterName, 'Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Assume yes to every destructive-operation prompt')
@@ -1250,7 +1253,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('check', 'check', [CompletionResultType]::ParameterValue, 'Run integrity check on all databases')
             [CompletionResult]::new('vacuum', 'vacuum', [CompletionResultType]::ParameterValue, 'Run VACUUM to reclaim space in all databases')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show database sizes and table statistics')
-            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Back up all databases to a directory')
+            [CompletionResult]::new('backup', 'backup', [CompletionResultType]::ParameterValue, 'Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)')
             break
         }
         'syncweb;db;check' {
@@ -1289,6 +1292,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         'syncweb;db;backup' {
             [CompletionResult]::new('--output', '--output', [CompletionResultType]::ParameterName, 'output')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
+            [CompletionResult]::new('--include-blobs', '--include-blobs', [CompletionResultType]::ParameterName, 'Also copy the blob store (can be very large); off by default')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Assume yes to every destructive-operation prompt')

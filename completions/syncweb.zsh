@@ -176,6 +176,7 @@ _arguments "${_arguments_options[@]}" : \
 '--download-existing[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can'\''t fill your disk by accident]' \
 '--download[Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can'\''t fill your disk by accident]' \
 '--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
+'--metadata-only[Track folder metadata without downloading content into the store; fetch content later with \`download\`]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -397,6 +398,8 @@ _arguments "${_arguments_options[@]}" : \
 '--remote-only[Show only entries not yet downloaded (State == remote)]' \
 '--no-sharing[Do not share or seed downloaded content]' \
 '--no-seeding[Do not share or seed downloaded content]' \
+'--dry-run[Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything]' \
+'--preview[Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -1499,6 +1502,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--output=[]:OUTPUT:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--include-blobs[Also copy the blob store (can be very large); off by default]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -1763,7 +1767,7 @@ _syncweb__subcmd__db_commands() {
 'check:Run integrity check on all databases' \
 'vacuum:Run VACUUM to reclaim space in all databases' \
 'stats:Show database sizes and table statistics' \
-'backup:Back up all databases to a directory' \
+'backup:Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)' \
     )
     _describe -t commands 'syncweb db commands' commands "$@"
 }

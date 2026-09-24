@@ -147,6 +147,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l ignore-self -d 'Ignore events emitted by this device\'s own writes'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l download-existing -l download -d 'Download matching existing content to the local folder after joining (one-shot; uses the same prefix/glob/max filters). Off by default so a big folder can\'t fill your disk by accident'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l no-indexing -d 'Do not opt the folder into local indexing (indexing is enabled by default)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l metadata-only -d 'Track folder metadata without downloading content into the store; fetch content later with `download`'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from join" -l yes -d 'Assume yes to every destructive-operation prompt'
@@ -316,6 +317,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l threads -d 
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l remote-only -d 'Show only entries not yet downloaded (State == remote)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l no-sharing -l no-seeding -d 'Do not share or seed downloaded content'
+complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l dry-run -l preview -d 'Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand download" -l yes -d 'Assume yes to every destructive-operation prompt'
@@ -847,7 +849,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "check" -d 'Run integrity check on all databases'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "vacuum" -d 'Run VACUUM to reclaim space in all databases'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "stats" -d 'Show database sizes and table statistics'
-complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "backup" -d 'Back up all databases to a directory'
+complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "backup" -d 'Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -868,6 +870,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subc
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from stats" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l output -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l include-blobs -d 'Also copy the blob store (can be very large); off by default'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from backup" -l yes -d 'Assume yes to every destructive-operation prompt'

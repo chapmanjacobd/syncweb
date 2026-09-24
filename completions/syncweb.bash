@@ -520,7 +520,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__db__subcmd__backup)
-            opts="-h --output --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            opts="-h --output --include-blobs --verbose --json --yes --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -614,7 +614,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__download)
-            opts="-e -h --hash --path-prefix --path-glob --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --provider --from --min-providers --no-seeding --no-sharing --max-peers --min-peers --min-count --max-count --threads --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            opts="-e -h --hash --path-prefix --path-glob --remote-only --ext --size --depth --min-depth --max-depth --type --modified-within --modified-before --time-modified --provider --from --min-providers --no-seeding --no-sharing --max-peers --min-peers --min-count --max-count --preview --dry-run --threads --verbose --json --yes --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -864,7 +864,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__folders__subcmd__join)
-            opts="-h --mode --relay-fallback --network --subscribe --ingest-only --ignore-self --prefix --sync-prefix --glob --max-count --max-size --download --download-existing --no-indexing --verbose --json --yes --embedded --no-daemon --data-dir --help"
+            opts="-h --mode --relay-fallback --network --subscribe --ingest-only --ignore-self --prefix --sync-prefix --glob --max-count --max-size --download --download-existing --no-indexing --metadata-only --verbose --json --yes --embedded --no-daemon --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

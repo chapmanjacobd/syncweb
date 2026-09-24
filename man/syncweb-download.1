@@ -4,7 +4,7 @@
 .SH NAME
 download \- Download folder content or copy a local file
 .SH SYNOPSIS
-\fBdownload\fR [\fB\-\-hash\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-remote\-only\fR] [\fB\-e\fR|\fB\-\-ext\fR] [\fB\-\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-type\fR] [\fB\-\-modified\-within\fR] [\fB\-\-modified\-before\fR] [\fB\-\-time\-modified\fR] [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
+\fBdownload\fR [\fB\-\-hash\fR] [\fB\-\-path\-prefix\fR] [\fB\-\-path\-glob\fR] [\fB\-\-remote\-only\fR] [\fB\-e\fR|\fB\-\-ext\fR] [\fB\-\-size\fR] [\fB\-\-depth\fR] [\fB\-\-min\-depth\fR] [\fB\-\-max\-depth\fR] [\fB\-\-type\fR] [\fB\-\-modified\-within\fR] [\fB\-\-modified\-before\fR] [\fB\-\-time\-modified\fR] [\fB\-\-from\fR] [\fB\-\-min\-providers\fR] [\fB\-\-no\-sharing\fR] [\fB\-\-max\-peers\fR] [\fB\-\-min\-peers\fR] [\fB\-\-min\-count\fR] [\fB\-\-max\-count\fR] [\fB\-\-dry\-run\fR] [\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISOURCE\fR> [\fIDESTINATION\fR] 
 .SH DESCRIPTION
 Download folder content or copy a local file
 .SH OPTIONS
@@ -80,6 +80,9 @@ Minimum number of blobs to fetch
 .TP
 \fB\-\-max\-count\fR \fI<MAX_COUNT>\fR
 Maximum number of blobs to fetch
+.TP
+\fB\-\-dry\-run\fR
+Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR [default: 0]
 Copy threads (1 disables parallelism, 0 uses all available CPUs)

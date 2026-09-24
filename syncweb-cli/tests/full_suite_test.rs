@@ -135,6 +135,81 @@ fn json_stats_output() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn json_status_and_devices_envelopes() -> anyhow::Result<()> {
+    // User story 6 (Oli): `status` and `devices` must emit a stable JSON
+    // envelope even with no daemon running.
+    let data_dir = test_dir("json-status");
+    let status = run_with_data(&data_dir, &["--json", "status"])?;
+    assert_success(&status, "json status")?;
+    let value: serde_json::Value = serde_json::from_slice(&status.stdout)?;
+    ensure!(
+        value
+            .get("daemon")
+            .and_then(|d| d.get("status"))
+            .and_then(serde_json::Value::as_str)
+            == Some("stopped"),
+        "stopped daemon should report status stopped: {value}"
+    );
+    ensure!(
+        value.get("folders").and_then(serde_json::Value::as_array).is_some(),
+        "status envelope should carry a folders array: {value}"
+    );
+    ensure!(
+        value.get("networks").and_then(serde_json::Value::as_array).is_some(),
+        "status envelope should carry a networks array: {value}"
+    );
+    ensure!(
+        value.get("devices").and_then(serde_json::Value::as_object).is_some(),
+        "status envelope should carry a devices object: {value}"
+    );
+    ensure!(
+        value.get("transfers").and_then(serde_json::Value::as_object).is_some(),
+        "status envelope should carry a transfers object: {value}"
+    );
+
+    let devices = run_with_data(&data_dir, &["--json", "devices"])?;
+    assert_success(&devices, "json devices")?;
+    let dv: serde_json::Value = serde_json::from_slice(&devices.stdout)?;
+    ensure!(
+        dv.get("iroh").and_then(serde_json::Value::as_str).is_some(),
+        "devices JSON should carry an iroh id: {dv}"
+    );
+    ensure!(
+        dv.get("syncthing").and_then(serde_json::Value::as_str).is_some(),
+        "devices JSON should carry a syncthing id: {dv}"
+    );
+
+    fs::remove_dir_all(&data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn json_network_list_and_status_envelopes() -> anyhow::Result<()> {
+    // User story 6 (Oli): the `network` list/status verbs must emit JSON too.
+    let data_dir = test_dir("json-network");
+    let create = run_with_data(&data_dir, &["network", "create", "team"])?;
+    assert_success(&create, "network create")?;
+
+    let list = run_with_data(&data_dir, &["--json", "network", "list"])?;
+    assert_success(&list, "json network list")?;
+    let value: serde_json::Value = serde_json::from_slice(&list.stdout)?;
+    let arr = value.as_array().context("network list JSON should be an array")?;
+    ensure!(
+        arr.iter()
+            .any(|n| n.get("name").and_then(serde_json::Value::as_str) == Some("team")),
+        "network list JSON should include team: {value}"
+    );
+
+    let status = run_with_data(&data_dir, &["--json", "network", "status"])?;
+    assert_success(&status, "json network status")?;
+    let sv: serde_json::Value = serde_json::from_slice(&status.stdout)?;
+    ensure!(sv.as_array().is_some(), "network status JSON should be an array: {sv}");
+
+    fs::remove_dir_all(&data_dir)?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // 7.3 – Config round-trip
 // ---------------------------------------------------------------------------
@@ -904,6 +979,125 @@ fn schedule_and_stats_persist() -> anyhow::Result<()> {
     ensure!(value.get("total_download") == Some(&serde_json::Value::from(0)));
 
     fs::remove_dir_all(data_dir)?;
+    Ok(())
+}
+
+#[test]
+fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
+    // User story 7 (Oli): db check/vacuum/backup must work end-to-end and the
+    // backup must capture databases, config, identity, and a manifest.
+    let data_dir = test_dir("db-backup");
+
+    let check = run_with_data(&data_dir, &["--json", "db", "check"])?;
+    assert_success(&check, "db check")?;
+    let cv: serde_json::Value = serde_json::from_slice(&check.stdout)?;
+    ensure!(
+        cv.get("node_db").is_some() && cv.get("stats_db").is_some(),
+        "db check JSON should report both databases: {cv}"
+    );
+
+    let vacuum = run_with_data(&data_dir, &["--json", "db", "vacuum"])?;
+    assert_success(&vacuum, "db vacuum")?;
+    let vv: serde_json::Value = serde_json::from_slice(&vacuum.stdout)?;
+    ensure!(
+        vv.get("node_db").and_then(|d| d.get("freelist_before")).is_some()
+            && vv.get("stats_db").and_then(|d| d.get("freelist_before")).is_some(),
+        "db vacuum JSON should report freelist counts: {vv}"
+    );
+
+    let stats = run_with_data(&data_dir, &["--json", "db", "stats"])?;
+    assert_success(&stats, "db stats")?;
+    let sv: serde_json::Value = serde_json::from_slice(&stats.stdout)?;
+    ensure!(
+        sv.get("node_db").and_then(|d| d.get("size_bytes")).is_some(),
+        "db stats JSON should report node.db size: {sv}"
+    );
+
+    // Persist a config so the backup has a config file to capture.
+    let config = run_with_data(&data_dir, &["config", "set", "bep.enabled", "true"])?;
+    assert_success(&config, "config set")?;
+
+    // `devices` initializes the identity key, which the backup must capture.
+    let devices = run_with_data(&data_dir, &["devices"])?;
+    assert_success(&devices, "devices")?;
+
+    let out = test_dir("db-backup-out");
+    let backup = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "db",
+            "backup",
+            "--output",
+            out.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    assert_success(&backup, "db backup")?;
+    let bv: serde_json::Value = serde_json::from_slice(&backup.stdout)?;
+    let path = bv
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .context("backup JSON should report the backup path")?;
+    let backup_path = std::path::Path::new(path);
+    ensure!(fs::metadata(path).is_ok(), "backup directory should exist: {path}");
+    for expected in ["node.db", "stats.db", "config.toml", "identity.key", "manifest.json"] {
+        ensure!(
+            backup_path.join(expected).exists(),
+            "backup should include {expected}: {path}"
+        );
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(backup_path.join("manifest.json"))?)
+        .context("manifest should be valid JSON")?;
+    ensure!(
+        manifest.get("files").and_then(serde_json::Value::as_array).is_some(),
+        "manifest should list captured files: {manifest}"
+    );
+
+    // --include-blobs copies the blob store when one exists.
+    let blob_data = test_dir("db-backup-blobs");
+    let folder = test_dir("db-backup-blobs-folder");
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            blob_data.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-import",
+            folder.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("create folder to initialize a blob store")?;
+    assert_success(&create, "folders create")?;
+
+    let blob_out = test_dir("db-backup-blobs-out");
+    let with_blobs = run_with_data(
+        &blob_data,
+        &[
+            "--json",
+            "db",
+            "backup",
+            "--include-blobs",
+            "--output",
+            blob_out.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    assert_success(&with_blobs, "db backup --include-blobs")?;
+    let wb: serde_json::Value = serde_json::from_slice(&with_blobs.stdout)?;
+    let blob_path = wb
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .context("backup path for --include-blobs")?;
+    ensure!(
+        std::path::Path::new(blob_path).join("blobs").is_dir(),
+        "--include-blobs should copy the blob store: {blob_path}"
+    );
+
+    fs::remove_dir_all(&data_dir)?;
+    fs::remove_dir_all(&out)?;
+    fs::remove_dir_all(&blob_data)?;
+    fs::remove_dir_all(&folder)?;
+    fs::remove_dir_all(&blob_out)?;
     Ok(())
 }
 

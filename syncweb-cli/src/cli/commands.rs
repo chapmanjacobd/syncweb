@@ -264,10 +264,12 @@ pub enum DbCommand {
     Vacuum,
     #[command(about = "Show database sizes and table statistics")]
     Stats,
-    #[command(about = "Back up all databases to a directory")]
+    #[command(about = "Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)")]
     Backup {
         #[arg(long, default_value = ".")]
         output: PathBuf,
+        #[arg(long, help = "Also copy the blob store (can be very large); off by default")]
+        include_blobs: bool,
     },
 }
 
@@ -350,6 +352,11 @@ pub struct FolderJoin {
         help = "Do not opt the folder into local indexing (indexing is enabled by default)"
     )]
     pub no_indexing: bool,
+    #[arg(
+        long,
+        help = "Track folder metadata without downloading content into the store; fetch content later with `download`"
+    )]
+    pub metadata_only: bool,
 }
 
 impl FolderJoin {
@@ -555,6 +562,12 @@ pub struct DownloadArgs {
     pub min_count: Option<usize>,
     #[arg(long, help = "Maximum number of blobs to fetch")]
     pub max_count: Option<usize>,
+    #[arg(
+        long,
+        visible_alias = "preview",
+        help = "Preview which folder entries would be fetched (paths, sizes, counts) without downloading anything"
+    )]
+    pub dry_run: bool,
     #[arg(
         long,
         default_value_t = 0,

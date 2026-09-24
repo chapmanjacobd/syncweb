@@ -57,7 +57,7 @@ use syncweb_core::{
         node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
         stats_db::StatsDatabase,
     },
-    sync::{AreaFilter, FetchFilter, FetchStrategy, SyncEngine, SyncEvent},
+    sync::{AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent},
     verify::IntegrityChecker,
 };
 
@@ -601,6 +601,7 @@ async fn daemon_client_or_start(
 async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
+    let transfers = transfer_status_summary(data_dir)?;
     let state_file = StateFile::new(data_dir);
     let Some(report) = state_file.load_status()? else {
         if output_json {
@@ -611,10 +612,12 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
                     "folders": [],
                     "devices": devices_value(data_dir)?,
                     "networks": [],
+                    "transfers": transfers,
                 }))?
             );
         } else {
             println!("daemon not running");
+            print_transfer_summary(&transfers);
         }
         return Ok(());
     };
@@ -628,6 +631,7 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
                 "folders": folders,
                 "devices": devices_value(data_dir)?,
                 "networks": networks,
+                "transfers": transfers,
             }))?
         );
         return Ok(());
@@ -670,7 +674,75 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
         ]);
     }
     println!("{table}");
+    print_transfer_summary(&transfers);
     Ok(())
+}
+
+/// Bucketed durable-transfer summary for the `status` screen (user story 6).
+/// Reads the persisted transfer-jobs table, so it also reflects queued work
+/// when the daemon is stopped.
+fn transfer_status_summary(data_dir: &std::path::Path) -> Result<serde_json::Value> {
+    let db = open_node_db(data_dir)?;
+    let jobs = db.list_transfer_jobs(None, None)?;
+    let mut queued = 0_u64;
+    let mut active = 0_u64;
+    let mut paused = 0_u64;
+    let mut failed = 0_u64;
+    let mut completed = 0_u64;
+    let mut cancelled = 0_u64;
+    let mut pending_bytes = 0_u64;
+    for job in &jobs {
+        match job.state.as_str() {
+            "queued" => {
+                queued = queued.saturating_add(1);
+                pending_bytes = pending_bytes.saturating_add(job.size.saturating_sub(job.bytes_transferred));
+            }
+            "fetching" | "materializing" => {
+                active = active.saturating_add(1);
+                pending_bytes = pending_bytes.saturating_add(job.size.saturating_sub(job.bytes_transferred));
+            }
+            "paused" => {
+                paused = paused.saturating_add(1);
+                pending_bytes = pending_bytes.saturating_add(job.size.saturating_sub(job.bytes_transferred));
+            }
+            "failed" => failed = failed.saturating_add(1),
+            "cancelled" => cancelled = cancelled.saturating_add(1),
+            "completed" => completed = completed.saturating_add(1),
+            _ => {}
+        }
+    }
+    Ok(serde_json::json!({
+        "queued": queued,
+        "active": active,
+        "paused": paused,
+        "failed": failed,
+        "completed": completed,
+        "cancelled": cancelled,
+        "pending_bytes": pending_bytes,
+    }))
+}
+
+fn print_transfer_summary(transfers: &serde_json::Value) {
+    let total = ["queued", "active", "paused", "failed"]
+        .iter()
+        .filter_map(|key| transfers.get(key).and_then(serde_json::Value::as_u64))
+        .sum::<u64>();
+    if total == 0 {
+        println!("transfers: none");
+        return;
+    }
+    let pending = transfers
+        .get("pending_bytes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    println!(
+        "transfers: {queued} queued, {active} active, {paused} paused, {failed} failed ({pending} bytes pending)",
+        queued = transfers.get("queued").and_then(serde_json::Value::as_u64).unwrap_or(0),
+        active = transfers.get("active").and_then(serde_json::Value::as_u64).unwrap_or(0),
+        paused = transfers.get("paused").and_then(serde_json::Value::as_u64).unwrap_or(0),
+        failed = transfers.get("failed").and_then(serde_json::Value::as_u64).unwrap_or(0),
+        pending = format_bytes(pending),
+    );
 }
 
 /// Self-identity for the `status --json` envelope (the same value `devices`
@@ -945,6 +1017,10 @@ async fn download_via_daemon_or_node(
     download_with_node(data_dir, output_json, command, strategy).await
 }
 
+#[expect(
+    clippy::literal_string_with_formatting_args,
+    reason = "indicatif progress template uses {bytes}/{total} placeholders"
+)]
 async fn download_with_node(
     data_dir: &std::path::Path,
     output_json: bool,
@@ -954,6 +1030,26 @@ async fn download_with_node(
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager.resolve(&command.source).await?;
+    // A metadata-only folder keeps content out of the store; a doc re-sync will
+    // not re-download it, so an explicit download fetches each selected blob
+    // directly from the folder's peers.
+    if folder.is_metadata_only().await? {
+        let bytes = syncweb_core::sync::fetch_selected_content(&node, &folder, &strategy).await?;
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "status": "downloaded",
+                    "namespace": folder.namespace_id().to_string(),
+                    "bytes_transferred": bytes,
+                })
+            );
+        } else {
+            println!("downloaded: {bytes} bytes");
+        }
+        node.stop().await?;
+        return Ok(());
+    }
     let sync = SyncEngine::from_node(&node, manager);
     let stats_db = open_stats_db(data_dir)?;
     let folder_key = folder.namespace_id().to_string();
@@ -1031,6 +1127,9 @@ async fn download_from_stdin(ctx: &CliContext<'_>, command: crate::cli::commands
 }
 
 async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::DownloadArgs) -> Result<()> {
+    if command.dry_run {
+        return Box::pin(preview_download(ctx, &command)).await;
+    }
     if let Ok(ticket) = command
         .source
         .to_string_lossy()
@@ -1126,6 +1225,113 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
         matched.as_deref(),
     )
     .await
+}
+
+/// Preview which folder entries `download` would fetch, without fetching them.
+///
+/// Mirrors `download_via_daemon_or_node`'s selection: only remote (not-yet-local)
+/// entries count, the shared content-filter group narrows the set client-side,
+/// and the peer/count constraints select the final candidates. Peer counts come
+/// from the daemon when one answers; otherwise they are unknown (zero) — the
+/// same honest empty state `network peers` reports without a daemon.
+async fn preview_download(ctx: &CliContext<'_>, command: &crate::cli::commands::DownloadArgs) -> Result<()> {
+    if command.source.as_os_str() == "-" {
+        anyhow::bail!("download --dry-run with stdin is not supported; preview one folder at a time");
+    }
+    if !command.filter.hash.is_empty()
+        || command
+            .source
+            .to_string_lossy()
+            .parse::<iroh_blobs::ticket::BlobTicket>()
+            .is_ok()
+    {
+        anyhow::bail!("download --dry-run is only supported for folder sources");
+    }
+    if command.destination.is_some() {
+        anyhow::bail!("download --dry-run is not supported when copying to a destination");
+    }
+
+    let (mode, resolved) = resolve_entry_source(ctx, &command.source).await?;
+    let client = match &mode {
+        ListingMode::Daemon { client } => Some(client.clone()),
+        ListingMode::Embedded(_) => None,
+    };
+    let mut rows = fetch_listing_rows(mode, &resolved, true).await?;
+    attach_peer_counts(client.as_ref(), &resolved.namespace, &mut rows).await?;
+    rows.retain(|row| !row.local);
+    if !command.filter.is_empty() {
+        rows.retain(|row| local_entry_matches_content(row, &command.filter, true).unwrap_or(false));
+    }
+
+    let mut fetch_filter = FetchFilter::new();
+    if let Some(peers) = command.min_peers {
+        fetch_filter = fetch_filter.with_min_peers(peers);
+    }
+    if let Some(peers) = command.max_peers {
+        fetch_filter = fetch_filter.with_max_peers(peers);
+    }
+    if let Some(count) = command.min_count {
+        fetch_filter = fetch_filter.with_min_count(count);
+    }
+    if let Some(count) = command.max_count {
+        fetch_filter = fetch_filter.with_max_count(count);
+    }
+    let candidates: Vec<FetchCandidate> = rows
+        .iter()
+        .map(|row| FetchCandidate::new(&row.path, row.hash, row.size, row.peers.unwrap_or(0), false))
+        .collect();
+    let strategy = if command.min_peers.is_some()
+        || command.max_peers.is_some()
+        || command.min_count.is_some()
+        || command.max_count.is_some()
+    {
+        FetchStrategy::Filter(fetch_filter)
+    } else {
+        FetchStrategy::All
+    };
+    let selected = strategy.select(&candidates);
+
+    let bytes: u64 = selected.iter().map(|candidate| candidate.size).sum();
+    if ctx.output_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "folder": resolved.namespace,
+                "matched": selected.len(),
+                "bytes": bytes,
+                "entries": selected
+                    .iter()
+                    .map(|candidate| serde_json::json!({
+                        "path": candidate.path,
+                        "size": candidate.size,
+                        "peers": candidate.peer_count,
+                    }))
+                    .collect::<Vec<_>>(),
+            }))?
+        );
+    } else if selected.is_empty() {
+        if candidates.is_empty() {
+            println!("would fetch 0 entries (no remote content in the folder)");
+        } else {
+            println!("would fetch 0 entries (nothing matches the fetch filters)");
+        }
+    } else {
+        let noun = if selected.len() == 1 { "entry" } else { "entries" };
+        println!("would fetch {} {noun} ({})", selected.len(), format_bytes(bytes));
+        for candidate in &selected {
+            let peer_hint = if candidate.peer_count > 0 {
+                format!("{} peers", candidate.peer_count)
+            } else {
+                "peers unknown".to_owned()
+            };
+            println!(
+                "  {}  {}  ({peer_hint})",
+                candidate.path.display(),
+                format_bytes(candidate.size)
+            );
+        }
+    }
+    Ok(())
 }
 
 #[async_recursion]
@@ -2571,6 +2777,17 @@ fn parse_period(val: &str) -> Result<Duration> {
     Ok(Duration::from_secs(seconds))
 }
 
+/// Human-readable share/ticket label. Write tickets get a visible `WRITE`
+/// marker (user story 2) so a pasted link can't be mistaken for read-only;
+/// read-only tickets keep printing the bare URL for backward compatibility.
+fn share_label(write: bool, url: &str) -> String {
+    if write {
+        format!("WRITE ticket: {url}")
+    } else {
+        url.to_owned()
+    }
+}
+
 #[async_recursion]
 async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::FolderCreate) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -2643,7 +2860,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                     }))?
                 );
             } else {
-                println!("{url}");
+                println!("{}", share_label(write, &url));
             }
         } else if output_json {
             println!(
@@ -2707,7 +2924,7 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
                     }))?
                 );
             } else {
-                println!("{}", result.url);
+                println!("{}", share_label(write, &result.url));
             }
         } else if output_json {
             println!(
@@ -2774,13 +2991,20 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                 filters: filters.clone(),
                 download: download_existing,
                 indexing: !command.no_indexing,
+                metadata_only: command.metadata_only,
             }))
             .await?;
         return print_daemon_message(response, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = manager.join(command.ticket, SyncMode::from_str(&command.mode)?).await?;
+    let folder = manager
+        .join_with_options(
+            command.ticket,
+            SyncMode::from_str(&command.mode)?,
+            command.metadata_only,
+        )
+        .await?;
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
     }
@@ -2978,6 +3202,13 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
                 persist: !args.no_persist,
             }))
             .await?;
+        if args.write
+            && !output_json
+            && let IpcResponse::Ok { message } = response
+        {
+            println!("{}", share_label(true, &message));
+            return Ok(());
+        }
         return print_daemon_message(response, output_json);
     }
     let node = open_node(data_dir).await?;
@@ -3019,7 +3250,7 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
             })
         );
     } else {
-        println!("{}", result.url);
+        println!("{}", share_label(args.write, &result.url));
     }
     node.stop().await?;
     Ok(())
@@ -4229,37 +4460,85 @@ fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<
                 println!("{table}");
             }
         }
-        cli::commands::DbCommand::Backup { output } => {
-            handle_db_backup(data_dir, &output, output_json)?;
+        cli::commands::DbCommand::Backup { output, include_blobs } => {
+            handle_db_backup(data_dir, &output, include_blobs, output_json)?;
         }
     }
     Ok(())
 }
 
-fn handle_db_backup(data_dir: &std::path::Path, output: &std::path::Path, output_json: bool) -> Result<()> {
+fn handle_db_backup(
+    data_dir: &std::path::Path,
+    output: &std::path::Path,
+    include_blobs: bool,
+    output_json: bool,
+) -> Result<()> {
     let backup_dir = output.join(format!(
         "syncweb-db-backup-{}",
         syncweb_core::parsing::current_unix_secs()
     ));
     std::fs::create_dir_all(&backup_dir)?;
-    let node_path = data_dir.join("node.db");
-    let stats_path = data_dir.join("stats.db");
-    if node_path.exists() {
-        std::fs::copy(&node_path, backup_dir.join("node.db"))?;
+    let mut copied: Vec<String> = Vec::new();
+    for name in ["node.db", "stats.db"] {
+        let source = data_dir.join(name);
+        if source.exists() {
+            std::fs::copy(&source, backup_dir.join(name))?;
+            copied.push(name.to_owned());
+        }
     }
-    if stats_path.exists() {
-        std::fs::copy(&stats_path, backup_dir.join("stats.db"))?;
+    for name in ["config.toml", "filters.toml", "schedules.toml", "identity.key"] {
+        let source = data_dir.join(name);
+        if source.exists() {
+            std::fs::copy(&source, backup_dir.join(name))?;
+            copied.push(name.to_owned());
+        }
     }
+    if include_blobs {
+        // The blob store lives under the node's data subdirectory.
+        let blobs = data_dir.join("data").join("blobs");
+        if blobs.exists() {
+            copy_dir_contents(&blobs, &backup_dir.join("blobs"))?;
+            copied.push("blobs/".to_owned());
+        }
+    }
+    let manifest = serde_json::json!({
+        "created_at": syncweb_core::parsing::current_unix_secs(),
+        "source": data_dir.to_string_lossy(),
+        "include_blobs": include_blobs,
+        "files": copied,
+    });
+    let manifest_path = backup_dir.join("manifest.json");
+    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
+    copied.push("manifest.json".to_owned());
     if output_json {
         println!(
             "{}",
             serde_json::json!({
                 "path": backup_dir.to_string_lossy(),
-                "files": ["node.db", "stats.db"],
+                "files": copied,
             })
         );
     } else {
         println!("Backup created at: {}", backup_dir.display());
+        for name in &copied {
+            println!("  - {name}");
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_contents(source: &std::path::Path, destination: &std::path::Path) -> Result<()> {
+    std::fs::create_dir_all(destination)?;
+    for dir_entry in std::fs::read_dir(source)? {
+        let child = dir_entry?;
+        let source_path = child.path();
+        let target_path = destination.join(child.file_name());
+        let file_type = child.file_type()?;
+        if file_type.is_dir() {
+            copy_dir_contents(&source_path, &target_path)?;
+        } else {
+            std::fs::copy(&source_path, &target_path)?;
+        }
     }
     Ok(())
 }

@@ -835,6 +835,7 @@ async fn assert_join_subscribe_filters(
                 filters: filters.clone(),
                 download: false,
                 indexing: false,
+                metadata_only: false,
             }))
             .await?;
         ensure!(
@@ -931,6 +932,7 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
                 filters: SubscribeFilters::default(),
                 download: false,
                 indexing: false,
+                metadata_only: false,
             }))
             .await?;
         ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");

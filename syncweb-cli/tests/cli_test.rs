@@ -1143,6 +1143,113 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
 }
 
 #[test]
+fn write_tickets_are_visually_distinct() -> anyhow::Result<()> {
+    // User story 2 (Maya): a write ticket must be visually distinct from a
+    // read-only one in human output so a pasted link can't be mistaken.
+    let directory = cli_test_dir("write-ticket-folder");
+    let data_dir = cli_test_dir("write-ticket-data");
+    let read_dir = cli_test_dir("write-ticket-read-folder");
+    let read_data = cli_test_dir("write-ticket-read-data");
+
+    let write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_dir.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--write",
+            "--no-import",
+            directory.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb folders create --write")?;
+    ensure!(
+        write.status.success(),
+        "create --write should succeed: {:?}",
+        String::from_utf8_lossy(&write.stderr)
+    );
+    let write_out = String::from_utf8(write.stdout).context("UTF-8 output")?;
+    ensure!(
+        write_out.starts_with("WRITE ticket: "),
+        "create --write should prefix the ticket with WRITE: {write_out}"
+    );
+    ensure!(
+        write_out.contains("syncweb://folder/"),
+        "write ticket should still carry the folder URL: {write_out}"
+    );
+
+    let read = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            read_data.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-import",
+            read_dir.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb folders create (read-only)")?;
+    ensure!(read.status.success());
+    let read_out = String::from_utf8(read.stdout).context("UTF-8 output")?;
+    ensure!(
+        read_out.starts_with("syncweb://folder/"),
+        "read-only create should keep the bare URL: {read_out}"
+    );
+    ensure!(
+        !read_out.contains("WRITE"),
+        "read-only create must not carry the WRITE marker: {read_out}"
+    );
+
+    // share --write follows the same rule.
+    let share_write = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            read_data.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            "--write",
+            read_dir.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb share --write")?;
+    ensure!(
+        share_write.status.success(),
+        "share --write should succeed: {}",
+        String::from_utf8_lossy(&share_write.stderr)
+    );
+    let share_write_out = String::from_utf8(share_write.stdout).context("UTF-8 output")?;
+    ensure!(
+        share_write_out.starts_with("WRITE ticket: "),
+        "share --write should prefix the ticket with WRITE: {share_write_out}"
+    );
+
+    let share_read = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            read_data.to_str().context("UTF-8 path")?,
+            "--no-daemon",
+            "share",
+            read_dir.to_str().context("UTF-8 path")?,
+        ])
+        .output()
+        .context("run syncweb share (read-only)")?;
+    ensure!(share_read.status.success());
+    let share_read_out = String::from_utf8(share_read.stdout).context("UTF-8 output")?;
+    ensure!(
+        share_read_out.starts_with("syncweb://folder/") && !share_read_out.contains("WRITE"),
+        "read-only share should keep the bare URL: {share_read_out}"
+    );
+
+    std::fs::remove_dir_all(&directory)?;
+    std::fs::remove_dir_all(&read_dir)?;
+    std::fs::remove_dir_all(&data_dir)?;
+    std::fs::remove_dir_all(&read_data)?;
+    Ok(())
+}
+
+#[test]
 fn leave_delete_files_aborts_without_yes() -> anyhow::Result<()> {
     let directory = cli_test_dir("leave-del-confirm");
     let data_dir = cli_test_dir("leave-del-confirm-data");

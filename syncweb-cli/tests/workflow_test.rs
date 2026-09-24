@@ -5,6 +5,72 @@ use anyhow::{Context, ensure};
 use workflow::World;
 
 #[test]
+fn status_reports_transfer_queue() -> anyhow::Result<()> {
+    // User story 6 (Oli): `status` must surface the durable transfer queue
+    // (pending/progress) in both the table and the --json envelope.
+    let world = World::new(&["alice"])?;
+    let alice = world.device("alice")?;
+
+    let empty = alice.run_ok(&["--json", "status"])?;
+    let empty_value: serde_json::Value = serde_json::from_str(&empty.stdout()).context("status JSON")?;
+    let empty_transfers = empty_value.get("transfers").context("status should carry transfers")?;
+    ensure!(
+        empty_transfers.get("queued") == Some(&serde_json::Value::from(0)),
+        "no jobs should be queued initially: {empty_transfers}"
+    );
+    ensure!(
+        empty_transfers.get("pending_bytes") == Some(&serde_json::Value::from(0)),
+        "no pending bytes initially: {empty_transfers}"
+    );
+
+    let namespace = iroh_docs::NamespaceId::from(&[1_u8; 32]).to_string();
+    let hash = iroh_blobs::Hash::from_bytes([2_u8; 32]).to_string();
+    let enqueue = alice.run_ok(&[
+        "--no-daemon",
+        "transfer",
+        "enqueue",
+        "--namespace",
+        &namespace,
+        "--path",
+        "media/clip.mp4",
+        "--hash",
+        &hash,
+        "--size",
+        "1048576",
+    ])?;
+    ensure!(
+        enqueue.stdout().contains("queued transfer job"),
+        "enqueue output: {}",
+        enqueue.stdout()
+    );
+
+    let status = alice.run_ok(&["--json", "status"])?;
+    let value: serde_json::Value = serde_json::from_str(&status.stdout()).context("status JSON after enqueue")?;
+    let transfers = value.get("transfers").context("status should carry transfers")?;
+    ensure!(
+        transfers.get("queued") == Some(&serde_json::Value::from(1)),
+        "one queued job should be visible: {transfers}"
+    );
+    ensure!(
+        transfers.get("pending_bytes") == Some(&serde_json::Value::from(1_048_576_u64)),
+        "pending bytes should reflect the queued job: {transfers}"
+    );
+    ensure!(
+        transfers.get("completed") == Some(&serde_json::Value::from(0)),
+        "no completed jobs yet: {transfers}"
+    );
+
+    let human = alice.run_ok(&["status"])?;
+    ensure!(
+        human.stdout().contains("transfers: 1 queued"),
+        "human status should show the transfer queue: {}",
+        human.stdout()
+    );
+
+    Ok(())
+}
+
+#[test]
 fn access_dashboard_lists_and_revokes_write() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;

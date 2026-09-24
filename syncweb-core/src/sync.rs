@@ -17,7 +17,7 @@ pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};
 pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};
 pub use lazy_fetch::LazyFetch;
-pub use partial_fetch::{BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport};
+pub use partial_fetch::{BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, fetch_selected_content};
 pub use peer_tracker::{EfficientPeerCache, EvictionStrategy, PeerTracker};
 pub use session::SessionMode;
 pub use sessions::{ActiveSession, cancel_session, is_active};

@@ -4,6 +4,55 @@ use std::path::PathBuf;
 use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
 
+use crate::error::Result;
+use crate::folder::SyncwebFolder;
+use crate::node::iroh_node::IrohNode;
+
+/// Fetch the blobs selected by `strategy` directly from the folder's namespace
+/// peers.
+///
+/// A metadata-only folder syncs entries while deliberately leaving blobs out of
+/// the local store; a later doc re-sync does not re-download that content, so
+/// `download` on such a folder must fetch each selected blob from its peers
+/// directly. Returns the number of bytes fetched.
+///
+/// # Errors
+///
+/// Returns an error if the folder's entries cannot be listed.
+pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, strategy: &FetchStrategy) -> Result<u64> {
+    let mut candidates = Vec::new();
+    for entry in folder.content_entries().await? {
+        let hash = entry.content_hash();
+        let local = folder.has_local(hash).await?;
+        let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
+        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+    }
+    let selected = strategy.select(&candidates);
+    let peers = node
+        .topic_tracker()
+        .find_peers(folder.namespace_id())
+        .await
+        .unwrap_or_default();
+    let mut bytes = 0_u64;
+    for candidate in selected {
+        if candidate.local {
+            continue;
+        }
+        for peer in &peers {
+            if node
+                .blob_store()
+                .force_fetch_from_peer(node.endpoint(), peer, candidate.hash)
+                .await
+                .is_ok()
+            {
+                bytes = bytes.saturating_add(candidate.size);
+                break;
+            }
+        }
+    }
+    Ok(bytes)
+}
+
 /// A document blob considered for a partial fetch.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]

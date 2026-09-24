@@ -117,6 +117,51 @@ impl SyncwebFolder {
         self.blob_store.has(hash).await
     }
 
+    /// Track this folder's metadata without fetching content into the local
+    /// store (user stories 1 and 4). Doc entries still sync, but iroh-docs'
+    /// download policy keeps the blobs remote until an explicit `download`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the download policy cannot be persisted.
+    pub async fn set_metadata_only(&self) -> Result<()> {
+        self.set_download_policy(iroh_docs::store::DownloadPolicy::NothingExcept(Vec::new()))
+            .await
+    }
+
+    /// Restore the default download policy (fetch all referenced content during
+    /// doc sync).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the download policy cannot be persisted.
+    pub async fn clear_metadata_only(&self) -> Result<()> {
+        self.set_download_policy(iroh_docs::store::DownloadPolicy::EverythingExcept(Vec::new()))
+            .await
+    }
+
+    /// Whether this folder is currently in metadata-only mode (content stays
+    /// out of the local store until an explicit download).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the download policy cannot be read.
+    pub async fn is_metadata_only(&self) -> Result<bool> {
+        let policy = self
+            .doc
+            .get_download_policy()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to read folder download policy", error))?;
+        Ok(matches!(policy, iroh_docs::store::DownloadPolicy::NothingExcept(_)))
+    }
+
+    async fn set_download_policy(&self, policy: iroh_docs::store::DownloadPolicy) -> Result<()> {
+        self.doc
+            .set_download_policy(policy)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to set folder download policy", error))
+    }
+
     /// List the folder's content entries, excluding `sys/` metadata keys.
     ///
     /// Used by stats, verify, and health-reporting paths so the "iterate the

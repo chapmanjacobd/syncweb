@@ -69,9 +69,31 @@ impl FolderManager {
     ///
     /// Returns an error if the folder ticket cannot be joined or parsed.
     pub async fn join(&self, ticket_str: impl AsRef<str>, mode: SyncMode) -> Result<SyncwebFolder> {
+        self.join_with_options(ticket_str, mode, false).await
+    }
+
+    /// Join a folder, optionally in metadata-only mode (doc entries sync but
+    /// content blobs stay out of the local store until an explicit download).
+    ///
+    /// The download policy is applied before the namespace is announced, so
+    /// peers never push content for a metadata-only folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder ticket cannot be joined or parsed, or the
+    /// download policy cannot be set.
+    pub async fn join_with_options(
+        &self,
+        ticket_str: impl AsRef<str>,
+        mode: SyncMode,
+        metadata_only: bool,
+    ) -> Result<SyncwebFolder> {
         let ticket = crate::uri::parse_folder_ticket(ticket_str.as_ref())?;
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode).await?;
+        if metadata_only {
+            folder.set_metadata_only().await?;
+        }
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
         self.announce_namespace(folder.namespace_id()).await;
         Ok(folder)

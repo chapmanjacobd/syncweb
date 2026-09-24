@@ -17,6 +17,13 @@ fn syncweb(args: &[&str]) -> anyhow::Result<std::process::Output> {
         .context("run syncweb")
 }
 
+/// Parse a folder URL out of a share command's human output. Write shares now
+/// carry a `WRITE ticket:` prefix (user story 2), so strip it when present.
+fn ticket_from_share_output(out: &str) -> String {
+    let trimmed = out.trim();
+    trimmed.strip_prefix("WRITE ticket: ").unwrap_or(trimmed).to_owned()
+}
+
 fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
     String::from_utf8(output.stdout.clone()).is_ok_and(|s| s.contains(needle))
 }
@@ -1073,7 +1080,7 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
-    let ticket = share_out.trim().to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
@@ -1154,10 +1161,11 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
         .to_owned();
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
-    let ticket = String::from_utf8(share.stdout)
+    let share_out = String::from_utf8(share.stdout)
         .context("UTF-8 output")?
         .trim()
         .to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
@@ -1174,7 +1182,6 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
     let join = syncweb(&[
         "--data-dir",
         bob_data_arg,
-        "--no-daemon",
         "folders",
         "join",
         &ticket,
@@ -1182,7 +1189,7 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
     ])?;
     ensure!(
         join.status.success(),
-        "bare join should succeed: {}",
+        "bob join should succeed: {}",
         String::from_utf8_lossy(&join.stderr)
     );
     let join_out = String::from_utf8(join.stdout).context("UTF-8 output")?;
@@ -1366,6 +1373,402 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_download_dry_run_previews_without_downloading() -> anyhow::Result<()> {
+    // User story 4 (Ari): `download --dry-run`/`--preview` previews what a
+    // folder fetch would grab without downloading anything. The preview
+    // selection (which entries match the shared filter group, peer/count
+    // limits) is exercised by the `FetchFilter::select` unit tests in core;
+    // this test pins the CLI wiring: the envelope, the alias, and the
+    // guarantee that nothing is materialized to disk.
+    let alice_data = cli_test_dir("dry-run-alice")?;
+    let alice_folder = cli_test_dir("dry-run-alice-folder")?;
+    let bob_data = cli_test_dir("dry-run-bob")?;
+    let bob_folder = cli_test_dir("dry-run-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = String::from_utf8(create.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+
+    std::fs::write(alice_folder.join("movie.mp4"), vec![b'a'; 4096]).context("write movie")?;
+    std::fs::write(alice_folder.join("notes.txt"), b"hello").context("write notes")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = String::from_utf8(share.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "folders",
+        "join",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bob join should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+    // Wait until bob's metadata shows alice's entries.
+    let mut saw_entries = false;
+    for _ in 0..60 {
+        let ls = syncweb(&["--data-dir", bob_data_arg, "--json", "ls", bob_folder_arg])?;
+        if ls.status.success() && String::from_utf8_lossy(&ls.stdout).contains("notes.txt") {
+            saw_entries = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(saw_entries, "bob should list alice's entries before the dry-run");
+
+    // Dry-run must never write to the disk.
+    let dry = syncweb(&["--data-dir", bob_data_arg, "download", "--dry-run", bob_folder_arg])?;
+    ensure!(
+        dry.status.success(),
+        "dry-run should succeed: {}",
+        String::from_utf8_lossy(&dry.stderr)
+    );
+    let dry_out = String::from_utf8_lossy(&dry.stdout);
+    ensure!(
+        dry_out.contains("would fetch"),
+        "dry-run should print a preview line: {dry_out}"
+    );
+    ensure!(
+        !dry_out.contains("downloaded"),
+        "dry-run must not claim a download: {dry_out}"
+    );
+    ensure!(
+        std::fs::read_dir(&bob_folder)?.next().is_none(),
+        "dry-run must not materialize content onto the disk"
+    );
+
+    // --preview is a visible alias.
+    let alias = syncweb(&["--data-dir", bob_data_arg, "download", "--preview", bob_folder_arg])?;
+    ensure!(
+        alias.status.success(),
+        "--preview should work: {}",
+        String::from_utf8_lossy(&alias.stderr)
+    );
+    ensure!(
+        String::from_utf8_lossy(&alias.stdout).contains("would fetch"),
+        "--preview should behave like --dry-run"
+    );
+
+    // Filter flags narrow the preview without erroring.
+    for extra in [&["--ext", "txt"][..], &["--max-count", "1"][..], &["--remote-only"][..]] {
+        let mut args = vec!["--data-dir", bob_data_arg, "download", "--dry-run"];
+        args.extend_from_slice(extra);
+        args.push(bob_folder_arg);
+        let filtered = syncweb(&args)?;
+        ensure!(
+            filtered.status.success(),
+            "dry-run {extra:?} should succeed: {}",
+            String::from_utf8_lossy(&filtered.stderr)
+        );
+        ensure!(
+            String::from_utf8_lossy(&filtered.stdout).contains("would fetch"),
+            "dry-run {extra:?} should still print a preview: {}",
+            String::from_utf8_lossy(&filtered.stdout)
+        );
+    }
+
+    // --json emits the stable envelope.
+    let json = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "--json",
+        "download",
+        "--dry-run",
+        bob_folder_arg,
+    ])?;
+    ensure!(json.status.success(), "dry-run --json should succeed");
+    let value: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&json.stdout)).context("dry-run --json should be valid JSON")?;
+    ensure!(value.get("folder").is_some(), "envelope should carry folder: {value}");
+    ensure!(value.get("matched").is_some(), "envelope should carry matched: {value}");
+    ensure!(value.get("bytes").is_some(), "envelope should carry bytes: {value}");
+    let entries = value
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .context("envelope should carry an entries array")?;
+    ensure!(
+        entries
+            .iter()
+            .all(|e| e.get("path").is_some() && e.get("size").is_some() && e.get("peers").is_some()),
+        "each entry should carry path/size/peers: {value}"
+    );
+
+    // Dry-run rejects unsupported sources with a clear message.
+    let dest = cli_test_dir("dry-run-dest")?;
+    let dest_arg = dest.to_str().context("UTF-8 path")?;
+    let bad_dest = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "download",
+        "--dry-run",
+        bob_folder_arg,
+        dest_arg,
+    ])?;
+    ensure!(
+        !bad_dest.status.success() && String::from_utf8_lossy(&bad_dest.stderr).contains("not supported when copying"),
+        "dry-run + destination should fail clearly: {}",
+        String::from_utf8_lossy(&bad_dest.stderr)
+    );
+    let bad_ticket = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "download",
+        "--dry-run",
+        "--hash",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        bob_folder_arg,
+    ])?;
+    ensure!(
+        !bad_ticket.status.success()
+            && String::from_utf8_lossy(&bad_ticket.stderr).contains("only supported for folder sources"),
+        "dry-run on a blob hash should fail clearly: {}",
+        String::from_utf8_lossy(&bad_ticket.stderr)
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown_b.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_folder, &alice_data, &bob_folder, &bob_data, &dest] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_download_dry_run_reports_remote_entries_with_metadata_only() -> anyhow::Result<()> {
+    // User story 4 (Ari): `download --dry-run` must report the actual "would
+    // fetch N" count. A `--metadata-only` join keeps content out of the store,
+    // so the remote set is deterministic: entries are listed but their blobs
+    // stay remote until an explicit `download`.
+    let alice_data = cli_test_dir("dryrun-pos-alice")?;
+    let alice_folder = cli_test_dir("dryrun-pos-alice-folder")?;
+    let bob_data = cli_test_dir("dryrun-pos-bob")?;
+    let bob_folder = cli_test_dir("dryrun-pos-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = String::from_utf8(create.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+
+    std::fs::write(alice_folder.join("movie.mp4"), vec![b'a'; 4096]).context("write movie")?;
+    std::fs::write(alice_folder.join("notes.txt"), b"hello").context("write notes")?;
+    let import = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "import",
+        alice_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = String::from_utf8(share.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+    ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "folders",
+        "join",
+        "--metadata-only",
+        &ticket,
+        bob_folder.to_str().context("UTF-8 path")?,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bob join --metadata-only should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+    // Entries sync (metadata), blobs never download — the remote set is stable.
+    let mut saw_both = false;
+    let mut bob_namespace = String::new();
+    for _ in 0..60 {
+        let ls = syncweb(&["--data-dir", bob_data_arg, "--json", "ls", bob_folder_arg])?;
+        let out = String::from_utf8_lossy(&ls.stdout);
+        if out.contains("movie.mp4") && out.contains("notes.txt") {
+            saw_both = true;
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&out) {
+                bob_namespace = value
+                    .get("folder")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+            }
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(saw_both, "bob should list both entries on a metadata-only join");
+    ensure!(
+        !bob_namespace.is_empty(),
+        "ls envelope should carry the folder namespace"
+    );
+
+    // Positive count: the preview must report exactly the remote entries.
+    let dry = syncweb(&["--data-dir", bob_data_arg, "download", "--dry-run", bob_folder_arg])?;
+    ensure!(
+        dry.status.success(),
+        "dry-run should succeed: {}",
+        String::from_utf8_lossy(&dry.stderr)
+    );
+    let dry_out = String::from_utf8_lossy(&dry.stdout);
+    ensure!(
+        dry_out.contains("would fetch 2 entries"),
+        "metadata-only join should make the dry-run report both remote entries: {dry_out}"
+    );
+    ensure!(
+        dry_out.contains("movie.mp4") && dry_out.contains("notes.txt"),
+        "preview should list both files: {dry_out}"
+    );
+    ensure!(
+        std::fs::read_dir(&bob_folder)?.next().is_none(),
+        "dry-run must not materialize anything onto the disk"
+    );
+
+    let json = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "--json",
+        "download",
+        "--dry-run",
+        bob_folder_arg,
+    ])?;
+    ensure!(json.status.success());
+    let value: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&json.stdout)).context("dry-run --json should be valid JSON")?;
+    ensure!(
+        value.get("matched") == Some(&serde_json::Value::from(2)),
+        "matched should be 2: {value}"
+    );
+    ensure!(
+        value.get("bytes") == Some(&serde_json::Value::from(4101)),
+        "bytes should sum sizes: {value}"
+    );
+
+    let ext = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "download",
+        "--dry-run",
+        "--ext",
+        "txt",
+        bob_folder_arg,
+    ])?;
+    ensure!(ext.status.success());
+    let ext_out = String::from_utf8_lossy(&ext.stdout);
+    ensure!(
+        ext_out.contains("would fetch 1 entry") && ext_out.contains("notes.txt") && !ext_out.contains("movie.mp4"),
+        "dry-run --ext txt should narrow the preview: {ext_out}"
+    );
+
+    // A real download fetches the content directly from peers (the daemon path
+    // runs a direct per-blob fetch for metadata-only folders); the dry-run then
+    // reports 0.
+    let dl = syncweb(&["--data-dir", bob_data_arg, "download", &bob_namespace])?;
+    ensure!(
+        dl.status.success(),
+        "real download should succeed: {}",
+        String::from_utf8_lossy(&dl.stderr)
+    );
+    ensure!(
+        String::from_utf8_lossy(&dl.stdout).contains("downloaded"),
+        "download should report progress: {}",
+        String::from_utf8_lossy(&dl.stdout)
+    );
+
+    let mut now_local = false;
+    for _ in 0..60 {
+        let after = syncweb(&["--data-dir", bob_data_arg, "download", "--dry-run", bob_folder_arg])?;
+        let out = String::from_utf8_lossy(&after.stdout);
+        if out.contains("would fetch 0 entries") {
+            now_local = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(
+        now_local,
+        "after a real download the dry-run should report nothing to fetch"
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown_b.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_folder, &alice_data, &bob_folder, &bob_data] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+#[test]
 fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("create-import-dl")?;
     let folder = cli_test_dir("create-import-dl-folder")?;
@@ -1456,7 +1859,7 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
-    let ticket = share_out.trim().to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;

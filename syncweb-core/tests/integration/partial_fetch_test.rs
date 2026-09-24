@@ -11,7 +11,7 @@ use syncweb_core::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
-    sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent},
+    sync::{FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SyncEngine, SyncEvent, fetch_selected_content},
 };
 
 use crate::test_utils::TestDirectory;
@@ -184,6 +184,103 @@ async fn test_download_max_peers() -> anyhow::Result<()> {
         node_b.blob_store().get(original_hash).await? == b"content_a".as_slice(),
         "downloaded content should match"
     );
+
+    node_a.stop().await?;
+    node_b.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_metadata_only_join_keeps_blobs_remote_then_fetches() -> anyhow::Result<()> {
+    // User stories 1/4: a metadata-only join must sync doc entries while
+    // leaving blobs out of the store, and an explicit download must then be
+    // able to fetch them directly from peers.
+    let directory = TestDirectory::new("syncweb-metaonly-test")?;
+    let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let memory_lookup = MemoryLookup::new();
+
+    let root_a = directory.path().join("seeder");
+    let node_a = IrohNode::new_with_address_lookup(
+        IdentityManager::new(root_a.join("identity.key"))?,
+        root_a.join("data"),
+        RelayMode::Custom {
+            map: relay_map.clone(),
+            insecure: true,
+        },
+        memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
+        crate::test_utils::empty_member_keys(),
+    )
+    .await?;
+
+    let root_b = directory.path().join("downloader");
+    let node_b = IrohNode::new_with_address_lookup(
+        IdentityManager::new(root_b.join("identity.key"))?,
+        root_b.join("data"),
+        RelayMode::Custom {
+            map: relay_map,
+            insecure: true,
+        },
+        memory_lookup.clone(),
+        DiscoveryConfig::disabled(),
+        crate::test_utils::empty_member_keys(),
+    )
+    .await?;
+
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_a.endpoint().id()).with_relay_url(relay_url.clone()));
+    memory_lookup.add_endpoint_info(iroh::EndpointAddr::new(node_b.endpoint().id()).with_relay_url(relay_url));
+
+    let manager_a = FolderManager::new(&node_a);
+    let folder_a = manager_a.create(SyncMode::SendReceive).await?;
+    folder_a.grant(node_a.endpoint().id(), Capability::Admin).await;
+    folder_a.set_blob("file_a.txt", b"content_a").await?;
+    folder_a.set_blob("file_b.txt", b"content_b").await?;
+    node_a.topic_tracker().announce(folder_a.namespace_id()).await?;
+    let ticket = folder_a.ticket(true).await?;
+
+    let manager_b = FolderManager::new(&node_b);
+    let folder_b = manager_b
+        .join_with_options(ticket.to_string(), SyncMode::ReceiveOnly, true)
+        .await?;
+    node_b.topic_tracker().announce(folder_b.namespace_id()).await?;
+
+    let entry = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            if let Some(entry) = node_b
+                .docs_engine()
+                .get(folder_b.doc(), folder_a.author(), "file_a.txt")
+                .await?
+            {
+                return anyhow::Ok(entry);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for initial sync")?
+    .context("initial sync entry should exist")?;
+    let original_hash = entry.content_hash();
+
+    anyhow::ensure!(
+        !node_b.blob_store().has(original_hash).await?,
+        "metadata-only join must keep blobs out of the local store"
+    );
+    anyhow::ensure!(
+        !folder_b.has_local(original_hash).await?,
+        "metadata-only join must report the entry as remote"
+    );
+
+    // An explicit download fetches the selected blobs directly from peers.
+    let bytes = fetch_selected_content(&node_b, &folder_b, &FetchStrategy::All).await?;
+    anyhow::ensure!(bytes > 0, "fetch_selected_content should download content");
+    anyhow::ensure!(
+        node_b.blob_store().get(original_hash).await? == b"content_a".as_slice(),
+        "fetched content should match"
+    );
+
+    // A second pass has nothing left to fetch.
+    let again = fetch_selected_content(&node_b, &folder_b, &FetchStrategy::All).await?;
+    anyhow::ensure!(again == 0, "a second fetch should be a no-op");
 
     node_a.stop().await?;
     node_b.stop().await?;

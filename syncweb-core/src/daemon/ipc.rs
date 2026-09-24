@@ -114,6 +114,8 @@ pub enum IpcCommand {
         download: bool,
         #[serde(default)]
         indexing: bool,
+        #[serde(default)]
+        metadata_only: bool,
     },
     SetSubscribe {
         namespace: String,
@@ -645,6 +647,7 @@ struct JoinOptions {
     subscribe: bool,
     download: bool,
     indexing: bool,
+    metadata_only: bool,
 }
 
 impl IpcServer {
@@ -860,11 +863,13 @@ impl IpcServer {
                 filters,
                 download,
                 indexing,
+                metadata_only,
             } => {
                 let options = JoinOptions {
                     subscribe,
                     download,
                     indexing,
+                    metadata_only,
                 };
                 self.handle_join(ticket, path, mode, filters, options).await
             }
@@ -1077,8 +1082,16 @@ impl IpcServer {
         })?;
         let namespace_id = iroh_docs::NamespaceId::from_str(&namespace)
             .map_err(|error| SyncwebError::operation("invalid download namespace", error))?;
+        let manager = FolderManager::new(&context.node);
+        let folder = manager.get(namespace_id).await?;
+        // A metadata-only folder keeps content out of the store; a doc re-sync
+        // will not re-download it, so an explicit download fetches each selected
+        // blob directly from the folder's peers.
+        if folder.is_metadata_only().await? {
+            return crate::sync::fetch_selected_content(&context.node, &folder, &strategy).await;
+        }
         let sync = SyncEngine::new(
-            FolderManager::new(&context.node),
+            manager,
             context.node.blob_store().clone(),
             context.node.docs_engine().clone(),
             Some(context.node.topic_tracker().clone()),
@@ -1277,7 +1290,7 @@ impl IpcServer {
             }
         }
         let manager = FolderManager::new(&context.node);
-        match manager.join(ticket, mode).await {
+        match manager.join_with_options(ticket, mode, options.metadata_only).await {
             Ok(folder) => {
                 let namespace = folder.namespace_id().to_string();
                 self.register_folder(folder.namespace_id(), &namespace, &path, mode)
@@ -3028,6 +3041,7 @@ mod tests {
                 filters: SubscribeFilters::default(),
                 download: false,
                 indexing: false,
+                metadata_only: false,
             }))
             .await;
         assert!(matches!(
@@ -3343,6 +3357,7 @@ mod tests {
                 filters: SubscribeFilters::default(),
                 download: false,
                 indexing: false,
+                metadata_only: false,
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

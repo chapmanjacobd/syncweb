@@ -263,7 +263,10 @@ folder-size\t''
 folder-avg-size\t''
 folder-date\t''
 folder-time\t''
-count\t''"
+count\t''
+name\t''
+modified\t''
+state\t''"
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l min-seeders -d 'Filter files with fewer than N seeders' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l max-seeders -d 'Filter files with more than N seeders' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand sort" -l niche -d 'Ideal popularity (peer count) for niche scoring' -r

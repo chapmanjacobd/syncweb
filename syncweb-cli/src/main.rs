@@ -930,6 +930,19 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     Ok(())
 }
 
+/// Restrict a fetch strategy to a single folder-relative path when the download
+/// source selected a file or subdirectory (rather than the folder root).
+fn strategy_with_remainder(strategy: FetchStrategy, remainder: &std::path::Path) -> FetchStrategy {
+    if remainder.as_os_str().is_empty() {
+        return strategy;
+    }
+    let filter = match strategy {
+        FetchStrategy::Filter(filter) => filter,
+        FetchStrategy::All | _ => FetchFilter::new(),
+    };
+    FetchStrategy::Filter(filter.with_paths(vec![remainder.to_path_buf()]))
+}
+
 async fn download_via_daemon_or_node(
     data_dir: &std::path::Path,
     output_json: bool,
@@ -989,10 +1002,12 @@ async fn download_via_daemon_or_node(
         FetchStrategy::All
     };
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, network).await? {
+        let resolved = resolve_selector_via_daemon(&client, &command.source).await?;
+        let scoped = strategy_with_remainder(strategy, &resolved.remainder);
         let response = client
             .send(IpcRequest::new(IpcCommand::Download {
-                namespace: command.source.to_string_lossy().into_owned(),
-                strategy,
+                namespace: resolved.namespace,
+                strategy: scoped,
             }))
             .await?;
         match response {
@@ -1029,12 +1044,13 @@ async fn download_with_node(
 ) -> Result<()> {
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = manager.resolve(&command.source).await?;
+    let (resolved, folder) = resolve_selector_embedded(data_dir, &manager, &command.source).await?;
+    let scoped = strategy_with_remainder(strategy, &resolved.remainder);
     // A metadata-only folder keeps content out of the store; a doc re-sync will
     // not re-download it, so an explicit download fetches each selected blob
     // directly from the folder's peers.
     if folder.is_metadata_only().await? {
-        let bytes = syncweb_core::sync::fetch_selected_content(&node, &folder, &strategy).await?;
+        let bytes = syncweb_core::sync::fetch_selected_content(&node, &folder, &scoped).await?;
         if output_json {
             println!(
                 "{}",
@@ -1054,7 +1070,7 @@ async fn download_with_node(
     let stats_db = open_stats_db(data_dir)?;
     let folder_key = folder.namespace_id().to_string();
     let mut accounted_bytes = 0_u64;
-    let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+    let mut intent = sync.fetch(folder.namespace_id(), scoped).await?;
     let pb = ProgressBar::new(0);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -5706,7 +5722,7 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
         if let Some(criteria) = command.sort {
             let sort_args = crate::cli::commands::SortArgs {
                 path: command.path,
-                by: criteria,
+                by: Some(criteria),
                 min_seeders: None,
                 max_seeders: None,
                 niche: None,
@@ -5745,8 +5761,28 @@ async fn handle_ls(ctx: &CliContext<'_>, command: crate::cli::commands::LocalPat
     Ok(())
 }
 
+/// Guess whether a `find` pattern should be interpreted as a regular expression
+/// or a glob when the user did not pass `--kind`. Regex-only metacharacters
+/// (`$`, `^`, `\`, `(`, `)`, `|`, `{`, `}`, `+`) signal regex; everything else
+/// falls back to glob so `*.md` and `report.*` keep their glob meaning.
+fn detect_find_kind(pattern: &str) -> &'static str {
+    if pattern
+        .chars()
+        .any(|c| matches!(c, '$' | '^' | '\\' | '(' | ')' | '|' | '{' | '}' | '+'))
+    {
+        "regex"
+    } else {
+        "glob"
+    }
+}
+
 fn build_find_query(command: &crate::cli::commands::FindArgs) -> Result<FindQuery> {
-    let mut query = match command.kind.as_str() {
+    let kind = command
+        .fixed_strings
+        .then_some("exact")
+        .or(command.kind.as_deref())
+        .unwrap_or_else(|| detect_find_kind(&command.pattern));
+    let mut query = match kind {
         "exact" => FindQuery::exact(&command.pattern),
         "regex" => FindQuery::regex(&command.pattern),
         _ => FindQuery::glob(&command.pattern),
@@ -5962,9 +5998,10 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
     let data_dir = ctx.data_dir;
     let entries = ParallelScanner::new(&command.path, Vec::<String>::new(), command.threads).scan()?;
     let mut sortable: Vec<SortEntry> = entries.into_iter().map(sort_entry).collect();
+    let by = command.by.as_deref().unwrap_or("niche");
 
     // Build sort config from CLI args
-    let mut criteria = SortConfig::parse_criteria(std::slice::from_ref(&command.by));
+    let mut criteria = SortConfig::parse_criteria(std::slice::from_ref(&by.to_owned()));
     if criteria.is_empty() {
         criteria = SortConfig::default().criteria;
     }
@@ -6026,9 +6063,9 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
                 })?;
             match response {
                 IpcResponse::EnrichData(peer_map) => {
-                    let needs_niche = command.by.eq_ignore_ascii_case("niche");
-                    let needs_frecency = command.by.eq_ignore_ascii_case("frecency");
-                    let needs_peers = command.by.eq_ignore_ascii_case("peers");
+                    let needs_niche = by.eq_ignore_ascii_case("niche");
+                    let needs_frecency = by.eq_ignore_ascii_case("frecency");
+                    let needs_peers = by.eq_ignore_ascii_case("peers");
                     if needs_peers || needs_niche || needs_frecency {
                         sorter.enrich_peers(&mut sortable, &peer_map);
                     }
@@ -6098,7 +6135,7 @@ async fn handle_sort(ctx: &CliContext<'_>, command: &crate::cli::commands::SortA
     }
     attach_peer_counts(client.as_ref(), &resolved.namespace, &mut rows).await?;
     rows = apply_listing_filters(rows, &resolved.remainder, &command.listing, &command.filter)?;
-    let by = parse_meta_sort(&command.by)?;
+    let by = parse_meta_sort(command.by.as_deref().unwrap_or("name"))?;
     sort_local_entries(&mut rows, by);
     render_entries(&rows, &resolved.namespace, &command.path, output_json)?;
     Ok(())

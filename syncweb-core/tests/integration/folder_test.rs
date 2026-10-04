@@ -129,9 +129,9 @@ async fn folder_mode_survives_node_restart() -> anyhow::Result<()> {
     node.stop().await?;
     drop(node);
 
-    let identity = IdentityManager::new(&identity_path)?;
+    let restarted_identity = IdentityManager::new(&identity_path)?;
     let restarted = IrohNode::new(
-        identity,
+        restarted_identity,
         root.join("data"),
         RelayMode::Default,
         crate::test_utils::empty_member_keys(),
@@ -140,8 +140,11 @@ async fn folder_mode_survives_node_restart() -> anyhow::Result<()> {
     .await?;
     let folders = FolderManager::new(&restarted).list().await?;
     anyhow::ensure!(folders.len() == 1);
-    anyhow::ensure!(folders[0].namespace_id() == namespace);
-    anyhow::ensure!(folders[0].mode() == SyncMode::SendReceive);
+    let folder = folders
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("expected one folder after restart"))?;
+    anyhow::ensure!(folder.namespace_id() == namespace);
+    anyhow::ensure!(folder.mode() == SyncMode::SendReceive);
     restarted.stop().await?;
     Ok(())
 }

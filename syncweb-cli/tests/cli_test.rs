@@ -916,8 +916,8 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
     ensure!(!download.status.success());
     let download_stderr = String::from_utf8(download.stderr).context("download UTF-8 error")?;
     ensure!(
-        download_stderr.contains("invalid download namespace"),
-        "expected 'invalid download namespace' in stderr, got: {download_stderr:?}"
+        download_stderr.contains("not inside of a Syncweb folder"),
+        "expected 'not inside of a Syncweb folder' in stderr, got: {download_stderr:?}"
     );
     ensure!(status.status.success());
     ensure!(

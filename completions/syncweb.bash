@@ -2045,7 +2045,7 @@ _syncweb() {
             fi
             case "${prev}" in
                 --by)
-                    COMPREPLY=($(compgen -W "niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count name modified state" -- "${cur}"))
                     return 0
                     ;;
                 --min-seeders)

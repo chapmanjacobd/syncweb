@@ -337,7 +337,7 @@ channel\:"Search only an editorial channel"))' \
 ;;
 (sort)
 _arguments "${_arguments_options[@]}" : \
-'--by=[]:BY:(niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count)' \
+'--by=[]:BY:(niche frecency peers random folder time date week month year size folder-size folder-avg-size folder-date folder-time count name modified state)' \
 '--min-seeders=[Filter files with fewer than N seeders]:MIN_SEEDERS:_default' \
 '--max-seeders=[Filter files with more than N seeders]:MAX_SEEDERS:_default' \
 '--niche=[Ideal popularity (peer count) for niche scoring]:NICHE:_default' \

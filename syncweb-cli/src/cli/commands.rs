@@ -439,8 +439,8 @@ pub struct FindArgs {
     pub pattern: String,
     #[arg(default_value = ".")]
     pub path: PathBuf,
-    #[arg(long, default_value = "glob", value_parser = ["exact", "glob", "regex"])]
-    pub kind: String,
+    #[arg(long, value_parser = ["exact", "glob", "regex"])]
+    pub kind: Option<String>,
     #[arg(
         short = 'i',
         long,
@@ -488,14 +488,14 @@ pub struct SortArgs {
         long = "by",
         alias = "sort",
         alias = "u",
-        default_value = "niche",
         value_parser = [
             "niche", "frecency", "peers", "random", "folder",
             "time", "date", "week", "month", "year", "size",
-            "folder-size", "folder-avg-size", "folder-date", "folder-time", "count"
+            "folder-size", "folder-avg-size", "folder-date", "folder-time", "count",
+            "name", "modified", "state"
         ]
     )]
-    pub by: String,
+    pub by: Option<String>,
     #[arg(long, help = "Filter files with fewer than N seeders")]
     pub min_seeders: Option<usize>,
     #[arg(long, help = "Filter files with more than N seeders")]

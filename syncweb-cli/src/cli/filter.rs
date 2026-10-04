@@ -34,6 +34,7 @@ pub struct ContentFilterArgs {
         alias = "sizes",
         alias = "S",
         action = clap::ArgAction::Append,
+        allow_hyphen_values = true,
         help = "Size constraints: N, -N, +N, N%10, +5GB, etc. (can repeat)"
     )]
     pub size: Vec<String>,
@@ -43,6 +44,7 @@ pub struct ContentFilterArgs {
         alias = "levels",
         alias = "d",
         action = clap::ArgAction::Append,
+        allow_hyphen_values = true,
         help = "Depth constraints: N, +N (min), -N (max) (can repeat)"
     )]
     pub depth: Vec<String>,
@@ -77,6 +79,7 @@ pub struct ContentFilterArgs {
     #[arg(
         long = "time-modified",
         action = clap::ArgAction::Append,
+        allow_hyphen_values = true,
         help = "Time modified: '-3 days' (newer), '+3 days' (older) (can repeat)"
     )]
     pub time_modified: Vec<String>,

@@ -630,7 +630,7 @@ pub enum StatsCommand {
 
 #[derive(Debug, Args)]
 pub struct StatsSeedingArgs {
-    #[arg(default_value = ".", help = "Namespace ID or path to a managed folder")]
+    #[arg(long, default_value = ".", value_name = "FOLDER", help = "Namespace ID or path to a managed folder")]
     pub folder: PathBuf,
 }
 

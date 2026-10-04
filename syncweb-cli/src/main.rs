@@ -2545,15 +2545,17 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
 
 #[async_recursion]
 async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) -> Result<()> {
-    let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    let selector = command.folder.to_string_lossy().to_string();
 
     // Prefer the daemon's per-blob peer snapshot; it is the only live source of
-    // seeding counts.
-    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+    // seeding counts. Resolve the selector to a namespace first because the
+    // daemon's folder manager cannot resolve a path when several folders exist.
+    let (mode, resolved) = resolve_entry_source(ctx, &command.folder).await?;
+    if let ListingMode::Daemon { client } = &mode {
         let response = client
-            .send(IpcRequest::new(IpcCommand::PeerAvailability { folder: selector }))
+            .send(IpcRequest::new(IpcCommand::PeerAvailability {
+                folder: resolved.namespace,
+            }))
             .await?;
         let IpcResponse::PeerAvailability(report) = response else {
             return print_daemon_message(response, output_json);
@@ -2570,9 +2572,11 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
         return Ok(());
     }
 
-    let node = open_node(data_dir).await?;
-    let manager = FolderManager::new(&node);
-    let folder = manager.resolve(&command.folder).await?;
+    let ListingMode::Embedded(embedded) = mode else {
+        unreachable!("daemon mode handled above");
+    };
+    let folder = embedded.folder;
+    let node = embedded.node;
     let mut candidates = Vec::new();
     for entry in folder.content_entries().await? {
         let hash = entry.content_hash();
@@ -4173,7 +4177,6 @@ async fn handle_package_archive_export(
     version: Option<String>,
     filters: Vec<String>,
 ) -> Result<()> {
-    let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let (sources, destination) = split_drop_paths(paths)?;
     let filter = parse_drop_filters(&filters)?;
@@ -4184,9 +4187,12 @@ async fn handle_package_archive_export(
             .ok_or_else(|| anyhow::anyhow!("multiple packages require an output directory"))?;
         std::fs::create_dir_all(output_dir)?;
     }
-    // Archive export is a purely local operation; opening a node with relay
-    // mode enabled can block on a relay handshake in an offline environment.
-    let node = open_node_offline(data_dir).await?;
+    // Archive export is a purely local operation. It must not open a node on
+    // the live data dir: a running daemon holds the blob/docs store locks, so a
+    // second node on the same store blocks instead of starting. A scratch data
+    // dir (plus relay-disabled mode) keeps the export fast and offline-safe.
+    let scratch = std::env::temp_dir().join(format!("syncweb-export-{}", uuid::Uuid::new_v4()));
+    let node = open_node_offline(&scratch).await?;
     let exporter = DropExporter::new(node.blob_store().clone());
     let mut results = Vec::with_capacity(sources.len());
     for source in sources {
@@ -4235,6 +4241,7 @@ async fn handle_package_archive_export(
         }
     }
     node.stop().await?;
+    let _ = std::fs::remove_dir_all(&scratch);
     Ok(())
 }
 
@@ -5109,13 +5116,15 @@ fn handle_status_networks(data_dir: &std::path::Path, name: Option<&str>, output
 }
 
 async fn handle_network_peers(ctx: &CliContext<'_>, folder: Option<&str>) -> Result<()> {
-    let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let selector = folder.unwrap_or(".");
-    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+    if let Some(client) = syncweb_core::daemon::daemon_client(ctx.data_dir)? {
+        // Resolve the folder selector to a namespace first: the daemon's folder
+        // manager cannot resolve a path when several folders are managed.
+        let resolved = resolve_selector_via_daemon(&client, Path::new(selector)).await?;
         let response = client
             .send(IpcRequest::new(IpcCommand::PeerAvailability {
-                folder: selector.to_string(),
+                folder: resolved.namespace,
             }))
             .await?;
         match response {

@@ -108,6 +108,45 @@ async fn test_sync_modes() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn folder_mode_survives_node_restart() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-folder-restart-test")?;
+    let root = directory.path().join("node");
+    let identity_path = root.join("identity.key");
+
+    let identity = IdentityManager::new(&identity_path)?;
+    let node = IrohNode::new(
+        identity,
+        root.join("data"),
+        RelayMode::Default,
+        crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
+    )
+    .await?;
+    let namespace = FolderManager::new(&node)
+        .create(SyncMode::SendReceive)
+        .await?
+        .namespace_id();
+    node.stop().await?;
+    drop(node);
+
+    let identity = IdentityManager::new(&identity_path)?;
+    let restarted = IrohNode::new(
+        identity,
+        root.join("data"),
+        RelayMode::Default,
+        crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
+    )
+    .await?;
+    let folders = FolderManager::new(&restarted).list().await?;
+    anyhow::ensure!(folders.len() == 1);
+    anyhow::ensure!(folders[0].namespace_id() == namespace);
+    anyhow::ensure!(folders[0].mode() == SyncMode::SendReceive);
+    restarted.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_public_blob_subscription_uses_blob_store() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-folder-test")?;
     let (relay_map, relay_url, _server) = iroh::test_utils::run_relay_server().await?;

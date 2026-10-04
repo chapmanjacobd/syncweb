@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use iroh_blobs::Hash;
+use iroh_blobs::api::Store as BlobStore;
 use iroh_docs::{
     AuthorId, DocTicket, Entry, NamespaceId,
     api::{
@@ -50,12 +51,16 @@ pub struct ProvisionedDoc {
 #[derive(Clone)]
 pub struct DocsEngine {
     docs: Docs,
+    blob_store: BlobStore,
 }
 
 impl DocsEngine {
     #[must_use]
-    pub fn new(docs: &Docs) -> Self {
-        Self { docs: docs.clone() }
+    pub fn new(docs: &Docs, blob_store: &BlobStore) -> Self {
+        Self {
+            docs: docs.clone(),
+            blob_store: blob_store.clone(),
+        }
     }
 
     #[must_use]
@@ -115,6 +120,10 @@ impl DocsEngine {
         let (doc, ticket) = self.create_or_open_namespace(existing).await?;
         let author = self.author().await?;
         self.set(&doc, author, kind.metadata_key(), metadata).await?;
+        self.blob_store
+            .sync_db()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to flush metadata blob", error))?;
         let namespace_id = self.namespace_id(&doc);
         Ok(ProvisionedDoc {
             doc,

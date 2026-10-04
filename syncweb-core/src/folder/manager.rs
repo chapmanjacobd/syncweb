@@ -347,7 +347,19 @@ impl FolderManager {
         let Some(entry) = self.docs_engine.get(doc, author, MODE_KEY).await? else {
             return Ok(fallback);
         };
-        let mode_bytes = self.blob_store.get(entry.content_hash()).await?;
+        let mode_hash = entry.content_hash();
+        let mode_bytes = match self.blob_store.get(mode_hash).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                tracing::warn!(
+                    %mode_hash,
+                    %error,
+                    fallback = %fallback,
+                    "folder mode metadata is unavailable; using capability-derived mode"
+                );
+                return Ok(fallback);
+            }
+        };
         let mode_value = std::str::from_utf8(&mode_bytes)
             .map_err(|error| SyncwebError::operation("folder mode metadata is not UTF-8", error))?;
         mode_value.parse()

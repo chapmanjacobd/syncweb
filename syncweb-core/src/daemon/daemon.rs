@@ -1006,6 +1006,11 @@ impl Daemon {
 
     async fn load_folders(&self) -> Result<()> {
         let folders = self.folder_manager.list().await?;
+        let folder_mounts = self
+            .node_db
+            .load_folder_mounts()?
+            .into_iter()
+            .collect::<HashMap<_, _>>();
         let mut registry = self.handle.folder_registry.write().await;
         for folder in folders {
             let namespace_key = folder.namespace_id().to_string();
@@ -1017,9 +1022,8 @@ impl Daemon {
                 .iter()
                 .any(|status| status.namespace == namespace_key)
             {
-                registry.add(
-                    FolderEntry::new(folder.namespace_id(), PathBuf::new()).with_mode(folder.mode().to_string()),
-                )?;
+                let path = folder_mounts.get(&namespace_key).cloned().unwrap_or_default();
+                registry.add(FolderEntry::new(folder.namespace_id(), path).with_mode(folder.mode().to_string()))?;
             }
         }
         drop(registry);

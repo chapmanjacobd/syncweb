@@ -254,7 +254,7 @@ impl IrohNode {
             .spawn();
 
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
-        let docs_engine = DocsEngine::new(&docs);
+        let docs_engine = DocsEngine::new(&docs, blobs.store());
         let topic_tracker = TopicTracker::new(&gossip, &endpoint);
 
         Ok(Self {
@@ -313,6 +313,11 @@ impl IrohNode {
     ///
     /// Returns an error if the router fails to shutdown properly.
     pub async fn stop(&self) -> Result<()> {
+        self.blob_store
+            .inner()
+            .sync_db()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to flush blob store", error))?;
         self.router
             .shutdown()
             .await

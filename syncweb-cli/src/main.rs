@@ -861,9 +861,13 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
         anyhow::bail!("import path does not exist: {}", command.path.display());
     }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+        let namespace = match command.folder.as_deref() {
+            Some(folder) => Some(resolve_selector_via_daemon(&client, std::path::Path::new(folder)).await?.namespace),
+            None => None,
+        };
         let response = client
             .send(IpcRequest::new(IpcCommand::ImportFiles {
-                namespace: command.folder.clone(),
+                namespace,
                 path: command.path.clone(),
             }))
             .await?;
@@ -888,8 +892,8 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let folder = if let Some(namespace) = command.folder {
-        manager.get(namespace.parse()?).await?
+    let folder = if let Some(folder) = command.folder {
+        resolve_selector_embedded(data_dir, &manager, std::path::Path::new(&folder)).await?.1
     } else {
         manager.resolve(&command.path).await.map_err(|_error| {
             anyhow::anyhow!(
@@ -1051,6 +1055,9 @@ async fn download_with_node(
     // directly from the folder's peers.
     if folder.is_metadata_only().await? {
         let bytes = syncweb_core::sync::fetch_selected_content(&node, &folder, &scoped).await?;
+        if let Some(mount_root) = resolved.mount_root.as_deref() {
+            syncweb_core::sync::materialize_selected_content(&node, &folder, &scoped, mount_root).await?;
+        }
         if output_json {
             println!(
                 "{}",
@@ -1070,7 +1077,7 @@ async fn download_with_node(
     let stats_db = open_stats_db(data_dir)?;
     let folder_key = folder.namespace_id().to_string();
     let mut accounted_bytes = 0_u64;
-    let mut intent = sync.fetch(folder.namespace_id(), scoped).await?;
+    let mut intent = sync.fetch(folder.namespace_id(), scoped.clone()).await?;
     let pb = ProgressBar::new(0);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -1107,6 +1114,9 @@ async fn download_with_node(
         }
     }
     pb.finish_and_clear();
+    if let Some(mount_root) = resolved.mount_root.as_deref() {
+        syncweb_core::sync::materialize_selected_content(&node, &folder, &scoped, mount_root).await?;
+    }
     if output_json {
         println!(
             "{}",

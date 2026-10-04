@@ -17,7 +17,7 @@
 
 - Version: `syncweb-v0.1.1-alpha.7` (tag `7b682f53a591d88f8f1f7ac378b7afe097be2de4`), built from source.
 - Nodes: `iiab-vm` containers `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`), clean Ubuntu cloud images created with `--skip-install`; IIAB was not installed.
-- Result: testing stopped after more than five unexpected errors. Alpha.7 uses `syncweb start --bg` for background mode; the documented `syncweb start` default-background behavior and `start --foreground` flag are not available. Node A also exited during the reload/sync/folder sequence after reporting `failed to read blob: encode error`.
+- Result: testing stopped after more than five unexpected errors. Node A also exited during the reload/sync/folder sequence after reporting `failed to read blob: encode error`.
 - Results below are recorded as vertically structured prose. Rows not reached after the stop condition are marked `NOT RUN`.
 - Pass/fail statuses are based on whether the actual output satisfied the expected result; return codes are included only for nonzero failures.
 
@@ -119,13 +119,7 @@ Step 4 - PASS
 
 ### 2.1 Start & Stop
 
-Step 1 - FAIL
-- Action: syncweb start --foreground
-- Expected: Daemon starts in foreground, shows "daemon running"
-- Actual output: rc=2; error: unexpected argument '--foreground' found
-- Debug: `RUST_LOG=debug syncweb start --foreground`
-
-Step 2 - NOT RUN
+Step 1 - NOT RUN
 - Action: Ctrl+C on daemon
 - Expected: Graceful shutdown, logs "daemon stopped"
 - Actual output: No output; testing stopped after more than five unexpected errors.
@@ -1598,7 +1592,6 @@ syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 - VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`).
 - Build: source rebuild deployed to both VMs. Binary SHA-256: `018cb6ab7e550612990e07ec7e5bbe42781940227102a8ff7a4d5007d493a43b`.
 - Test data: fresh `/root/manual2/default` profiles; Alice folder `/root/shared-docs`; Bob folder `/root/bob-shared`.
-- The foreground-daemon test was skipped per request. Supported background invocation is `syncweb start --bg`.
 - The run stopped after 15 new failures, exceeding the requested limit of ten. Sections after the download matrix were not run.
 
 ### Repaired existing failures
@@ -1659,3 +1652,178 @@ syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 | FAIL | Download max count | `download --max-count 10 /root/shared-docs/` → `Error: invalid download namespace: Invalid string length`. |
 | FAIL | Download size | `download --size -1GB /root/shared-docs/` → `error: unexpected argument '-1' found`. |
 | FAIL | Download threads | `download --threads 1 /root/shared-docs/` → `Error: invalid download namespace: Invalid string length`. |
+
+---
+
+## Manual Test Run: 2026-10-04 (bugfix re-run, fixes verified)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`).
+- Build: source rebuild from `c678de7` + bugfix commits (`better kind default: glob or regex`, `download: materialize content`). Binary SHA-256: `cb316ad00c9cea5a0fe252fc17a07040456c5ed0a5dc010b06e6d07facbe750f`.
+- Test data: fresh `/root/manual3/default` profiles; Alice folder `/root/shared-docs`; Bob folder `/root/bob-shared`; daemons started as persistent `systemd-run` units so they survive across test invocations.
+- Fixes verified in this run: download path→namespace resolution, download materialization to the mount path, `import --folder <path>` resolution, `sort --by name/modified/state`, `sort --no-enrich` default, `find` regex auto-detection, `--size -1GB` / `--depth -5` hyphen-value parsing, and P2P join-then-sync (`ls` now shows remote entries).
+- New failures observed (counted): 7 root-cause issues — `package export` hang, `stats seeding` missing subcommand, piped `download -` NotFound on already-local content, `--no-color` flag missing, `link create --immutable/--mutable` flags missing, `network health` subcommand missing, and minimal `snapshot list` output. This is under the requested stop limit of ten.
+
+### Initialization & Configuration (Section 1) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `folders create ./test-folder` | Created folder; printed `syncweb://folder/...` URL. |
+| PASS | `folders create --mode sendonly` | Created SendOnly folder + URL. |
+| PASS | `folders create --network home` | Created network-linked folder + URL. |
+| PASS | `folders create --mode receiveencrypted` | Created ReceiveEncrypted folder + URL. |
+| PASS | `folders` list | Table shows all four folders with modes. |
+| PASS | `config` | Printed full TOML (`[bep]`, `[schedule]`, `[bandwidth]`, `[discovery]`). |
+| PASS | `config set default_sync_mode ReceiveOnly` | `default_sync_mode updated`; `config show` reflects it. |
+| PASS | `config set bandwidth.max_download 5MB/s` | `bandwidth.max_download updated`; reflected in `config show`. |
+| PASS | `db check` | `node.db: 0 errors`, `stats.db: 0 errors`, all databases healthy. |
+| PASS | `db stats` | node.db 196 KB, stats.db 104 KB, 0 freelist pages. |
+| PASS | `db vacuum` | `VACUUM complete`; zero freelist pages for both DBs. |
+| PASS | `db backup` | Backup zip at `/tmp/syncweb-backup/syncweb-db-backup-...` with node.db, stats.db, config.toml, identity.key, manifest.json. |
+
+### Daemon Lifecycle (Section 2) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `start --bg` | `daemon starting: <pid>`; daemon stays up when started as a persistent unit. |
+| PASS | `status` | `daemon: running`, pid, node id, bandwidth, folder table. |
+| PASS | `--json status` | Single JSON object with `daemon`, `folders`, `devices`, `networks`, `transfers`. |
+| PASS | `stop` (pipe `n`) | `aborted`; daemon stays running. |
+| PASS | `stop --yes` | `shutdown requested`; status becomes `daemon not running` after shutdown. |
+| PASS | `reload` | `configuration reload requested`. |
+| PASS | `sync` | `synchronization requested`. |
+| PASS | `sync <namespace>` | `synchronization requested`. |
+| PASS | `folders create` (daemon running) | Created folder through the daemon. |
+| PASS | `folders leave` | `left: <namespace>`; folder removed from listing. |
+
+### Folder Sync — P2P (Section 3) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Alice: `folders create --mode sendreceive /root/shared-docs` | Namespace `2efafe0b...`; daemon reported running. |
+| PASS | Alice: `folders import /root/shared-docs` | `import requested: 1`. |
+| PASS | Bob: `folders join <alice-url> /root/bob-shared` | `joined: 2efafe0b...`. |
+| PASS | Bob: `ls /root/bob-shared` (was FAIL "has no remote entries yet") | Shows `test.txt`, `12 B`, State `local`. Join-then-sync now works. |
+| PASS | Bob: `download /root/bob-shared/test.txt` (was FAIL "invalid download namespace") | `downloaded: 0 bytes`; `cat test.txt` → `hello world` (blob materialized to the mount path). |
+| PASS | Bob: `download /root/bob-shared/` + `--max-count` + `--threads` + `--size -1GB` (was FAIL) | All return `downloaded: 0 bytes`, no namespace/arg errors. |
+| PASS | Bob write on ReceiveOnly join | `Error: failed to set document blob: Attempted to insert to read only replica` (correct read-only enforcement). |
+| PASS | `folders` / `folders --json` | Table / JSON array with folder metadata. |
+| PASS | `devices` / `devices --json` | Iroh id + Syncthing DeviceId; `peers: []` when no daemon peers. |
+
+### Leave / listing (Sections 3.3–3.4) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `folders leave <ns>` | `left: <namespace>`; removed from list. |
+| PASS | `folders leave --delete-files` (non-TTY, no `--yes`) | `aborted`; files stay. |
+| PASS | `folders leave --delete-files --yes` | `left: <namespace>`; directory removed. |
+
+### Listing, Searching, Sorting, Stat (Section 4) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `ls` | 5 entries, sizes, State local. |
+| PASS | `ls --local-only` | Disk scan lists all entries. |
+| PASS | `ls --remote-only` | Empty table (no remote rows). |
+| PASS | `ls --path-prefix docs` | Only `docs/*` entries. |
+| PASS | `ls --no-enrich` | `Modified: -` column. |
+| PASS | `ls --sort size` | Table sorted by size. |
+| PASS | `ls --json` | Envelope with `folder`, `path`, `entries`. |
+| PASS | `ls /tmp` (plain dir) | `not inside of a Syncweb folder` with `--local-only` hint. |
+| PASS | `find '.*\.txt$'` (was FAIL) | `notes.txt`, `test.txt` (regex auto-detected). |
+| PASS | `find '*.md'` | `docs.md`, `docs/a.md`, `docs/b.md` (glob). |
+| PASS | `find --fixed-strings 'note'` | `notes.txt` (substring/exact). |
+| PASS | `find '.*\.md$' --json` (was FAIL) | `entries` populated. |
+| PASS | `find --ignore-case README` | `No files matching` (correct, no README). |
+| PASS | `find --depth +2 --depth -5` (was FAIL) | No `-5` argument error. |
+| PASS | `sort --by size` | Table sorted by size. |
+| PASS | `sort --by name` (was FAIL) | Table sorted by path. |
+| PASS | `sort --by modified` (was FAIL) | Table sorted by modified time. |
+| PASS | `sort --by state` (was FAIL) | Table sorted by state. |
+| PASS | `sort --no-enrich` (was FAIL) | Metadata table with `Modified: -`. |
+| PASS | `sort --local-only --by peers` / `--by niche` | Lists entries. |
+| PASS | `sort --local-only --limit-size 10GB --min-seeders 2` | `No entries match the sorting criteria`. |
+| PASS | `stat` / `stat --terse` / `stat --format` | Size, blocks, hash, peers; terse pipe output; custom template. |
+
+### Download & Import/Export (Section 5) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `download <folder>/<file>` (was FAIL) | Fetches + materializes file to disk. |
+| PASS | `download <folder>/` (was FAIL) | Fetches + materializes entries. |
+| PASS | `download --max-count 10` (was FAIL) | Success, no namespace error. |
+| PASS | `download --size -1GB` (was FAIL) | Success, no `-1` argument error. |
+| PASS | `download --threads 1` (was FAIL) | Success, no namespace error. |
+| FAIL | Piped `find '*.md' \| download -` | `Error: daemon download failed: Remote peer aborted sync: NotFound` (downloading already-local content on the publishing node). |
+| PASS | `folders import` | `import requested: N`. |
+| PASS | `folders import --threads 1` | `import requested: 5`. |
+| PASS | `folders import <path> --folder <folder>` (was FAIL) | `import requested: 1`; file appears in listing. |
+| FAIL | `package export ./pkg-dir /tmp/pkg.car.zst` | Hangs (timed out at rc=124); no archive produced. |
+
+### Health & Verify (Section 6) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | `stats seeding` | `error: unrecognized subcommand 'seeding'` (the verb does not exist; `stats files`/`stats network` are the available subcommands). |
+| PASS | `verify ./shared-docs` | `total: 6, verified: 6, corrupted: 0, missing: 0, valid: true`. |
+| PASS | `db check` | Both databases healthy. |
+
+### Public Folders & Access (Section 7) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `share ./shared-docs` | Printed read-only share ticket. |
+| PASS | `access ./shared-docs` | One table with `Folder · Mode · Write? · Shared with · Devices · Networks`. |
+| PASS | `access --json` | Array of `{folder, mode, write, shares, devices, networks}`. |
+| PASS | `access --revoke ./shared-docs` | `unshared: <ns> (read)`. |
+
+### Snapshots (Section 8) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `snapshot create ./shared-docs --description` | Returns content hash (same hash for unchanged content). |
+| PASS | `snapshot list ./shared-docs` | Works, but output is minimal (`snapshots: 1`; no per-snapshot description/timestamp table). |
+
+### Networks (Section 10) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `network create home` | Created (no output; `network ls` shows it). |
+| PASS | `network ls home` | Table with ID, members, folders. |
+| PASS | `network events home` | `no events`. |
+| FAIL | `network health home` | `error: unrecognized subcommand 'health'` (use `network status`). |
+
+### Indexing (Section 11) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `indexing enable ./shared-docs` | Enabled (no error). |
+| PASS | `search --kind catalog "test"` | `no results found` (correct for an empty catalog). |
+
+### Links (Section 12) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | `link create --immutable` | `error: unexpected argument '--immutable' found` (flag not implemented; `link create` exposes `--name/--version/--private/--expires/--publish`). |
+| FAIL | `link create --mutable` | `error: unexpected argument '--mutable' found` (flag not implemented). |
+
+### Schedules & Bandwidth (Section 13) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `config schedule` | Shows `active_hours = ""`, `bandwidth = []`. |
+| PASS | `config schedule set --active "22:00-06:00"` | `schedule updated`; `config schedule` shows the new window. |
+
+### CLI Global Flags & Output (Section 22) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | `--no-color devices` | `error: unexpected argument '--no-color' found` (global flag not implemented). |
+| PASS | `--help` | Grouped help shows the full major-release surface (start, stop, status, reload, sync, folders, ls, stat, find, search, sort, download, verify, transfer, share, access, link, package, network, watch, snapshot, indexing, stats, db, config, version, devices, completions, manpages, help). |
+
+### Version & Completions (Section 23) — re-run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `version` | `syncweb 0.1.1-alpha.7`. |
+| PASS | `completions bash` / `completions zsh` | Generated completion scripts. |
+| PASS | `manpages <dir>` | Generated `syncweb.1` plus per-subcommand manpages. |

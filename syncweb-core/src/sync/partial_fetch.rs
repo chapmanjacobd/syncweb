@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,43 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         }
     }
     Ok(bytes)
+}
+
+/// Write the blobs selected by `strategy` to files under `mount_root`, using
+/// the folder-relative entry paths. Returns the number of files written.
+///
+/// This turns a `download` from a store-only fetch into files on disk.
+///
+/// # Errors
+///
+/// Returns an error if an entry directory cannot be created or a blob cannot
+/// be exported to its destination.
+pub async fn materialize_selected_content(
+    node: &IrohNode,
+    folder: &SyncwebFolder,
+    strategy: &FetchStrategy,
+    mount_root: &Path,
+) -> Result<usize> {
+    let mut candidates = Vec::new();
+    for entry in folder.content_entries().await? {
+        let hash = entry.content_hash();
+        let local = folder.has_local(hash).await?;
+        let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
+        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+    }
+    let selected = strategy.select(&candidates);
+    let mut count = 0_usize;
+    for candidate in selected {
+        let dest = mount_root.join(&candidate.path);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|error| crate::error::SyncwebError::operation("failed to create download directory", error))?;
+        }
+        node.blob_store().export_to_path(candidate.hash, &dest).await?;
+        count = count.saturating_add(1);
+    }
+    Ok(count)
 }
 
 /// A document blob considered for a partial fetch.

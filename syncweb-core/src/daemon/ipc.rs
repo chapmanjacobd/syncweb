@@ -1087,22 +1087,29 @@ impl IpcServer {
         // A metadata-only folder keeps content out of the store; a doc re-sync
         // will not re-download it, so an explicit download fetches each selected
         // blob directly from the folder's peers.
-        if folder.is_metadata_only().await? {
-            return crate::sync::fetch_selected_content(&context.node, &folder, &strategy).await;
-        }
-        let sync = SyncEngine::new(
-            manager,
-            context.node.blob_store().clone(),
-            context.node.docs_engine().clone(),
-            Some(context.node.topic_tracker().clone()),
-        );
-        let mut intent = sync.fetch(namespace_id, strategy).await?;
-        let bytes_transferred = if timeout_duration == DOWNLOAD_TIMEOUT {
-            self.run_download_loop(&mut intent).await?
+        let bytes_transferred = if folder.is_metadata_only().await? {
+            crate::sync::fetch_selected_content(&context.node, &folder, &strategy).await?
         } else {
-            self.run_download_loop_with_timeout(&mut intent, timeout_duration)
-                .await?
+            let sync = SyncEngine::new(
+                manager,
+                context.node.blob_store().clone(),
+                context.node.docs_engine().clone(),
+                Some(context.node.topic_tracker().clone()),
+            );
+            let mut intent = sync.fetch(namespace_id, strategy.clone()).await?;
+            if timeout_duration == DOWNLOAD_TIMEOUT {
+                self.run_download_loop(&mut intent).await?
+            } else {
+                self.run_download_loop_with_timeout(&mut intent, timeout_duration)
+                    .await?
+            }
         };
+        // `download` materializes the fetched blobs into the folder's mount path,
+        // not just the blob store, so the files are readable on disk.
+        let mount_root = self.daemon_handle.folder_registry.read().await.path_for(&namespace);
+        if let Some(root) = mount_root {
+            crate::sync::materialize_selected_content(&context.node, &folder, &strategy, &root).await?;
+        }
         Ok(bytes_transferred)
     }
 

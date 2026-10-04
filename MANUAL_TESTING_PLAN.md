@@ -1446,7 +1446,7 @@ Step 1 - NOT RUN
 - Action: Time `syncweb start` (cold start)
 - Expected: < 500ms
 - Actual output: No output; testing stopped after more than five unexpected errors.
-- Debug: `time syncweb start --foreground`
+- Debug: `time syncweb start --bg`
 
 Step 2 - NOT RUN
 - Action: Create 10000 files, time `syncweb folders import`
@@ -1560,7 +1560,8 @@ export RUST_LOG=debug   # or trace, info, warn, error
 
 # Log to file
 export RUST_LOG=debug
-syncweb start --foreground 2>&1 | tee /tmp/syncweb-debug.log
+syncweb start --bg --log-file /tmp/syncweb-debug.log
+cat /tmp/syncweb-debug.log
 
 # Custom data directory
 syncweb --data-dir /tmp/syncweb-test ...
@@ -1568,9 +1569,9 @@ syncweb --data-dir /tmp/syncweb-test ...
 # Network isolation (for running two nodes on same machine)
 # Start two terminals with different data dirs:
 # Terminal 1 (Alice):
-syncweb --data-dir /tmp/alice start --foreground
+syncweb --data-dir /tmp/alice start --bg --log-file /tmp/alice-daemon.log
 # Terminal 2 (Bob):
-syncweb --data-dir /tmp/bob start --foreground
+syncweb --data-dir /tmp/bob start --bg --log-file /tmp/bob-daemon.log
 ```
 
 ## Two-Node Loopback Test Setup
@@ -1588,6 +1589,73 @@ mkdir -p /tmp/bob-data /tmp/bob-files
 syncweb --data-dir /tmp/bob-data join <URL> /tmp/bob-files/shared
 
 # Start both daemons
-syncweb --data-dir /tmp/alice-data start --foreground   # Terminal 1
-syncweb --data-dir /tmp/bob-data start --foreground     # Terminal 2
+syncweb --data-dir /tmp/alice-data start --bg --log-file /tmp/alice-daemon.log
+syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 ```
+
+## Manual Test Run: 2026-10-04 (repaired build, resumed)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`).
+- Build: source rebuild deployed to both VMs. Binary SHA-256: `018cb6ab7e550612990e07ec7e5bbe42781940227102a8ff7a4d5007d493a43b`.
+- Test data: fresh `/root/manual2/default` profiles; Alice folder `/root/shared-docs`; Bob folder `/root/bob-shared`.
+- The foreground-daemon test was skipped per request. Supported background invocation is `syncweb start --bg`.
+- The run stopped after 15 new failures, exceeding the requested limit of ten. Sections after the download matrix were not run.
+
+### Repaired existing failures
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Blob startup recovery | Before fix: `Error: failed to read blob: encode error`. After fix: `folder mode metadata is unavailable; using capability-derived mode` followed by a successful folder listing; `folders import` returned `import requested: 1`. |
+| PASS | Metadata durability regression | `cargo test -p syncweb-core --test integration_tests integration::folder_test::folder_mode_survives_node_restart -- --exact --nocapture` → `1 passed`. |
+| PASS | Persisted mount restoration | After restarting the daemon, `folders --json` reported `path: "/root/shared-docs"` and `ls /root/shared-docs` listed `test.txt`. |
+| PASS | Source validation | `cargo fmt --all`, targeted restart test, and `cargo build --release` all completed successfully. |
+
+### Resumed P2P tests
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Alice creates folder | `folders create --mode sendreceive /root/shared-docs` → namespace `0030afcbb2f393f85ba65f546ed3ffeeb36a158c700e8ac2b9ad63c76c42170a`; daemon reported `running`. |
+| PASS | Alice imports and lists file | `folders import /root/shared-docs` → `import requested: 1`; `ls` showed `test.txt`, `12 B`, `local`. |
+| PASS | Bob joins ticket | `folders join <alice-url> /root/bob-shared` → `joined: 0030af...`; Bob's folder listing reported `mode: "receiveonly"`. |
+| FAIL | Join starts syncing | After 10 seconds, Bob's `ls /root/bob-shared` reported `has no remote entries yet`; status remained `Session: paused`, `Entries: 0`. Explicit `sync <namespace>` and `folders join --subscribe <namespace>` did not produce entries. |
+| FAIL | Bob downloads file | `download /root/bob-shared/test.txt` → `Error: invalid download namespace: Odd number of digits`; `/root/bob-shared/test.txt` was not created. |
+
+### Listing and search tests on Alice
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `ls` metadata | `ls /root/shared-docs` showed `test.txt`, `12 B`, `local`. |
+| PASS | `ls --local-only` | Output: `test.txt`. |
+| PASS | `ls --remote-only` | Empty table, as expected with no remote-only entries. |
+| PASS | `ls --path-prefix docs` | Empty table, as expected because no `docs/` entries exist. |
+| PASS | `ls --no-enrich` | `test.txt`, `12 B`, `Modified: -`, `local`. |
+| PASS | `ls --sort size` | One-row table sorted by size. |
+| PASS | `ls --json` | Valid object with `folder`, `path`, and `entries`; entry hash was `dc5a4edb8240b018124052c330270696f96771a63b45250a5c17d3000e823355`. |
+| PASS | Plain directory error | `ls /tmp` → `not inside of a Syncweb folder` with the documented `--local-only` suggestion. |
+| FAIL | Regex find | `find '.*\.txt$' /root/shared-docs` → `No files matching '.*\.txt$' found`, despite `test.txt` being indexed. |
+| FAIL | Local-only find | `find --type f --ext mp3 --local-only /root/music` → `Error: Permission denied (os error 13)` for a root-owned test file. |
+| FAIL | Depth find | `find --depth +2 --depth -5 config /root/shared-docs` → `error: unexpected argument '-5' found`. |
+| FAIL | Regex find JSON | JSON returned `"entries": []` for `find '.*\.txt$' --json /root/shared-docs`. |
+
+### Sort and stat tests on Alice
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `sort --by size` | One-row metadata table containing `test.txt`. |
+| FAIL | `sort --by name` | `error: invalid value 'name' for '--by <BY>'`. |
+| FAIL | `sort --by modified` | `error: invalid value 'modified' for '--by <BY>'`. |
+| FAIL | `sort --by state` | `error: invalid value 'state' for '--by <BY>'`. |
+| PASS | Disk sort by peers/niche | `sort --local-only --by peers` and `--by niche` both returned `test.txt`. |
+| PASS | Sort limits | `sort --local-only --limit-size 10GB --min-seeders 2` → `No entries match the sorting criteria`. |
+| FAIL | `sort --no-enrich` | `Error: sort --by 'niche' is only valid with --local-only; on a synchronized folder use name, size, modified, or state`. |
+| PASS | Stat variants | Default, `--terse`, `--format "%n %s %y"`, modified-file, and `*.md` tests all returned successfully. Example terse output: `/root/shared-docs/test.txt|13|1|71d4204dd0e09850084ce60ffddc2cd8243c53573a439d338d8106aaff32d26f|0`. |
+
+### Download tests (stop point)
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | Download file | `download /root/shared-docs/test.txt` → `Error: invalid download namespace: Invalid string length`. |
+| FAIL | Download directory | `download /root/shared-docs/` → `Error: invalid download namespace: Invalid string length`. |
+| FAIL | Download max count | `download --max-count 10 /root/shared-docs/` → `Error: invalid download namespace: Invalid string length`. |
+| FAIL | Download size | `download --size -1GB /root/shared-docs/` → `error: unexpected argument '-1' found`. |
+| FAIL | Download threads | `download --threads 1 /root/shared-docs/` → `Error: invalid download namespace: Invalid string length`. |

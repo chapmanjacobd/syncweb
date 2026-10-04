@@ -22,6 +22,7 @@ _syncweb() {
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb_commands" \
@@ -52,6 +53,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -65,6 +67,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -77,6 +80,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -89,6 +93,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -101,6 +106,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::namespace -- Namespace of a live folder to sync now; omit it to sync every enabled folder:_default' \
@@ -114,6 +120,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -126,6 +133,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__folders_commands" \
@@ -154,6 +162,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -182,6 +191,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket -- Iroh document ticket for a new folder, or a folder selector for an already-tracked folder:_default' \
@@ -197,6 +207,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder -- Namespace ID or path to a managed folder:_default' \
@@ -214,6 +225,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -248,6 +260,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -264,6 +277,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -310,6 +324,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':pattern:_default' \
@@ -330,6 +345,7 @@ channel\:"Search only an editorial channel"))' \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '::query -- Search query; omit to list everything:_default' \
@@ -366,6 +382,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -405,6 +422,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
@@ -439,6 +457,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -452,6 +471,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__transfer_commands" \
@@ -477,6 +497,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -489,6 +510,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -503,6 +525,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':id:_default' \
@@ -523,6 +546,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -540,6 +564,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -553,6 +578,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -565,6 +591,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':id:_default' \
@@ -578,6 +605,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':id:_default' \
@@ -591,6 +619,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':id:_default' \
@@ -604,6 +633,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':id:_default' \
@@ -625,6 +655,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path -- Folder path or namespace:_files' \
@@ -646,6 +677,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path -- Folder path or namespace to filter persisted shares:_files' \
@@ -659,6 +691,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__share__subcmd__provider_commands" \
@@ -679,6 +712,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -706,6 +740,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path -- Folder path or namespace (omit to show every folder):_files' \
@@ -719,6 +754,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__link_commands" \
@@ -733,18 +769,21 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (create)
 _arguments "${_arguments_options[@]}" : \
-'(--private)--name=[]:NAME:_default' \
+'(--private --immutable)--name=[]:NAME:_default' \
 '--version=[]:VERSION:_default' \
 '--sequence=[]:SEQUENCE:_default' \
 '--expires=[Private-link expiration as a Unix timestamp]:EXPIRES:_default' \
 '--publish=[Namespace (folder) to publish the link into]:PUBLISH:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'(--name)--private[]' \
+'(--name --mutable)--private[]' \
+'(--name --private --mutable)--immutable[Force an immutable content link (the default when no --name/--mutable is given)]' \
+'(--private --immutable)--mutable[Force a mutable name link, deriving the alias from the source file name when --name is omitted]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_files' \
@@ -760,6 +799,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':link:_default' \
@@ -773,6 +813,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':link:_default' \
@@ -790,6 +831,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__package_commands" \
@@ -813,6 +855,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::paths:_files' \
@@ -828,6 +871,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -845,6 +889,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::paths:_files' \
@@ -860,6 +905,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::paths:_files' \
@@ -874,6 +920,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::archives:_files' \
@@ -889,6 +936,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::ticket:_default' \
@@ -903,6 +951,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -917,6 +966,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -930,6 +980,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -945,6 +996,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -958,6 +1010,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -970,6 +1023,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -983,6 +1037,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':collection:_default' \
@@ -1001,6 +1056,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__network_commands" \
@@ -1023,6 +1079,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1036,6 +1093,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
@@ -1049,6 +1107,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1062,6 +1121,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name -- Optional network name to inspect:_default' \
@@ -1075,6 +1135,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1089,6 +1150,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1104,6 +1166,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':network_id:_default' \
@@ -1118,6 +1181,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1130,6 +1194,21 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::name -- Optional network name or ID to inspect:_default' \
+&& ret=0
+;;
+(health)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name -- Optional network name or ID to inspect:_default' \
@@ -1143,6 +1222,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::folder -- Optional folder path or namespace to inspect:_default' \
@@ -1167,6 +1247,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -1180,6 +1261,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__snapshot_commands" \
@@ -1202,6 +1284,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -1215,6 +1298,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -1229,6 +1313,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path:_files' \
@@ -1242,6 +1327,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -1257,6 +1343,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':path:_files' \
@@ -1275,6 +1362,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__indexing_commands" \
@@ -1295,6 +1383,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1308,6 +1397,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1321,6 +1411,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__indexing__subcmd__filter_commands" \
@@ -1341,6 +1432,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':rule_type:(device file hash)' \
@@ -1355,6 +1447,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':source:_default' \
@@ -1374,6 +1467,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':folder:_files' \
@@ -1391,6 +1485,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__stats_commands" \
@@ -1419,6 +1514,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1433,9 +1529,24 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::path -- Namespace ID or path to a managed folder:_files' \
+&& ret=0
+;;
+(seeding)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::folder -- Namespace ID or path to a managed folder:_files' \
 && ret=0
 ;;
         esac
@@ -1450,6 +1561,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__db_commands" \
@@ -1470,6 +1582,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1482,6 +1595,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1494,6 +1608,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1508,6 +1623,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1524,6 +1640,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__config_commands" \
@@ -1544,6 +1661,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':key:_default' \
@@ -1558,6 +1676,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::section:_default' \
@@ -1571,6 +1690,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_syncweb__subcmd__config__subcmd__schedule_commands" \
@@ -1594,6 +1714,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1609,6 +1730,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name:_default' \
@@ -1630,6 +1752,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1642,6 +1765,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':shell:(bash elvish fish powershell zsh)' \
@@ -1655,6 +1779,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::dir:_files' \
@@ -1668,6 +1793,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Assume yes to every destructive-operation prompt]' \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::command:_default' \
@@ -1930,6 +2056,7 @@ _syncweb__subcmd__network_commands() {
 'events:Show recent network events' \
 'test-relay:Test a Syncthing relay TCP connection' \
 'status:Show network membership and health, optionally limited to a single network by name' \
+'health:Show network connectivity health, optionally limited to a single network by name' \
 'peers:Show peer availability for a folder\: which peers joined and how seeded its blobs are' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
@@ -1943,6 +2070,11 @@ _syncweb__subcmd__network__subcmd__create_commands() {
 _syncweb__subcmd__network__subcmd__events_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network events commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__network__subcmd__health_commands] )) ||
+_syncweb__subcmd__network__subcmd__health_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb network health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__invite_commands] )) ||
 _syncweb__subcmd__network__subcmd__invite_commands() {
@@ -2159,6 +2291,7 @@ _syncweb__subcmd__stats_commands() {
     local commands; commands=(
 'network:Show persisted bandwidth accounting' \
 'files:Show file-level statistics for synced folder content' \
+'seeding:Show per-blob seeding health for a folder (well/under/unseeded)' \
     )
     _describe -t commands 'syncweb stats commands' commands "$@"
 }
@@ -2171,6 +2304,11 @@ _syncweb__subcmd__stats__subcmd__files_commands() {
 _syncweb__subcmd__stats__subcmd__network_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb stats network commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__stats__subcmd__seeding_commands] )) ||
+_syncweb__subcmd__stats__subcmd__seeding_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb stats seeding commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__status_commands] )) ||
 _syncweb__subcmd__status_commands() {

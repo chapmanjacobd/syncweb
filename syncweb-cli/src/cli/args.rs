@@ -11,6 +11,7 @@ pub struct CliContext<'a> {
     pub no_daemon: bool,
     pub network: Option<&'a str>,
     pub yes: bool,
+    pub no_color: bool,
 }
 
 pub fn effective_data_dir(data_dir: &Path, network: Option<&str>) -> PathBuf {
@@ -334,6 +335,13 @@ pub struct Cli {
         help = "Bypass the daemon and use an embedded node for supported commands"
     )]
     pub no_daemon: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Disable ANSI colors in interactive prompts and progress output"
+    )]
+    pub no_color: bool,
 
     #[arg(
         long,

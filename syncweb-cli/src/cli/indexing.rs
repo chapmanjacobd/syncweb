@@ -110,6 +110,8 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             version,
             sequence,
             private,
+            immutable,
+            mutable,
             expires,
             publish,
         } => {
@@ -119,6 +121,8 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
                 version,
                 sequence,
                 private,
+                immutable,
+                mutable,
                 expires,
                 publish,
             };
@@ -171,7 +175,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             )?;
         }
         LinkCommand::Revoke { link } => {
-            if !confirm_destructive("revoke this link", ctx.yes)? {
+            if !confirm_destructive("revoke this link", ctx.yes, ctx.no_color)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -193,6 +197,8 @@ struct LinkCreateOptions {
     version: Option<String>,
     sequence: u64,
     private: bool,
+    immutable: bool,
+    mutable: bool,
     expires: Option<u64>,
     publish: Option<String>,
 }
@@ -204,7 +210,21 @@ async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Re
     let identity = IdentityManager::new(data_dir.join("identity.key"))?;
     let hash = syncweb_core::indexing::hash_source(&opts.source)?;
     let link = if opts.private {
+        ensure!(!opts.immutable, "--private conflicts with --immutable");
+        ensure!(!opts.mutable, "--private conflicts with --mutable");
         store.create_private_link(hash, opts.expires)?
+    } else if opts.immutable {
+        ensure!(opts.name.is_none(), "--immutable conflicts with --name");
+        ensure!(opts.version.is_none(), "--version requires --name");
+        ensure!(opts.sequence == 0, "--sequence requires --name");
+        store.create_content_link(hash)
+    } else if opts.mutable {
+        let alias = opts
+            .name
+            .clone()
+            .or_else(|| opts.source.file_name().map(|name| name.to_string_lossy().into_owned()))
+            .ok_or_else(|| anyhow::anyhow!("--mutable requires --name or a file path with a file name"))?;
+        store.create_named_link(&identity, alias, hash, opts.version, opts.sequence)?
     } else if let Some(alias) = opts.name {
         store.create_named_link(&identity, alias, hash, opts.version, opts.sequence)?
     } else {

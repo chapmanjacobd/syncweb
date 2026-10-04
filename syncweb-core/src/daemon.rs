@@ -12,7 +12,7 @@ pub use transfers::{TransferJobSummary, process_transfer_jobs};
 
 pub use ipc::{
     BlobPeerAvailability, DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand,
-    IpcListener, IpcRequest, IpcResponse, IpcServer, PeerAvailabilityReport, PeerInfo,
+    IpcListener, IpcRequest, IpcResponse, IpcServer, PeerAvailabilityReport, PeerInfo, SnapshotInfo,
 };
 pub use pool::ManagedPool;
 pub use route::{daemon_client, try_daemon, with_node};

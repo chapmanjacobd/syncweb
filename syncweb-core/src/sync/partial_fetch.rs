@@ -90,6 +90,29 @@ pub async fn materialize_selected_content(
     Ok(count)
 }
 
+/// Whether everything selected by `strategy` is already present locally.
+///
+/// A download of already-local content does not need a doc re-sync: fetching
+/// blobs the local node already holds can fail on the publishing node (there is
+/// no remote peer to fetch from), so the caller can skip straight to
+/// materialization. Returns `false` when the strategy selects nothing or when
+/// any selected blob is not yet local.
+///
+/// # Errors
+///
+/// Returns an error if the folder's entries cannot be listed.
+pub async fn strategy_selects_only_local(folder: &SyncwebFolder, strategy: &FetchStrategy) -> Result<bool> {
+    let mut candidates = Vec::new();
+    for entry in folder.content_entries().await? {
+        let hash = entry.content_hash();
+        let local = folder.has_local(hash).await?;
+        let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
+        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+    }
+    let selected = strategy.select(&candidates);
+    Ok(!selected.is_empty() && selected.iter().all(|candidate| candidate.local))
+}
+
 /// A document blob considered for a partial fetch.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]

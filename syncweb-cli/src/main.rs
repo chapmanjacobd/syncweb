@@ -19,8 +19,8 @@ use cli::{
         AccessArgs, Command, ConfigCommand, FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand,
         ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
         SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
+        TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{AccessRow, confirm_destructive, init_tracing, print_version, render_access_json, render_access_table},
@@ -138,7 +138,7 @@ fn top_level_help_exit_code(args: &[std::ffi::OsString]) -> Option<i32> {
         if s.starts_with("--data-dir=") || s.starts_with("--network=") {
             continue;
         }
-        if s == "--verbose" || s == "--json" || s == "--no-daemon" || s == "--embedded" {
+        if s == "--verbose" || s == "--json" || s == "--no-daemon" || s == "--embedded" || s == "--no-color" {
             continue;
         }
         return None;
@@ -179,6 +179,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         no_daemon: cli.no_daemon,
         network: cli.network.as_deref(),
         yes: cli.yes,
+        no_color: cli.no_color,
     };
     match cli.command {
         Command::Version => {
@@ -246,6 +247,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         no_daemon,
         network,
         yes,
+        no_color,
         ..
     } = cli;
     let effective = effective_data_dir(&data_dir, network.as_deref());
@@ -255,6 +257,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         no_daemon,
         network: network.as_deref(),
         yes,
+        no_color,
     };
     if let Command::Start(args) = command {
         let base = args.data_dir.as_ref().unwrap_or(&data_dir);
@@ -265,6 +268,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
             no_daemon,
             network: network.as_deref(),
             yes,
+            no_color,
         };
         if args.bg && !args.media_only {
             let child = spawn_daemon_process(base, &args, network.as_deref())?;
@@ -478,7 +482,7 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
 async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
-    if !confirm_destructive("stop the daemon", ctx.yes)? {
+    if !confirm_destructive("stop the daemon", ctx.yes, ctx.no_color)? {
         println!("aborted");
         return Ok(());
     }
@@ -852,6 +856,41 @@ fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> 
     }
 }
 
+/// Render a snapshot list from the daemon or an embedded node. The table keeps
+/// one row per snapshot with its id, created-at time, size, file count, and
+/// description.
+fn render_snapshot_rows(rows: &[syncweb_core::daemon::SnapshotInfo], output_json: bool) -> Result<()> {
+    if output_json {
+        let values = rows
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "id": s.id,
+                    "created_at": s.created_at,
+                    "total_size": s.total_size,
+                    "file_count": s.file_count,
+                    "description": s.description,
+                })
+            })
+            .collect::<Vec<_>>();
+        println!("{}", serde_json::to_string_pretty(&values)?);
+    } else {
+        let mut table = Table::new();
+        table.set_header(["ID", "Created", "Size", "Files", "Description"]);
+        for snapshot in rows {
+            table.add_row([
+                snapshot.id.clone(),
+                snapshot.created_at.to_string(),
+                snapshot.total_size.to_string(),
+                snapshot.file_count.to_string(),
+                snapshot.description.clone().unwrap_or_default(),
+            ]);
+        }
+        println!("{table}");
+    }
+    Ok(())
+}
+
 #[async_recursion]
 async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -862,7 +901,11 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = match command.folder.as_deref() {
-            Some(folder) => Some(resolve_selector_via_daemon(&client, std::path::Path::new(folder)).await?.namespace),
+            Some(folder) => Some(
+                resolve_selector_via_daemon(&client, std::path::Path::new(folder))
+                    .await?
+                    .namespace,
+            ),
             None => None,
         };
         let response = client
@@ -893,7 +936,9 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = if let Some(folder) = command.folder {
-        resolve_selector_embedded(data_dir, &manager, std::path::Path::new(&folder)).await?.1
+        resolve_selector_embedded(data_dir, &manager, std::path::Path::new(&folder))
+            .await?
+            .1
     } else {
         manager.resolve(&command.path).await.map_err(|_error| {
             anyhow::anyhow!(
@@ -1069,6 +1114,28 @@ async fn download_with_node(
             );
         } else {
             println!("downloaded: {bytes} bytes");
+        }
+        node.stop().await?;
+        return Ok(());
+    }
+    // Content already present locally needs no doc re-sync; materialize it
+    // directly (piped downloads of already-local content on the publishing
+    // node otherwise fail fetching from a peer that has nothing to give).
+    if syncweb_core::sync::strategy_selects_only_local(&folder, &scoped).await? {
+        if let Some(mount_root) = resolved.mount_root.as_deref() {
+            syncweb_core::sync::materialize_selected_content(&node, &folder, &scoped, mount_root).await?;
+        }
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "status": "downloaded",
+                    "namespace": folder.namespace_id().to_string(),
+                    "bytes_transferred": 0,
+                })
+            );
+        } else {
+            println!("downloaded: 0 bytes");
         }
         node.stop().await?;
         return Ok(());
@@ -1449,6 +1516,9 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
                 let response = client
                     .send(IpcRequest::new(IpcCommand::SnapshotList { path: path.clone() }))
                     .await?;
+                if let IpcResponse::SnapshotList(snapshots) = response {
+                    return render_snapshot_rows(&snapshots, output_json);
+                }
                 return print_daemon_message(response, output_json);
             }
             let node = open_node(data_dir).await?;
@@ -1457,39 +1527,18 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             let mut matching = Vec::new();
             for snapshot in snapshots.list().await? {
                 if namespace.is_none_or(|id| snapshot.namespace_id == Some(id)) {
-                    matching.push(snapshot);
-                }
-            }
-            if output_json {
-                let values = matching
-                    .iter()
-                    .map(|s| {
-                        serde_json::json!({
-                            "id": s.id.to_string(),
-                            "created_at": s.created_at,
-                            "total_size": s.total_size,
-                            "file_count": s.file_count,
-                            "description": s.description,
-                        })
-                    })
-                    .collect::<Vec<_>>();
-                println!("{}", serde_json::to_string_pretty(&values)?);
-            } else {
-                let mut table = Table::new();
-                table.set_header(["ID", "Created", "Size", "Files", "Description"]);
-                for snapshot in &matching {
-                    table.add_row([
+                    matching.push(syncweb_core::daemon::SnapshotInfo::new(
                         snapshot.id.to_string(),
-                        snapshot.created_at.to_string(),
-                        snapshot.total_size.to_string(),
-                        snapshot.file_count.to_string(),
-                        snapshot.description.clone().unwrap_or_default(),
-                    ]);
+                        snapshot.created_at,
+                        snapshot.total_size,
+                        snapshot.file_count,
+                        snapshot.description,
+                    ));
                 }
-                println!("{table}");
             }
+            let result = render_snapshot_rows(&matching, output_json);
             node.stop().await?;
-            Ok(())
+            return result;
         }
         SnapshotCommand::Diff { path: _, first, second } => {
             let node = open_node(data_dir).await?;
@@ -1525,7 +1574,7 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             Ok(())
         }
         SnapshotCommand::Delete { path: _, snapshot } => {
-            if !confirm_destructive("delete this snapshot", ctx.yes)? {
+            if !confirm_destructive("delete this snapshot", ctx.yes, ctx.no_color)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -2236,6 +2285,7 @@ async fn handle_stats(ctx: &CliContext<'_>, command: StatsCommand) -> Result<()>
     match command {
         StatsCommand::Network(args) => handle_stats_network(ctx, args),
         StatsCommand::Files(args) => handle_stats_files(ctx, args).await,
+        StatsCommand::Seeding(args) => handle_stats_seeding(ctx, &args).await,
     }
 }
 
@@ -2491,6 +2541,85 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
 
     node.stop().await?;
     Ok(())
+}
+
+#[async_recursion]
+async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    let selector = command.folder.to_string_lossy().to_string();
+
+    // Prefer the daemon's per-blob peer snapshot; it is the only live source of
+    // seeding counts.
+    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::PeerAvailability { folder: selector }))
+            .await?;
+        let IpcResponse::PeerAvailability(report) = response else {
+            return print_daemon_message(response, output_json);
+        };
+        let mut candidates = Vec::with_capacity(report.per_blob.len());
+        for blob in report.per_blob {
+            let Ok(hash) = blob.hash.parse::<iroh_blobs::Hash>() else {
+                continue;
+            };
+            candidates.push(FetchCandidate::new(&blob.path, hash, 0, blob.peer_count, false));
+        }
+        let health = syncweb_core::sync::HealthReport::from_candidates(&candidates, 1);
+        render_seeding(&report.folder, &health, output_json);
+        return Ok(());
+    }
+
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.resolve(&command.folder).await?;
+    let mut candidates = Vec::new();
+    for entry in folder.content_entries().await? {
+        let hash = entry.content_hash();
+        let local = folder.has_local(hash).await?;
+        let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
+        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+    }
+    let peers_per_hash: std::collections::HashMap<iroh_blobs::Hash, usize> = std::collections::HashMap::new();
+    let health = syncweb_core::sync::HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 1);
+    node.stop().await?;
+    render_seeding(&command.folder.to_string_lossy(), &health, output_json);
+    Ok(())
+}
+
+/// Render a seeding `HealthReport` as a plain summary or a JSON object.
+fn render_seeding(folder: &str, health: &syncweb_core::sync::HealthReport, output_json: bool) {
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "folder": folder,
+                "total": health.total,
+                "well_seeded": health.well_seeded,
+                "under_seeded": health.under_seeded,
+                "unseeded": health.unseeded,
+            })
+        );
+    } else {
+        println!("folder: {folder}");
+        println!("total:          {}", health.total);
+        println!("well_seeded:    {}", health.well_seeded);
+        println!("under_seeded:   {}", health.under_seeded);
+        println!("unseeded:       {}", health.unseeded);
+        if !health.least_seeded.is_empty() {
+            println!();
+            let mut table = Table::new();
+            table.set_header(["Path", "Hash", "Peers"]);
+            for blob in health.least_seeded.iter().take(20) {
+                table.add_row([
+                    blob.path.display().to_string(),
+                    blob.hash.to_string(),
+                    blob.peer_count.to_string(),
+                ]);
+            }
+            println!("{table}");
+        }
+    }
 }
 
 fn print_file_stats_report(
@@ -3340,7 +3469,7 @@ async fn handle_unshare(
             .map(|hash| format!("remove the pin for shared blob {hash}"))
     };
     if let Some(prompt) = operation
-        && !confirm_destructive(&prompt, ctx.yes)?
+        && !confirm_destructive(&prompt, ctx.yes, ctx.no_color)?
     {
         println!("aborted");
         return Ok(());
@@ -3741,7 +3870,7 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
         PackageCommand::Remove {
             collection: collection_id,
             version,
-        } => handle_package_remove(&packages, &collection_id, &version, output_json, ctx.yes)?,
+        } => handle_package_remove(&packages, &collection_id, &version, ctx)?,
         PackageCommand::Verify { collection, version } => {
             handle_package_verify(&packages, &collection, version.as_deref(), output_json)?;
         }
@@ -3845,16 +3974,15 @@ fn handle_package_remove(
     packages: &PackageManager,
     collection_id: &str,
     version: &str,
-    output_json: bool,
-    assume_yes: bool,
+    ctx: &CliContext<'_>,
 ) -> Result<()> {
-    if !confirm_destructive("remove this package version", assume_yes)? {
+    if !confirm_destructive("remove this package version", ctx.yes, ctx.no_color)? {
         println!("aborted");
         return Ok(());
     }
     let collection = collection_id.parse()?;
     packages.remove(collection, version)?;
-    if output_json {
+    if ctx.output_json {
         println!(
             "{}",
             serde_json::json!({"status": "removed", "collection": collection_id, "version": version})
@@ -4013,6 +4141,31 @@ async fn handle_package_archive_import(
     Ok(())
 }
 
+/// Open an embedded node with relay, mDNS, and beacon discovery disabled.
+///
+/// Used by purely local operations (archive export) that only need the blob
+/// store and docs engine, where a default relay-mode node could block on a
+/// relay handshake in an offline environment.
+///
+/// # Errors
+///
+/// Returns an error if the identity cannot be loaded or the node cannot be created.
+async fn open_node_offline(data_dir: &std::path::Path) -> Result<IrohNode> {
+    use syncweb_core::node::iroh_node::{DiscoveryConfig, RelayMode};
+
+    let identity = IdentityManager::new(data_dir.join("identity.key"))?;
+    let empty_keys = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
+    IrohNode::new(
+        identity,
+        data_dir.join("data"),
+        RelayMode::None,
+        empty_keys,
+        DiscoveryConfig::default(),
+    )
+    .await
+    .map_err(anyhow::Error::from)
+}
+
 #[async_recursion]
 async fn handle_package_archive_export(
     ctx: &CliContext<'_>,
@@ -4031,7 +4184,9 @@ async fn handle_package_archive_export(
             .ok_or_else(|| anyhow::anyhow!("multiple packages require an output directory"))?;
         std::fs::create_dir_all(output_dir)?;
     }
-    let node = open_node(data_dir).await?;
+    // Archive export is a purely local operation; opening a node with relay
+    // mode enabled can block on a relay handshake in an offline environment.
+    let node = open_node_offline(data_dir).await?;
     let exporter = DropExporter::new(node.blob_store().clone());
     let mut results = Vec::with_capacity(sources.len());
     for source in sources {
@@ -4700,7 +4855,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Leave { name } => {
-            if !confirm_destructive("leave this network", ctx.yes)? {
+            if !confirm_destructive("leave this network", ctx.yes, ctx.no_color)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -4733,7 +4888,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Kick { name, device } => {
-            if !confirm_destructive("kick this device from the network", ctx.yes)? {
+            if !confirm_destructive("kick this device from the network", ctx.yes, ctx.no_color)? {
                 println!("aborted");
                 return Ok(());
             }
@@ -4771,6 +4926,9 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
         }
         NetworkCommand::Status { name } => {
             handle_status_networks(data_dir, name.as_deref(), output_json)?;
+        }
+        NetworkCommand::Health { name } => {
+            handle_network_health(data_dir, &manager, name, output_json)?;
         }
         NetworkCommand::Peers { folder } => {
             handle_network_peers(ctx, folder.as_deref()).await?;
@@ -5061,6 +5219,7 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
         && !confirm_destructive(
             &format!("permanently delete all local files for folder {}", command.folder),
             ctx.yes,
+            ctx.no_color,
         )?
     {
         println!("aborted");

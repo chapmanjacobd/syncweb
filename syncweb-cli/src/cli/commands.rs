@@ -624,6 +624,14 @@ pub enum StatsCommand {
     Network(StatsNetworkArgs),
     #[command(about = "Show file-level statistics for synced folder content")]
     Files(StatsFilesArgs),
+    #[command(about = "Show per-blob seeding health for a folder (well/under/unseeded)")]
+    Seeding(StatsSeedingArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct StatsSeedingArgs {
+    #[arg(default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -985,6 +993,11 @@ pub enum NetworkCommand {
         #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
         name: Option<String>,
     },
+    #[command(about = "Show network connectivity health, optionally limited to a single network by name")]
+    Health {
+        #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
+        name: Option<String>,
+    },
     #[command(about = "Show peer availability for a folder: which peers joined and how seeded its blobs are")]
     Peers {
         #[arg(value_name = "FOLDER", help = "Optional folder path or namespace to inspect")]
@@ -1024,14 +1037,29 @@ pub enum LinkCommand {
     #[command(about = "Create an immutable, private, or mutable link")]
     Create {
         source: PathBuf,
-        #[arg(long, alias = "alias", conflicts_with = "private")]
+        #[arg(long, alias = "alias", conflicts_with = "private", conflicts_with = "immutable")]
         name: Option<String>,
         #[arg(long)]
         version: Option<String>,
         #[arg(long, default_value_t = 0)]
         sequence: u64,
-        #[arg(long, conflicts_with = "name")]
+        #[arg(long, conflicts_with = "name", conflicts_with = "mutable")]
         private: bool,
+        #[arg(
+            long,
+            conflicts_with = "name",
+            conflicts_with = "private",
+            conflicts_with = "mutable",
+            help = "Force an immutable content link (the default when no --name/--mutable is given)"
+        )]
+        immutable: bool,
+        #[arg(
+            long,
+            conflicts_with = "private",
+            conflicts_with = "immutable",
+            help = "Force a mutable name link, deriving the alias from the source file name when --name is omitted"
+        )]
+        mutable: bool,
         #[arg(long, help = "Private-link expiration as a Unix timestamp")]
         expires: Option<u64>,
         #[arg(long, help = "Namespace (folder) to publish the link into")]

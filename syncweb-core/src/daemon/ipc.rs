@@ -242,7 +242,38 @@ pub enum IpcResponse {
     FileStats(Box<FileStatsReport>),
     Entries(Vec<EntryRow>),
     PeerAvailability(Box<PeerAvailabilityReport>),
+    SnapshotList(Vec<SnapshotInfo>),
     Error { message: String },
+}
+
+/// One snapshot's summary row returned by the daemon for `snapshot list`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct SnapshotInfo {
+    pub id: String,
+    pub created_at: u64,
+    pub total_size: u64,
+    pub file_count: u64,
+    pub description: Option<String>,
+}
+
+impl SnapshotInfo {
+    #[must_use]
+    pub const fn new(
+        id: String,
+        created_at: u64,
+        total_size: u64,
+        file_count: u64,
+        description: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            created_at,
+            total_size,
+            file_count,
+            description,
+        }
+    }
 }
 
 /// One row of a metadata-only folder listing returned by the daemon.
@@ -1084,6 +1115,17 @@ impl IpcServer {
             .map_err(|error| SyncwebError::operation("invalid download namespace", error))?;
         let manager = FolderManager::new(&context.node);
         let folder = manager.get(namespace_id).await?;
+        // Downloading content the node already holds locally is a no-op for
+        // fetching: a doc re-sync for already-present blobs can fail on the
+        // publishing node (no remote peer to fetch from). Skip straight to
+        // materialization so piped downloads of local content succeed.
+        if !folder.is_metadata_only().await? && crate::sync::strategy_selects_only_local(&folder, &strategy).await? {
+            let mount_root = self.daemon_handle.folder_registry.read().await.path_for(&namespace);
+            if let Some(root) = mount_root {
+                crate::sync::materialize_selected_content(&context.node, &folder, &strategy, &root).await?;
+            }
+            return Ok(0);
+        }
         // A metadata-only folder keeps content out of the store; a doc re-sync
         // will not re-download it, so an explicit download fetches each selected
         // blob directly from the folder's peers.
@@ -2144,13 +2186,18 @@ impl IpcServer {
         let namespace = path.to_string_lossy().parse::<iroh_docs::NamespaceId>().ok();
         match snapshots.list().await {
             Ok(all) => {
-                let count = all
+                let rows = all
                     .into_iter()
                     .filter(|s| namespace.is_none_or(|id| s.namespace_id == Some(id)))
-                    .count();
-                IpcResponse::Ok {
-                    message: format!("snapshots: {count}"),
-                }
+                    .map(|s| SnapshotInfo {
+                        id: s.id.to_string(),
+                        created_at: s.created_at,
+                        total_size: s.total_size,
+                        file_count: s.file_count,
+                        description: s.description,
+                    })
+                    .collect();
+                IpcResponse::SnapshotList(rows)
             }
             Err(error) => response_from_error(error),
         }
@@ -2583,6 +2630,7 @@ impl IpcClient {
                 | IpcResponse::FileStats(_)
                 | IpcResponse::Entries(_)
                 | IpcResponse::PeerAvailability(_)
+                | IpcResponse::SnapshotList(_)
                 | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
@@ -3616,10 +3664,7 @@ mod tests {
                 path: PathBuf::from("."),
             }))
             .await;
-        assert!(matches!(response, IpcResponse::Ok { .. }));
-        if let IpcResponse::Ok { message } = response {
-            assert!(message.contains("snapshots:"));
-        }
+        assert!(matches!(response, IpcResponse::SnapshotList(snapshots) if snapshots.is_empty()));
         cleanup_ipc_test(fixture).await;
     }
 

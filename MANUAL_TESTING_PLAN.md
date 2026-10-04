@@ -1709,7 +1709,7 @@ syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 | PASS | `folders` / `folders --json` | Table / JSON array with folder metadata. |
 | PASS | `devices` / `devices --json` | Iroh id + Syncthing DeviceId; `peers: []` when no daemon peers. |
 
-### Leave / listing (Sections 3.3–3.4) — re-run
+### Leave / listing (Sections 3.3--3.4) — re-run
 
 | Status | Test | Command / output |
 |---|---|---|

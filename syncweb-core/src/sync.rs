@@ -19,7 +19,7 @@ pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};
 pub use lazy_fetch::LazyFetch;
 pub use partial_fetch::{
     BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, fetch_selected_content,
-    materialize_selected_content,
+    materialize_selected_content, strategy_selects_only_local,
 };
 pub use peer_tracker::{EfficientPeerCache, EvictionStrategy, PeerTracker};
 pub use session::SessionMode;

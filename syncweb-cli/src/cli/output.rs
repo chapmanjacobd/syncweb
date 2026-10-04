@@ -26,19 +26,30 @@ pub fn print_version() {
 /// Require interactive confirmation for destructive operations. Auto-approves
 /// only when the caller passes `--yes`, and aborts the operation when stdin is
 /// not interactive, so non-interactive automation cannot run a destructive
-/// command silently (not even with `--json`).
-pub fn confirm_destructive(operation: &str, assume_yes: bool) -> Result<bool> {
+/// command silently (not even with `--json`). When `no_color` is set, the
+/// prompt is rendered without ANSI styling.
+pub fn confirm_destructive(operation: &str, assume_yes: bool, no_color: bool) -> Result<bool> {
     if assume_yes {
         return Ok(true);
     }
     if !std::io::stdin().is_terminal() {
         return Ok(false);
     }
-    Ok(Confirm::new()
-        .with_prompt(format!("Are you sure you want to {operation}?"))
-        .default(false)
-        .show_default(true)
-        .interact()?)
+    let prompt = format!("Are you sure you want to {operation}?");
+    let interact = if no_color {
+        Confirm::with_theme(&dialoguer::theme::SimpleTheme)
+            .with_prompt(prompt)
+            .default(false)
+            .show_default(true)
+            .interact()?
+    } else {
+        Confirm::new()
+            .with_prompt(prompt)
+            .default(false)
+            .show_default(true)
+            .interact()?
+    };
+    Ok(interact)
 }
 
 /// Maximum number of share rows rendered per folder before the list is

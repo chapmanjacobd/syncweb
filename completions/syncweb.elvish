@@ -25,6 +25,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand start 'Start the local syncweb daemon'
@@ -76,6 +77,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -87,6 +89,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -97,6 +100,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -107,6 +111,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -117,6 +122,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -127,6 +133,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -137,6 +144,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)'
@@ -159,6 +167,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -184,6 +193,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -195,6 +205,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -209,6 +220,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -236,6 +248,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -249,6 +262,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -292,6 +306,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -305,6 +320,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
         }
@@ -338,6 +354,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -374,6 +391,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -404,6 +422,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -414,6 +433,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand info 'List durable transfer jobs'
@@ -439,6 +459,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -449,6 +470,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -461,6 +483,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -477,6 +500,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -492,6 +516,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -503,6 +528,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -513,6 +539,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -523,6 +550,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -533,6 +561,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -543,6 +572,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -557,6 +587,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand list 'List persisted shares, optionally filtered by path'
@@ -569,6 +600,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -579,6 +611,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Register a blob ticket as an alternate provider'
@@ -590,6 +623,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -605,6 +639,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -615,6 +650,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create an immutable, private, or mutable link'
@@ -629,11 +665,14 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --publish 'Namespace (folder) to publish the link into'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --private 'private'
+            cand --immutable 'Force an immutable content link (the default when no --name/--mutable is given)'
+            cand --mutable 'Force a mutable name link, deriving the alias from the source file name when --name is omitted'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -646,6 +685,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -656,6 +696,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -666,6 +707,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Scan one or more paths into a package manifest (creates it if missing)'
@@ -692,6 +734,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -704,6 +747,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -718,6 +762,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -730,6 +775,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -741,6 +787,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -753,6 +800,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -764,6 +812,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -775,6 +824,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -785,6 +835,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -796,6 +847,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -806,6 +858,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -816,6 +869,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -826,6 +880,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -836,6 +891,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a named network'
@@ -847,6 +903,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand events 'Show recent network events'
             cand test-relay 'Test a Syncthing relay TCP connection'
             cand status 'Show network membership and health, optionally limited to a single network by name'
+            cand health 'Show network connectivity health, optionally limited to a single network by name'
             cand peers 'Show peer availability for a folder: which peers joined and how seeded its blobs are'
         }
         &'syncweb;network;create'= {
@@ -858,6 +915,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -868,6 +926,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -878,6 +937,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -888,6 +948,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -898,6 +959,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -908,6 +970,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -919,6 +982,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -930,6 +994,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -940,6 +1005,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;network;health'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+            cand --yes 'Assume yes to every destructive-operation prompt'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -950,6 +1027,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -967,6 +1045,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -977,6 +1056,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create a content-addressed snapshot'
@@ -994,6 +1074,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1004,6 +1085,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1014,6 +1096,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1024,6 +1107,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1034,6 +1118,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1044,6 +1129,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand enable 'Opt a synchronized folder into indexing'
@@ -1058,6 +1144,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1068,6 +1155,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1078,6 +1166,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand add 'Add a device, file, or hash denylist rule'
@@ -1090,6 +1179,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1100,6 +1190,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1112,6 +1203,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1122,10 +1214,12 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand network 'Show persisted bandwidth accounting'
             cand files 'Show file-level statistics for synced folder content'
+            cand seeding 'Show per-blob seeding health for a folder (well/under/unseeded)'
         }
         &'syncweb;stats;network'= {
             cand --folder 'Limit display to a folder or namespace'
@@ -1142,6 +1236,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1154,6 +1249,18 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'syncweb;stats;seeding'= {
+            cand --data-dir 'Directory used for persistent node identity and data'
+            cand --verbose 'Enable verbose structured logging'
+            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+            cand --yes 'Assume yes to every destructive-operation prompt'
+            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
+            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1164,6 +1271,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand check 'Run integrity check on all databases'
@@ -1178,6 +1286,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1188,6 +1297,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1198,6 +1308,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1210,6 +1321,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1220,6 +1332,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand set 'Set a configuration value'
@@ -1233,6 +1346,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1243,6 +1357,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1253,6 +1368,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
             cand set 'Update the global schedule'
@@ -1268,6 +1384,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1281,6 +1398,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1291,6 +1409,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1301,6 +1420,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1311,6 +1431,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1321,6 +1442,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --yes 'Assume yes to every destructive-operation prompt'
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
+            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
         }

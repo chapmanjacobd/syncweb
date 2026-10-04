@@ -189,6 +189,15 @@ pub enum IpcCommand {
     SnapshotDelete {
         id: String,
     },
+    SnapshotDiff {
+        path: PathBuf,
+        first: String,
+        second: String,
+    },
+    SnapshotRestore {
+        path: PathBuf,
+        snapshot: String,
+    },
     CollectionPublish {
         path: PathBuf,
         namespace: String,
@@ -243,7 +252,29 @@ pub enum IpcResponse {
     Entries(Vec<EntryRow>),
     PeerAvailability(Box<PeerAvailabilityReport>),
     SnapshotList(Vec<SnapshotInfo>),
+    SnapshotDiff(Box<SnapshotDiffReport>),
     Error { message: String },
+}
+
+/// Path-level changes between two snapshots, as returned by the daemon.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct SnapshotDiffReport {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    /// `(path, old_hash, new_hash)` for every modified entry.
+    pub modified: Vec<(String, String, String)>,
+}
+
+impl SnapshotDiffReport {
+    #[must_use]
+    pub const fn new(added: Vec<String>, removed: Vec<String>, modified: Vec<(String, String, String)>) -> Self {
+        Self {
+            added,
+            removed,
+            modified,
+        }
+    }
 }
 
 /// One snapshot's summary row returned by the daemon for `snapshot list`.
@@ -511,6 +542,15 @@ impl FolderRegistry {
     #[must_use]
     pub fn path_for(&self, namespace: &str) -> Option<PathBuf> {
         self.folders.get(namespace).map(|entry| entry.path.clone())
+    }
+
+    /// Reverse lookup: the namespace registered for a mount path, if any.
+    #[must_use]
+    pub fn namespace_for_path(&self, selector: &Path) -> Option<String> {
+        self.folders
+            .iter()
+            .find(|(_, entry)| entry.path == *selector)
+            .map(|(namespace, _)| namespace.clone())
     }
 
     pub fn record_import(&mut self, namespace: iroh_docs::NamespaceId, entries: u64, timestamp: u64) {
@@ -937,6 +977,8 @@ impl IpcServer {
             } => self.handle_snapshot_create(path, description, threads).await,
             C::SnapshotList { path } => self.handle_snapshot_list(path).await,
             C::SnapshotDelete { id } => self.handle_snapshot_delete(id).await,
+            C::SnapshotDiff { first, second, .. } => self.handle_snapshot_diff(first, second).await,
+            C::SnapshotRestore { path, snapshot } => self.handle_snapshot_restore(path, snapshot).await,
             C::CollectionPublish {
                 path,
                 namespace,
@@ -1619,7 +1661,13 @@ impl IpcServer {
             }
         };
         let manager = FolderManager::new(&context.node);
-        let folder = match resolve_folder_for_daemon(&manager, &folder_path).await {
+        let folder = match resolve_folder_for_daemon(
+            &manager,
+            &*self.daemon_handle.folder_registry.read().await,
+            &folder_path,
+        )
+        .await
+        {
             Ok(f) => f,
             Err(error) => return error,
         };
@@ -1699,7 +1747,9 @@ impl IpcServer {
             return IpcResponse::EnrichData(HashMap::new());
         };
         let manager = FolderManager::new(&context.node);
-        let Ok(folder) = resolve_folder_for_daemon(&manager, &path).await else {
+        let Ok(folder) =
+            resolve_folder_for_daemon(&manager, &*self.daemon_handle.folder_registry.read().await, &path).await
+        else {
             return IpcResponse::EnrichData(HashMap::new());
         };
         let Ok(entries) = context.node.docs_engine().list_latest(folder.doc()).await else {
@@ -1740,7 +1790,13 @@ impl IpcServer {
             };
         };
         let manager = FolderManager::new(&context.node);
-        let folder = match resolve_folder_for_daemon(&manager, Path::new(&folder_selection)).await {
+        let folder = match resolve_folder_for_daemon(
+            &manager,
+            &*self.daemon_handle.folder_registry.read().await,
+            Path::new(&folder_selection),
+        )
+        .await
+        {
             Ok(folder) => folder,
             Err(error) => return error,
         };
@@ -1858,10 +1914,11 @@ impl IpcServer {
             }
         };
         let manager = FolderManager::new(&context.node);
-        let folder = match resolve_folder_for_daemon(&manager, &path).await {
-            Ok(f) => f,
-            Err(error) => return error,
-        };
+        let folder =
+            match resolve_folder_for_daemon(&manager, &*self.daemon_handle.folder_registry.read().await, &path).await {
+                Ok(f) => f,
+                Err(error) => return error,
+            };
         let checker = IntegrityChecker::new(context.node.blob_store().clone(), context.node.docs_engine().clone());
 
         let filter = build_ipc_verify_filter(&hash, path_filter.as_ref(), glob_filter.as_ref());
@@ -2159,10 +2216,13 @@ impl IpcServer {
             snapshots.create_from_path(&path, threads, description).await
         } else {
             let manager = FolderManager::new(&context.node);
-            let folder = match resolve_folder_for_daemon(&manager, &path).await {
-                Ok(f) => f,
-                Err(error) => return error,
-            };
+            let folder =
+                match resolve_folder_for_daemon(&manager, &*self.daemon_handle.folder_registry.read().await, &path)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(error) => return error,
+                };
             snapshots.create_for_folder(&folder, description).await
         };
         match result {
@@ -2225,6 +2285,89 @@ impl IpcServer {
             Ok(()) => IpcResponse::Ok {
                 message: format!("deleted: {id}"),
             },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_snapshot_diff(&self, first: String, second: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon snapshot IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let snapshots = SnapshotStore::with_docs(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        let (Ok(left_id), Ok(right_id)) = (first.parse::<iroh_blobs::Hash>(), second.parse::<iroh_blobs::Hash>())
+        else {
+            return IpcResponse::Error {
+                message: "invalid snapshot id".to_owned(),
+            };
+        };
+        let (left, right) = match (snapshots.load(left_id).await, snapshots.load(right_id).await) {
+            (Ok(left), Ok(right)) => (left, right),
+            (Err(error), _) | (_, Err(error)) => return response_from_error(error),
+        };
+        match left.diff(&right) {
+            Ok(diff) => IpcResponse::SnapshotDiff(Box::new(SnapshotDiffReport {
+                added: diff.added.iter().map(|e| e.path.display().to_string()).collect(),
+                removed: diff.removed.iter().map(|e| e.path.display().to_string()).collect(),
+                modified: diff
+                    .modified
+                    .iter()
+                    .map(|(old, new)| {
+                        (
+                            old.path.display().to_string(),
+                            old.hash.to_string(),
+                            new.hash.to_string(),
+                        )
+                    })
+                    .collect(),
+            })),
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_snapshot_restore(&self, path: PathBuf, snapshot: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon snapshot IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let snapshots = SnapshotStore::with_docs(context.node.blob_store().clone(), context.node.docs_engine().clone());
+        let id = match snapshot.parse::<iroh_blobs::Hash>() {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid snapshot id: {error}"),
+                };
+            }
+        };
+        let loaded = match snapshots.load(id).await {
+            Ok(found) => found,
+            Err(error) => return response_from_error(error),
+        };
+        let result = if let Ok(namespace) = path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
+            let manager = FolderManager::new(&context.node);
+            match manager.get(namespace).await {
+                Ok(folder) => snapshots
+                    .restore_for_folder(&folder, &loaded)
+                    .await
+                    .map(|()| namespace.to_string()),
+                Err(error) => Err(error),
+            }
+        } else {
+            snapshots
+                .restore_to_path(&loaded, &path)
+                .await
+                .map(|paths| format!("restored {} files", paths.len()))
+        };
+        match result {
+            Ok(message) => IpcResponse::Ok { message },
             Err(error) => response_from_error(error),
         }
     }
@@ -2506,8 +2649,20 @@ fn build_ipc_verify_filter(
 
 async fn resolve_folder_for_daemon(
     manager: &FolderManager,
+    registry: &FolderRegistry,
     selector: &Path,
 ) -> std::result::Result<crate::folder::SyncwebFolder, IpcResponse> {
+    // A selector that names a managed mount path must resolve through the
+    // folder registry: `FolderManager` only knows namespaces, so a path
+    // selector fails whenever more than one folder is managed.
+    if selector.to_string_lossy().parse::<iroh_docs::NamespaceId>().is_err()
+        && let Some(namespace) = registry.namespace_for_path(selector)
+        && let Ok(namespace_id) = namespace.parse::<iroh_docs::NamespaceId>()
+    {
+        return manager.get(namespace_id).await.map_err(|error| IpcResponse::Error {
+            message: error.to_string(),
+        });
+    }
     manager.resolve(selector).await.map_err(|error| IpcResponse::Error {
         message: error.to_string(),
     })
@@ -2631,6 +2786,7 @@ impl IpcClient {
                 | IpcResponse::Entries(_)
                 | IpcResponse::PeerAvailability(_)
                 | IpcResponse::SnapshotList(_)
+                | IpcResponse::SnapshotDiff(_)
                 | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",

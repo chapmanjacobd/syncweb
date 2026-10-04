@@ -21,15 +21,22 @@ use syncweb_core::init::open_node;
 
 use super::output::confirm_destructive;
 
+/// Resolve a folder selector to a namespace ID through the daemon-aware
+/// listing resolver (paths resolve even with several managed folders).
+async fn resolve_folder_namespace(ctx: &CliContext<'_>, folder: &Path) -> Result<iroh_docs::NamespaceId> {
+    crate::resolve_folder_namespace(ctx, folder).await
+}
+
 #[async_recursion]
 pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     match command {
         IndexingCommand::Enable { folder } => {
+            let namespace = resolve_folder_namespace(ctx, &folder).await?;
             let node = open_node(data_dir).await?;
             let manager = FolderManager::new(&node);
-            let selected = manager.resolve(&folder).await?;
+            let selected = manager.get(namespace).await?;
             let indexing = open_indexing(data_dir)?;
             let handle = indexing.enable_folder(&selected).await?;
             print_status(
@@ -43,17 +50,13 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
             node.stop().await?;
         }
         IndexingCommand::Disable { folder } => {
-            let node = open_node(data_dir).await?;
-            let manager = FolderManager::new(&node);
-            let selected = manager.resolve(&folder).await?;
-            let selected_namespace = selected.namespace_id();
-            open_indexing(data_dir)?.disable_folder(selected_namespace).await?;
+            let namespace = resolve_folder_namespace(ctx, &folder).await?;
+            open_indexing(data_dir)?.disable_folder(namespace).await?;
             print_status(
                 output_json,
-                serde_json::json!({"status": "disabled", "namespace": selected_namespace.to_string()}),
-                format!("disabled: {selected_namespace}"),
+                serde_json::json!({"status": "disabled", "namespace": namespace.to_string()}),
+                format!("disabled: {namespace}"),
             )?;
-            node.stop().await?;
         }
         IndexingCommand::Filter {
             command: filter_command,
@@ -67,9 +70,10 @@ pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogAr
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let PublishCatalogArgs { folder, catalog, tags } = args;
+    let namespace = resolve_folder_namespace(ctx, &folder).await?;
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
-    let selected = manager.resolve(&folder).await?;
+    let selected = manager.get(namespace).await?;
     let indexing = open_indexing(data_dir)?;
     indexing.enable_folder(&selected).await?;
     let catalog_service = indexing.catalog_service(

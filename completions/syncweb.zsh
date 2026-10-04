@@ -1537,6 +1537,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (seeding)
 _arguments "${_arguments_options[@]}" : \
+'--folder=[Namespace ID or path to a managed folder]:FOLDER:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -1546,7 +1547,6 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::folder -- Namespace ID or path to a managed folder:_files' \
 && ret=0
 ;;
         esac

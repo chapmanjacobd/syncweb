@@ -68,7 +68,9 @@ const DEFAULT_MEDIA_LISTEN: &str = "127.0.0.1:9193";
 
 async fn run_media_server(listen: std::net::SocketAddr, data_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(data_dir)?;
-    let node = syncweb_core::init::open_node(data_dir).await?;
+    // A standalone media server is purely local; relay-mode node creation can
+    // block on a relay handshake in an offline environment.
+    let node = open_node_offline(data_dir).await?;
     let server = syncweb_core::media::MediaServer::new(listen, node.blob_store().clone());
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
 
@@ -1510,7 +1512,18 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             }
             handle_snapshot_create(ctx, args).await
         }
-        SnapshotCommand::Restore(args) => handle_snapshot_restore(ctx, args).await,
+        SnapshotCommand::Restore(args) => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::SnapshotRestore {
+                        path: args.path.clone(),
+                        snapshot: args.snapshot.clone(),
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
+            handle_snapshot_restore(ctx, args).await
+        }
         SnapshotCommand::List { path } => {
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
                 let response = client
@@ -1541,35 +1554,40 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             return result;
         }
         SnapshotCommand::Diff { path: _, first, second } => {
+            if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::SnapshotDiff {
+                        path: PathBuf::new(),
+                        first: first.clone(),
+                        second: second.clone(),
+                    }))
+                    .await?;
+                if let IpcResponse::SnapshotDiff(diff) = response {
+                    render_snapshot_diff(&diff, output_json);
+                    return Ok(());
+                }
+                return print_daemon_message(response, output_json);
+            }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::from_node(&node);
             let left = snapshots.load(first.parse()?).await?;
             let right = snapshots.load(second.parse()?).await?;
             let diff = left.diff(&right)?;
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "added": diff.added.iter().map(|e| e.path.display().to_string()).collect::<Vec<_>>(),
-                        "removed": diff.removed.iter().map(|e| e.path.display().to_string()).collect::<Vec<_>>(),
-                        "modified": diff.modified.iter().map(|(old, new)| serde_json::json!({
-                            "path": old.path,
-                            "old_hash": old.hash.to_string(),
-                            "new_hash": new.hash.to_string(),
-                        })).collect::<Vec<_>>(),
+            let report = syncweb_core::daemon::SnapshotDiffReport::new(
+                diff.added.iter().map(|e| e.path.display().to_string()).collect(),
+                diff.removed.iter().map(|e| e.path.display().to_string()).collect(),
+                diff.modified
+                    .iter()
+                    .map(|(old, new)| {
+                        (
+                            old.path.display().to_string(),
+                            old.hash.to_string(),
+                            new.hash.to_string(),
+                        )
                     })
-                );
-            } else {
-                for entry in diff.added {
-                    println!("added\t{}", entry.path.display());
-                }
-                for entry in diff.removed {
-                    println!("removed\t{}", entry.path.display());
-                }
-                for (old, new) in diff.modified {
-                    println!("modified\t{}\t{}\t{}", old.path.display(), old.hash, new.hash);
-                }
-            }
+                    .collect(),
+            );
+            render_snapshot_diff(&report, output_json);
             node.stop().await?;
             Ok(())
         }
@@ -1598,6 +1616,34 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
             }
             node.stop().await?;
             Ok(())
+        }
+    }
+}
+
+/// Render a snapshot diff from the daemon or an embedded node.
+fn render_snapshot_diff(diff: &syncweb_core::daemon::SnapshotDiffReport, output_json: bool) {
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "added": diff.added,
+                "removed": diff.removed,
+                "modified": diff.modified.iter().map(|(path, old, new)| serde_json::json!({
+                    "path": path,
+                    "old_hash": old,
+                    "new_hash": new,
+                })).collect::<Vec<_>>(),
+            })
+        );
+    } else {
+        for path in &diff.added {
+            println!("added\t{path}");
+        }
+        for path in &diff.removed {
+            println!("removed\t{path}");
+        }
+        for (path, old, new) in &diff.modified {
+            println!("modified\t{path}\t{old}\t{new}");
         }
     }
 }
@@ -5717,6 +5763,25 @@ async fn resolve_selector_via_daemon(client: &IpcClient, selector: &Path) -> Res
         selector.display(),
         selector.display()
     );
+}
+
+/// Resolve a folder selector (namespace ID or managed mount path) to a
+/// namespace ID, reusing the daemon-aware listing resolver so paths resolve
+/// even when several folders are managed.
+///
+/// # Errors
+///
+/// Returns an error if the selector does not resolve to a managed folder.
+pub async fn resolve_folder_namespace(ctx: &CliContext<'_>, folder: &Path) -> Result<iroh_docs::NamespaceId> {
+    let (mode, resolved) = resolve_entry_source(ctx, folder).await?;
+    match mode {
+        ListingMode::Daemon { .. } => Ok(resolved.namespace.parse()?),
+        ListingMode::Embedded(embedded) => {
+            let namespace = resolved.namespace;
+            embedded.node.stop().await?;
+            Ok(namespace.parse()?)
+        }
+    }
 }
 
 /// Resolve a selector to a folder listing source. Uses the daemon when one is

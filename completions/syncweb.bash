@@ -2302,12 +2302,16 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__stats__subcmd__seeding)
-            opts="-h --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --folder --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --folder)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

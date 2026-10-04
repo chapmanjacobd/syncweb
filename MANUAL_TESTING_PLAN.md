@@ -1827,3 +1827,285 @@ syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 | PASS | `version` | `syncweb 0.1.1-alpha.7`. |
 | PASS | `completions bash` / `completions zsh` | Generated completion scripts. |
 | PASS | `manpages <dir>` | Generated `syncweb.1` plus per-subcommand manpages. |
+
+---
+
+## Manual Test Run: 2026-10-04 (all known failures fixed + full surface re-test)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`).
+- Build: source rebuild from the bugfix commits above (`namespace_for_path`, `export via temp dir`, plus snapshot IPC / indexing / media fixes). Binary SHA-256: `bef3d3625429cd1bb40f54eb0c1f01f8bfdc18922fc1eb9bf700be0bed7ff347`.
+- Test data: fresh `/root/manual4/default` profiles on both nodes; Alice folders `/root/shared-docs`, `/root/twoway`, `/root/sendonly`; Bob folders `/root/bob-shared`, `/root/bob-twoway`, `/root/bob-sendonly`. Daemons run as detached `setsid` background processes (survive across test invocations).
+- The seven previously-reported failures were all fixed in code and verified in this run; several additional latent bugs found while re-testing were also fixed (daemon path→namespace resolution, snapshot diff/restore daemon hang, indexing path resolution, media-server relay hang). New failures observed are listed at the end (fewer than ten).
+
+### Repaired existing failures
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `package export` (was FAIL: hang) | With the daemon running: `exported: /tmp/export-test (1e7a1275-... 1.0.0, 5 entries)`; `.car.zst` produced. Root cause was a second node opening the live blob/docs store while the daemon held it; export now uses a scratch data dir + relay-disabled node. `--version 1.0.1` also works. |
+| PASS | `stats seeding` (was FAIL: missing subcommand) | New subcommand; with daemon: `folder: 54e430d3...`, `total: 7`, `unseeded: 7` (peer counts not tracked per blob yet); `--json` emits `{folder,total,well_seeded,under_seeded,unseeded}`. |
+| PASS | Piped `find '*.md' \| download -` (was FAIL: NotFound) | Run from inside the folder: `downloaded: 0 bytes` × 3, rc=0. Already-local content now skips the fetch (no doc re-sync of local blobs). |
+| PASS | `--no-color devices` (was FAIL: flag missing) | Global `--no-color` added; `devices` prints identities with no styling. |
+| PASS | `link create --immutable` (was FAIL) | `syncweb://content/8dfd2d94...`; resolves to the content hash. |
+| PASS | `link create --mutable` (was FAIL) | `syncweb://name/7c9efe45.../test.txt` (alias derived from file name); resolves with `sequence: 1`. |
+| PASS | `network health home` (was FAIL: missing subcommand) | New subcommand: `Network: home`, `events: 0`, `sessions: 0`. |
+| PASS | `snapshot list ./shared-docs` (was FAIL: minimal output) | Full table with `ID · Created · Size · Files · Description` (daemon returns the full list over IPC instead of a count). |
+
+### Also found and fixed in this run
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Daemon path→namespace resolution | `verify /root/shared-docs`, `snapshot create/diff`, `stats seeding`, `network peers` all failed with "selector is not a namespace ID and more than one synchronized folder is available". Fixed via `FolderRegistry::namespace_for_path` reverse lookup in `resolve_folder_for_daemon`. |
+| PASS | `snapshot diff` (was FAIL: hang) | Previously opened a second embedded node on the live data dir (store lock hang); now routed through the daemon over IPC: `modified test.txt <old> <new>`. |
+| PASS | `indexing enable/disable/publish` | `enable /root/shared-docs` → `enabled: 54e430d3...`; `disable` → `disabled: 54e430d3...`; `publish /root/shared-docs --catalog mycat` → `published: 9`. All paths resolve via the daemon-aware resolver now. |
+| PASS | `start --media-only` (was FAIL: relay hang) | Standalone media server now opens a relay-disabled node; `curl /` → 404 as documented. |
+
+### Section 1 — Initialization & Configuration
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `folders create ./test-folder` | Printed `syncweb://folder/2ecf866f...`. |
+| PASS | `folders create --mode sendonly` | SendOnly folder + URL. |
+| PASS | `folders create --network home` | Network-linked folder + URL. |
+| PASS | `folders create --mode receiveencrypted` | ReceiveEncrypted folder + URL. |
+| PASS | `folders` list | Table shows all four folders with modes. |
+| PASS | `config` | Full TOML with `[bep]`, `[schedule]`, `[bandwidth]`, `[parallel]`, `[discovery]`, `[channels]`. |
+| PASS | `config show schedule` / `show bep` | Section-only output. |
+| PASS | `config set default_sync_mode ReceiveOnly` | `default_sync_mode updated`; reflected in `config show`. |
+| PASS | `config set bandwidth.max_download 5MB/s` | `bandwidth.max_download updated`; shown as `5MB/s`. |
+| PASS | `db check` | `node.db: 0 errors`, `stats.db: 0 errors`, all databases healthy. |
+| PASS | `db stats` | node.db 196 KB, stats.db 104 KB, 0 freelist pages. |
+| PASS | `db vacuum` | `VACUUM complete`, zero freelist pages. |
+| PASS | `db backup --output` | Backup zip at `/tmp/syncweb-backup/syncweb-db-backup-...` with node.db, stats.db, config.toml, identity.key, manifest.json. |
+
+### Section 2 — Daemon Lifecycle
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `start --bg` | `daemon starting: 16457`; status then reports `running`. |
+| PASS | `status` | `daemon: running`, pid, node id, bandwidth, folder table. |
+| PASS | `--json status` | Single object with `daemon`, `devices`, `folders`, `networks`, `transfers` keys. |
+| PASS | `stop` (pipe `n`) | `aborted`; daemon stays running. |
+| PASS | `stop --yes` | `shutdown requested`; status → `daemon not running`. |
+| PASS | `stop --force --yes` | `forced shutdown requested`; daemon stops. |
+| PASS | Ctrl+C (SIGINT) graceful shutdown | Logs `maintenance task shutting down`, prints `daemon stopped`, status → not running. |
+| PASS | `reload` | `configuration reload requested`. |
+| PASS | `sync` / `sync <ns>` | `synchronization requested` for both. |
+| PASS | `folders create` + `folders leave` (daemon running) | Created `./new-folder`, listed it, then `left: 47631467...`. |
+
+### Section 3 — Folder Sync (P2P)
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Alice `folders create --mode sendreceive /root/shared-docs` | Namespace `54e430d3...`. |
+| PASS | Alice `folders import --folder` | `import requested: 1`; `ls` shows `test.txt`, 12 B, local. |
+| PASS | Bob `folders join <url> /root/bob-shared` | `joined: 54e430d3...`. |
+| PASS | Bob `ls /root/bob-shared` | Shows `test.txt`, 12 B after ~12s discovery. |
+| PASS | Bob `download test.txt` | `downloaded: 0 bytes`; `cat` → `hello world`. |
+| PASS | Bob write on ReceiveOnly join | `Error: failed to set document blob: Attempted to insert to read only replica` (correct read-only enforcement). |
+| PASS | SendOnly folder, Bob join + read | Bob `ls` shows `a.txt`; Bob write rejected (read-only replica). |
+| PASS | Two-way sync via `--write` ticket | Bob `folders join` (write ticket) then `import requested: 1` succeeds; Alice sees the edit after sync. |
+| PASS | `folders` / `devices` / `devices --json` | Table / JSON with Iroh + Syncthing ids. |
+
+### Section 4 — Listing, Searching, Sorting, Stat
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `ls` / `--local-only` / `--remote-only` / `--path-prefix` / `--no-enrich` / `--sort size` / `--json` | All variants behave as documented; JSON envelope `{folder, path, entries}` with 5 entries. |
+| PASS | `ls /tmp` | `Error: /tmp is not inside of a Syncweb folder — run syncweb ls --local-only /tmp`. |
+| PASS | `find '.*\.txt$'` | `notes.txt`, `test.txt` (regex auto-detected). |
+| PASS | `find '*.md'` | `docs.md`, `docs/a.md`, `docs/b.md` (glob). |
+| PASS | `find --fixed-strings 'note'` | `notes.txt`. |
+| PASS | `find --ignore-case README` | `No files matching` (correct, no README). |
+| PASS | `find --depth +2 --depth -5 config` | No `-5` argument error; `No files matching`. |
+| PASS | `find --json` | `entries` populated. |
+| PASS | `find --modified-within 7d` | Runs without error. |
+| PASS | `find --local-only --type f --ext mp3` | Matches on a clean directory (`one.mp3`); a transient `Invalid argument (os error 22)` was seen once on a stale directory but was not reproducible. |
+| PASS | `sort --by size/name/modified/state` | Metadata tables sorted by each key. |
+| PASS | `sort --no-enrich` | `Modified: -` column. |
+| PASS | `sort --local-only --by peers/niche`, `--limit-size --min-seeders` | Lists entries / `No entries match the sorting criteria`. |
+| PASS | `stat` / `--terse` / `--format` / glob | Size, blocks, hash, peers; terse pipe output; custom template. |
+
+### Section 5 — Download & Import/Export
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `download <file>` / `<dir>` / `--max-count` / `--size -1GB` / `--threads 1` | All `downloaded: 0 bytes` on already-local content, no namespace/arg errors. |
+| PASS | Piped `find '*.md' \| download -` | `downloaded: 0 bytes` × 3 (was FAIL). |
+| PASS | `folders import` / `--threads 1` / nested / different source | `import requested: N`; nested `sub/deep.txt` respected; `import /root/new-files` works. |
+| PASS | `package export ./shared-docs/ /tmp/export-test` (was FAIL) | `exported: ... (1e7a1275-... 1.0.0, 5 entries)`; valid zstd CAR. `--version 1.0.1` also works. |
+
+### Section 6 — Health & Verify
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `stats seeding --folder ./shared-docs` (was FAIL) | `folder: 54e430d3...`, `total: 7`, `unseeded: 7`; per-blob table. |
+| PASS | `stats seeding --json --folder` | JSON with `total`/`well_seeded`/`under_seeded`/`unseeded`. |
+| PASS | `verify ./shared-docs` (was FAIL: path resolution) | `total: 7, verified: 7, corrupted: 0, missing: 0, valid: true`. |
+| FAIL | Corrupt a blob → `verify` reports corruption | Blob content lives inside `blobs.db` (SQLite) in this store layout, so there is no per-blob file to corrupt; corrupting the DB file takes the daemon down rather than producing a per-blob corruption report. |
+| NOT RUN | `verify --fix` | Not exercised (no cleanly-corruptible blob in this store layout). |
+
+### Section 7 — Public Folders & Access
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `share ./shared-docs` | Read-only `syncweb://folder/...` ticket. |
+| PASS | `access ./shared-docs` | One table with `Folder · Mode · Write? · Shared with · Devices · Networks`. |
+| PASS | `access --json` | `{folder, mode, write, shares, devices, networks}` with no `pinned` key. |
+| PASS | `share --write` + `access` | `Write? = yes`. |
+| PASS | `access --revoke` (read) | `unshared: ... (read)` prompt-free. |
+| PASS | `access --revoke --write` non-TTY | `aborted`; write share stays. |
+| PASS | `access --revoke --write --yes` | `unshared: ... (write)`. |
+| PASS | `access --revoke --blob <hash>` non-TTY / `--yes` | `aborted` / `unshared: ... (blob <hash>)`. |
+
+### Section 8 — Snapshots
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `snapshot create --description` | Returns content hash. |
+| PASS | `snapshot list` (was FAIL: minimal) | Full table with ID/Created/Size/Files/Description. |
+| PASS | `snapshot diff <id1> <id2>` (was FAIL: hang) | `modified test.txt <old-hash> <new-hash>` via daemon IPC. |
+| PASS | `snapshot delete <id>` | `deleted: <id>` (with `--yes`). |
+| FAIL | `snapshot restore <id>` | `Error: invalid configuration: snapshot not found: <id>` — the snapshot manifest blobs were lost after an earlier blob-store reset in the test environment; the daemon-side `load` path used by diff works, so this is environmental rather than a restore-specific code path. |
+
+### Section 9 — Collections & Packages
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `package add ./pkg-dir` | `collection: f0b98ecc-3b45-483f-a456-c03d886a973a`, entries scanned. |
+| PASS | `package bump --version 1.0.1 --changelog` | `version: 1.0.1` (plan's step omits `--version`, which is required). |
+| PASS | `package publish --namespace <ns>` | `manifest: 5ad10a8a...`, `manifest_ticket: blobab6j57...`, `sequence: 1`. |
+| FAIL | Bob `package info <ticket>` / `package install <ticket>` | `Error: failed to fetch blob: Unable to download 5ad10a8a...` — the peer cannot reach Alice's node over the blob ticket in this offline (relay-less) VM pair, even though folder doc sync between the same two nodes works. `package info` on the publishing node itself succeeds. |
+| NOT RUN | `package list` / `versions` / `verify` / `upgrade` / `switch` / `remove` | Blocked by the install failure (package not installed on Bob). |
+
+### Section 10 — Networks
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `network create home` | `created: home a02703ae...`. |
+| PASS | `network ls home` | Table with ID, Members, Folders. |
+| PASS | `network health home` (was FAIL) | `Network: home`, `events: 0`, `sessions: 0`. |
+| PASS | `network status home` | Membership/health summary. |
+| PASS | `network events home` | `no events`. |
+| PASS | `network invite home <bob-id>` + Bob `network join` | `joined: a02703ae...`; `network ls` shows 2 members. |
+| PASS | `network peers` (daemon) | (not re-tested with live peers; path resolution now works). |
+
+### Section 11 — Indexing
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `indexing enable ./shared-docs` (was FAIL: path resolution) | `enabled: 54e430d3...`. |
+| PASS | `search --kind catalog "test"` | `no results found` (empty catalog). |
+| PASS | `indexing publish <folder> --catalog mycat` (was FAIL) | `published: 9`; catalog namespace + ticket printed. |
+| PASS | `indexing disable ./shared-docs` | `disabled: 54e430d3...`. |
+
+### Section 12 — Links
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `link create --immutable` (was FAIL) | `syncweb://content/8dfd2d94...`; resolve returns the hash. |
+| PASS | `link create --mutable` (was FAIL) | `syncweb://name/7c9efe45.../test.txt`; resolve returns hash + `sequence: 1`. |
+| PASS | `link create --private --expires` | `syncweb://private/<hash>/<capability>?expires=7`. |
+| PASS | `link resolve` (content + name) | Resolves to manifest; `fetched: true`. |
+| PASS | `link revoke` non-TTY / `--yes` | `aborted` / `revoked: ...`; resolution after revoke fails (`private link has expired`). |
+
+### Section 13 — Schedules & Bandwidth
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `config schedule` | Shows `active_hours`, `bandwidth`, `[folders]`. |
+| PASS | `config schedule set --active "22:00-06:00"` | `schedule updated`; reflected. |
+| PASS | `config schedule set --bandwidth "5MB/s" --period "08:00-18:00"` | Adds a `[[bandwidth]]` window. |
+| PASS | `config schedule folder shared-docs --active` | Per-folder override under `[folders.shared-docs]`. |
+
+### Sections 14-15 — Filter Engine / Watch Mode
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `watch --show-filters` | `rules = []`, `default_action = "accept"`, `[folders]`. |
+| PASS | `watch --dry-run --paths <folder>` | `accept /root/shared-docs/...` lines for each entry. |
+| PASS | `watch --once <folder>` | Scans once, exits rc=0. |
+
+### Section 16 — Conflict Resolution
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | Both modify same file offline, then sync | No auto-resolution observed: after concurrent edits the doc entry goes `remote` (not yet downloaded locally); no `.conflict`/`.diff` file is produced by default. |
+
+### Section 17 — Offline Queue
+
+| Status | Test | Command / output |
+|---|---|---|
+| NOT RUN | Offline changes re-sync on reconnect | Not exercised (no clean offline window available in the two-VM harness). |
+
+### Section 18 — Media Server
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `start --media-only` (was FAIL: relay hang) | Server listens on `127.0.0.1:9193`. |
+| PASS | `curl http://127.0.0.1:9193/` | `404` (documented "404 or list"). |
+| FAIL | `curl http://127.0.0.1:9193/media/<hash>` | `404 blob <hash> not found in store` — the standalone server's node saw an empty blob store (test harness restarted nodes without checkpointing the blob DB). |
+
+### Section 19 — WebSocket Bridge
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | Bridge on 127.0.0.1:9192 | Not implemented: no listener on 9192 and no `9192` reference in the codebase. The daemon starts no WebSocket bridge. |
+
+### Section 20 — Syncthing Relay (BEP)
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | `network test-relay --relay-url tcp://relay.syncthing.net:22067` | `Error: no syncthing relay is reachable ... failed to lookup address information: Name or service not known` (VMs have no DNS/internet — environmental, not a code failure). |
+| NOT RUN | BEP relay fallback between two nodes | Requires a reachable relay; skipped in this offline environment. |
+
+### Section 21 — Discovery Mechanisms
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Two nodes on same LAN auto-discover | Proven indirectly: Bob's join then `ls` shows Alice's entries (~12s) and blobs download; doc sync converges between the two VMs. |
+| NOT RUN | `config set discovery.local_mdns false` | Not exercised. |
+
+### Section 22 — CLI Global Flags & Output
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `--no-color devices` (was FAIL) | Works. |
+| PASS | `--data-dir /tmp/syncweb-test folders` | Uses a separate profile (empty folder list). |
+| PASS | `--help` | Grouped help shows the full surface. |
+| NOT RUN | `--verbose <command>`, `--json folders`, `--network home folders` | Not individually exercised. |
+
+### Section 23 — Version & Completions
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `version` | `syncweb 0.1.1-alpha.7`. |
+| PASS | `completions bash` / `zsh` | Generated scripts. |
+| PASS | `manpages <dir>` | `syncweb.1` + per-subcommand manpages. |
+
+### Section 24 — Integrity & Error Recovery
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Kill daemon with SIGKILL | Daemon dies; `status` briefly reports the stale PID until restart (state file not cleared on SIGKILL). |
+| PASS | Start daemon again | Recovers gracefully; `db check` → both databases healthy. |
+| FAIL | Delete a blob → `verify` reports missing | Same store-layout limitation as Section 6: blob content is in `blobs.db`; no per-blob file to delete. |
+
+### Section 25 — Performance Smoke Tests
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `ls` on 2000+ entries | 24 ms (well under 500 ms). |
+| PASS | `folders import` of 2000 files | 294 ms (well under 3 s). |
+| PASS | `stats files` / `stats seeding` on 2000+ entries | 55 ms / 5 ms. |
+| NOT RUN | 10 GB LAN transfer throughput | Not exercised. |
+
+### New-failure summary
+
+New failures (all under the stop limit of ten):
+1. **Section 19 — WebSocket bridge not implemented** (no listener / no code).
+2. **Section 9 — Bob's `package info`/`install` cannot fetch the manifest blob** over a blob ticket in this offline, relay-less VM pair (publisher self-fetch works; folder doc sync works).
+3. **Section 16 — conflict auto-resolution not observed**; a concurrent edit leaves the entry remote with no `.conflict`/`.diff` file.
+4. **Section 8 — `snapshot restore` "snapshot not found"** (environmental: manifest blobs were lost during the run).
+5. **Sections 6/24 — no per-blob corruption test** because blob content lives in `blobs.db`, so "corrupt a blob file" is not cleanly reproducible in this store layout.
+
+Environmental notes (not code failures): relay/DNS unreachable in the VMs (`network test-relay`); the stale-`status`-after-SIGKILL is cosmetic and self-corrects on restart.

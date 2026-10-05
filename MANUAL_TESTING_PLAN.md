@@ -2121,7 +2121,7 @@ Environmental notes (not code failures): relay/DNS unreachable in the VMs (`netw
 
 ### Root cause found this run
 
-`open_node(data_dir)` opens an embedded node on the live data directory. While a daemon owns that directory, the daemon holds the redb blob/docs store locks, so the embedded node **blocks forever** instead of starting. This affected several commands that were not routing through the daemon. The fix is to prefer the daemon over IPC whenever one is running, and only open an embedded node when none is running (`--no-daemon` / no daemon).
+`open_node(data_dir)` opens an embedded node on the live data directory. While a daemon owns that directory, the daemon holds the redb blob/docs store locks, so the embedded node blocks forever instead of starting. This affected several commands that were not routing through the daemon. The fix is to prefer the daemon over IPC whenever one is running, and only open an embedded node when none is running (`--no-daemon` / no daemon).
 
 ### Repaired existing failures
 
@@ -2183,7 +2183,7 @@ Environmental notes (not code failures): relay/DNS unreachable in the VMs (`netw
 |---|---|---|
 | PASS | `ls` / `--local-only` / `--remote-only` / `--path-prefix` / `--no-enrich` / `--sort size` / `--json` / `ls /tmp` | All variants as documented; `/tmp` → `not inside of a Syncweb folder` with `--local-only` hint. |
 | PASS | `find '.*\.txt$'` / `'*.md'` / `--fixed-strings` / `--modified-within` / `--depth` / `--json` / `--ignore-case` | Regex/glob/exact matches; depth parses `-5`; JSON populated. |
-| FAIL | `find --type f --ext mp3 --local-only ./music` (plan syntax) | Plan syntax omits the pattern, so `./music` binds to the **pattern** slot and the path defaults to `.`; the scanner then walks `/` and hits unreadable special files (`EIO`/`EACCES`). Correct form `find '*' --type f --ext mp3 --local-only ./music` → `one.mp3`, `song.mp3`, `track.mp3`. This is a test-syntax bug, not a code bug. |
+| FAIL | `find --type f --ext mp3 --local-only ./music` (plan syntax) | Plan syntax omits the pattern, so `./music` binds to the pattern slot and the path defaults to `.`; the scanner then walks `/` and hits unreadable special files (`EIO`/`EACCES`). Correct form `find '*' --type f --ext mp3 --local-only ./music` → `one.mp3`, `song.mp3`, `track.mp3`. This is a test-syntax bug, not a code bug. |
 | PASS | `sort --by size/name/modified/state` / `--no-enrich` / `--local-only --by peers/niche` / `--limit-size --min-seeders` | Metadata tables sorted per key; disk sorts and limits behave as documented. |
 | PASS | `stat` / `--terse` / `--format` / glob | Size, blocks, hash, peers; terse pipe output; custom template. |
 
@@ -2290,7 +2290,7 @@ All seven real bugs found this run were fixed in code and verified:
 7. WebSocket bridge (Section 19) was unimplemented — now implemented on `127.0.0.1:9192`.
 
 One real bug remains unfixed (below the stop limit of ten):
-1. **`watch --once` hangs while a daemon is running** (`handle_watch` opens an embedded node; main.rs:2866).
+1. `watch --once` hangs while a daemon is running (`handle_watch` opens an embedded node; main.rs:2866).
 
 Plan-syntax mismatches found (not code bugs): `find --type f --ext mp3 --local-only <path>` (missing pattern), `package upgrade <collection-id>` (takes a ticket), `package remove <collection-id>` (needs a version), `package export <collection-id>` (takes a path), `package import --no-install` (flag does not exist), `link create --expires 7d` (expects a Unix timestamp), `network test-relay` (requires `--relay-url`).
 

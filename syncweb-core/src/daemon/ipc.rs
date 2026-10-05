@@ -46,6 +46,101 @@ const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// Transport used by an IPC client to exchange newline-delimited messages.
+#[async_trait::async_trait]
+pub trait IpcTransport: Send + Sync {
+    /// Serialize and send one request.
+    async fn send_request(&mut self, request: &IpcRequest) -> Result<()>;
+
+    /// Receive and deserialize one response.
+    async fn recv_response(&mut self) -> Result<IpcResponse>;
+}
+
+fn encode_ipc_request(request: &IpcRequest) -> Result<Vec<u8>> {
+    let mut message = serde_json::to_vec(request)
+        .map_err(|error| SyncwebError::operation("failed to serialize IPC request", error))?;
+    message.push(b'\n');
+    Ok(message)
+}
+
+fn encode_ipc_response(response: &IpcResponse) -> Result<Vec<u8>> {
+    let mut message = serde_json::to_vec(response)
+        .map_err(|error| SyncwebError::operation("failed to serialize IPC response", error))?;
+    message.push(b'\n');
+    Ok(message)
+}
+
+fn decode_ipc_response(bytes: &[u8]) -> Result<IpcResponse> {
+    if bytes.is_empty() {
+        return Err(SyncwebError::operation(
+            "daemon IPC returned no response",
+            "connection closed",
+        ));
+    }
+    serde_json::from_slice(bytes.trim_ascii())
+        .map_err(|error| SyncwebError::operation("failed to deserialize IPC response", error))
+}
+
+#[cfg(unix)]
+#[derive(Debug)]
+pub struct UnixSocketTransport {
+    socket_path: PathBuf,
+    stream: Option<tokio::net::UnixStream>,
+}
+
+#[cfg(unix)]
+impl UnixSocketTransport {
+    #[must_use]
+    pub const fn new(socket_path: PathBuf) -> Self {
+        Self {
+            socket_path,
+            stream: None,
+        }
+    }
+}
+
+#[cfg(unix)]
+#[async_trait::async_trait]
+impl IpcTransport for UnixSocketTransport {
+    async fn send_request(&mut self, request: &IpcRequest) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+        use tokio::time::timeout;
+
+        let mut stream = timeout(IPC_TIMEOUT, tokio::net::UnixStream::connect(&self.socket_path))
+            .await
+            .map_err(|error| SyncwebError::operation("daemon IPC connection timed out", error))?
+            .map_err(|error| {
+                SyncwebError::operation(
+                    format!("failed to connect to daemon socket at {}", self.socket_path.display()),
+                    error,
+                )
+            })?;
+        let message = encode_ipc_request(request)?;
+        timeout(IPC_TIMEOUT, stream.write_all(&message))
+            .await
+            .map_err(|error| SyncwebError::operation("daemon IPC write timed out", error))?
+            .map_err(|error| SyncwebError::operation("daemon IPC write failed", error))?;
+        self.stream = Some(stream);
+        Ok(())
+    }
+
+    async fn recv_response(&mut self) -> Result<IpcResponse> {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        use tokio::time::timeout;
+
+        let stream = self
+            .stream
+            .take()
+            .ok_or_else(|| SyncwebError::operation("daemon IPC read failed", "request was not sent"))?;
+        let mut response = Vec::new();
+        timeout(IPC_TIMEOUT, BufReader::new(stream).read_until(b'\n', &mut response))
+            .await
+            .map_err(|error| SyncwebError::operation("daemon IPC read timed out", error))?
+            .map_err(|error| SyncwebError::operation("daemon IPC read failed", error))?;
+        decode_ipc_response(&response)
+    }
+}
+
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -2895,9 +2990,7 @@ impl IpcServer {
                 message: format!("invalid daemon request: {error}"),
             },
         };
-        let mut bytes = serde_json::to_vec(&response)
-            .map_err(|error| SyncwebError::operation("failed to serialize IPC response", error))?;
-        bytes.push(b'\n');
+        let bytes = encode_ipc_response(&response)?;
         write_half.write_all(&bytes).await?;
         Ok(())
     }
@@ -3022,38 +3115,9 @@ impl IpcClient {
     pub async fn send(&self, request: IpcRequest) -> Result<IpcResponse> {
         #[cfg(unix)]
         {
-            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-            use tokio::time::timeout;
-            let mut stream = timeout(IPC_TIMEOUT, tokio::net::UnixStream::connect(&self.socket_path))
-                .await
-                .map_err(|error| SyncwebError::operation("daemon IPC connection timed out", error))?
-                .map_err(|error| {
-                    SyncwebError::operation(
-                        format!("failed to connect to daemon socket at {}", self.socket_path.display()),
-                        error,
-                    )
-                })?;
-            let mut message = serde_json::to_vec(&request)
-                .map_err(|error| SyncwebError::operation("failed to serialize IPC request", error))?;
-            message.push(b'\n');
-            timeout(IPC_TIMEOUT, stream.write_all(&message))
-                .await
-                .map_err(|error| SyncwebError::operation("daemon IPC write timed out", error))?
-                .map_err(|error| SyncwebError::operation("daemon IPC write failed", error))?;
-            let mut response = Vec::new();
-            let mut reader = BufReader::new(stream);
-            timeout(IPC_TIMEOUT, reader.read_until(b'\n', &mut response))
-                .await
-                .map_err(|error| SyncwebError::operation("daemon IPC read timed out", error))?
-                .map_err(|error| SyncwebError::operation("daemon IPC read failed", error))?;
-            if response.is_empty() {
-                return Err(SyncwebError::operation(
-                    "daemon IPC returned no response",
-                    "connection closed",
-                ));
-            }
-            serde_json::from_slice(response.trim_ascii())
-                .map_err(|error| SyncwebError::operation("failed to deserialize IPC response", error))
+            let mut transport = UnixSocketTransport::new(self.socket_path.clone());
+            transport.send_request(&request).await?;
+            transport.recv_response().await
         }
         #[cfg(not(unix))]
         {
@@ -3063,6 +3127,555 @@ impl IpcClient {
                 "Unix sockets are not supported on this platform",
             ))
         }
+    }
+
+    async fn request(&self, command: IpcCommand, operation: &str) -> Result<IpcResponse> {
+        match self.send(IpcRequest::new(command)).await? {
+            IpcResponse::Error { message } => Err(SyncwebError::operation(
+                format!("daemon {operation} request failed"),
+                message,
+            )),
+            response => Ok(response),
+        }
+    }
+
+    fn unexpected_response(operation: &str, response: IpcResponse) -> SyncwebError {
+        SyncwebError::operation(
+            format!("daemon {operation} request returned an unexpected response"),
+            format!("{response:?}"),
+        )
+    }
+
+    fn expect_message(operation: &str, response: IpcResponse) -> Result<String> {
+        match response {
+            IpcResponse::Ok { message } => Ok(message),
+            response => Err(Self::unexpected_response(operation, response)),
+        }
+    }
+
+    /// Request the daemon status.
+    pub async fn status(&self) -> Result<DaemonStatus> {
+        match self.request(IpcCommand::Status, "status").await? {
+            IpcResponse::Status(status) => Ok(status),
+            response => Err(Self::unexpected_response("status", response)),
+        }
+    }
+
+    /// List all folders and public subscriptions managed by the daemon.
+    pub async fn list_folders(&self) -> Result<Vec<FolderStatus>> {
+        match self.request(IpcCommand::ListFolders, "list folders").await? {
+            IpcResponse::FolderList(folders) => Ok(folders),
+            response => Err(Self::unexpected_response("list folders", response)),
+        }
+    }
+
+    /// Register a folder with the daemon.
+    pub async fn add_folder(&self, namespace: String, path: PathBuf) -> Result<String> {
+        Self::expect_message(
+            "add folder",
+            self.request(IpcCommand::AddFolder { namespace, path }, "add folder")
+                .await?,
+        )
+    }
+
+    /// Ask the daemon to trigger synchronization.
+    pub async fn trigger_sync(&self, namespace: Option<String>) -> Result<String> {
+        Self::expect_message(
+            "trigger sync",
+            self.request(IpcCommand::TriggerSync { namespace }, "trigger sync")
+                .await?,
+        )
+    }
+
+    /// Set the daemon log level.
+    pub async fn set_log_level(&self, level: String) -> Result<String> {
+        Self::expect_message(
+            "set log level",
+            self.request(IpcCommand::SetLogLevel { level }, "set log level").await?,
+        )
+    }
+
+    /// Ask the daemon to reload its configuration.
+    pub async fn reload_config(&self) -> Result<String> {
+        Self::expect_message(
+            "reload config",
+            self.request(IpcCommand::ReloadConfig, "reload config").await?,
+        )
+    }
+
+    /// Ask the daemon to shut down.
+    pub async fn shutdown(&self, force: bool) -> Result<String> {
+        Self::expect_message(
+            "shutdown",
+            self.request(IpcCommand::Shutdown { force }, "shutdown").await?,
+        )
+    }
+
+    /// Download selected folder content and return the transferred byte count.
+    pub async fn download(&self, namespace: String, strategy: FetchStrategy) -> Result<u64> {
+        match self
+            .request(IpcCommand::Download { namespace, strategy }, "download")
+            .await?
+        {
+            IpcResponse::DownloadComplete { bytes_transferred } => Ok(bytes_transferred),
+            response => Err(Self::unexpected_response("download", response)),
+        }
+    }
+
+    /// Materialize pending transfer jobs and return completed and failed counts.
+    pub async fn materialize_transfers(&self, namespace: Option<String>) -> Result<(u64, u64)> {
+        match self
+            .request(IpcCommand::MaterializeTransfers { namespace }, "materialize transfers")
+            .await?
+        {
+            IpcResponse::TransferJobsProcessed { completed, failed } => Ok((completed, failed)),
+            response => Err(Self::unexpected_response("materialize transfers", response)),
+        }
+    }
+
+    /// Import files into a managed folder and return the imported entry count.
+    pub async fn import_files(&self, namespace: Option<String>, path: PathBuf) -> Result<u64> {
+        match self
+            .request(IpcCommand::ImportFiles { namespace, path }, "import files")
+            .await?
+        {
+            IpcResponse::ImportFilesComplete { entries } => Ok(entries),
+            response => Err(Self::unexpected_response("import files", response)),
+        }
+    }
+
+    /// Import an archive and return its resulting collection.
+    pub async fn import_archive(
+        &self,
+        input: PathBuf,
+        target: PathBuf,
+        filter: Option<FilterConfig>,
+    ) -> Result<DropImportResult> {
+        match self
+            .request(IpcCommand::ImportArchive { input, target, filter }, "import archive")
+            .await?
+        {
+            IpcResponse::ImportComplete(result) => Ok(*result),
+            response => Err(Self::unexpected_response("import archive", response)),
+        }
+    }
+
+    /// Export a managed folder as an archive.
+    pub async fn export_archive(
+        &self,
+        namespace: String,
+        version: Option<String>,
+        output: PathBuf,
+    ) -> Result<DropExportResult> {
+        match self
+            .request(
+                IpcCommand::ExportArchive {
+                    namespace,
+                    version,
+                    output,
+                },
+                "export archive",
+            )
+            .await?
+        {
+            IpcResponse::ExportComplete(result) => Ok(*result),
+            response => Err(Self::unexpected_response("export archive", response)),
+        }
+    }
+
+    /// Join a folder from a ticket.
+    pub async fn join(
+        &self,
+        ticket: String,
+        path: PathBuf,
+        mode: SyncMode,
+        subscribe: bool,
+        filters: SubscribeFilters,
+        download: bool,
+        indexing: bool,
+        metadata_only: bool,
+    ) -> Result<String> {
+        Self::expect_message(
+            "join",
+            self.request(
+                IpcCommand::Join {
+                    ticket,
+                    path,
+                    mode,
+                    subscribe,
+                    filters,
+                    download,
+                    indexing,
+                    metadata_only,
+                },
+                "join",
+            )
+            .await?,
+        )
+    }
+
+    /// Enable or disable subscription for a managed folder.
+    pub async fn set_subscribe(
+        &self,
+        namespace: String,
+        enabled: bool,
+        filters: Option<SubscribeFilters>,
+    ) -> Result<String> {
+        Self::expect_message(
+            "set subscribe",
+            self.request(
+                IpcCommand::SetSubscribe {
+                    namespace,
+                    enabled,
+                    filters,
+                },
+                "set subscribe",
+            )
+            .await?,
+        )
+    }
+
+    /// Subscribe to a public blob ticket.
+    pub async fn subscribe_public(&self, ticket: String) -> Result<String> {
+        Self::expect_message(
+            "subscribe public",
+            self.request(IpcCommand::SubscribePublic { ticket }, "subscribe public")
+                .await?,
+        )
+    }
+
+    /// Create a managed folder and return the daemon's creation message.
+    pub async fn create_folder(&self, path: PathBuf, mode: String, indexing: bool) -> Result<String> {
+        Self::expect_message(
+            "create folder",
+            self.request(IpcCommand::CreateFolder { path, mode, indexing }, "create folder")
+                .await?,
+        )
+    }
+
+    /// Collect file statistics for a managed folder.
+    pub async fn stats_files(&self, folder: PathBuf) -> Result<FileStatsReport> {
+        match self.request(IpcCommand::StatsFiles { folder }, "stats files").await? {
+            IpcResponse::FileStats(report) => Ok(*report),
+            response => Err(Self::unexpected_response("stats files", response)),
+        }
+    }
+
+    /// List the metadata entries in a managed folder.
+    pub async fn list_entries(&self, folder: String, enrich: bool) -> Result<Vec<EntryRow>> {
+        match self
+            .request(IpcCommand::ListEntries { folder, enrich }, "list entries")
+            .await?
+        {
+            IpcResponse::Entries(entries) => Ok(entries),
+            response => Err(Self::unexpected_response("list entries", response)),
+        }
+    }
+
+    /// Verify the integrity of a managed folder.
+    pub async fn verify_integrity(
+        &self,
+        path: PathBuf,
+        hash: Vec<String>,
+        path_filter: Option<String>,
+        glob_filter: Option<String>,
+        fix: bool,
+        from: Vec<String>,
+    ) -> Result<String> {
+        Self::expect_message(
+            "verify integrity",
+            self.request(
+                IpcCommand::VerifyIntegrity {
+                    path,
+                    hash,
+                    path_filter,
+                    glob_filter,
+                    fix,
+                    from,
+                },
+                "verify integrity",
+            )
+            .await?,
+        )
+    }
+
+    /// Remove a public blob subscription.
+    pub async fn unsubscribe(&self, namespace: String) -> Result<String> {
+        Self::expect_message(
+            "unsubscribe",
+            self.request(IpcCommand::Unsubscribe { namespace }, "unsubscribe")
+                .await?,
+        )
+    }
+
+    /// Leave a managed folder.
+    pub async fn leave_folder(&self, namespace: String, delete_files: bool) -> Result<String> {
+        Self::expect_message(
+            "leave folder",
+            self.request(
+                IpcCommand::LeaveFolder {
+                    namespace,
+                    delete_files,
+                },
+                "leave folder",
+            )
+            .await?,
+        )
+    }
+
+    /// Share a folder or one of its blobs and return the resulting message.
+    pub async fn share(
+        &self,
+        namespace: String,
+        blob: Option<String>,
+        writable: bool,
+        pin: bool,
+        persist: bool,
+    ) -> Result<String> {
+        Self::expect_message(
+            "share",
+            self.request(
+                IpcCommand::Share {
+                    namespace,
+                    blob,
+                    writable,
+                    pin,
+                    persist,
+                },
+                "share",
+            )
+            .await?,
+        )
+    }
+
+    /// List persisted shares.
+    pub async fn share_list(&self) -> Result<String> {
+        Self::expect_message("share list", self.request(IpcCommand::ShareList, "share list").await?)
+    }
+
+    /// Remove a folder share or one of its blob shares.
+    pub async fn unshare(&self, namespace: String, blob: Option<String>, writable: bool) -> Result<String> {
+        Self::expect_message(
+            "unshare",
+            self.request(
+                IpcCommand::Unshare {
+                    namespace,
+                    blob,
+                    writable,
+                },
+                "unshare",
+            )
+            .await?,
+        )
+    }
+
+    /// Create a snapshot and return its identifier message.
+    pub async fn snapshot_create(&self, path: PathBuf, description: Option<String>, threads: usize) -> Result<String> {
+        Self::expect_message(
+            "snapshot create",
+            self.request(
+                IpcCommand::SnapshotCreate {
+                    path,
+                    description,
+                    threads,
+                },
+                "snapshot create",
+            )
+            .await?,
+        )
+    }
+
+    /// List snapshots for a folder.
+    pub async fn snapshot_list(&self, path: PathBuf) -> Result<Vec<SnapshotInfo>> {
+        match self.request(IpcCommand::SnapshotList { path }, "snapshot list").await? {
+            IpcResponse::SnapshotList(snapshots) => Ok(snapshots),
+            response => Err(Self::unexpected_response("snapshot list", response)),
+        }
+    }
+
+    /// Delete a snapshot.
+    pub async fn snapshot_delete(&self, id: String) -> Result<String> {
+        Self::expect_message(
+            "snapshot delete",
+            self.request(IpcCommand::SnapshotDelete { id }, "snapshot delete")
+                .await?,
+        )
+    }
+
+    /// Compare two snapshots.
+    pub async fn snapshot_diff(&self, path: PathBuf, first: String, second: String) -> Result<SnapshotDiffReport> {
+        match self
+            .request(IpcCommand::SnapshotDiff { path, first, second }, "snapshot diff")
+            .await?
+        {
+            IpcResponse::SnapshotDiff(report) => Ok(*report),
+            response => Err(Self::unexpected_response("snapshot diff", response)),
+        }
+    }
+
+    /// Restore a snapshot.
+    pub async fn snapshot_restore(&self, path: PathBuf, snapshot: String) -> Result<String> {
+        Self::expect_message(
+            "snapshot restore",
+            self.request(IpcCommand::SnapshotRestore { path, snapshot }, "snapshot restore")
+                .await?,
+        )
+    }
+
+    /// Publish a collection and return the daemon's result message.
+    pub async fn collection_publish(
+        &self,
+        path: PathBuf,
+        namespace: String,
+        sequence: u64,
+        bootstrap: Vec<String>,
+        manifest_bytes: Option<Vec<u8>>,
+    ) -> Result<String> {
+        Self::expect_message(
+            "collection publish",
+            self.request(
+                IpcCommand::CollectionPublish {
+                    path,
+                    namespace,
+                    sequence,
+                    bootstrap,
+                    manifest_bytes,
+                },
+                "collection publish",
+            )
+            .await?,
+        )
+    }
+
+    /// Return peer enrichment counts for a folder.
+    pub async fn enrich_sort(&self, path: PathBuf) -> Result<HashMap<String, usize>> {
+        match self.request(IpcCommand::EnrichSort { path }, "enrich sort").await? {
+            IpcResponse::EnrichData(data) => Ok(data),
+            response => Err(Self::unexpected_response("enrich sort", response)),
+        }
+    }
+
+    /// Invite a device to a network.
+    pub async fn network_invite(&self, network_id: String, device: String) -> Result<String> {
+        Self::expect_message(
+            "network invite",
+            self.request(IpcCommand::NetworkInvite { network_id, device }, "network invite")
+                .await?,
+        )
+    }
+
+    /// Remove a device from a network.
+    pub async fn network_kick(&self, network_id: String, device: String) -> Result<String> {
+        Self::expect_message(
+            "network kick",
+            self.request(IpcCommand::NetworkKick { network_id, device }, "network kick")
+                .await?,
+        )
+    }
+
+    /// Leave a network.
+    pub async fn network_leave(&self, network_id: String) -> Result<String> {
+        Self::expect_message(
+            "network leave",
+            self.request(IpcCommand::NetworkLeave { network_id }, "network leave")
+                .await?,
+        )
+    }
+
+    /// Create a network and return its structured identity.
+    pub async fn network_create(
+        &self,
+        name: String,
+        label: String,
+        invite_only: bool,
+        doc_ticket: Option<String>,
+    ) -> Result<(String, String)> {
+        match self
+            .request(
+                IpcCommand::NetworkCreate {
+                    name,
+                    label,
+                    invite_only,
+                    doc_ticket,
+                },
+                "network create",
+            )
+            .await?
+        {
+            IpcResponse::NetworkCreated { name, id } => Ok((name, id)),
+            response => Err(Self::unexpected_response("network create", response)),
+        }
+    }
+
+    /// Join a network from an invite ticket.
+    pub async fn network_join(&self, ticket: String) -> Result<String> {
+        Self::expect_message(
+            "network join",
+            self.request(IpcCommand::NetworkJoin { ticket }, "network join").await?,
+        )
+    }
+
+    /// Report peer availability for a folder.
+    pub async fn peer_availability(&self, folder: String) -> Result<PeerAvailabilityReport> {
+        match self
+            .request(IpcCommand::PeerAvailability { folder }, "peer availability")
+            .await?
+        {
+            IpcResponse::PeerAvailability(report) => Ok(*report),
+            response => Err(Self::unexpected_response("peer availability", response)),
+        }
+    }
+
+    /// Inspect a package manifest.
+    pub async fn package_info(
+        &self,
+        ticket: Option<String>,
+        hash: Option<String>,
+        node_id: Option<String>,
+    ) -> Result<PackageInfoResult> {
+        match self
+            .request(IpcCommand::PackageInfo { ticket, hash, node_id }, "package info")
+            .await?
+        {
+            IpcResponse::PackageInfo(info) => Ok(*info),
+            response => Err(Self::unexpected_response("package info", response)),
+        }
+    }
+
+    /// Install a package and return its collection identity.
+    pub async fn package_install(&self, ticket: String) -> Result<(String, String)> {
+        match self
+            .request(IpcCommand::PackageInstall { ticket }, "package install")
+            .await?
+        {
+            IpcResponse::PackageInstall { collection_id, version } => Ok((collection_id, version)),
+            response => Err(Self::unexpected_response("package install", response)),
+        }
+    }
+
+    /// Enable indexing for a folder.
+    pub async fn indexing_enable(&self, namespace: String) -> Result<String> {
+        Self::expect_message(
+            "indexing enable",
+            self.request(IpcCommand::IndexingEnable { namespace }, "indexing enable")
+                .await?,
+        )
+    }
+
+    /// Publish an indexing catalog and return the daemon's result message.
+    pub async fn indexing_publish(&self, namespace: String, catalog: String, tags: Vec<String>) -> Result<String> {
+        Self::expect_message(
+            "indexing publish",
+            self.request(
+                IpcCommand::IndexingPublish {
+                    namespace,
+                    catalog,
+                    tags,
+                },
+                "indexing publish",
+            )
+            .await?,
+        )
     }
 
     /// Perform a bounded synchronous status probe for routing decisions.

@@ -17,12 +17,7 @@ use syncweb_core::{
 };
 
 use iroh_blobs::{Hash, ticket::BlobTicket};
-use syncweb_core::{
-    daemon::{IpcCommand, IpcRequest},
-    init::open_node,
-};
-
-use crate::print_daemon_message;
+use syncweb_core::init::open_node;
 
 use super::output::confirm_destructive;
 
@@ -40,12 +35,13 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
         IndexingCommand::Enable { folder } => {
             let namespace = resolve_folder_namespace(ctx, &folder).await?;
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::IndexingEnable {
-                        namespace: namespace.to_string(),
-                    }))
-                    .await?;
-                return print_daemon_message(response, output_json);
+                let message = client.indexing_enable(namespace.to_string()).await?;
+                if output_json {
+                    println!("{}", serde_json::json!({"status": "ok", "message": message}));
+                } else {
+                    println!("{message}");
+                }
+                return Ok(());
             }
             let node = open_node(data_dir).await?;
             let manager = FolderManager::new(&node);
@@ -85,14 +81,13 @@ pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogAr
     let PublishCatalogArgs { folder, catalog, tags } = args;
     let namespace = resolve_folder_namespace(ctx, &folder).await?;
     if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::IndexingPublish {
-                namespace: namespace.to_string(),
-                catalog,
-                tags,
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
+        let message = client.indexing_publish(namespace.to_string(), catalog, tags).await?;
+        if output_json {
+            println!("{}", serde_json::json!({"status": "ok", "message": message}));
+        } else {
+            println!("{message}");
+        }
+        return Ok(());
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);

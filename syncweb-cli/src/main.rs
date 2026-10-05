@@ -33,7 +33,7 @@ use syncweb_core::{
     allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
     bandwidth_stats::BandwidthStats,
     cancel_session,
-    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, IpcCommand, IpcRequest, IpcResponse, PidLock, StateFile},
+    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
@@ -63,7 +63,6 @@ use syncweb_core::{
 
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
-const ERR_UNEXPECTED_RESPONSE: &str = "daemon returned an unexpected response";
 const DEFAULT_MEDIA_LISTEN: &str = "127.0.0.1:9193";
 
 async fn run_media_server(listen: std::net::SocketAddr, data_dir: &Path) -> Result<()> {
@@ -372,9 +371,7 @@ async fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> 
                 tracing::warn!(%error, "failed to write TOML config file");
             }
             if nudge && let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let _ = client
-                    .send(IpcRequest::new(IpcCommand::TriggerSync { namespace: None }))
-                    .await;
+                let _ = client.trigger_sync(None).await;
             }
             if output_json {
                 println!(
@@ -488,23 +485,10 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
         println!("aborted");
         return Ok(());
     }
-    send_daemon_command(
-        data_dir,
-        output_json,
-        IpcRequest::new(IpcCommand::Shutdown { force: args.force }),
-    )
-    .await
-}
-
-/// Send a command to the running daemon and print its response.
-///
-/// Shared plumbing for the daemon control commands (`shutdown`, `reload`,
-/// `daemon-sync`) that only differ in the [`IpcRequest`] they send.
-async fn send_daemon_command(data_dir: &std::path::Path, output_json: bool, request: IpcRequest) -> Result<()> {
     let client =
         syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
-    let response = client.send(request).await?;
-    print_daemon_message(response, output_json)
+    let message = client.shutdown(args.force).await?;
+    print_daemon_ok(&message, output_json)
 }
 
 fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: Option<&str>) -> Result<Child> {
@@ -767,10 +751,7 @@ fn devices_value(data_dir: &std::path::Path) -> Result<serde_json::Value> {
 /// the key stays present and empty so the envelope is shape-stable.
 async fn status_folders_value(data_dir: &std::path::Path) -> Result<serde_json::Value> {
     if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        if let IpcResponse::FolderList(folders) = response {
-            return Ok(serde_json::to_value(folders)?);
-        }
+        return Ok(serde_json::to_value(client.list_folders().await?)?);
     }
     Ok(serde_json::json!([]))
 }
@@ -800,16 +781,17 @@ fn network_health_summary_json(data_dir: &std::path::Path) -> Result<serde_json:
 
 #[async_recursion]
 async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
-    send_daemon_command(ctx.data_dir, ctx.output_json, IpcRequest::new(IpcCommand::ReloadConfig)).await
+    let client = syncweb_core::daemon::daemon_client(ctx.data_dir)?
+        .ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
+    let message = client.reload_config().await?;
+    print_daemon_ok(&message, ctx.output_json)
 }
 
 async fn handle_daemon_sync(ctx: &CliContext<'_>, namespace: Option<String>) -> Result<()> {
-    send_daemon_command(
-        ctx.data_dir,
-        ctx.output_json,
-        IpcRequest::new(IpcCommand::TriggerSync { namespace }),
-    )
-    .await
+    let client = syncweb_core::daemon::daemon_client(ctx.data_dir)?
+        .ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
+    let message = client.trigger_sync(namespace).await?;
+    print_daemon_ok(&message, ctx.output_json)
 }
 
 #[async_recursion]
@@ -817,10 +799,7 @@ async fn resolve_namespace_via_daemon(client: &syncweb_core::daemon::IpcClient, 
     if let Ok(ns) = selector.parse::<iroh_docs::NamespaceId>() {
         return Ok(ns.to_string());
     }
-    let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-    let IpcResponse::FolderList(folders) = response else {
-        anyhow::bail!("unexpected response from daemon while resolving folder");
-    };
+    let folders = client.list_folders().await?;
     let path = std::path::Path::new(selector);
     let matched = if path.exists() {
         folders.iter().find(|f| f.path == path)
@@ -837,25 +816,13 @@ async fn resolve_namespace_via_daemon(client: &syncweb_core::daemon::IpcClient, 
     }
 }
 
-fn print_daemon_message(response: IpcResponse, output_json: bool) -> Result<()> {
-    match response {
-        IpcResponse::Ok { message } => {
-            if output_json {
-                println!("{}", serde_json::json!({"status": "ok", "message": message}));
-            } else {
-                println!("{message}");
-            }
-            Ok(())
-        }
-        IpcResponse::Error { message } => anyhow::bail!("{message}"),
-        IpcResponse::Status(_)
-        | IpcResponse::FolderList(_)
-        | IpcResponse::DownloadComplete { .. }
-        | IpcResponse::ImportFilesComplete { .. }
-        | IpcResponse::ImportComplete(_)
-        | IpcResponse::ExportComplete(_)
-        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+fn print_daemon_ok(message: &str, output_json: bool) -> Result<()> {
+    if output_json {
+        println!("{}", serde_json::json!({"status": "ok", "message": message}));
+    } else {
+        println!("{message}");
     }
+    Ok(())
 }
 
 /// Render a snapshot list from the daemon or an embedded node. The table keeps
@@ -910,30 +877,13 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
             ),
             None => None,
         };
-        let response = client
-            .send(IpcRequest::new(IpcCommand::ImportFiles {
-                namespace,
-                path: command.path.clone(),
-            }))
-            .await?;
-        match response {
-            IpcResponse::ImportFilesComplete { entries } => {
-                if output_json {
-                    println!("{}", serde_json::json!({"entries": entries}));
-                } else {
-                    println!("import requested: {entries}");
-                }
-                return Ok(());
-            }
-            IpcResponse::Ok { .. }
-            | IpcResponse::Status(_)
-            | IpcResponse::FolderList(_)
-            | IpcResponse::DownloadComplete { .. }
-            | IpcResponse::ImportComplete(_)
-            | IpcResponse::ExportComplete(_)
-            | IpcResponse::Error { .. }
-            | _ => return print_daemon_message(response, output_json),
+        let entries = client.import_files(namespace, command.path.clone()).await?;
+        if output_json {
+            println!("{}", serde_json::json!({"entries": entries}));
+        } else {
+            println!("import requested: {entries}");
         }
+        return Ok(());
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -1055,30 +1005,13 @@ async fn download_via_daemon_or_node(
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, network).await? {
         let resolved = resolve_selector_via_daemon(&client, &command.source).await?;
         let scoped = strategy_with_remainder(strategy, &resolved.remainder);
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Download {
-                namespace: resolved.namespace,
-                strategy: scoped,
-            }))
-            .await?;
-        match response {
-            IpcResponse::DownloadComplete { bytes_transferred } => {
-                if output_json {
-                    println!("{}", serde_json::json!({"bytes_transferred": bytes_transferred}));
-                } else {
-                    println!("downloaded: {bytes_transferred} bytes");
-                }
-                return Ok(());
-            }
-            IpcResponse::Ok { .. }
-            | IpcResponse::Status(_)
-            | IpcResponse::FolderList(_)
-            | IpcResponse::ImportFilesComplete { .. }
-            | IpcResponse::ImportComplete(_)
-            | IpcResponse::ExportComplete(_)
-            | IpcResponse::Error { .. }
-            | _ => return print_daemon_message(response, output_json),
+        let bytes_transferred = client.download(resolved.namespace, scoped).await?;
+        if output_json {
+            println!("{}", serde_json::json!({"bytes_transferred": bytes_transferred}));
+        } else {
+            println!("downloaded: {bytes_transferred} bytes");
         }
+        return Ok(());
     }
     download_with_node(data_dir, output_json, command, strategy).await
 }
@@ -1501,38 +1434,26 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
     match command {
         SnapshotCommand::Create(args) => {
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::SnapshotCreate {
-                        path: args.path.clone(),
-                        description: args.description.clone(),
-                        threads: args.threads,
-                    }))
+                let message = client
+                    .snapshot_create(args.path.clone(), args.description.clone(), args.threads)
                     .await?;
-                return print_daemon_message(response, output_json);
+                return print_daemon_ok(&message, output_json);
             }
             handle_snapshot_create(ctx, args).await
         }
         SnapshotCommand::Restore(args) => {
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::SnapshotRestore {
-                        path: args.path.clone(),
-                        snapshot: args.snapshot.clone(),
-                    }))
+                client
+                    .snapshot_restore(args.path.clone(), args.snapshot.clone())
                     .await?;
-                return print_daemon_message(response, output_json);
+                return print_daemon_ok("snapshot restored", output_json);
             }
             handle_snapshot_restore(ctx, args).await
         }
         SnapshotCommand::List { path } => {
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::SnapshotList { path: path.clone() }))
-                    .await?;
-                if let IpcResponse::SnapshotList(snapshots) = response {
-                    return render_snapshot_rows(&snapshots, output_json);
-                }
-                return print_daemon_message(response, output_json);
+                let snapshots = client.snapshot_list(path.clone()).await?;
+                return render_snapshot_rows(&snapshots, output_json);
             }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::from_node(&node);
@@ -1555,18 +1476,11 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
         }
         SnapshotCommand::Diff { path: _, first, second } => {
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::SnapshotDiff {
-                        path: PathBuf::new(),
-                        first: first.clone(),
-                        second: second.clone(),
-                    }))
+                let diff = client
+                    .snapshot_diff(PathBuf::new(), first.clone(), second.clone())
                     .await?;
-                if let IpcResponse::SnapshotDiff(diff) = response {
-                    render_snapshot_diff(&diff, output_json);
-                    return Ok(());
-                }
-                return print_daemon_message(response, output_json);
+                render_snapshot_diff(&diff, output_json);
+                return Ok(());
             }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::from_node(&node);
@@ -1597,10 +1511,8 @@ async fn handle_snapshot(ctx: &CliContext<'_>, command: SnapshotCommand) -> Resu
                 return Ok(());
             }
             if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::SnapshotDelete { id: snapshot.clone() }))
-                    .await?;
-                return print_daemon_message(response, output_json);
+                client.snapshot_delete(snapshot.clone()).await?;
+                return print_daemon_ok("snapshot deleted", output_json);
             }
             let node = open_node(data_dir).await?;
             let snapshots = SnapshotStore::from_node(&node);
@@ -1929,16 +1841,8 @@ async fn materialize_transfer_jobs(
     namespace_id: &str,
 ) -> Result<syncweb_core::daemon::TransferJobSummary> {
     if let Some(client) = daemon_client_or_start(ctx.data_dir, ctx.no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::MaterializeTransfers {
-                namespace: Some(namespace_id.to_owned()),
-            }))
-            .await?;
-        if let IpcResponse::TransferJobsProcessed { completed, failed } = response {
-            return Ok(syncweb_core::daemon::TransferJobSummary::new(completed, failed));
-        }
-        print_daemon_message(response, ctx.output_json)?;
-        anyhow::bail!("daemon returned an unexpected response while materializing transfers");
+        let (completed, failed) = client.materialize_transfers(Some(namespace_id.to_owned())).await?;
+        return Ok(syncweb_core::daemon::TransferJobSummary::new(completed, failed));
     }
     let node = open_node(ctx.data_dir).await?;
     let db = open_node_db(ctx.data_dir)?;
@@ -2060,19 +1964,11 @@ async fn handle_transfer_materialize(ctx: &CliContext<'_>, args: TransferMateria
     let Some(client) = daemon_client_or_start(ctx.data_dir, ctx.no_daemon, ctx.network).await? else {
         anyhow::bail!("transfer materialization requires a running daemon");
     };
-    let response = client
-        .send(IpcRequest::new(IpcCommand::MaterializeTransfers {
-            namespace: args.namespace,
-        }))
-        .await?;
-    if let IpcResponse::TransferJobsProcessed { completed, failed } = response {
-        if ctx.output_json {
-            println!("{}", serde_json::json!({"completed": completed, "failed": failed}));
-        } else {
-            println!("materialized {completed} transfer jobs ({failed} failed)");
-        }
+    let (completed, failed) = client.materialize_transfers(args.namespace).await?;
+    if ctx.output_json {
+        println!("{}", serde_json::json!({"completed": completed, "failed": failed}));
     } else {
-        print_daemon_message(response, ctx.output_json)?;
+        println!("materialized {completed} transfer jobs ({failed} failed)");
     }
     Ok(())
 }
@@ -2139,17 +2035,17 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
         } else {
             (command.filter.path_prefix.clone(), command.filter.path_glob.clone())
         };
-        let response = client
-            .send(IpcRequest::new(IpcCommand::VerifyIntegrity {
-                path: command.path.clone(),
+        let message = client
+            .verify_integrity(
+                command.path.clone(),
                 hash,
                 path_filter,
                 glob_filter,
-                fix: command.fix,
-                from: command.providers.from.clone(),
-            }))
+                command.fix,
+                command.providers.from.clone(),
+            )
             .await?;
-        return print_daemon_message(response, output_json);
+        return print_daemon_ok(&message, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -2560,14 +2456,7 @@ async fn handle_stats_files(ctx: &CliContext<'_>, command: StatsFilesArgs) -> Re
     let no_daemon = ctx.no_daemon;
 
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::StatsFiles {
-                folder: command.path.clone(),
-            }))
-            .await?;
-        let IpcResponse::FileStats(report) = response else {
-            return print_daemon_message(response, output_json);
-        };
+        let report = client.stats_files(command.path.clone()).await?;
         print_file_stats_report(&report, &command.by, command.top_largest, output_json)?;
         return Ok(());
     }
@@ -2598,14 +2487,7 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
     // daemon's folder manager cannot resolve a path when several folders exist.
     let (mode, resolved) = resolve_entry_source(ctx, &command.folder).await?;
     if let ListingMode::Daemon { client } = &mode {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::PeerAvailability {
-                folder: resolved.namespace,
-            }))
-            .await?;
-        let IpcResponse::PeerAvailability(report) = response else {
-            return print_daemon_message(response, output_json);
-        };
+        let report = client.peer_availability(resolved.namespace.clone()).await?;
         let mut candidates = Vec::with_capacity(report.per_blob.len());
         for blob in report.per_blob {
             let Ok(hash) = blob.hash.parse::<iroh_blobs::Hash>() else {
@@ -2833,10 +2715,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
         let namespace = if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
             namespace.to_string()
         } else {
-            let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-            let IpcResponse::FolderList(folders) = response else {
-                return print_daemon_message(response, output_json);
-            };
+            let folders = client.list_folders().await?;
             match folders.as_slice() {
                 [folder] => folder.namespace.clone(),
                 [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
@@ -2846,13 +2725,8 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
             }
         };
 
-        let response = client
-            .send(IpcRequest::new(IpcCommand::AddFolder {
-                namespace,
-                path: command.path.clone(),
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
+        let message = client.add_folder(namespace, command.path.clone()).await?;
+        return print_daemon_ok(&message, output_json);
     }
     let root_is_namespace = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>().is_ok();
     let root = if root_is_namespace {
@@ -3004,54 +2878,25 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
     let do_import = command.import && !command.no_import;
     let namespace = if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::CreateFolder {
-                path: command.path.clone(),
-                mode: command.mode.clone(),
-                indexing: !command.no_indexing,
-            }))
+        let message = client
+            .create_folder(command.path.clone(), command.mode.clone(), !command.no_indexing)
             .await?;
-        let created_namespace = if let IpcResponse::Ok { message } = &response {
-            message
-                .lines()
-                .find_map(|l| l.strip_prefix("namespace: "))
-                .map(str::to_owned)
-        } else {
-            None
-        };
+        let created_namespace = message
+            .lines()
+            .find_map(|line| line.strip_prefix("namespace: "))
+            .map(str::to_owned);
         if do_import && dir_has_entries(&command.path)? {
             if let Some(namespace) = created_namespace.clone() {
-                let import = client
-                    .send(IpcRequest::new(IpcCommand::ImportFiles {
-                        namespace: Some(namespace),
-                        path: command.path.clone(),
-                    }))
-                    .await?;
-                if !matches!(import, IpcResponse::ImportFilesComplete { .. }) {
-                    return print_daemon_message(import, output_json);
-                }
+                client.import_files(Some(namespace), command.path.clone()).await?;
             } else {
-                return print_daemon_message(response, output_json);
+                anyhow::bail!("daemon create did not report a namespace");
             }
         }
         let namespace = created_namespace.ok_or_else(|| anyhow::anyhow!("daemon create did not report a namespace"))?;
         let node_db = open_node_db(data_dir)?;
         node_db.upsert_folder_mount(&namespace, &command.path)?;
         if do_share {
-            let share = client
-                .send(IpcRequest::new(IpcCommand::Share {
-                    namespace: namespace.clone(),
-                    blob: None,
-                    writable: write,
-                    pin: true,
-                    persist: true,
-                }))
-                .await?;
-            let url = if let IpcResponse::Ok { message } = &share {
-                message.clone()
-            } else {
-                return print_daemon_message(share, output_json);
-            };
+            let url = client.share(namespace.clone(), None, write, true, true).await?;
             if output_json {
                 let ticket = url.split_once("?ticket=").map_or("", |(_, t)| t);
                 println!(
@@ -3187,19 +3032,19 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     std::fs::create_dir_all(&effective_path)
         .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Join {
-                ticket: command.ticket.clone(),
-                path: effective_path.clone(),
-                mode: SyncMode::from_str(&command.mode)?,
+        let message = client
+            .join(
+                command.ticket.clone(),
+                effective_path.clone(),
+                SyncMode::from_str(&command.mode)?,
                 subscribe,
-                filters: filters.clone(),
-                download: download_existing,
-                indexing: !command.no_indexing,
-                metadata_only: command.metadata_only,
-            }))
+                filters.clone(),
+                download_existing,
+                !command.no_indexing,
+                command.metadata_only,
+            )
             .await?;
-        return print_daemon_message(response, output_json);
+        return print_daemon_ok(&message, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -3340,25 +3185,18 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     let no_daemon = ctx.no_daemon;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, selector).await?;
-        let response = client
-            .send(IpcRequest::new(IpcCommand::SetSubscribe {
-                namespace: namespace.clone(),
-                enabled: true,
-                filters: Some(filters.clone()),
-            }))
+        let message = client
+            .set_subscribe(namespace.clone(), true, Some(filters.clone()))
             .await?;
-        if let IpcResponse::Ok { message } = response {
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"status": "subscribed", "namespace": namespace})
-                );
-            } else {
-                println!("{message}");
-            }
-            return Ok(());
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({"status": "subscribed", "namespace": namespace})
+            );
+        } else {
+            println!("{message}");
         }
-        return print_daemon_message(response, output_json);
+        return Ok(());
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -3398,23 +3236,14 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
     let selector = args.path.to_string_lossy();
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Share {
-                namespace,
-                blob: args.blob.clone(),
-                writable: args.write,
-                pin: !args.no_pin,
-                persist: !args.no_persist,
-            }))
+        let message = client
+            .share(namespace, args.blob.clone(), args.write, !args.no_pin, !args.no_persist)
             .await?;
-        if args.write
-            && !output_json
-            && let IpcResponse::Ok { message } = response
-        {
+        if args.write && !output_json {
             println!("{}", share_label(true, &message));
             return Ok(());
         }
-        return print_daemon_message(response, output_json);
+        return print_daemon_ok(&message, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -3466,8 +3295,8 @@ async fn handle_share_list(ctx: &CliContext<'_>, filter: Option<&std::path::Path
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client.send(IpcRequest::new(IpcCommand::ShareList)).await?;
-        return print_daemon_message(response, output_json);
+        let message = client.share_list().await?;
+        return print_daemon_ok(&message, output_json);
     }
     let mut shares = open_node_db(data_dir)?.list_shares()?;
     if let Some(selector) = filter
@@ -3526,14 +3355,8 @@ async fn handle_unshare(
     }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &selector_str).await?;
-        let response = client
-            .send(IpcRequest::new(IpcCommand::Unshare {
-                namespace,
-                blob: blob.clone(),
-                writable: write,
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
+        let message = client.unshare(namespace, blob.clone(), write).await?;
+        return print_daemon_ok(&message, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -3586,16 +3409,10 @@ async fn surface_access_peers(client: Option<&IpcClient>, rows: &mut BTreeMap<St
     let namespaces: Vec<String> = rows.keys().cloned().collect();
     let mut surfaced = false;
     for namespace in namespaces {
-        let response = daemon
-            .send(IpcRequest::new(IpcCommand::PeerAvailability {
-                folder: namespace.clone(),
-            }))
-            .await?;
-        if let IpcResponse::PeerAvailability(report) = response {
-            surfaced = true;
-            if let Some(row) = rows.get_mut(&namespace) {
-                row.devices = report.peers.iter().map(|peer| peer.device_id.clone()).collect();
-            }
+        let report = daemon.peer_availability(namespace.clone()).await?;
+        surfaced = true;
+        if let Some(row) = rows.get_mut(&namespace) {
+            row.devices = report.peers.iter().map(|peer| peer.device_id.clone()).collect();
         }
     }
     Ok(surfaced)
@@ -3620,10 +3437,7 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
         if let Some(path) = args.path.as_ref().filter(|path| path.as_os_str() != ".") {
             filter = Some(resolve_namespace_via_daemon(&client, &path.to_string_lossy()).await?);
         }
-        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        let IpcResponse::FolderList(list) = response else {
-            return print_daemon_message(response, output_json);
-        };
+        let list = client.list_folders().await?;
         for folder in list.into_iter().filter(|folder| folder.kind == "folder") {
             folders.push(AccessFolder {
                 namespace: folder.namespace,
@@ -3839,16 +3653,10 @@ async fn handle_collection_publish(
         .load_workspace_manifest(&source)?
         .ok_or_else(|| anyhow::anyhow!("no workspace manifest found at root {source}; run `package add` first"))?;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client
-            .send(IpcRequest::new(IpcCommand::CollectionPublish {
-                path: root,
-                namespace,
-                sequence,
-                bootstrap: Vec::new(),
-                manifest_bytes: Some(manifest_bytes.clone()),
-            }))
+        let message = client
+            .collection_publish(root, namespace, sequence, Vec::new(), Some(manifest_bytes.clone()))
             .await?;
-        return print_daemon_message(response, output_json);
+        return print_daemon_ok(&message, output_json);
     }
     let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
     let node = open_node(data_dir).await?;
@@ -3919,19 +3727,15 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
         }
         PackageCommand::Info { ticket, hash, node_id } => {
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::PackageInfo { ticket, hash, node_id }))
-                    .await?;
-                return print_package_info_response(response, output_json);
+                let info = client.package_info(ticket, hash, node_id).await?;
+                return print_package_info_response(info, output_json);
             }
             handle_package_info(ctx, ticket, hash, node_id).await?;
         }
         PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::PackageInstall { ticket }))
-                    .await?;
-                return print_package_install_response(response, output_json);
+                let result = client.package_install(ticket).await?;
+                return print_package_install_response(result, output_json);
             }
             handle_package_install(ctx, &packages, ticket, path).await?;
         }
@@ -3955,82 +3759,41 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
 }
 
 /// Render a daemon-provided `package info` response.
-fn print_package_info_response(response: IpcResponse, output_json: bool) -> Result<()> {
-    match response {
-        IpcResponse::PackageInfo(info) => {
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&info)?);
-            } else {
-                let mut table = Table::new();
-                table.add_row(["Collection", &info.collection_id]);
-                if let Some(name) = &info.name {
-                    table.add_row(["Name", name]);
-                }
-                table.add_row(["Version", &info.version]);
-                if let Some(parent) = &info.parent {
-                    table.add_row(["Parent", parent]);
-                }
-                table.add_row(["Entries", &info.entries.to_string()]);
-                println!("{table}");
-            }
-            Ok(())
+fn print_package_info_response(info: syncweb_core::daemon::PackageInfoResult, output_json: bool) -> Result<()> {
+    if output_json {
+        println!("{}", serde_json::to_string_pretty(&info)?);
+    } else {
+        let mut table = Table::new();
+        table.add_row(["Collection", &info.collection_id]);
+        if let Some(name) = &info.name {
+            table.add_row(["Name", name]);
         }
-        IpcResponse::Error { message } => anyhow::bail!("{message}"),
-        IpcResponse::Ok { .. }
-        | IpcResponse::Status(_)
-        | IpcResponse::FolderList(_)
-        | IpcResponse::DownloadComplete { .. }
-        | IpcResponse::TransferJobsProcessed { .. }
-        | IpcResponse::ImportFilesComplete { .. }
-        | IpcResponse::ImportComplete(_)
-        | IpcResponse::ExportComplete(_)
-        | IpcResponse::EnrichData(_)
-        | IpcResponse::FileStats(_)
-        | IpcResponse::Entries(_)
-        | IpcResponse::PeerAvailability(_)
-        | IpcResponse::SnapshotList(_)
-        | IpcResponse::SnapshotDiff(_)
-        | IpcResponse::PackageInstall { .. }
-        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+        table.add_row(["Version", &info.version]);
+        if let Some(parent) = &info.parent {
+            table.add_row(["Parent", parent]);
+        }
+        table.add_row(["Entries", &info.entries.to_string()]);
+        println!("{table}");
     }
+    Ok(())
 }
 
 /// Render a daemon-provided `package install` response.
-fn print_package_install_response(response: IpcResponse, output_json: bool) -> Result<()> {
-    match response {
-        IpcResponse::PackageInstall { collection_id, version } => {
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "status": "installed",
-                        "collection": collection_id,
-                        "version": version,
-                    })
-                );
-            } else {
-                println!("installed: {collection_id} {version}");
-            }
-            Ok(())
-        }
-        IpcResponse::Error { message } => anyhow::bail!("{message}"),
-        IpcResponse::Ok { .. }
-        | IpcResponse::Status(_)
-        | IpcResponse::FolderList(_)
-        | IpcResponse::DownloadComplete { .. }
-        | IpcResponse::TransferJobsProcessed { .. }
-        | IpcResponse::ImportFilesComplete { .. }
-        | IpcResponse::ImportComplete(_)
-        | IpcResponse::ExportComplete(_)
-        | IpcResponse::EnrichData(_)
-        | IpcResponse::FileStats(_)
-        | IpcResponse::Entries(_)
-        | IpcResponse::PeerAvailability(_)
-        | IpcResponse::SnapshotList(_)
-        | IpcResponse::SnapshotDiff(_)
-        | IpcResponse::PackageInfo(_)
-        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+fn print_package_install_response(result: (String, String), output_json: bool) -> Result<()> {
+    let (collection_id, version) = result;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "installed",
+                "collection": collection_id,
+                "version": version,
+            })
+        );
+    } else {
+        println!("installed: {collection_id} {version}");
     }
+    Ok(())
 }
 
 async fn handle_package_info(
@@ -4229,16 +3992,13 @@ async fn handle_package_archive_import(
             syncweb_core::constants::DROP_SOURCE_STAGING_PREFIX,
             uuid::Uuid::new_v4()
         ));
-        let response = client
-            .send(IpcRequest::new(IpcCommand::ImportArchive {
-                input: archive.clone(),
-                target: staging.clone(),
-                filter: filter.as_ref().map(FilterEngine::config),
-            }))
+        let result = client
+            .import_archive(
+                archive.clone(),
+                staging.clone(),
+                filter.as_ref().map(FilterEngine::config),
+            )
             .await?;
-        let IpcResponse::ImportComplete(result) = response else {
-            return print_daemon_message(response, output_json);
-        };
         if packages
             .state()?
             .current(result.collection_id)
@@ -5025,35 +4785,13 @@ fn scan_collection_entries(
     Ok((root, deduped))
 }
 
-fn print_network_create_response(response: IpcResponse, output_json: bool) -> Result<()> {
-    match response {
-        IpcResponse::NetworkCreated { name, id } => {
-            if output_json {
-                println!("{}", serde_json::json!({"status": "created", "name": name, "id": id}));
-            } else {
-                println!("created: {name}\t{id}");
-            }
-            Ok(())
-        }
-        IpcResponse::Error { message } => anyhow::bail!("{message}"),
-        IpcResponse::Ok { .. }
-        | IpcResponse::Status(_)
-        | IpcResponse::FolderList(_)
-        | IpcResponse::DownloadComplete { .. }
-        | IpcResponse::TransferJobsProcessed { .. }
-        | IpcResponse::ImportFilesComplete { .. }
-        | IpcResponse::ImportComplete(_)
-        | IpcResponse::ExportComplete(_)
-        | IpcResponse::EnrichData(_)
-        | IpcResponse::FileStats(_)
-        | IpcResponse::Entries(_)
-        | IpcResponse::PeerAvailability(_)
-        | IpcResponse::SnapshotList(_)
-        | IpcResponse::SnapshotDiff(_)
-        | IpcResponse::PackageInfo(_)
-        | IpcResponse::PackageInstall { .. }
-        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+fn print_network_created(name: &str, id: &str, output_json: bool) -> Result<()> {
+    if output_json {
+        println!("{}", serde_json::json!({"status": "created", "name": name, "id": id}));
+    } else {
+        println!("created: {name}\t{id}");
     }
+    Ok(())
 }
 
 #[async_recursion]
@@ -5068,15 +4806,8 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             invite_only,
         } => {
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::NetworkCreate {
-                        name: name.clone(),
-                        label,
-                        invite_only,
-                        doc_ticket: None,
-                    }))
-                    .await?;
-                return print_network_create_response(response, output_json);
+                let (created_name, id) = client.network_create(name.clone(), label, invite_only, None).await?;
+                return print_network_created(&created_name, &id, output_json);
             }
             let mut options = NetworkOptions::default();
             options.label = label;
@@ -5124,13 +4855,8 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             if let Some(node_id) = device.clone()
                 && let Some(client) = syncweb_core::daemon::daemon_client(data_dir)?
             {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::NetworkInvite {
-                        network_id: id.to_string(),
-                        device: node_id,
-                    }))
-                    .await?;
-                return print_daemon_message(response, output_json);
+                let message = client.network_invite(id.to_string(), node_id).await?;
+                return print_daemon_ok(&message, output_json);
             }
             let ticket = if let Some(node_id) = device {
                 manager.invite(id, node_id.parse()?)?
@@ -5156,13 +4882,8 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
             let id = network_id_by_name(&manager, &name)?;
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let response = client
-                    .send(IpcRequest::new(IpcCommand::NetworkKick {
-                        network_id: id.to_string(),
-                        device: device.clone(),
-                    }))
-                    .await?;
-                return print_daemon_message(response, output_json);
+                let message = client.network_kick(id.to_string(), device.clone()).await?;
+                return print_daemon_ok(&message, output_json);
             }
             manager.kick(id, &device.parse()?)?;
             if let Some(network) = manager.get(&id).cloned()
@@ -5386,34 +5107,13 @@ async fn handle_network_peers(ctx: &CliContext<'_>, folder: Option<&str>) -> Res
         // Resolve the folder selector to a namespace first: the daemon's folder
         // manager cannot resolve a path when several folders are managed.
         let resolved = resolve_selector_via_daemon(&client, Path::new(selector)).await?;
-        let response = client
-            .send(IpcRequest::new(IpcCommand::PeerAvailability {
-                folder: resolved.namespace,
-            }))
-            .await?;
-        match response {
-            IpcResponse::PeerAvailability(report) => {
-                if output_json {
-                    println!("{}", serde_json::to_string_pretty(&report)?);
-                } else {
-                    render_peer_availability(&report);
-                }
-                return Ok(());
-            }
-            IpcResponse::Error { message } => anyhow::bail!("{message}"),
-            IpcResponse::Ok { .. }
-            | IpcResponse::Status(_)
-            | IpcResponse::FolderList(_)
-            | IpcResponse::DownloadComplete { .. }
-            | IpcResponse::TransferJobsProcessed { .. }
-            | IpcResponse::ImportFilesComplete { .. }
-            | IpcResponse::ImportComplete(_)
-            | IpcResponse::ExportComplete(_)
-            | IpcResponse::EnrichData(_)
-            | IpcResponse::FileStats(_)
-            | IpcResponse::Entries(_)
-            | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+        let report = client.peer_availability(resolved.namespace).await?;
+        if output_json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            render_peer_availability(&report);
         }
+        return Ok(());
     }
     // No daemon: honest empty state, no guessed peers.
     if output_json {
@@ -5500,13 +5200,8 @@ async fn handle_leave(ctx: &CliContext<'_>, command: crate::cli::commands::Leave
     }
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, &command.folder).await?;
-        let response = client
-            .send(IpcRequest::new(IpcCommand::LeaveFolder {
-                namespace,
-                delete_files: command.delete_files,
-            }))
-            .await?;
-        return print_daemon_message(response, output_json);
+        let message = client.leave_folder(namespace, command.delete_files).await?;
+        return print_daemon_ok(&message, output_json);
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -5551,44 +5246,32 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        match response {
-            IpcResponse::FolderList(folders) => {
-                if output_json {
-                    println!("{}", serde_json::to_string_pretty(&folders)?);
+        let folders = client.list_folders().await?;
+        if output_json {
+            println!("{}", serde_json::to_string_pretty(&folders)?);
+        } else {
+            let mut table = Table::new();
+            table.set_header(["Namespace", "Mode", "Path", "Active", "Last Sync", "Entries", "Errors"]);
+            for folder in &folders {
+                let active_label = if folder.session_active { "yes" } else { "no" };
+                let mode_label = if folder.mode.is_empty() {
+                    "-".to_owned()
                 } else {
-                    let mut table = Table::new();
-                    table.set_header(["Namespace", "Mode", "Path", "Active", "Last Sync", "Entries", "Errors"]);
-                    for folder in &folders {
-                        let active_label = if folder.session_active { "yes" } else { "no" };
-                        let mode_label = if folder.mode.is_empty() {
-                            "-".to_owned()
-                        } else {
-                            folder.mode.clone()
-                        };
-                        table.add_row([
-                            &folder.namespace,
-                            &mode_label,
-                            &folder.path.display().to_string(),
-                            &active_label.to_string(),
-                            &folder.last_sync_at.map_or_else(|| "-".to_owned(), |v| v.to_string()),
-                            &folder.entries_synced.to_string(),
-                            &folder.errors.len().to_string(),
-                        ]);
-                    }
-                    println!("{table}");
-                }
-                return Ok(());
+                    folder.mode.clone()
+                };
+                table.add_row([
+                    &folder.namespace,
+                    &mode_label,
+                    &folder.path.display().to_string(),
+                    &active_label.to_string(),
+                    &folder.last_sync_at.map_or_else(|| "-".to_owned(), |v| v.to_string()),
+                    &folder.entries_synced.to_string(),
+                    &folder.errors.len().to_string(),
+                ]);
             }
-            IpcResponse::Ok { .. }
-            | IpcResponse::Status(_)
-            | IpcResponse::DownloadComplete { .. }
-            | IpcResponse::ImportFilesComplete { .. }
-            | IpcResponse::ImportComplete(_)
-            | IpcResponse::ExportComplete(_)
-            | IpcResponse::Error { .. }
-            | _ => return print_daemon_message(response, output_json),
+            println!("{table}");
         }
+        return Ok(());
     }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
@@ -5635,20 +5318,16 @@ async fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
     // empty (not guessed) when it can't.
     let mut peers: Vec<String> = Vec::new();
     if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-        let folders_response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        if let IpcResponse::FolderList(folders) = folders_response {
-            for folder in folders.into_iter().filter(|folder| folder.kind == "folder") {
-                let peer_response = client
-                    .send(IpcRequest::new(IpcCommand::PeerAvailability {
-                        folder: folder.namespace.clone(),
-                    }))
-                    .await?;
-                if let IpcResponse::PeerAvailability(report) = peer_response {
-                    for peer in report.peers {
-                        if !peers.contains(&peer.device_id) {
-                            peers.push(peer.device_id);
-                        }
-                    }
+        for folder in client
+            .list_folders()
+            .await?
+            .into_iter()
+            .filter(|folder| folder.kind == "folder")
+        {
+            let report = client.peer_availability(folder.namespace).await?;
+            for peer in report.peers {
+                if !peers.contains(&peer.device_id) {
+                    peers.push(peer.device_id);
                 }
             }
         }
@@ -5788,15 +5467,7 @@ fn entry_row_to_local(row: EntryRow) -> LocalEntry {
 async fn fetch_listing_rows(mode: ListingMode, resolved: &ResolvedFolder, enrich: bool) -> Result<Vec<LocalEntry>> {
     match mode {
         ListingMode::Daemon { client } => {
-            let response = client
-                .send(IpcRequest::new(IpcCommand::ListEntries {
-                    folder: resolved.namespace.clone(),
-                    enrich,
-                }))
-                .await?;
-            let IpcResponse::Entries(rows) = response else {
-                anyhow::bail!("daemon returned an unexpected response while listing entries");
-            };
+            let rows = client.list_entries(resolved.namespace.clone(), enrich).await?;
             Ok(rows.into_iter().map(entry_row_to_local).collect())
         }
         ListingMode::Embedded(listing) => {
@@ -5814,20 +5485,14 @@ async fn attach_peer_counts(client: Option<&IpcClient>, namespace: &str, rows: &
     let Some(daemon) = client else {
         return Ok(());
     };
-    let response = daemon
-        .send(IpcRequest::new(IpcCommand::PeerAvailability {
-            folder: namespace.to_string(),
-        }))
-        .await?;
-    if let IpcResponse::PeerAvailability(report) = response {
-        let counts: std::collections::HashMap<String, usize> = report
-            .per_blob
-            .into_iter()
-            .map(|blob| (blob.path, blob.peer_count))
-            .collect();
-        for row in rows.iter_mut() {
-            row.peers = counts.get(&row.path).copied();
-        }
+    let report = daemon.peer_availability(namespace.to_string()).await?;
+    let counts: std::collections::HashMap<String, usize> = report
+        .per_blob
+        .into_iter()
+        .map(|blob| (blob.path, blob.peer_count))
+        .collect();
+    for row in rows.iter_mut() {
+        row.peers = counts.get(&row.path).copied();
     }
     Ok(())
 }
@@ -5923,10 +5588,7 @@ async fn resolve_selector_embedded(
 }
 
 async fn resolve_selector_via_daemon(client: &IpcClient, selector: &Path) -> Result<ResolvedFolder> {
-    let response = client.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-    let IpcResponse::FolderList(folders) = response else {
-        anyhow::bail!("unexpected response from daemon while resolving folder");
-    };
+    let folders = client.list_folders().await?;
     let selector_str = selector.to_string_lossy();
     if let Ok(_namespace_id) = selector_str.parse::<iroh_docs::NamespaceId>() {
         let mount_root = folders
@@ -6513,17 +6175,11 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
     // Enrich with daemon data if --enrich is set
     if command.enrich {
         if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-            let response = tokio::runtime::Runtime::new()
+            let peer_map = tokio::runtime::Runtime::new()
                 .map_err(|e| anyhow::anyhow!("failed to create runtime for enrich sort: {e}"))?
-                .block_on(async {
-                    client
-                        .send(IpcRequest::new(IpcCommand::EnrichSort {
-                            path: command.path.clone(),
-                        }))
-                        .await
-                })?;
-            match response {
-                IpcResponse::EnrichData(peer_map) => {
+                .block_on(client.enrich_sort(command.path.clone()));
+            match peer_map {
+                Ok(peer_map) => {
                     let needs_niche = by.eq_ignore_ascii_case("niche");
                     let needs_frecency = by.eq_ignore_ascii_case("frecency");
                     let needs_peers = by.eq_ignore_ascii_case("peers");
@@ -6534,18 +6190,8 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
                         sorter.enrich_niche(&mut sortable);
                     }
                 }
-                IpcResponse::Error { message } => {
-                    eprintln!("warning: daemon enrichment failed: {message}");
-                }
-                IpcResponse::Ok { .. }
-                | IpcResponse::Status(_)
-                | IpcResponse::FolderList(_)
-                | IpcResponse::DownloadComplete { .. }
-                | IpcResponse::ImportFilesComplete { .. }
-                | IpcResponse::ImportComplete(_)
-                | IpcResponse::ExportComplete(_)
-                | _ => {
-                    eprintln!("warning: daemon returned unexpected response; enrichment skipped");
+                Err(error) => {
+                    eprintln!("warning: daemon enrichment failed: {error}");
                 }
             }
         } else {

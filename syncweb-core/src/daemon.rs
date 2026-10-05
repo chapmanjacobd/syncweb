@@ -10,9 +10,11 @@ mod transfers;
 
 pub use transfers::{TransferJobSummary, process_transfer_jobs};
 
+#[cfg(unix)]
+pub use ipc::UnixSocketTransport;
 pub use ipc::{
     BlobPeerAvailability, DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand,
-    IpcListener, IpcRequest, IpcResponse, IpcServer, PackageInfoResult, PeerAvailabilityReport, PeerInfo,
+    IpcListener, IpcRequest, IpcResponse, IpcServer, IpcTransport, PackageInfoResult, PeerAvailabilityReport, PeerInfo,
     SnapshotDiffReport, SnapshotInfo,
 };
 pub use pool::ManagedPool;

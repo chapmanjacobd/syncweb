@@ -2109,3 +2109,194 @@ New failures (all under the stop limit of ten):
 5. Sections 6/24 — no per-blob corruption test because blob content lives in `blobs.db`, so "corrupt a blob file" is not cleanly reproducible in this store layout.
 
 Environmental notes (not code failures): relay/DNS unreachable in the VMs (`network test-relay`); the stale-`status`-after-SIGKILL is cosmetic and self-corrects on restart.
+
+---
+
+## Manual Test Run: 2026-10-05 (daemon-routing fixes; partial run)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`), via `iiab-vm` + `nsenter`.
+- Build: source rebuild including the fixes below. Binary SHA-256: `7b174ed6ba7d192030bcdb5706d97f386e9a8b05d266895a669b5780a617e717`.
+- Test data: fresh `/root/manual6/default` profiles; Alice folders `/root/shared-docs`, `/root/twoway`, `/root/sendonly`; Bob folders `/root/bob-shared`, `/root/bob-twoway`, `/root/bob-sendonly`. Daemons run as detached `start --bg` processes on both nodes.
+- Scope: the run covered Sections 1--13 and part of 14/15. It was stopped early (context limit) with Sections 16--25 not run.
+
+### Root cause found this run
+
+`open_node(data_dir)` opens an embedded node on the live data directory. While a daemon owns that directory, the daemon holds the redb blob/docs store locks, so the embedded node **blocks forever** instead of starting. This affected several commands that were not routing through the daemon. The fix is to prefer the daemon over IPC whenever one is running, and only open an embedded node when none is running (`--no-daemon` / no daemon).
+
+### Repaired existing failures
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `package info` / `package install` (was: hang / `Unable to download`) | New `PackageInfo`/`PackageInstall` IPC commands run the fetch inside the daemon, reusing its live store (no scratch dir, no re-download, no store-lock hang). `package info <ticket>` returned the manifest table; `package install <ticket>` → `installed: 6b74443f-... 1.0.1`, then `1.0.2` via `package upgrade <ticket>`. |
+| PASS | `package import` (was: hang, Section 9.3 Step 2) | Now routed through the existing (previously unused) `ImportArchive` IPC: daemon imports into its store, materializes to a staging dir, publishes to a fresh folder, and the CLI installs from staging. `package import /tmp/import-test.car.zst` → `imported: 6158c1b9-... 1.0.0 (7 entries)` with the daemon running. |
+| PASS | `indexing enable` / `indexing publish` (was: hang) | New `IndexingEnable`/`IndexingPublish` IPC commands run against the daemon's node + indexing service. `indexing enable /root/shared-docs` → `enabled: 31f9e579...`; `indexing publish /root/shared-docs --catalog mycat` → `published: 10`. |
+| PASS | `search --kind package` / `--kind catalog` (was: hang) | Search no longer opens a node for package/catalog queries; only channel search (which actually needs the docs engine) opens one. `search --kind package "pkg"` → `no results found for query: pkg`. |
+| PASS | `package publish` without `--namespace` (was: hang) | Resolves the target namespace through the daemon when one is running. |
+| PASS | `network create` / `network invite` / `network kick` (was: hang) | Routed through the `NetworkCreate`/`NetworkInvite`/`NetworkKick` IPC commands. The daemon now provisions/refreshes the membership doc with its own node (`membership::provision_with_node` / `refresh_with_node`). `network create home` → `created: home <id>`; `network invite home <id>` → ticket; `network kick home <id> --yes` → `member kicked`. |
+| PASS | WebSocket bridge (Section 19, was: not implemented) | Implemented a daemon-owned bridge on `127.0.0.1:9192` (`syncweb-core/src/media/bridge.rs`) that proxies newline-free JSON `IpcRequest` messages to `IpcServer::handle_request` and streams JSON `IpcResponse` back. Verified: handshake `101 Switching Protocols`; `{"command":{"command":"status"}}` → `{"response":"status","data":"running"}`; invalid JSON → `{"response":"error","data":{"message":"invalid JSON: ..."}}`. |
+
+### `IrohNode::new` audit
+
+| Status | Site | Disposition |
+|---|---|---|
+| PASS | `daemon/daemon.rs` daemon node | The owning node; unchanged. |
+| PASS | `init::open_node` (embedded helper) | All reachable-with-daemon call sites now route via IPC first (package info/install/import, indexing enable/publish, package publish namespace resolution, network create/invite/kick, search). Remaining uses are guarded fallbacks reached only when no daemon runs, or `--no-daemon`. |
+| PASS | `open_node_offline` | Scratch data dir + relay-disabled; used by archive export and the standalone media server; cannot conflict with the live store. |
+| PASS | `syncweb-core/src/media/bridge.rs` | New bridge listener; no second store node. |
+| FAIL | `handle_watch` (`--once`, and `watch --no-daemon`) | Still calls `open_node(data_dir)` directly (main.rs:2866), so `watch --once` hangs while a daemon runs. Not fixed this run; needs a one-shot scan/import IPC or a scratch node. |
+
+### Section 1 — Initialization & Configuration
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `folders create` (default / `--mode sendonly` / `--network home` / `--mode receiveencrypted`) | Four folders created, each printing a `syncweb://folder/...` URL; `folders` lists all four with modes. |
+| PASS | `config` / `show schedule` / `show bep` | Full TOML; section-only output for `schedule` and `bep`. |
+| PASS | `config set default_sync_mode ReceiveOnly` / `bandwidth.max_download 5MB/s` | Updated and reflected in `config show`. |
+| PASS | `db check` / `db stats` / `db vacuum` / `db backup --output` | `0 errors` for both DBs; sizes reported; `VACUUM complete`; backup dir with `node.db`, `stats.db`, `config.toml`, `identity.key`, `manifest.json`. |
+
+### Section 2 — Daemon Lifecycle
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `start --bg` / `status` / `--json status` | `daemon: running`; JSON object with `daemon`, `devices`, `folders`, `networks`, `transfers`. |
+| PASS | `stop` (pipe `n`) / `stop --force --yes` / `stop --yes` | `aborted` (daemon stays up); forced/confirmed shutdown → `daemon not running`. |
+| PASS | Ctrl+C (SIGINT) graceful shutdown | Logs `maintenance task shutting down`, prints `daemon stopped`, status → not running. |
+| PASS | `reload` / `sync` / `sync <namespace>` | `configuration reload requested` / `synchronization requested`. |
+| PASS | `folders create` + `folders leave` (daemon running) | Created through the daemon, listed, then `left: <namespace>`. |
+
+### Section 3 — Folder Sync (P2P)
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Alice `folders create --mode sendreceive /root/shared-docs` + `folders import --folder` | Namespace `31f9e579...`; `import requested: 1`; `ls` shows `test.txt`. |
+| PASS | Bob `folders join <url> /root/bob-shared` | `joined: 31f9e579...`; after discovery `ls` shows `test.txt`. |
+| PASS | Bob `download test.txt` | `downloaded: 0 bytes`; `cat` → `hello world`. |
+| PASS | Bob write on read-only join | `Error: failed to set document blob: Attempted to insert to read only replica` (correct enforcement). |
+| PASS | Two-way via `--write` ticket (`/root/twoway` ↔ `/root/bob-twoway`) | Bob joined the write ticket, imported an edit; Alice's sync+download shows both lines. |
+| PASS | SendOnly folder, Bob join + read | Bob `ls` shows `s.txt`; write rejected (read-only replica). |
+| PASS | `folders leave` / `--delete-files` (non-TTY) / `--delete-files --yes` | `left`; `aborted` (dir stays); `left` (dir removed). |
+| PASS | `folders` / `folders --json` / `devices` / `devices --json` | Table/JSON with modes and Iroh + Syncthing ids. |
+
+### Section 4 — Listing, Searching, Sorting, Stat
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `ls` / `--local-only` / `--remote-only` / `--path-prefix` / `--no-enrich` / `--sort size` / `--json` / `ls /tmp` | All variants as documented; `/tmp` → `not inside of a Syncweb folder` with `--local-only` hint. |
+| PASS | `find '.*\.txt$'` / `'*.md'` / `--fixed-strings` / `--modified-within` / `--depth` / `--json` / `--ignore-case` | Regex/glob/exact matches; depth parses `-5`; JSON populated. |
+| FAIL | `find --type f --ext mp3 --local-only ./music` (plan syntax) | Plan syntax omits the pattern, so `./music` binds to the **pattern** slot and the path defaults to `.`; the scanner then walks `/` and hits unreadable special files (`EIO`/`EACCES`). Correct form `find '*' --type f --ext mp3 --local-only ./music` → `one.mp3`, `song.mp3`, `track.mp3`. This is a test-syntax bug, not a code bug. |
+| PASS | `sort --by size/name/modified/state` / `--no-enrich` / `--local-only --by peers/niche` / `--limit-size --min-seeders` | Metadata tables sorted per key; disk sorts and limits behave as documented. |
+| PASS | `stat` / `--terse` / `--format` / glob | Size, blocks, hash, peers; terse pipe output; custom template. |
+
+### Section 5 — Download & Import/Export
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `download <file>` / `<dir>` / `--max-count` / `--size -1GB` / `--threads 1` / piped `find '*' \| download -` | All `downloaded: 0 bytes` on already-local content, no namespace/arg errors. |
+| PASS | `folders import` / `--threads 1` / nested / different source (write folder) | `import requested: N`; nested `nest/deep/n.txt` respected; `import /root/new-files --folder ...` works. |
+| PASS | `package export <path> <output>` / `--version 1.0.1` | `exported: ... (7 entries)`; output is a valid zstd CAR archive. |
+
+### Section 6 — Health & Verify
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `stats seeding --folder` / `--json` | `total: 7`, `unseeded: 7`; JSON with `total`/`well_seeded`/`under_seeded`/`unseeded`. |
+| PASS | `verify ./shared-docs` | `total: 7, verified: 7, corrupted: 0, missing: 0, valid: true`. |
+| NOT RUN | Corrupt a blob → `verify` reports corruption; `verify --fix` | Blob content lives inside `blobs.db` (redb), so there is no per-blob file to corrupt; unchanged from prior runs. |
+
+### Section 7 — Public Folders & Access
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `share` / `access` / `access --json` | Read ticket; one table with `Folder · Mode · Write? · Shared with · Devices · Networks`; JSON array with `devices`/`folder`/`mode`/`networks`/`shares`/`write`. |
+| PASS | `access --revoke --write` (non-TTY) / `--write --yes` / `--revoke` (read) | `aborted` (write stays); `unshared: ... (write)`; prompt-free read revoke. |
+
+### Section 8 — Snapshots
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `snapshot create --description` | Returns a content hash; two snapshots differ after an edit. |
+| PASS | `snapshot list` | Full table with `ID · Created · Size · Files · Description`. |
+| PASS | `snapshot diff <id1> <id2>` | `modified test.txt <old-hash> <new-hash>`. |
+| PASS | `snapshot restore <id>` (was FAIL: `snapshot not found`) | `restored 7 files` — works in a fresh profile (the prior failure was environmental: manifest blobs had been lost). |
+| PASS | `snapshot delete <id> --yes` | `deleted: <id>`; removed from the list. |
+
+### Section 9 — Collections & Packages
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `package add` / `package bump --version --changelog` / `package publish --namespace --sequence` | `collection: 6b74443f-...`; `version: 1.0.1`; publish prints `manifest`, `manifest_ticket`, `sequence`. |
+| PASS | Bob `package info <ticket>` (was FAIL) | Manifest table (collection/version/parent/entries) with the daemon running. |
+| PASS | Bob `package install <ticket>` (was FAIL) | `installed: 6b74443f-... 1.0.1`; files materialized under `packages/`. |
+| PASS | `package list` / `versions` / `verify` | `1.0.1`, `1.0.2`; `verified: ... 1.0.1`. |
+| PASS | `package upgrade <ticket>` (plan says `<collection-id>`) | Installed `1.0.2`; `versions` shows both. Correct argument is the manifest ticket, not the collection id. |
+| PASS | `package switch <collection> 1.0.1` / `remove <collection> <version> --yes` | Switched current; removed a non-current version. The plan's `remove <collection-id>` omits the required version. |
+| PASS | `package export <path> /tmp/pkg.car.zst` | Valid zstd CAR. The plan's `<collection-id>` form is unsupported — export takes filesystem paths. |
+| PASS | `package import <archive>` (was HANG) | `imported: 6158c1b9-... 1.0.0 (7 entries)`. The plan's `--no-install` flag does not exist. |
+
+### Section 10 — Networks
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `network create home` (was HANG) | `created: home <id>`; `network ls` shows it. |
+| PASS | `network ls home` / `network events home` / `network health home` | Table with ID/members/folders; `no events`; `Network: home`, `events: 0`, `sessions: 0`. |
+| PASS | `network invite home <bob-id>` (was HANG) | Printed a `syncweb://network/...` ticket. |
+| PASS | `network kick home <bob-id> --yes` (was HANG) | `member kicked`. |
+| FAIL | `network test-relay` (plan syntax) | Requires `--relay-url <RELAY_URL>`; also unreachable DNS in the offline VMs. |
+
+### Section 11 — Indexing
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `indexing enable ./shared-docs` (was HANG) | `enabled: 31f9e579...`. |
+| PASS | `search --kind catalog "test"` | Catalog table rendered (catalog published in this run). |
+| PASS | `indexing publish <folder> --catalog mycat` (was HANG) | `published: 10`; namespace + ticket printed. |
+| PASS | `indexing disable ./shared-docs` | `disabled: 31f9e579...`. |
+
+### Section 12 — Links
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `link create --immutable` | `syncweb://content/dc5a4edb...`. |
+| PASS | `link create --mutable` | `syncweb://name/<node-id>/test.txt`. |
+| PASS | `link create --private --expires <unix-ts>` | `syncweb://private/<hash>/<capability>?expires=<ts>`. The plan's `--expires 7d` is not accepted — it expects a Unix timestamp. |
+| NOT RUN | `link resolve` / `link revoke` | Not exercised this run. |
+
+### Section 13 — Schedules & Bandwidth
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `config schedule` / `set --active` / `set --bandwidth --period` / `folder media --active` | `active_hours = "22:00-06:00"`, a `[[bandwidth]]` window, and `[folders.media]`. |
+
+### Sections 14--15 — Filter Engine / Watch Mode (partial)
+
+| Status | Test | Command / output |
+|---|---|---|
+| FAIL | `watch --once <folder>` | Hangs while a daemon runs: `handle_watch` calls `open_node(data_dir)` directly for `--once` (`--no-daemon` too), so it blocks on the daemon's store locks. Not fixed this run. |
+| NOT RUN | `watch --show-filters` / `--dry-run` / `--filters` | The `--show-filters` invocation produced no output before the run stopped (likely the same path). |
+
+### Sections 16--25 — NOT RUN
+
+Stopped before conflict resolution, offline queue, media server, WebSocket bridge end-to-end via the plan (the bridge itself was verified directly, above), BEP relay, discovery, global flags, version/completions, integrity recovery, and performance smoke tests.
+
+### New-failure summary
+
+All seven real bugs found this run were fixed in code and verified:
+1. `package info`/`install` opened a second node on the live data dir (store-lock hang) — now daemon IPC.
+2. `package import` hung (same root cause) — now `ImportArchive` IPC.
+3. `indexing enable`/`publish` hung (same root cause) — now `IndexingEnable`/`IndexingPublish` IPC.
+4. `search --kind package/catalog` hung (pointless node open) — node now opened only for channel search.
+5. `package publish` without `--namespace` hung — now daemon namespace resolution.
+6. `network create`/`invite`/`kick` hung (`membership::provision`/`refresh` opened a node) — now daemon IPC with `provision_with_node`/`refresh_with_node`.
+7. WebSocket bridge (Section 19) was unimplemented — now implemented on `127.0.0.1:9192`.
+
+One real bug remains unfixed (below the stop limit of ten):
+1. **`watch --once` hangs while a daemon is running** (`handle_watch` opens an embedded node; main.rs:2866).
+
+Plan-syntax mismatches found (not code bugs): `find --type f --ext mp3 --local-only <path>` (missing pattern), `package upgrade <collection-id>` (takes a ticket), `package remove <collection-id>` (needs a version), `package export <collection-id>` (takes a path), `package import --no-install` (flag does not exist), `link create --expires 7d` (expects a Unix timestamp), `network test-relay` (requires `--relay-url`).
+
+### Remaining steps
+
+1. Fix `watch --once`/`watch --no-daemon` to route through the daemon (or use a scratch node), then re-test Sections 14--15.
+2. Run Sections 16--25: conflict resolution, offline queue, media server, bridge end-to-end via `websocat`, BEP relay, discovery, global flags, version/completions, integrity recovery, and performance smoke tests.
+3. Re-test the `find --local-only` and other plan-syntax rows with the corrected commands and update the plan's commands accordingly.
+4. Continue the `open_node` audit for any command not yet exercised with a daemon running (e.g. `link resolve`/`revoke`, `stats`, `transfer`, `provider`).

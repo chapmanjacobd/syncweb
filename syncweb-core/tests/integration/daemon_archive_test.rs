@@ -2,7 +2,10 @@ use std::{fs, sync::Arc};
 
 use anyhow::{Result, ensure};
 use syncweb_core::{
-    daemon::{DaemonHandle, DaemonState, DaemonStatus, IpcCommand, IpcRequest, IpcResponse, IpcServer, ManagedPool},
+    daemon::{
+        DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcCommand, IpcRequest, IpcResponse, IpcServer,
+        ManagedPool,
+    },
     folder::{CollectionEntry, CollectionManifest, CollectionStore, FolderManager, SyncMode},
     node::{
         identity::IdentityManager,
@@ -56,6 +59,10 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
         directory.path(),
         DaemonStatus::Running,
     ));
+    handle.folder_registry.write().await.add(FolderEntry::new(
+        folder.namespace_id(),
+        directory.path().join("mounted"),
+    ))?;
     let pool = Arc::new(ManagedPool::new("daemon-archive-test", 1)?);
     let server =
         IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
@@ -68,6 +75,18 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
         }))
         .await;
     ensure!(matches!(export_response, IpcResponse::ExportComplete(_)));
+
+    let collection_archive = directory.path().join("collection-export.car.zst");
+    let collection_export_response = server
+        .handle_request(IpcRequest::new(IpcCommand::ExportCollectionArchive {
+            collection: manifest.collection_id.to_string(),
+            version: None,
+            output: collection_archive.clone(),
+            filter: None,
+        }))
+        .await;
+    ensure!(matches!(collection_export_response, IpcResponse::ExportComplete(_)));
+    ensure!(collection_archive.is_file());
 
     let target = directory.path().join("imported");
     let import_response = server

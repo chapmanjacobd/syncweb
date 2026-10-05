@@ -534,7 +534,7 @@ syncweb config set discovery.interface eth0
 | | `verify` | Integrity verification (re-check local blobs) |
 | | `config schedule` | Show/modify sync schedule |
 | | `watch` | Watch a folder, importing filesystem changes and honoring filter rules (`--filters`, `--dry-run`, `--show-filters`) |
-| | `network test-relay` | Test Syncthing relay connectivity |
+| | `network test-relay <relay-url>` | Test Syncthing relay connectivity |
 
 ### CLI Options
 
@@ -624,6 +624,9 @@ syncweb folders import /path/to/files
 
 # Parallel package export (the default)
 syncweb package export ./collection /tmp/out/
+
+# Export a published collection ID through the daemon
+syncweb package export <collection-id> /tmp/collection.car.zst
 
 # File-level statistics for a folder
 syncweb stats files audio/

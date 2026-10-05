@@ -115,6 +115,10 @@ syncweb://private/<manifest-hash>/<capability>?expires=<unix-timestamp>
 - `expires_at`: Unix timestamp after which the capability is rejected
 - Revocation lists are stored in the node database and checked at serve time
 
+Create private links with a relative expiration duration by default (for
+example, `--expires 7d` or `--expires "2 hours"`). Use `--unix` with
+`--expires` when providing an absolute Unix timestamp.
+
 Capability links are enforced at blob serve time — the requesting peer must be a network member AND the capability must be valid, unexpired, and unrevoked.
 
 ### Access Enforcement by Network Type

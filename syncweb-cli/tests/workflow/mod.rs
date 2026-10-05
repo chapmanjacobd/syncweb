@@ -127,11 +127,6 @@ impl Device {
         self.run_ok(&["--no-daemon", "folders", "leave", namespace])
     }
 
-    #[expect(dead_code, reason = "part of DSL public API")]
-    pub fn leave_delete_files(&self, namespace: &str) -> anyhow::Result<CmdOutput> {
-        self.run_ok(&["--no-daemon", "folders", "leave", "--delete-files", "--yes", namespace])
-    }
-
     #[expect(clippy::unused_self, reason = "API consistency")]
     pub fn write_file(&self, path: &Path, content: &[u8]) -> anyhow::Result<()> {
         if let Some(parent) = path.parent() {

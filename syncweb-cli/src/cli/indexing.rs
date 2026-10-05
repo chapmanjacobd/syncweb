@@ -135,6 +135,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             immutable,
             mutable,
             expires,
+            unix,
             publish,
         } => {
             let opts = LinkCreateOptions {
@@ -146,6 +147,7 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
                 immutable,
                 mutable,
                 expires,
+                unix,
                 publish,
             };
             handle_link_create(ctx, opts).await?;
@@ -168,6 +170,12 @@ pub async fn handle_link(ctx: &CliContext<'_>, command: LinkCommand) -> Result<(
             };
             let fetched = if no_fetch {
                 false
+            } else if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let tickets: Vec<String> = resolution.tickets.iter().map(ToString::to_string).collect();
+                client
+                    .fetch_blob(resolution.manifest.to_string(), tickets, None)
+                    .await?;
+                true
             } else {
                 let node = open_node(data_dir).await?;
                 let fetch_result = fetch_and_pin_blob(&node, resolution.manifest, &resolution.tickets).await;
@@ -221,7 +229,8 @@ struct LinkCreateOptions {
     private: bool,
     immutable: bool,
     mutable: bool,
-    expires: Option<u64>,
+    expires: Option<String>,
+    unix: bool,
     publish: Option<String>,
 }
 
@@ -234,7 +243,7 @@ async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Re
     let link = if opts.private {
         ensure!(!opts.immutable, "--private conflicts with --immutable");
         ensure!(!opts.mutable, "--private conflicts with --mutable");
-        store.create_private_link(hash, opts.expires)?
+        store.create_private_link(hash, parse_private_link_expiration(opts.expires.as_deref(), opts.unix)?)?
     } else if opts.immutable {
         ensure!(opts.name.is_none(), "--immutable conflicts with --name");
         ensure!(opts.version.is_none(), "--version requires --name");
@@ -256,10 +265,14 @@ async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Re
     };
 
     if let Some(namespace_str) = opts.publish {
-        let node = open_node(data_dir).await?;
-        let publish_result = store.publish_link(&node, &namespace_str, &link).await;
-        node.stop().await?;
-        publish_result?;
+        if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+            client.link_publish(namespace_str, link.to_string()).await?;
+        } else {
+            let node = open_node(data_dir).await?;
+            let publish_result = store.publish_link(&node, &namespace_str, &link).await;
+            node.stop().await?;
+            publish_result?;
+        }
     }
 
     print_status(
@@ -268,6 +281,24 @@ async fn handle_link_create(ctx: &CliContext<'_>, opts: LinkCreateOptions) -> Re
         format!("link: {link}\nhash: {hash}"),
     )?;
     Ok(())
+}
+
+fn parse_private_link_expiration(expires: Option<&str>, unix: bool) -> Result<Option<u64>> {
+    let Some(value) = expires else {
+        return Ok(None);
+    };
+    if unix {
+        return value
+            .parse::<u64>()
+            .map(Some)
+            .map_err(|error| anyhow::anyhow!("invalid Unix expiration timestamp {value:?}: {error}"));
+    }
+    let duration = syncweb_core::parsing::parse_duration(value)
+        .map_err(|error| anyhow::anyhow!("invalid expiration duration {value:?}: {error}"))?;
+    let expires_at = syncweb_core::parsing::current_unix_secs()
+        .checked_add(duration.as_secs())
+        .ok_or_else(|| anyhow::anyhow!("expiration duration is too large"))?;
+    Ok(Some(expires_at))
 }
 
 pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result<()> {
@@ -304,6 +335,24 @@ pub async fn download_blob(
     let output_json = ctx.output_json;
     let first_ticket = tickets.first().context("tickets list is empty")?;
     let content_hash = first_ticket.hash();
+
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        let ticket_strings: Vec<String> = tickets.iter().map(ToString::to_string).collect();
+        let hash = client
+            .fetch_blob(
+                content_hash.to_string(),
+                ticket_strings,
+                export_path.map(Path::to_path_buf),
+            )
+            .await?;
+        if output_json {
+            println!("{}", serde_json::json!({"hash": hash, "pinned": true}));
+        } else {
+            println!("hash: {hash}");
+            println!("pinned: true");
+        }
+        return Ok(());
+    }
 
     let node = open_node(data_dir).await?;
     fetch_and_pin_blob(&node, content_hash, tickets).await?;
@@ -436,4 +485,35 @@ where
         println!("{text}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_private_link_expiration;
+
+    #[test]
+    fn private_link_expiration_defaults_to_duration() {
+        let before = syncweb_core::parsing::current_unix_secs();
+        let expires_at = parse_private_link_expiration(Some("2 hours"), false)
+            .unwrap()
+            .expect("duration should produce an expiration");
+        let after = syncweb_core::parsing::current_unix_secs();
+        assert!(expires_at >= before + 2 * 60 * 60);
+        assert!(expires_at <= after + 2 * 60 * 60);
+    }
+
+    #[test]
+    fn private_link_expiration_supports_unix_timestamps() {
+        assert_eq!(
+            parse_private_link_expiration(Some("1700000000"), true).unwrap(),
+            Some(1_700_000_000)
+        );
+    }
+
+    #[test]
+    fn private_link_expiration_rejects_invalid_values() {
+        assert!(parse_private_link_expiration(Some("tomorrow"), false).is_err());
+        assert!(parse_private_link_expiration(Some("not-a-timestamp"), true).is_err());
+        assert_eq!(parse_private_link_expiration(None, false).unwrap(), None);
+    }
 }

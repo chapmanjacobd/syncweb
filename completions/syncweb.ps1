@@ -700,12 +700,13 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
             [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
             [CompletionResult]::new('--sequence', '--sequence', [CompletionResultType]::ParameterName, 'sequence')
-            [CompletionResult]::new('--expires', '--expires', [CompletionResultType]::ParameterName, 'Private-link expiration as a Unix timestamp')
+            [CompletionResult]::new('--expires', '--expires', [CompletionResultType]::ParameterName, 'Private-link expiration duration (for example, 30m, 2h, or 7d)')
             [CompletionResult]::new('--publish', '--publish', [CompletionResultType]::ParameterName, 'Namespace (folder) to publish the link into')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--private', '--private', [CompletionResultType]::ParameterName, 'private')
             [CompletionResult]::new('--immutable', '--immutable', [CompletionResultType]::ParameterName, 'Force an immutable content link (the default when no --name/--mutable is given)')
             [CompletionResult]::new('--mutable', '--mutable', [CompletionResultType]::ParameterName, 'Force a mutable name link, deriving the alias from the source file name when --name is omitted')
+            [CompletionResult]::new('--unix', '--unix', [CompletionResultType]::ParameterName, 'Interpret --expires as a Unix timestamp instead of a duration')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Assume yes to every destructive-operation prompt')
@@ -755,7 +756,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             [CompletionResult]::new('add', 'add', [CompletionResultType]::ParameterValue, 'Scan one or more paths into a package manifest (creates it if missing)')
             [CompletionResult]::new('bump', 'bump', [CompletionResultType]::ParameterValue, 'Create a new package manifest version')
             [CompletionResult]::new('publish', 'publish', [CompletionResultType]::ParameterValue, 'Publish a package manifest ticket and announce it to the catalog')
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export one or more package directories as compressed CAR archive files')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export package directories or collection IDs as compressed CAR archive files')
             [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Import and install a compressed CAR archive file')
             [CompletionResult]::new('info', 'info', [CompletionResultType]::ParameterValue, 'Show a collection manifest from a ticket or blob hash')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Verify, stage, and atomically install a collection version')
@@ -1051,7 +1052,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;network;test-relay' {
-            [CompletionResult]::new('--relay-url', '--relay-url', [CompletionResultType]::ParameterName, 'relay-url')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')

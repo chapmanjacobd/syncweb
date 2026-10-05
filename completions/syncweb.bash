@@ -1104,7 +1104,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__link__subcmd__create)
-            opts="-h --name --version --sequence --private --immutable --mutable --expires --publish --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --name --version --sequence --private --immutable --mutable --expires --unix --publish --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1480,16 +1480,12 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__network__subcmd__test__subcmd__relay)
-            opts="-h --relay-url --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --relay-url)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

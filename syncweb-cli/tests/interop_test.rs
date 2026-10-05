@@ -17,12 +17,7 @@ fn interop_enabled() -> bool {
 #[test]
 fn relay_test_reachable_via_cli() -> anyhow::Result<()> {
     let output = cli()
-        .args([
-            "network",
-            "test-relay",
-            "--relay-url",
-            "tcp://relay.syncthing.net:22270",
-        ])
+        .args(["network", "test-relay", "tcp://relay.syncthing.net:22270"])
         .output()
         .context("run test-relay")?;
 

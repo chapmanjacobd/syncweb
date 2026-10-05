@@ -900,9 +900,9 @@ pub enum PackageCommand {
         )]
         root: Option<PathBuf>,
     },
-    #[command(about = "Export one or more package directories as compressed CAR archive files")]
+    #[command(about = "Export package directories or collection IDs as compressed CAR archive files")]
     Export {
-        #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_OUTPUT")]
+        #[arg(required = true, num_args = 1.., value_name = "PACKAGE_OR_COLLECTION_OR_OUTPUT")]
         paths: Vec<PathBuf>,
         #[arg(long)]
         version: Option<String>,
@@ -990,7 +990,7 @@ pub enum NetworkCommand {
     },
     #[command(about = "Test a Syncthing relay TCP connection")]
     TestRelay {
-        #[arg(long = "relay-url")]
+        #[arg(value_name = "RELAY_URL")]
         relay_url: String,
     },
     #[command(about = "Show network membership and health, optionally limited to a single network by name")]
@@ -1065,8 +1065,18 @@ pub enum LinkCommand {
             help = "Force a mutable name link, deriving the alias from the source file name when --name is omitted"
         )]
         mutable: bool,
-        #[arg(long, help = "Private-link expiration as a Unix timestamp")]
-        expires: Option<u64>,
+        #[arg(
+            long,
+            requires = "private",
+            help = "Private-link expiration duration (for example, 30m, 2h, or 7d)"
+        )]
+        expires: Option<String>,
+        #[arg(
+            long,
+            requires = "expires",
+            help = "Interpret --expires as a Unix timestamp instead of a duration"
+        )]
+        unix: bool,
         #[arg(long, help = "Namespace (folder) to publish the link into")]
         publish: Option<String>,
     },

@@ -772,12 +772,13 @@ _arguments "${_arguments_options[@]}" : \
 '(--private --immutable)--name=[]:NAME:_default' \
 '--version=[]:VERSION:_default' \
 '--sequence=[]:SEQUENCE:_default' \
-'--expires=[Private-link expiration as a Unix timestamp]:EXPIRES:_default' \
+'--expires=[Private-link expiration duration (for example, 30m, 2h, or 7d)]:EXPIRES:_default' \
 '--publish=[Namespace (folder) to publish the link into]:PUBLISH:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '(--name --mutable)--private[]' \
 '(--name --private --mutable)--immutable[Force an immutable content link (the default when no --name/--mutable is given)]' \
 '(--private --immutable)--mutable[Force a mutable name link, deriving the alias from the source file name when --name is omitted]' \
+'--unix[Interpret --expires as a Unix timestamp instead of a duration]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -1174,7 +1175,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (test-relay)
 _arguments "${_arguments_options[@]}" : \
-'--relay-url=[]:RELAY_URL:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -1184,6 +1184,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
+':relay_url:_default' \
 && ret=0
 ;;
 (status)
@@ -2122,7 +2123,7 @@ _syncweb__subcmd__package_commands() {
 'add:Scan one or more paths into a package manifest (creates it if missing)' \
 'bump:Create a new package manifest version' \
 'publish:Publish a package manifest ticket and announce it to the catalog' \
-'export:Export one or more package directories as compressed CAR archive files' \
+'export:Export package directories or collection IDs as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
 'info:Show a collection manifest from a ticket or blob hash' \
 'install:Verify, stage, and atomically install a collection version' \

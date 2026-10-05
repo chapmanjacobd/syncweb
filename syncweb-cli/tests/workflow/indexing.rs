@@ -339,6 +339,7 @@ fn link_create_version_sequence_expires_publish() -> Result<()> {
             "--private",
             "--expires",
             &expires.to_string(),
+            "--unix",
             CONTENT_HASH,
         ],
     )?;

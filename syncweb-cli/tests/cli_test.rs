@@ -2091,6 +2091,7 @@ fn link_create_help_lists_untested_options() -> anyhow::Result<()> {
     ensure!(help.contains("--version"), "help should mention --version");
     ensure!(help.contains("--sequence"), "help should mention --sequence");
     ensure!(help.contains("--expires"), "help should mention --expires");
+    ensure!(help.contains("--unix"), "help should mention --unix");
     ensure!(help.contains("--publish"), "help should mention --publish");
     Ok(())
 }

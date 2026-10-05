@@ -120,7 +120,7 @@ syncweb config set bep.enabled true
 syncweb folders join --relay-fallback syncweb://folder-id#NODE-ID
 
 # Test relay connectivity
-syncweb network test-relay
+syncweb network test-relay tcp://relay.syncthing.net:22270
 ```
 
 Relay settings are persisted in `<data-dir>/config.toml`:

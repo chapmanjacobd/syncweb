@@ -419,8 +419,8 @@ Step 3 - NOT RUN
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 4 - NOT RUN
-- Action: syncweb find --type f --ext mp3 --local-only ./music
-- Expected: Combined filters on the disk
+- Action: syncweb find '*' --type f --ext mp3 --local-only ./music
+- Expected: Combined filters on the disk (the pattern is positional and required; without it `./music` binds to the pattern slot)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 - Debug: `--remote-only` narrows to undownloaded rows
 
@@ -830,7 +830,7 @@ Step 7 - NOT RUN
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 8 - NOT RUN
-- Action: Bob: `syncweb package upgrade <collection-id>`
+- Action: Bob: `syncweb package upgrade <manifest-ticket>`
 - Expected: Upgrades to latest
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
@@ -841,8 +841,8 @@ Step 9 - NOT RUN
 - Debug: Check version: `cat ./pkg-install/.version`
 
 Step 10 - NOT RUN
-- Action: Bob: `syncweb package remove <collection-id>`
-- Expected: Cleanly removes
+- Action: Bob: `syncweb package remove <collection-id> <version>`
+- Expected: Cleanly removes (a version argument is required)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 - Debug: `syncweb package list` no longer shows it
 
@@ -850,20 +850,20 @@ Step 10 - NOT RUN
 ### 9.3 Package Archive (.car.zst)
 
 Step 1 - NOT RUN
-- Action: syncweb package export <collection-id> /tmp/pkg.car.zst
-- Expected: Creates compressed archive
+- Action: syncweb package export <package-dir> /tmp/pkg.car.zst
+- Expected: Creates compressed archive (export takes filesystem paths, not a collection id)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 - Debug: `ls -la /tmp/pkg.car.zst`
 
 Step 2 - NOT RUN
-- Action: On another machine (air-gapped): `syncweb package import /tmp/pkg.car.zst ./pkg-import`
-- Expected: Imports and installs
+- Action: On another machine (air-gapped): `syncweb package import /tmp/pkg.car.zst`
+- Expected: Imports and installs into the packages directory
 - Actual output: No output; testing stopped after more than five unexpected errors.
 - Debug: `syncweb package list` shows it
 
 Step 3 - NOT RUN
-- Action: syncweb package import --no-install /tmp/pkg.car.zst /tmp/extract
-- Expected: Extracts without installing
+- Action: syncweb package import --filter 'name!=*.tmp' /tmp/pkg.car.zst
+- Expected: Imports while dropping filtered entries (`--no-install` does not exist; import always installs)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 
@@ -931,8 +931,8 @@ Step 2 - NOT RUN
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 3 - NOT RUN
-- Action: syncweb network test-relay
-- Expected: Tests relay connectivity
+- Action: syncweb network test-relay --relay-url tcp://relay.example.net:22067
+- Expected: Tests relay connectivity (the relay URL is required)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 4 - NOT RUN
@@ -988,8 +988,8 @@ Step 2 - NOT RUN
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 3 - NOT RUN
-- Action: syncweb link create --private ./shared-docs/test.txt --expires 7d
-- Expected: Creates expiring private link
+- Action: syncweb link create --private ./shared-docs/test.txt --expires 1793774654
+- Expected: Creates expiring private link (--expires takes a Unix timestamp, not a duration like 7d)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 
 Step 4 - NOT RUN
@@ -1284,8 +1284,8 @@ Step 3 - NOT RUN
 - Debug: Logs show "relay connected"
 
 Step 4 - NOT RUN
-- Action: syncweb network test-relay
-- Expected: Tests relay connectivity
+- Action: syncweb network test-relay --relay-url tcp://relay.example.net:22067
+- Expected: Tests relay connectivity (the relay URL is required)
 - Actual output: No output; testing stopped after more than five unexpected errors.
 - Debug: Logs latency and status
 
@@ -2143,7 +2143,11 @@ Environmental notes (not code failures): relay/DNS unreachable in the VMs (`netw
 | PASS | `init::open_node` (embedded helper) | All reachable-with-daemon call sites now route via IPC first (package info/install/import, indexing enable/publish, package publish namespace resolution, network create/invite/kick, search). Remaining uses are guarded fallbacks reached only when no daemon runs, or `--no-daemon`. |
 | PASS | `open_node_offline` | Scratch data dir + relay-disabled; used by archive export and the standalone media server; cannot conflict with the live store. |
 | PASS | `syncweb-core/src/media/bridge.rs` | New bridge listener; no second store node. |
-| FAIL | `handle_watch` (`--once`, and `watch --no-daemon`) | Still calls `open_node(data_dir)` directly (main.rs:2866), so `watch --once` hangs while a daemon runs. Not fixed this run; needs a one-shot scan/import IPC or a scratch node. |
+| PASS | `handle_watch` (`--once`, and `watch --no-daemon`) | Fixed in the follow-up run: `--once` now routes through the new `WatchOnce` IPC (daemon scans + filters + imports, reports imported/rejected) and the embedded fallback performs a real one-shot scan instead of waiting for a filesystem event. `--no-daemon` with a live daemon now fails fast with a clear message instead of blocking on the store locks. |
+| PASS | `download <blob-ticket>` / `link resolve` | Fixed via the new `FetchBlob` IPC: the daemon fetches/pins (and optionally exports) the blob. |
+| PASS | `link create --publish` | Fixed via the new `LinkPublish` IPC: the daemon writes the link into the folder document. |
+| PASS | `link revoke`, `provider add`, `stats network`, `transfer info/remaining/root/allocate/state/retry` | Do not open a node (indexing `SQLite` / node DB only); no daemon conflict. |
+| PASS | `stats files`/`seeding`, `transfer enqueue`/`materialize`, `snapshot *`, `verify`, `join`, `share`/`access`, `package publish`, `collection publish` | Daemon-aware already; guarded fallbacks only when no daemon runs. |
 
 ### Section 1 — Initialization & Configuration
 
@@ -2271,8 +2275,10 @@ Environmental notes (not code failures): relay/DNS unreachable in the VMs (`netw
 
 | Status | Test | Command / output |
 |---|---|---|
-| FAIL | `watch --once <folder>` | Hangs while a daemon runs: `handle_watch` calls `open_node(data_dir)` directly for `--once` (`--no-daemon` too), so it blocks on the daemon's store locks. Not fixed this run. |
-| NOT RUN | `watch --show-filters` / `--dry-run` / `--filters` | The `--show-filters` invocation produced no output before the run stopped (likely the same path). |
+| PASS | `watch --once <folder>` (daemon running) | Fixed. `watch --once /root/watch-once-test2` → `rejected skip.tmp`, `imported: 3`, rc=0 in 7 ms (was a hang). `--json` → `{"imported":3,"rejected":["skip.tmp"]}`. |
+| PASS | `watch --once --no-daemon` (daemon running) | Fails fast: `Error: a daemon owns /root/manual6/default/default; stop it before using --no-daemon` (rc=1), no hang. |
+| PASS | `watch --once --no-daemon` (no daemon) | Embedded one-shot scan: added a new file while stopped → `rejected skip.tmp`, `imported: 4`, rc=0 in 24 ms (proves scan-once, not wait-for-event). |
+| NOT RUN | `watch --show-filters` / `--dry-run` / `--filters` | `--show-filters` and `--dry-run` do not open a node, so they cannot hang; still not exercised end-to-end this run. |
 
 ### Sections 16--25 — NOT RUN
 
@@ -2296,7 +2302,35 @@ Plan-syntax mismatches found (not code bugs): `find --type f --ext mp3 --local-o
 
 ### Remaining steps
 
-1. Fix `watch --once`/`watch --no-daemon` to route through the daemon (or use a scratch node), then re-test Sections 14--15.
-2. Run Sections 16--25: conflict resolution, offline queue, media server, bridge end-to-end via `websocat`, BEP relay, discovery, global flags, version/completions, integrity recovery, and performance smoke tests.
-3. Re-test the `find --local-only` and other plan-syntax rows with the corrected commands and update the plan's commands accordingly.
-4. Continue the `open_node` audit for any command not yet exercised with a daemon running (e.g. `link resolve`/`revoke`, `stats`, `transfer`, `provider`).
+1. Run Sections 16--25: conflict resolution, offline queue, media server, bridge end-to-end via `websocat`, BEP relay, discovery, global flags, version/completions, integrity recovery, and performance smoke tests.
+2. Re-test the corrected plan-syntax rows (the in-body `Action:` lines were updated this run: `find '*' ...`, `package upgrade <manifest-ticket>`, `package remove <collection> <version>`, `package export <package-dir> <output>`, `package import <archive>`, `package import --filter`, `link create --expires <unix-ts>`, `network test-relay --relay-url <URL>`).
+3. `link create --publish` and `download <blob-ticket>` / `link resolve` are now daemon-routed (see below); re-check any remaining `open_node` sites when a daemon runs.
+
+---
+
+## Follow-up Run: 2026-10-05 (watch + `open_node` audit)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`) via `iiab-vm` + `nsenter`.
+- Binary SHA-256: `c209ff4568326f22c4741cbecca4b373bf856b7db121f89d6abbcba5de98ab60`.
+- Scope: fixed the one remaining hang from the previous run (`watch --once`) and closed the `open_node` audit gaps for `download <blob-ticket>`, `link resolve`, and `link create --publish`.
+
+### New IPC commands
+
+- `WatchOnce { namespace, path, filter, exclude }` → `WatchOnceComplete { imported, rejected }` — daemon-routed one-shot filtered scan/import; the embedded fallback performs a real scan-once instead of waiting for a watcher event.
+- `FetchBlob { hash, tickets, export_path }` → `FetchBlobComplete { hash }` — daemon fetch/pin (with optional export) for blob tickets.
+- `LinkPublish { namespace, link }` → `Ok` — daemon writes a stable link into a managed folder document.
+
+### Verified
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | `watch --once <folder>` (daemon) | `rejected skip.tmp`, `imported: 3`, rc=0 in 7 ms (was a hang). `--json` → `{"imported":3,"rejected":["skip.tmp"]}`; folder listing shows only the accepted entries. |
+| PASS | `watch --once --no-daemon` (daemon running) | `Error: a daemon owns /root/manual6/default/default; stop it before using --no-daemon` (rc=1), no hang. |
+| PASS | `watch --once --no-daemon` (no daemon) | New file added while stopped → `rejected skip.tmp`, `imported: 4`, rc=0 in 24 ms. |
+| PASS | `download <blob-ticket>` (daemon) | `hash: 8e4c...`, `pinned: true` in 5 ms; `--destination` file materialized with the expected content. |
+| PASS | `link resolve <link>` (daemon) | `manifest: 8e4c...`, `fetched: true` in 6 ms; `--no-fetch` also works. |
+| PASS | `link create --mutable/--private --publish <ns>` (daemon) | rc=0, no hang. |
+
+### Lint
+
+`cargo clippy --all-targets --all-features` reports the same pre-existing 67 core errors as the base commit (none introduced by these changes). `cargo check` and the full `cargo test` suite pass.

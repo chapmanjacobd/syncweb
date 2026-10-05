@@ -26,7 +26,7 @@ Folder creation, joining, basic sync, and Syncthing relay fallback for CGNAT tra
 - Syncthing relay protocol message codec (JoinRelayRequest, SessionInvitation, JoinSessionRequest)
 - Datagram-over-TCP tunnel framing
 - `--relay-fallback` flag on relevant commands
-- `syncweb network test-relay` command
+- `syncweb network test-relay <relay-url>` command
 - Config: `[bep]` section for relay URLs, timeout, auto_fallback
 
 ### File Operations and Search/Sort/Stat

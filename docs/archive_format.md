@@ -37,6 +37,9 @@ A user can export a specific version (or the latest version) of a package into a
 # Export the latest version (defaults to my-dataset.car.zst)
 syncweb package export ./my-dataset
 
+# Export a published collection by ID through the running daemon
+syncweb package export <collection-id>
+
 # Export a specific version to a specific file
 syncweb package export --version 1.2.0 ./my-dataset my-dataset_v1.2.0.car.zst
 

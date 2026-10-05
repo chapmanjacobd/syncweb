@@ -15,9 +15,17 @@ sections and tests are omitted; status reflects the 2026-10-05 runs.
 ## Last Verified Run (provenance)
 
 - VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`) via `iiab-vm` + `nsenter`.
-- Binary SHA-256: `818a03180369ff5b2b1affab10d6f1b500bcdff2d8636667bb95a6ab063e15d8`.
+- Binary SHA-256: `d1eeb9673609586641b7ae5f80c00f45f0127847247936075c0b57b6cf2c5f2e`.
 - Data: fresh profiles; Alice `shared-docs`/`twoway`/`sendonly`, Bob
   `bob-shared`/`bob-twoway`/`bob-sendonly`; daemons run with `start --bg`.
+- Re-verified the ten prior failures against the SHA above. Passing after the
+  fixes: JSON envelopes (`folders --json` → `{"folders":[…]}`,
+  `find --json` → `{"paths":[…]}`), `status --json` `mode`/`kind`/`sync_count`,
+  human-readable filter sizes plus rejection of a wrong-direction bound and of
+  garbage (`F5`), media listener (`/`=404, `/media/deadbeef`=400, 64-zero
+  hash=404), `--log-file` writing the `daemon started` record immediately on a
+  clean start, `start --bg` idempotence on an already-running daemon, and
+  `folders create --mode` help listing `receiveencrypted`.
 
 ---
 
@@ -44,8 +52,8 @@ sections and tests are omitted; status reflects the 2026-10-05 runs.
 
 ## 10.3 Network Events & Health
 
-- `syncweb network test-relay --relay-url <URL>` — the relay URL is required
-  (there is no default).
+- `syncweb network test-relay <RELAY_URL>` — the relay URL is a required
+  positional argument (not `--relay-url`); there is no default.
 - `syncweb network peers ./nw-docs` (daemon running) — shows the folder's
   inbound peers and a per-blob `% seeded` table; `--json` emits a single
   `{folder, peers, per_blob}` object.
@@ -100,6 +108,14 @@ type = "reject"
 match = { name = "*.tmp" }
 ```
 
+- Size fields accept human-readable values (`1KB`, `100MB`, `2GiB`) and bare
+  integers; a wrong-direction bound (`min_size = "<5GB"`) or garbage
+  (`min_size = "not-a-size"`) makes daemon startup fail with a clear error. All
+  verified 2026-10-05.
+- The parser only knows the top-level `rules` array (TOML `[[rules]]`). The
+  `[general]` table and any singular `[[rule]]` are silently ignored (the config
+  struct has no `deny_unknown_fields`), so a typo there is not reported.
+
 ## 15. Watch Mode (File Watcher)
 
 - `syncweb watch ./shared-docs` — watches the folder; then touch/create/delete/
@@ -130,6 +146,9 @@ match = { name = "*.tmp" }
 - `curl -H "Range: bytes=0-100" http://127.0.0.1:9193/media/<hash>` — partial
   content (206) with the first 100 bytes; check the `Content-Range` header.
 - Custom listen address in config — server starts on the specified address.
+- Malformed hashes are rejected without dropping the connection: a short hash
+  (`/media/deadbeef`) returns `400`, an unknown 64-hex hash returns `404`, and
+  `/` returns `404`. Verified 2026-10-05.
 
 ## 19. WebSocket Bridge
 
@@ -147,20 +166,23 @@ match = { name = "*.tmp" }
   `syncweb config set bep.relay_urls '["tcp://relay.syncthing.net:22270"]'`),
   then connect two nodes behind CGNAT. Expected: the connection falls back to
   the Syncthing relay; logs show "relay connected".
-- `syncweb network test-relay --relay-url tcp://relay.example.net:22067` — logs
+- `syncweb network test-relay tcp://relay.example.net:22067` — logs
   latency and status. Requires a reachable relay/DNS.
 - `syncweb devices` — verify the DeviceId format matches Syncthing.
 
 ## 21. Discovery Mechanisms
 
-- `syncweb config set discovery.local_mdns false` — no LAN discovery; re-enabling
-  resumes discovery.
+- `syncweb config set discovery.mdns false` — no LAN discovery; re-enabling
+  (`discovery.mdns true`) resumes discovery. The key is `discovery.mdns`, not
+  `discovery.local_mdns`.
 - Two nodes on different networks — discover via DHT (~5-10s) or gossip.
 
 ## 22. CLI Global Flags & Output
 
 - `syncweb --verbose <command>` — debug-level output.
-- `syncweb --json folders` — JSON output (pipe to `jq .`).
+- `syncweb --json folders` — JSON output; arrays are wrapped in a named key
+  (`{"folders":[…]}`), never a bare top-level array. Same for `find`
+  (`{"paths":[…]}`) and `access` (`{"folders":[…]}`). Verified 2026-10-05.
 - `syncweb --network home folders` — folders in the "home" network context.
 
 ## 24. Integrity & Error Recovery
@@ -175,6 +197,48 @@ match = { name = "*.tmp" }
 - Sync a 10GB folder over LAN — expected > 500 MB/s; monitor with
   `syncweb stats network`.
 
+## New Failures Found (2026-10-05, beyond the ten-failure pass)
+
+These were discovered while re-verifying the ten fixes against
+`d1eeb967…`. Per the testing rule the run stopped here; they are logged, not
+yet fixed.
+
+### NF-1 `--no-daemon` hangs when a daemon owns the store (some commands)
+
+- Repro (daemon running on the same store):
+  `syncweb --data-dir /root/plan --no-daemon access`
+- Expected: a fast error like the one `watch` gives — "a daemon owns
+  `<data-dir>`; stop it before using --no-daemon". Actual: the process blocks
+  indefinitely holding the embedded store; it had to be `kill -9`ed twice.
+- Notes: `--no-daemon watch --once` and other embedded commands *do* return the
+  daemon-owned error, so the guard is inconsistent across commands.
+
+### NF-2 `folders create` is not idempotent per path
+
+- Repro (daemon running): call `syncweb folders create ./alice/shared`
+  repeatedly. Actual: each call registers a **new** namespace for the same
+  path (observed 5+ namespaces for one `./alice/shared`), so `ls`, `watch` and
+  `sync` may operate on a different registration than the URL that was shared.
+- Expected: either reuse the existing registration for that path or fail with a
+  clear "already exists" error.
+- Impact: a shared URL can point at a namespace the sender no longer
+  imports into, producing `Remote peer aborted sync: NotFound` on the joiner.
+
+### NF-3 Cross-VM transfer from a freshly joined folder yields no content
+
+- Repro: fresh stores on both nodes (`--no-relay`), Alice `folders create
+  ./shared` → `watch --once ./shared` → share URL; Bob `folders join <url>
+  ./bob` → `download ./bob`.
+- Expected: Alice's two files download to Bob. Actual: `downloaded: 0 bytes`;
+  `ls ./bob` reports "no remote entries yet"; the peer index never propagates.
+  In a polluted store the same path surfaced
+  `Remote peer aborted sync: NotFound`.
+- Notes: this leaves `F3` (relative-path download) only partially verified — the
+  original `path is not absolute` failure is gone, but a successful end-to-end
+  cross-VM download was not observed. May be environmental (both nodes on
+  `--no-relay`, no mDNS/relay across the VM network) or a real propagation bug;
+  not yet distinguished.
+
 ---
 
 ## Known Limitations / Notes
@@ -187,14 +251,18 @@ match = { name = "*.tmp" }
 - Commands that need the live store must route through the daemon. Opening a
   second embedded node on a live data dir blocks on the store locks; several
   hangs found earlier came from this and were fixed by IPC routing (see the
-  `IrohNode::new` audit).
+  `IrohNode::new` audit). **Still failing** for at least `access --no-daemon`
+  (see New Failures below).
 - Plan-syntax corrections already applied in-body: `find` requires a positional
   pattern; `package upgrade <manifest-ticket>` (not the collection id);
   `package remove <collection> <version>` (version required);
   `package export <package-dir> <output>` (filesystem paths, not a collection
   id); `package import` always installs (`--no-install` does not exist);
   `link create --expires <unix-ts>` (not a duration);
-  `network test-relay --relay-url <URL>`.
+  `network test-relay <RELAY_URL>`; `config set discovery.mdns <bool>`
+  (not `discovery.local_mdns`); the node-database debug queries were corrected
+  to real tables (`folder_mounts`, `shares`; there is no `folder_configs`,
+  `snapshot_metadata`, or `folder_peers` table).
 
 ## Debugging SQL Queries (Node Database)
 
@@ -203,7 +271,7 @@ sqlite3 ~/.local/share/syncweb/node.db
 
 SELECT * FROM daemon_lifecycle;
 SELECT * FROM daemon_status;
-SELECT * FROM folder_configs;
+SELECT * FROM folder_mounts;
 SELECT * FROM folder_status_reports;
 SELECT * FROM sync_checkpoints ORDER BY last_updated_at DESC LIMIT 20;
 SELECT * FROM sync_entry_progress WHERE status = 'failed';
@@ -211,9 +279,8 @@ SELECT * FROM networks;
 SELECT * FROM network_members;
 SELECT * FROM filter_rules;
 SELECT * FROM installed_collections;
-SELECT * FROM snapshot_metadata;
+SELECT * FROM shares;
 SELECT * FROM app_config;
-SELECT * FROM folder_peers;
 SELECT * FROM schema_version;
 ```
 

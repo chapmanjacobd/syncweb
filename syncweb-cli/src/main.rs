@@ -39,7 +39,7 @@ use syncweb_core::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, DropImportOptions,
         DropImporter, FolderLike, FolderManager, PackageManager, SyncMode, SyncwebFolder,
     },
-    fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner},
+    fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner, Scanner},
     init::open_node,
     net::{NetworkLogger, NetworkManager, NetworkOptions, TransportFallback},
     node::{
@@ -2707,7 +2707,10 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     if command.dry_run {
         return dry_run_filters(&engine, command.paths, output_json);
     }
-    if !command.once && !no_daemon {
+    if command.once {
+        return watch_once(ctx, &command, &engine).await;
+    }
+    if !no_daemon {
         let client = daemon_client_or_start(data_dir, no_daemon, ctx.network)
             .await?
             .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or pass --no-daemon"))?;
@@ -2799,12 +2802,75 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
                 );
             }
         }
-        if command.once {
-            break;
+    }
+}
+
+/// One-shot scan/import backing `watch --once`. Prefers the daemon (which owns
+/// the live store) and falls back to an embedded node when none is running.
+async fn watch_once(ctx: &CliContext<'_>, command: &WatchArgs, engine: &FilterEngine) -> Result<()> {
+    let data_dir = ctx.data_dir;
+    let output_json = ctx.output_json;
+    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+        let resolved = resolve_selector_via_daemon(&client, &command.path).await?;
+        let watch_path = resolved
+            .mount_root
+            .clone()
+            .unwrap_or_else(|| command.path.clone());
+        let (imported, rejected) = client
+            .watch_once(
+                Some(resolved.namespace.clone()),
+                watch_path,
+                Some(engine.config().clone()),
+                command.exclude.clone(),
+            )
+            .await?;
+        print_watch_once(output_json, imported, &rejected);
+        return Ok(());
+    }
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let (resolved, folder) = resolve_selector_embedded(data_dir, &manager, &command.path).await?;
+    let root = resolved.mount_root.clone().unwrap_or_else(|| command.path.clone());
+    let scanned = Scanner::new(&root, command.exclude.clone()).scan()?;
+    let mut accepted = Vec::with_capacity(scanned.len());
+    let mut rejected = Vec::new();
+    for entry in scanned {
+        let is_rejected = engine
+            .evaluate_for_folder(
+                &resolved.namespace,
+                &FilterEntry::new(entry.relative_path.clone(), entry.size),
+            )
+            == FilterAction::Reject;
+        if is_rejected {
+            rejected.push(entry.relative_path.to_string_lossy().into_owned());
+        } else {
+            accepted.push(entry);
         }
     }
+    let importer = Importer::new(
+        node.blob_store().clone(),
+        node.docs_engine().clone(),
+        folder.doc().clone(),
+        folder.author(),
+    )
+    .with_root(&root);
+    let imported = importer.import_entries(accepted).await?;
+    let imported_count = u64::try_from(imported.len())
+        .map_err(|error| anyhow::anyhow!("watch entry count overflowed: {error}"))?;
+    print_watch_once(output_json, imported_count, &rejected);
     node.stop().await?;
     Ok(())
+}
+
+fn print_watch_once(output_json: bool, imported: u64, rejected: &[String]) {
+    if output_json {
+        println!("{}", serde_json::json!({"imported": imported, "rejected": rejected}));
+    } else {
+        for path in rejected {
+            println!("rejected\t{path}");
+        }
+        println!("imported: {imported}");
+    }
 }
 
 fn print_filter_config(engine: &FilterEngine, output_json: bool) -> Result<()> {

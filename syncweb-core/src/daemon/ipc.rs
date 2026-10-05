@@ -17,13 +17,13 @@ use crate::{
     bandwidth_stats::{FileStatsCollector, FileStatsReport},
     daemon::state::FolderStatusReport,
     error::{Result, SyncwebError},
-    filter::{FilterConfig, FilterEngine},
+    filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry},
     folder::{
         CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
         DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, ShareOptions,
         SyncMode, share_folder,
     },
-    fs::Importer,
+    fs::{Importer, Scanner},
     indexing::IndexingService,
     node::iroh_node::IrohNode,
     snapshot::SnapshotStore,
@@ -186,6 +186,14 @@ pub enum IpcCommand {
     ImportFiles {
         namespace: Option<String>,
         path: PathBuf,
+    },
+    WatchOnce {
+        namespace: Option<String>,
+        path: PathBuf,
+        #[serde(default)]
+        filter: Option<FilterConfig>,
+        #[serde(default)]
+        exclude: Vec<String>,
     },
     ImportArchive {
         input: PathBuf,
@@ -360,6 +368,7 @@ pub enum IpcResponse {
     DownloadComplete { bytes_transferred: u64 },
     TransferJobsProcessed { completed: u64, failed: u64 },
     ImportFilesComplete { entries: u64 },
+    WatchOnceComplete { imported: u64, rejected: Vec<String> },
     ImportComplete(Box<DropImportResult>),
     ExportComplete(Box<DropExportResult>),
     EnrichData(HashMap<String, usize>),
@@ -1067,6 +1076,12 @@ impl IpcServer {
                 self.handle_import_archive_response(input, target, filter).await
             }
             C::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
+            C::WatchOnce {
+                namespace,
+                path,
+                filter,
+                exclude,
+            } => self.handle_watch_once_response(namespace, path, filter, exclude).await,
             C::ExportArchive {
                 namespace,
                 version,
@@ -1290,6 +1305,19 @@ impl IpcServer {
         }
     }
 
+    async fn handle_watch_once_response(
+        &self,
+        namespace: Option<String>,
+        path: PathBuf,
+        filter: Option<FilterConfig>,
+        exclude: Vec<String>,
+    ) -> IpcResponse {
+        match self.handle_watch_once(namespace, path, filter, exclude).await {
+            Ok((imported, rejected)) => IpcResponse::WatchOnceComplete { imported, rejected },
+            Err(error) => response_from_error(error),
+        }
+    }
+
     async fn handle_download(&self, namespace: String, strategy: FetchStrategy) -> Result<u64> {
         self.handle_download_with_timeout(namespace, strategy, DOWNLOAD_TIMEOUT)
             .await
@@ -1433,6 +1461,75 @@ impl IpcServer {
         .with_root(root);
         let entries = importer.import_path(path).await?;
         u64::try_from(entries.len()).map_err(|error| SyncwebError::operation("import entry count overflowed", error))
+    }
+
+    /// One-shot filtered scan/import used by `watch --once` when a daemon owns
+    /// the live data directory. Scans `path` recursively, evaluates each file
+    /// against the caller-supplied filter, imports the accepted entries into
+    /// the resolved folder, and reports the accepted count plus rejected
+    /// folder-relative paths.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the folder cannot be resolved, the filesystem
+    /// cannot be scanned, or the entries cannot be imported.
+    async fn handle_watch_once(
+        &self,
+        namespace: Option<String>,
+        path: PathBuf,
+        filter: Option<FilterConfig>,
+        exclude: Vec<String>,
+    ) -> Result<(u64, Vec<String>)> {
+        let context = self.archive_context.clone().ok_or_else(|| {
+            SyncwebError::operation("daemon watch is unavailable", "server has no node context")
+        })?;
+        let namespace_id = if let Some(value) = namespace {
+            iroh_docs::NamespaceId::from_str(&value)
+                .map_err(|error| SyncwebError::operation("invalid watch namespace", error))?
+        } else {
+            let folders = self.daemon_handle.folder_registry.read().await.statuses();
+            let [folder] = folders.as_slice() else {
+                return Err(SyncwebError::operation(
+                    "cannot infer watch namespace",
+                    "specify a folder when more than one folder is managed",
+                ));
+            };
+            iroh_docs::NamespaceId::from_str(&folder.namespace)
+                .map_err(|error| SyncwebError::operation("invalid managed folder namespace", error))?
+        };
+        let folder = FolderManager::new(&context.node).get(namespace_id).await?;
+        let root = if path.is_dir() {
+            path
+        } else {
+            path.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+        };
+        let scanned = Scanner::new(&root, exclude).scan()?;
+        let filter_engine = filter.map(FilterEngine::new).transpose()?;
+        let folder_key = namespace_id.to_string();
+        let mut accepted = Vec::with_capacity(scanned.len());
+        let mut rejected = Vec::new();
+        for entry in scanned {
+            let is_rejected = filter_engine.as_ref().is_some_and(|engine| {
+                engine.evaluate_for_folder(&folder_key, &FilterEntry::new(entry.relative_path.clone(), entry.size))
+                    == FilterAction::Reject
+            });
+            if is_rejected {
+                rejected.push(entry.relative_path.to_string_lossy().into_owned());
+            } else {
+                accepted.push(entry);
+            }
+        }
+        let importer = Importer::new(
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            folder.doc().clone(),
+            folder.author(),
+        )
+        .with_root(&root);
+        let imported = importer.import_entries(accepted).await?;
+        let imported_count = u64::try_from(imported.len())
+            .map_err(|error| SyncwebError::operation("watch entry count overflowed", error))?;
+        Ok((imported_count, rejected))
     }
 
     async fn handle_import_archive(
@@ -3244,6 +3341,37 @@ impl IpcClient {
         }
     }
 
+    /// One-shot filtered scan/import for `watch --once`. Returns the imported
+    /// entry count and the folder-relative paths rejected by the filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the daemon request fails or returns an unexpected
+    /// response.
+    pub async fn watch_once(
+        &self,
+        namespace: Option<String>,
+        path: PathBuf,
+        filter: Option<FilterConfig>,
+        exclude: Vec<String>,
+    ) -> Result<(u64, Vec<String>)> {
+        match self
+            .request(
+                IpcCommand::WatchOnce {
+                    namespace,
+                    path,
+                    filter,
+                    exclude,
+                },
+                "watch once",
+            )
+            .await?
+        {
+            IpcResponse::WatchOnceComplete { imported, rejected } => Ok((imported, rejected)),
+            response => Err(Self::unexpected_response("watch once", response)),
+        }
+    }
+
     /// Import an archive and return its resulting collection.
     pub async fn import_archive(
         &self,
@@ -3715,6 +3843,7 @@ impl IpcClient {
                 | IpcResponse::FolderList(_)
                 | IpcResponse::DownloadComplete { .. }
                 | IpcResponse::ImportFilesComplete { .. }
+                | IpcResponse::WatchOnceComplete { .. }
                 | IpcResponse::ImportComplete(_)
                 | IpcResponse::ExportComplete(_)
                 | IpcResponse::EnrichData(_)

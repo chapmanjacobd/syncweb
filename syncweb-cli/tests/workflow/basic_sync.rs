@@ -292,7 +292,10 @@ fn snapshot_restore_diff_delete_round_trip() -> anyhow::Result<()> {
     );
 
     let list = alice.snapshot_list_json()?;
-    let ids = list.as_array().context("snapshot list should be an array")?;
+    let ids = list
+        .get("snapshots")
+        .and_then(serde_json::Value::as_array)
+        .context("snapshot list should wrap rows under `snapshots`")?;
     ensure!(ids.len() == 1, "only v2 should remain after delete: {list}");
     let remaining = ids
         .first()
@@ -322,7 +325,10 @@ fn snapshot_create_with_description() -> anyhow::Result<()> {
     );
 
     let list = alice.snapshot_list_json()?;
-    let array = list.as_array().context("snapshot list should be an array")?;
+    let array = list
+        .get("snapshots")
+        .and_then(serde_json::Value::as_array)
+        .context("snapshot list should wrap rows under `snapshots`")?;
     ensure!(array.len() == 1, "should list one snapshot: {list}");
     let entry = array.first().context("snapshot list is empty")?;
     ensure!(

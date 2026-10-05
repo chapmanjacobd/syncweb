@@ -12,16 +12,17 @@ fn json(output: &CmdOutput) -> anyhow::Result<serde_json::Value> {
     serde_json::from_str(&output.stdout()).context("parse JSON output")
 }
 
-fn first<'a>(value: &'a serde_json::Value, label: &str) -> anyhow::Result<&'a serde_json::Value> {
+fn first<'a>(value: &'a serde_json::Value, label: &str, key: &str) -> anyhow::Result<&'a serde_json::Value> {
     value
-        .as_array()
+        .get(key)
+        .and_then(serde_json::Value::as_array)
         .and_then(|array| array.first())
-        .with_context(|| format!("{label} should be a non-empty array: {value}"))
+        .with_context(|| format!("{label} should list rows under `{key}`: {value}"))
 }
 
 fn job_state(device: &Device, label: &str) -> anyhow::Result<serde_json::Value> {
     let output = run(device, &["--json", "transfer", "info"])?;
-    let state = first(&json(&output)?, label)?
+    let state = first(&json(&output)?, label, "jobs")?
         .get("state")
         .context("transfer job state missing")?
         .clone();
@@ -51,7 +52,7 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
 
     let remaining = run(alice, &["--json", "transfer", "remaining"])?;
     let remaining_json = json(&remaining)?;
-    let root_record = first(&remaining_json, "transfer remaining")?;
+    let root_record = first(&remaining_json, "transfer remaining", "roots")?;
     ensure!(root_record.get("id") == Some(&serde_json::Value::from("root-a")));
     ensure!(root_record.get("enabled") == Some(&serde_json::Value::from(true)));
 
@@ -80,7 +81,7 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
 
     let info = run(alice, &["--json", "transfer", "info"])?;
     let info_json = json(&info)?;
-    let job = first(&info_json, "transfer info")?;
+    let job = first(&info_json, "transfer info", "jobs")?;
     ensure!(job.get("id") == Some(&serde_json::Value::from(job_id.as_str())));
     ensure!(job.get("namespace") == Some(&serde_json::Value::from(namespace.as_str())));
     ensure!(job.get("state") == Some(&serde_json::Value::from("queued")));
@@ -102,7 +103,7 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
 
     let assigned = run(alice, &["--json", "transfer", "info"])?;
     let assigned_json = json(&assigned)?;
-    let assigned_job = first(&assigned_json, "transfer info after allocate")?;
+    let assigned_job = first(&assigned_json, "transfer info after allocate", "jobs")?;
     ensure!(
         assigned_job.get("root") == Some(&serde_json::Value::from("root-a")),
         "job should be assigned to root: {assigned_job}"
@@ -184,7 +185,7 @@ fn transfer_enqueue_now_materializes_immediately() -> anyhow::Result<()> {
 
     let info_output = run(alice, &["--json", "transfer", "info"])?;
     let info_json = json(&info_output)?;
-    let job = first(&info_json, "transfer info after --now")?;
+    let job = first(&info_json, "transfer info after --now", "jobs")?;
     ensure!(job.get("state") == Some(&serde_json::Value::from("completed")));
 
     Ok(())

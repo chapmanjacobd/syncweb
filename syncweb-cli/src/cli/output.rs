@@ -1,26 +1,68 @@
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use comfy_table::Table;
 use dialoguer::Confirm;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-pub fn init_tracing(verbose: bool) -> Result<()> {
+/// Install the JSON logger. When `log_file` is set, records are additionally
+/// appended to that exact path, which is what `start --log-file` promises.
+/// The returned guard flushes the non-blocking writer and must be held for the
+/// lifetime of the process.
+///
+/// # Errors
+///
+/// Returns an error if the log file cannot be opened or the global subscriber
+/// is already installed.
+pub fn init_tracing_with_log_file(verbose: bool, log_file: Option<&Path>) -> Result<Option<WorkerGuard>> {
     let default_filter = if verbose { "syncweb=debug" } else { "syncweb=info" };
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
-    fmt()
-        .json()
-        .with_writer(std::io::stderr)
-        .with_env_filter(filter)
-        .try_init()
-        .map_err(|err| anyhow!("failed to initialize structured logging: {err}"))?;
-    Ok(())
+    let stderr_layer = fmt::layer().json().with_writer(std::io::stderr);
+    if let Some(path) = log_file {
+        let parent = path.parent().filter(|parent| !parent.as_os_str().is_empty());
+        let directory = parent.unwrap_or_else(|| Path::new("."));
+        let file_name = path.file_name().unwrap_or_else(|| OsStr::new("syncweb.log"));
+        std::fs::create_dir_all(directory)
+            .map_err(|err| anyhow!("failed to create log directory {}: {err}", directory.display()))?;
+        // The appender always takes (directory, file name). Splitting the
+        // requested path keeps the name exactly as asked for: passing the whole
+        // path as the directory would create `<path>/<name>.YYYY-MM-DD` with
+        // rotation, or a stray directory without it.
+        let appender = tracing_appender::rolling::never(directory, file_name);
+        let (writer, guard) = tracing_appender::non_blocking(appender);
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .with(fmt::layer().json().with_writer(writer))
+            .try_init()
+            .map_err(|err| anyhow!("failed to initialize structured logging: {err}"))?;
+        Ok(Some(guard))
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .try_init()
+            .map_err(|err| anyhow!("failed to initialize structured logging: {err}"))?;
+        Ok(None)
+    }
 }
 
 pub fn print_version() {
     println!("syncweb {}", env!("CARGO_PKG_VERSION"));
+}
+
+/// Serialize a list of rows under a single named key.
+///
+/// `--json` promises one JSON object per command with arrays only inside a
+/// named key, so list-shaped output is wrapped instead of printed bare.
+pub fn json_list<T: serde::Serialize>(key: &str, rows: T) -> Result<String> {
+    let mut map = serde_json::Map::with_capacity(1);
+    map.insert(key.to_owned(), serde_json::to_value(rows)?);
+    Ok(serde_json::to_string_pretty(&serde_json::Value::Object(map))?)
 }
 
 /// Require interactive confirmation for destructive operations. Auto-approves
@@ -134,7 +176,7 @@ pub fn render_access_table(rows: &BTreeMap<String, AccessRow>, full: bool) -> St
     table.to_string()
 }
 
-/// Render the `access --json` array. `pinned` is intentionally omitted: pin
+/// Render the `access --json` list. `pinned` is intentionally omitted: pin
 /// status needs a live local node and guessing `false` would mislead.
 #[must_use]
 pub fn render_access_json(rows: &BTreeMap<String, AccessRow>) -> String {
@@ -161,7 +203,7 @@ pub fn render_access_json(rows: &BTreeMap<String, AccessRow>) -> String {
             })
         })
         .collect::<Vec<_>>();
-    serde_json::to_string_pretty(&values).unwrap_or_else(|_| "[]".to_owned())
+    json_list("folders", values).unwrap_or_else(|_| "{\"folders\":[]}".to_owned())
 }
 
 #[cfg(test)]

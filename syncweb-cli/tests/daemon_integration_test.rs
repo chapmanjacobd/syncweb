@@ -938,8 +938,124 @@ fn test_start_with_log_file_writes_log() -> anyhow::Result<()> {
     ensure!(shutdown.status.success(), "shutdown should succeed");
     std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
 
+    ensure!(
+        log_file.is_file(),
+        "--log-file should create the exact file it was given: {}",
+        log_file.display()
+    );
+    let contents = std::fs::read_to_string(&log_file).context("read the daemon log file")?;
+    ensure!(
+        contents.contains("daemon"),
+        "the log file should carry daemon records, got: {contents}"
+    );
+    ensure!(
+        contents.lines().all(|line| line.trim_start().starts_with('{')),
+        "the log file should be JSON lines: {contents}"
+    );
+
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
+}
+
+#[test]
+fn test_start_bg_reports_a_daemon_that_cannot_start() -> anyhow::Result<()> {
+    // A broken `filters.toml` kills the daemon during startup. `--bg` sends the
+    // child's stderr to /dev/null, so the CLI has to notice the early exit
+    // itself instead of printing a success message for a dead process.
+    let data_dir = cli_test_dir("bg-start-failure")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    // `--data-dir` is the base; the daemon's own store lives in `default/`.
+    let store_dir = data_dir.join("default");
+    std::fs::create_dir_all(&store_dir)?;
+    std::fs::write(store_dir.join("filters.toml"), "this is not valid toml [[[")?;
+
+    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg", "--no-relay"])?;
+    let stderr = String::from_utf8_lossy(&start.stderr).into_owned();
+    ensure!(
+        !start.status.success(),
+        "--bg should fail when the daemon cannot start, stdout: {}",
+        String::from_utf8_lossy(&start.stdout)
+    );
+    ensure!(
+        stderr.contains("daemon exited before becoming ready"),
+        "the error should say the daemon died, got: {stderr}"
+    );
+
+    let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
+    ensure!(
+        !stdout_contains(&status, "daemon: running"),
+        "no daemon should be left behind: {}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_start_bg_is_idempotent_when_a_daemon_is_already_running() -> anyhow::Result<()> {
+    // The second `start --bg` must not spawn a daemon that dies on the store
+    // lock and then report that dead pid as if it were running.
+    let data_dir = cli_test_dir("bg-idempotent")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let log_file = data_dir.join("second.log");
+
+    let first = syncweb(&["--data-dir", data_dir_arg, "start", "--bg", "--no-relay"])?;
+    ensure!(first.status.success(), "the first start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+    let running_pid = first_pid(&syncweb(&["--data-dir", data_dir_arg, "status"])?);
+
+    let second = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "start",
+        "--bg",
+        "--no-relay",
+        "--log-file",
+        log_file.to_str().context("UTF-8 log path")?,
+    ])?;
+    ensure!(
+        second.status.success(),
+        "starting an already-running daemon should succeed: {}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    ensure!(
+        stdout_contains(&second, "already running"),
+        "the second start should say the daemon was already up: {}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    // The CLI creates the file when it installs the appender, but no daemon ran,
+    // so it must stay empty.
+    let log_contents = std::fs::read_to_string(&log_file).unwrap_or_default();
+    ensure!(
+        log_contents.is_empty(),
+        "no second daemon should have written this log: {log_contents}"
+    );
+
+    ensure!(daemon_still_alive(
+        &syncweb(&["--data-dir", data_dir_arg, "status"])?,
+        running_pid
+    ));
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success(), "shutdown should succeed");
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+/// Pull the `pid: <n>` line out of `syncweb status` output.
+fn first_pid(status: &std::process::Output) -> u32 {
+    String::from_utf8_lossy(&status.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("pid: "))
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or_default()
+}
+
+fn daemon_still_alive(status: &std::process::Output, expected: u32) -> bool {
+    stdout_contains(status, "daemon: running") && first_pid(status) == expected
 }
 
 #[test]

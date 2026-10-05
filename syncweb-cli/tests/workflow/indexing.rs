@@ -481,7 +481,10 @@ fn indexing_search_with_limit() -> Result<()> {
 
     let searched = run(alice, &["--json", "search", "--limit", "5", "test"])?;
     let search_json = json_output(&searched)?;
-    let results = search_json.as_array().context("search should emit a JSON array")?;
+    let results = search_json
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .context("search should wrap rows under `results`")?;
     ensure!(!results.is_empty(), "search should find the imported record");
     ensure!(results.len() <= 5, "search limit should cap results to 5");
 

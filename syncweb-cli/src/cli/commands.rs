@@ -280,7 +280,7 @@ pub struct FolderCreate {
     #[arg(
         long,
         default_value = "sendreceive",
-        help = "Sync mode: sendreceive, receiveonly, or sendonly"
+        help = "Sync mode: sendreceive, receiveonly, receiveencrypted, or sendonly"
     )]
     pub mode: String,
     #[arg(long, help = "Enable Syncthing relay fallback for this folder")]

@@ -88,7 +88,10 @@ fn access_dashboard_lists_and_revokes_write() -> anyhow::Result<()> {
 
     let json = alice.run_ok(&["--json", "--no-daemon", "access"])?;
     let value: serde_json::Value = serde_json::from_str(&json.stdout()).context("access should emit JSON")?;
-    let row_array = value.as_array().context("access JSON should be an array")?;
+    let row_array = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .context("access JSON should wrap rows under `folders`")?;
     ensure!(row_array.len() == 1, "the folder should be listed once: {value}");
     let row = row_array.first().context("access JSON is empty")?;
     ensure!(
@@ -124,7 +127,8 @@ fn access_dashboard_lists_and_revokes_write() -> anyhow::Result<()> {
     let after = alice.run_ok(&["--json", "--no-daemon", "access"])?;
     let after_value: serde_json::Value = serde_json::from_str(&after.stdout()).context("access JSON after revoke")?;
     let after_row = after_value
-        .as_array()
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
         .and_then(|rows| rows.first())
         .context("one row should remain after revoke")?;
     ensure!(

@@ -131,7 +131,7 @@ impl BlobStore {
                 target: destination.as_ref().to_owned(),
             })
             .await
-            .map_err(|error| SyncwebError::operation("failed to export blob", error))
+            .map_err(|error| SyncwebError::operation("failed to export blob", crate::error::error_chain(&error)))
     }
 
     /// # Errors

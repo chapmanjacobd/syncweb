@@ -60,8 +60,9 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
 ///
 /// # Errors
 ///
-/// Returns an error if an entry directory cannot be created or a blob cannot
-/// be exported to its destination.
+/// Returns an error if `mount_root` cannot be resolved against the current
+/// directory, an entry directory cannot be created, or a blob cannot be
+/// exported to its destination.
 pub async fn materialize_selected_content(
     node: &IrohNode,
     folder: &SyncwebFolder,
@@ -76,9 +77,10 @@ pub async fn materialize_selected_content(
         candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
     }
     let selected = strategy.select(&candidates);
+    let root = absolute_base(mount_root)?;
     let mut count = 0_usize;
     for candidate in selected {
-        let dest = mount_root.join(&candidate.path);
+        let dest = root.join(&candidate.path);
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -88,6 +90,20 @@ pub async fn materialize_selected_content(
         count = count.saturating_add(1);
     }
     Ok(count)
+}
+
+/// Resolve `base` to an absolute path without touching the filesystem.
+///
+/// Blob export rejects relative destinations, so a folder registered with a
+/// relative mount path (the CLI default is a relative `--data-dir`) still needs
+/// an absolute root to materialize into.
+fn absolute_base(base: &Path) -> Result<PathBuf> {
+    if base.is_absolute() {
+        return Ok(base.to_path_buf());
+    }
+    let cwd = std::env::current_dir()
+        .map_err(|error| crate::error::SyncwebError::operation("failed to resolve current directory", error))?;
+    Ok(cwd.join(base))
 }
 
 /// Whether everything selected by `strategy` is already present locally.
@@ -337,5 +353,35 @@ impl HealthReport {
             })
             .collect();
         Self::from_candidates(&enriched, well_seeded_threshold)
+    }
+}
+
+#[cfg(test)]
+mod absolute_base_tests {
+    use super::*;
+
+    #[test]
+    fn absolute_paths_are_returned_unchanged() {
+        assert_eq!(
+            absolute_base(Path::new("/srv/folder")).unwrap(),
+            PathBuf::from("/srv/folder")
+        );
+    }
+
+    #[test]
+    fn relative_paths_are_anchored_to_the_current_directory() {
+        let base = Path::new("relative/folder");
+        let resolved = absolute_base(base).unwrap();
+        assert!(
+            resolved.is_absolute(),
+            "blob export rejects relative roots: {resolved:?}"
+        );
+        assert!(resolved.ends_with(base), "{resolved:?} should end with {base:?}");
+    }
+
+    #[test]
+    fn dot_resolves_to_the_current_directory() {
+        let resolved = absolute_base(Path::new(".")).unwrap();
+        assert!(resolved.is_absolute());
     }
 }

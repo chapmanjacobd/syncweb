@@ -164,7 +164,7 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
             break
         }
         'syncweb;folders;create' {
-            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Sync mode: sendreceive, receiveonly, or sendonly')
+            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Sync mode: sendreceive, receiveonly, receiveencrypted, or sendonly')
             [CompletionResult]::new('--network', '--network', [CompletionResultType]::ParameterName, 'Add the created folder to a named network')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--relay-fallback', '--relay-fallback', [CompletionResultType]::ParameterName, 'Enable Syncthing relay fallback for this folder')

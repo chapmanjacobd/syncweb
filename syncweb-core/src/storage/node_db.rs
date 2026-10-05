@@ -210,8 +210,11 @@ impl NodeDatabase {
         CREATE TABLE IF NOT EXISTS folder_status_reports (
             namespace_id TEXT NOT NULL,
             path TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'folder',
+            mode TEXT NOT NULL DEFAULT '',
             session_active INTEGER NOT NULL DEFAULT 0,
             last_sync_at INTEGER,
+            sync_count INTEGER NOT NULL DEFAULT 0,
             entries_synced INTEGER NOT NULL DEFAULT 0,
             errors_json TEXT NOT NULL DEFAULT '[]',
             updated_at INTEGER NOT NULL,
@@ -381,6 +384,15 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
         if let Err(error) = connection.execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT") {
             tracing::debug!(%error, "migration: add doc_ticket (may already exist)");
+        }
+        for migration in [
+            "ALTER TABLE folder_status_reports ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'",
+            "ALTER TABLE folder_status_reports ADD COLUMN mode TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE folder_status_reports ADD COLUMN sync_count INTEGER NOT NULL DEFAULT 0",
+        ] {
+            if let Err(error) = connection.execute_batch(migration) {
+                tracing::debug!(%error, "migration: {migration} (may already exist)");
+            }
         }
         if let Err(error) = connection.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_transfer_jobs_namespace ON transfer_jobs(namespace_id);
@@ -562,21 +574,27 @@ impl NodeDatabase {
             let errors_json = serde_json::to_string(&folder.errors).unwrap_or_else(|_| "[]".to_string());
             connection
                 .execute(
-                    "INSERT INTO folder_status_reports(namespace_id, path, session_active, last_sync_at,
-                    entries_synced, errors_json, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    "INSERT INTO folder_status_reports(namespace_id, path, kind, mode, session_active,
+                    last_sync_at, sync_count, entries_synced, errors_json, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(namespace_id) DO UPDATE SET
                     path = excluded.path,
+                    kind = excluded.kind,
+                    mode = excluded.mode,
                     session_active = excluded.session_active,
                     last_sync_at = excluded.last_sync_at,
+                    sync_count = excluded.sync_count,
                     entries_synced = excluded.entries_synced,
                     errors_json = excluded.errors_json,
                     updated_at = excluded.updated_at",
                     params![
                         folder.namespace,
                         folder.path.to_string_lossy().as_ref(),
+                        folder.kind,
+                        folder.mode,
                         i64::from(folder.session_active),
                         folder.last_sync_at.map(u64::cast_signed),
+                        folder.sync_count.cast_signed(),
                         folder.entries_synced.cast_signed(),
                         errors_json,
                         now,
@@ -647,7 +665,8 @@ impl NodeDatabase {
         if let Some(mut report) = result {
             let mut folder_stmt = connection
                 .prepare(
-                    "SELECT namespace_id, path, session_active, last_sync_at, entries_synced, errors_json
+                    "SELECT namespace_id, path, kind, mode, session_active, last_sync_at,
+                    sync_count, entries_synced, errors_json
                  FROM folder_status_reports",
                 )
                 .map_err(|error| SyncwebError::operation("failed to prepare folder status query", error))?;
@@ -655,19 +674,26 @@ impl NodeDatabase {
                 .query_map([], |row| {
                     let namespace: String = row.get(0)?;
                     let path: String = row.get(1)?;
-                    let session_active: i64 = row.get(2)?;
-                    let last_sync_at: Option<i64> = row.get(3)?;
-                    let entries_synced: i64 = row.get(4)?;
-                    let errors_json: String = row.get(5)?;
+                    let kind: String = row.get(2)?;
+                    let mode: String = row.get(3)?;
+                    let session_active: i64 = row.get(4)?;
+                    let last_sync_at: Option<i64> = row.get(5)?;
+                    let sync_count: i64 = row.get(6)?;
+                    let entries_synced: i64 = row.get(7)?;
+                    let errors_json: String = row.get(8)?;
                     let errors: Vec<String> = serde_json::from_str(&errors_json).unwrap_or_default();
-                    Ok(FolderStatusReport::new(
+                    let mut folder = FolderStatusReport::new(
                         namespace,
                         path,
                         session_active != 0,
                         last_sync_at.map(i64::cast_unsigned),
                         entries_synced.cast_unsigned(),
                         errors,
-                    ))
+                    );
+                    folder.kind = if kind.is_empty() { folder.kind } else { kind };
+                    folder.mode = mode;
+                    folder.sync_count = sync_count.cast_unsigned();
+                    Ok(folder)
                 })
                 .map_err(|error| SyncwebError::operation("failed to query folder statuses", error))?
                 .collect::<std::result::Result<Vec<_>, _>>()
@@ -2574,6 +2600,120 @@ mod tests {
 
     fn make_public_key(seed: u8) -> PublicKey {
         iroh::SecretKey::from_bytes(&[seed; 32]).public()
+    }
+
+    #[test]
+    fn status_round_trips_kind_mode_and_sync_count() {
+        let db = test_db();
+        let mut folder = FolderStatusReport::new("ns-1", "/tmp/one", true, Some(1_700_000_000), 12, Vec::new());
+        folder.kind = "encrypted".to_owned();
+        folder.mode = "receiveencrypted".to_owned();
+        folder.sync_count = 4;
+
+        let mut report = DaemonStatusReport::from_state(
+            &DaemonState::new(
+                42,
+                "node-1".to_owned(),
+                1_700_000_000,
+                std::path::Path::new("/tmp/store"),
+                DaemonStatus::Running,
+            ),
+            5,
+            vec![folder.clone()],
+            BandwidthSnapshot::default(),
+            None,
+            4,
+        );
+        report.pid = 42;
+        db.save_status(&report).unwrap();
+
+        let loaded = db.load_status().unwrap().expect("status should be persisted");
+        let saved = loaded.folders.first().expect("the folder row should be present");
+        assert_eq!(saved.namespace, "ns-1");
+        assert_eq!(saved.kind, "encrypted", "kind must survive a restart");
+        assert_eq!(saved.mode, "receiveencrypted", "mode must survive a restart");
+        assert_eq!(saved.sync_count, 4, "sync_count must survive a restart");
+        assert_eq!(saved.entries_synced, 12);
+        assert_eq!(saved, &folder);
+    }
+
+    #[test]
+    fn status_without_a_stored_row_keeps_the_default_kind() {
+        let db = test_db();
+        let folder = FolderStatusReport::new("ns-1", "/tmp/one", false, None, 0, Vec::new());
+        let report = DaemonStatusReport::from_state(
+            &DaemonState::new(
+                42,
+                "node-1".to_owned(),
+                1_700_000_000,
+                std::path::Path::new("/tmp/store"),
+                DaemonStatus::Running,
+            ),
+            5,
+            vec![folder],
+            BandwidthSnapshot::default(),
+            None,
+            4,
+        );
+        db.save_status(&report).unwrap();
+
+        let loaded = db.load_status().unwrap().expect("status should be persisted");
+        let saved = loaded.folders.first().expect("the folder row should be present");
+        assert_eq!(saved.kind, "folder", "an unset kind should read back as the default");
+        assert!(
+            saved.mode.is_empty(),
+            "an unknown mode stays empty rather than being invented"
+        );
+    }
+
+    /// A database written before `kind`/`mode`/`sync_count` existed must gain
+    /// those columns through the idempotent migrations, not fail to open.
+    #[test]
+    fn an_older_status_table_gains_the_new_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE folder_status_reports (
+                namespace_id TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                session_active INTEGER NOT NULL,
+                last_sync_at INTEGER,
+                entries_synced INTEGER NOT NULL,
+                errors_json TEXT NOT NULL
+             );
+             INSERT INTO folder_status_reports
+                VALUES ('old-ns', '/tmp/old', 0, NULL, 7, '[]');
+             CREATE TABLE daemon_status (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                pid INTEGER NOT NULL,
+                node_id TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                uptime_seconds INTEGER NOT NULL,
+                upload_total INTEGER NOT NULL DEFAULT 0,
+                download_total INTEGER NOT NULL DEFAULT 0,
+                upload_rate INTEGER NOT NULL DEFAULT 0,
+                download_rate INTEGER NOT NULL DEFAULT 0,
+                has_schedule INTEGER NOT NULL DEFAULT 0,
+                in_active_window INTEGER NOT NULL DEFAULT 0,
+                next_window_start INTEGER,
+                rayon_threads INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+             );
+             INSERT INTO daemon_status
+                VALUES (1, 11, 'node-old', 1700000000, 3, 0, 0, 0, 0, 0, 0, NULL, 2, 1700000000);",
+        )
+        .unwrap();
+        let db = NodeDatabase {
+            connection: Arc::new(Mutex::new(conn)),
+        };
+        db.init_schema().unwrap();
+
+        let loaded = db.load_status().unwrap().expect("the old row should still load");
+        let folder = loaded.folders.first().expect("the old row should still be there");
+        assert_eq!(folder.namespace, "old-ns");
+        assert_eq!(folder.entries_synced, 7, "existing columns must be preserved");
+        assert_eq!(folder.kind, "folder");
+        assert!(folder.mode.is_empty());
+        assert_eq!(folder.sync_count, 0);
     }
 
     #[test]

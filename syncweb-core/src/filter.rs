@@ -32,7 +32,9 @@ pub struct MatchCriteria {
     #[serde(alias = "ext")]
     pub extensions: Option<Vec<String>>,
     pub path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_min_size")]
     pub min_size: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_max_size")]
     pub max_size: Option<u64>,
     #[serde(default, deserialize_with = "deserialize_optional_duration")]
     pub age: Option<Duration>,
@@ -349,6 +351,74 @@ fn matches_rule(compiled: &CompiledRule, entry: &FilterEntry) -> bool {
     true
 }
 
+/// Deserialize a size bound that may be a byte count or a human-readable size.
+///
+/// `min_size`/`max_size` accept `100MB`, `1.5GiB`, `500K` and plain byte counts
+/// so a hand-written `filters.toml` reads like the rest of the CLI (`--size`,
+/// `schedule set --bandwidth`).
+/// Which end of a parsed `--size`-style constraint a bound wants.
+///
+/// `min_size` and `max_size` accept the same grammar as `--size` for
+/// convenience, so `min_size = "100MB"` and `min_size = "1MB-2GB"` both work.
+/// A range has to pick one end, and picking the wrong one would invert the
+/// bound (`min_size = "-5GB"` means "smaller than 5GB"), so the field decides.
+#[derive(Clone, Copy)]
+enum SizeBound {
+    Minimum,
+    Maximum,
+}
+
+fn deserialize_size_bound<'de, D>(deserializer: D, bound: SizeBound) -> std::result::Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SizeValue {
+        Bytes(u64),
+        Text(String),
+    }
+
+    fn parse(value: SizeValue, bound: SizeBound) -> std::result::Result<u64, String> {
+        let (min, max, text) = match value {
+            SizeValue::Bytes(bytes) => return Ok(bytes),
+            SizeValue::Text(text) => {
+                let (min, max) = crate::parsing::parse_size_constraint(&text).map_err(|error| error.to_string())?;
+                (min, max, text)
+            }
+        };
+        match bound {
+            SizeBound::Minimum => min,
+            SizeBound::Maximum => max,
+        }
+        .ok_or_else(|| {
+            format!(
+                "size constraint {text:?} only defines an upper bound; \
+                 use `max_size` for it, or a plain value for an exact bound"
+            )
+        })
+    }
+
+    Option::<SizeValue>::deserialize(deserializer)?
+        .map(|value| parse(value, bound))
+        .transpose()
+        .map_err(serde::de::Error::custom)
+}
+
+fn deserialize_min_size<'de, D>(deserializer: D) -> std::result::Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_size_bound(deserializer, SizeBound::Minimum)
+}
+
+fn deserialize_max_size<'de, D>(deserializer: D) -> std::result::Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_size_bound(deserializer, SizeBound::Maximum)
+}
+
 fn deserialize_optional_duration<'de, D>(deserializer: D) -> std::result::Result<Option<Duration>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -393,4 +463,104 @@ where
         .map(parse)
         .transpose()
         .map_err(serde::de::Error::custom)
+}
+
+#[cfg(test)]
+mod size_bound_tests {
+    use super::*;
+
+    fn criteria_from_toml(toml_text: &str) -> std::result::Result<MatchCriteria, toml::de::Error> {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            criteria: MatchCriteria,
+        }
+        toml::from_str::<Wrapper>(toml_text).map(|wrapper| wrapper.criteria)
+    }
+
+    const KB: u64 = 1_000;
+    const MB: u64 = 1_000_000;
+    const GB: u64 = 1_000_000_000;
+    const GIB: u64 = 1_073_741_824;
+
+    #[test]
+    fn human_readable_bounds_are_accepted() {
+        let criteria = criteria_from_toml(
+            r#"[criteria]
+            min_size = "100MB"
+            max_size = "2GiB"
+            "#,
+        )
+        .expect("human-readable sizes should parse");
+        assert_eq!(criteria.min_size, Some(100 * MB));
+        assert_eq!(criteria.max_size, Some(2 * GIB));
+    }
+
+    #[test]
+    fn plain_byte_counts_are_accepted() {
+        let criteria = criteria_from_toml(
+            r"[criteria]
+            min_size = 1024
+            ",
+        )
+        .expect("byte counts should parse");
+        assert_eq!(criteria.min_size, Some(1024));
+    }
+
+    #[test]
+    fn inclusive_bounds_agree() {
+        let criteria = criteria_from_toml(
+            r#"[criteria]
+            min_size = "1KB"
+            max_size = "5GB"
+            "#,
+        )
+        .expect("inclusive bounds should parse");
+        assert_eq!(criteria.min_size, Some(KB));
+        assert_eq!(criteria.max_size, Some(5 * GB));
+    }
+
+    #[test]
+    fn exclusive_bounds_keep_their_direction() {
+        let criteria = criteria_from_toml(
+            r#"[criteria]
+            min_size = ">1MB"
+            max_size = "<5GB"
+            "#,
+        )
+        .expect("exclusive bounds should parse");
+        assert_eq!(criteria.min_size, Some(MB + 1));
+        assert_eq!(criteria.max_size, Some(5 * GB - 1));
+    }
+
+    #[test]
+    fn an_upper_bound_in_min_size_is_rejected() {
+        let error = criteria_from_toml(
+            r#"[criteria]
+            min_size = "<5GB"
+            "#,
+        )
+        .expect_err("an upper bound is not a minimum");
+        assert!(
+            error.to_string().contains("max_size"),
+            "the error should point at max_size: {error}"
+        );
+    }
+
+    #[test]
+    fn absent_bounds_are_none() {
+        let criteria = criteria_from_toml("[criteria]").expect("empty criteria should parse");
+        assert_eq!(criteria.min_size, None);
+        assert_eq!(criteria.max_size, None);
+    }
+
+    #[test]
+    fn unparsable_sizes_are_rejected() {
+        let error = criteria_from_toml(
+            r#"[criteria]
+            min_size = "not-a-size"
+            "#,
+        )
+        .expect_err("garbage should not parse");
+        assert!(error.to_string().contains("size"), "unhelpful error: {error}");
+    }
 }

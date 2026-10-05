@@ -127,7 +127,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "join" -d 'Join a folder from an Iroh document ticket'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "import" -d 'Import local files into a synchronized folder'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l mode -d 'Sync mode: sendreceive, receiveonly, or sendonly' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l mode -d 'Sync mode: sendreceive, receiveonly, receiveencrypted, or sendonly' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l network -d 'Add the created folder to a named network' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l relay-fallback -d 'Enable Syncthing relay fallback for this folder'

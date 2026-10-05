@@ -25,17 +25,26 @@ pub struct MediaState {
     pub blob_store: BlobStore,
 }
 
+/// Parse a hex blob hash, rejecting malformed input.
+///
+/// `iroh_blobs::Hash`'s `FromStr` panics inside `data-encoding` when the input
+/// is valid hex of the wrong length (a short `?mime=` style probe, a truncated
+/// URL), which would drop the connection instead of returning `400`.
+fn parse_blob_hash(value: &str) -> Option<iroh_blobs::Hash> {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    value.parse().ok()
+}
+
 pub async fn serve_media(
     State(state): State<Arc<MediaState>>,
     Path(hash_str): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
-    let hash: iroh_blobs::Hash = match hash_str.parse() {
-        Ok(h) => h,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, "invalid hash").into_response();
-        }
+    let Some(hash) = parse_blob_hash(&hash_str) else {
+        return (StatusCode::BAD_REQUEST, "invalid hash").into_response();
     };
 
     let blob_store = &state.blob_store;
@@ -143,4 +152,34 @@ async fn peek_magic_bytes(blob_store: &BlobStore, hash: iroh_blobs::Hash, max_le
     let mut buf = Vec::with_capacity(max_len);
     let _ = limited.read_to_end(&mut buf).await;
     buf
+}
+
+#[cfg(test)]
+mod hash_parsing_tests {
+    use super::*;
+
+    #[test]
+    fn a_valid_hash_parses() {
+        let hash = parse_blob_hash("ce5c3b899e1c5bb1bdf0013b35cfbfc564d1eb25420663013f43b3c0a2d549b4");
+        assert!(hash.is_some(), "a well-formed hash must parse");
+    }
+
+    #[test]
+    fn short_hex_is_rejected_instead_of_panicking() {
+        // `iroh_blobs::Hash: FromStr` panics on valid hex of the wrong length.
+        assert!(parse_blob_hash("deadbeef").is_none());
+        assert!(parse_blob_hash("00").is_none());
+    }
+
+    #[test]
+    fn non_hex_of_the_right_length_is_rejected() {
+        let not_hex = "zz".repeat(32);
+        assert!(parse_blob_hash(&not_hex).is_none());
+    }
+
+    #[test]
+    fn empty_and_overlong_input_is_rejected() {
+        assert!(parse_blob_hash("").is_none());
+        assert!(parse_blob_hash(&"a".repeat(65)).is_none());
+    }
 }

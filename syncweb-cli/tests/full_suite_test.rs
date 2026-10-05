@@ -194,7 +194,10 @@ fn json_network_list_and_status_envelopes() -> anyhow::Result<()> {
     let list = run_with_data(&data_dir, &["--json", "network", "list"])?;
     assert_success(&list, "json network list")?;
     let value: serde_json::Value = serde_json::from_slice(&list.stdout)?;
-    let arr = value.as_array().context("network list JSON should be an array")?;
+    let arr = value
+        .get("networks")
+        .and_then(serde_json::Value::as_array)
+        .context("network list JSON should wrap rows under `networks`")?;
     ensure!(
         arr.iter()
             .any(|n| n.get("name").and_then(serde_json::Value::as_str) == Some("team")),
@@ -204,7 +207,10 @@ fn json_network_list_and_status_envelopes() -> anyhow::Result<()> {
     let status = run_with_data(&data_dir, &["--json", "network", "status"])?;
     assert_success(&status, "json network status")?;
     let sv: serde_json::Value = serde_json::from_slice(&status.stdout)?;
-    ensure!(sv.as_array().is_some(), "network status JSON should be an array: {sv}");
+    ensure!(
+        sv.get("networks").and_then(serde_json::Value::as_array).is_some(),
+        "network status JSON should wrap rows under `networks`: {sv}"
+    );
 
     fs::remove_dir_all(&data_dir)?;
     Ok(())
@@ -758,7 +764,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     let list = run_with_data(&data_dir, &["--json", "package", "list"])?;
     assert_success(&list, "package list")?;
     let list_json: serde_json::Value = serde_json::from_slice(&list.stdout)?;
-    let installed = list_json.as_array().context("package list should be an array")?;
+    let installed = list_json
+        .get("collections")
+        .and_then(serde_json::Value::as_array)
+        .context("package list should wrap rows under `collections`")?;
     ensure!(installed.len() == 1, "one collection installed: {list_json}");
     let installed_collection = installed.first().context("package list is empty")?;
     ensure!(installed_collection.get("collection") == Some(&serde_json::Value::from(collection.as_str())));
@@ -767,7 +776,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     let search = run_with_data(&data_dir, &["--json", "search", "--kind", "package", &collection])?;
     assert_success(&search, "search --kind package")?;
     let search_json: serde_json::Value = serde_json::from_slice(&search.stdout)?;
-    let results = search_json.as_array().context("search should be an array")?;
+    let results = search_json
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .context("search should wrap rows under `results`")?;
     ensure!(
         results
             .iter()
@@ -779,8 +791,9 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     assert_success(&versions, "package versions")?;
     let versions_json: serde_json::Value = serde_json::from_slice(&versions.stdout)?;
     let version_list = versions_json
-        .as_array()
-        .context("package versions should be an array")?;
+        .get("versions")
+        .and_then(serde_json::Value::as_array)
+        .context("package versions should wrap rows under `versions`")?;
     ensure!(
         version_list.iter().any(|v| v == &serde_json::Value::from("1.0.0")),
         "versions should include 1.0.0: {versions_json}"
@@ -833,9 +846,10 @@ fn package_import_search_install_upgrade_remove() -> anyhow::Result<()> {
     assert_success(&export, "package export --version")?;
     let export_json: serde_json::Value = serde_json::from_slice(&export.stdout)?;
     let export_entry = export_json
-        .as_array()
+        .get("archives")
+        .and_then(serde_json::Value::as_array)
         .and_then(|array| array.first())
-        .context("package export should be a non-empty array")?;
+        .context("package export should wrap rows under `archives`")?;
     ensure!(
         export_entry.get("version") == Some(&serde_json::Value::from("3.0.0")),
         "export should use the requested version: {export_json}"

@@ -23,7 +23,10 @@ use cli::{
         TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
-    output::{AccessRow, confirm_destructive, init_tracing, print_version, render_access_json, render_access_table},
+    output::{
+        AccessRow, confirm_destructive, init_tracing_with_log_file, json_list, print_version, render_access_json,
+        render_access_table,
+    },
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use iroh_blobs::Hash as BlobHash;
@@ -108,6 +111,9 @@ fn format_bytes(bytes: u64) -> String {
     format!("{size} {unit_label}")
 }
 
+/// How long a spawned daemon gets to bind its IPC socket before `--bg` fails.
+const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
@@ -116,7 +122,16 @@ async fn main() -> Result<()> {
         std::process::exit(code);
     }
     let cli = Cli::parse();
-    init_tracing(cli.verbose)?;
+    // Only `start` can redirect the log; every other command inherits the
+    // default subscriber.
+    let log_file = if let Command::Start(start) = &cli.command {
+        start.log_file.clone()
+    } else {
+        None
+    };
+    // The appender guard has to outlive `run`, so it is held for the whole
+    // process instead of being dropped right after installation.
+    let _log_guard = init_tracing_with_log_file(cli.verbose, log_file.as_deref())?;
     tracing::debug!(command = ?cli.command, category = category_of(&cli.command), "cli initialized");
     Box::pin(execute_cli(cli)).await
 }
@@ -272,11 +287,31 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
             no_color,
         };
         if args.bg && !args.media_only {
-            let child = spawn_daemon_process(base, &args, network.as_deref())?;
+            // A daemon that is already up owns the store, so a freshly spawned
+            // one would die on the lock. Checking first keeps `--bg` idempotent
+            // and stops it from reporting the dead child's pid.
+            if let Some(client) = syncweb_core::daemon::daemon_client(&effective_start)? {
+                let pid = daemon_pid(&effective_start)?;
+                if output_json {
+                    println!("{}", serde_json::json!({"status": "already-running", "pid": pid}));
+                } else {
+                    println!("daemon: already running");
+                    println!("pid: {pid}");
+                }
+                return Ok(()).map(|()| drop(client));
+            }
+            let mut child = spawn_daemon_process(base, &args, network.as_deref())?;
+            let pid = child.id();
+            // `--bg` must not report success for a daemon that died during
+            // startup (bad `filters.toml`, a held store lock, ...): the child's
+            // own stderr goes to /dev/null, so wait for the IPC socket and
+            // surface the exit status if the process dies first.
+            wait_for_daemon_ready(&effective_start, Some(&mut child), DAEMON_START_TIMEOUT, None).await?;
             if output_json {
-                println!("{}", serde_json::json!({"status": "started", "pid": child.id()}));
+                println!("{}", serde_json::json!({"status": "started", "pid": pid}));
             } else {
-                println!("daemon starting: {}", child.id());
+                println!("daemon: running");
+                println!("pid: {pid}");
             }
             return Ok(());
         }
@@ -452,7 +487,11 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     } else {
         syncweb_core::node::iroh_node::RelayMode::Default
     };
-    daemon_config.media_listen = args.media_listen;
+    let media_listen = match args.media_listen {
+        Some(addr) => addr,
+        None => DEFAULT_MEDIA_LISTEN.parse()?,
+    };
+    daemon_config.media_listen = Some(media_listen);
     daemon_config.discovery.mdns = !args.no_mdns;
     daemon_config.discovery.beacon = !args.no_beacon;
     if let Some(port) = args.beacon_port {
@@ -463,6 +502,15 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     }
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
+    // Log the startup record: `--log-file` is useless if the file stays empty
+    // until shutdown, which is the only other thing a quiet daemon logs.
+    tracing::info!(
+        node_id = %state.node_id,
+        pid = state.pid,
+        data_dir = %display_path(data_dir),
+        media_listen = ?media_listen,
+        "daemon started"
+    );
     if output_json {
         println!("{}", serde_json::to_string_pretty(&state)?);
     } else {
@@ -490,6 +538,23 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
     let message = client.shutdown(args.force).await?;
     print_daemon_ok(&message, output_json);
     Ok(())
+}
+
+/// Read the pid of the daemon that currently owns `data_dir`.
+///
+/// # Errors
+///
+/// Returns an error when the store cannot be read.
+fn daemon_pid(data_dir: &Path) -> Result<u32> {
+    open_node_db(data_dir)?
+        .load_lifecycle()
+        .map(|lifecycle| lifecycle.map_or(0, |state| state.pid))
+        .map_err(Into::into)
+}
+
+/// Render a path for logging without failing on non-UTF-8 bytes.
+fn display_path(path: &Path) -> std::borrow::Cow<'_, str> {
+    path.to_string_lossy()
 }
 
 fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: Option<&str>) -> Result<Child> {
@@ -565,26 +630,45 @@ async fn daemon_client_or_start(
     let pb = ProgressBar::new_spinner();
     pb.set_style(ProgressStyle::default_spinner().template("{spinner} {msg}")?);
     pb.set_message("waiting for daemon to start...");
+    let started = wait_for_daemon_ready(data_dir, daemon_child.as_mut(), DAEMON_START_TIMEOUT, Some(&pb)).await;
+    pb.finish_and_clear();
+    started?;
+    Ok(syncweb_core::daemon::daemon_client(data_dir)?)
+}
+
+/// Wait until the daemon for `data_dir` answers on its IPC socket.
+///
+/// `child` is polled as well so a daemon that exits during startup (an
+/// unparsable `filters.toml`, a held store lock, ...) reports its status
+/// instead of a bare timeout. `spinner` is ticked while waiting, when given.
+async fn wait_for_daemon_ready(
+    data_dir: &Path,
+    mut child: Option<&mut Child>,
+    timeout: Duration,
+    spinner: Option<&ProgressBar>,
+) -> Result<()> {
     let deadline = Instant::now()
-        .checked_add(Duration::from_secs(10))
+        .checked_add(timeout)
         .ok_or_else(|| anyhow::anyhow!("failed to calculate daemon startup deadline"))?;
     loop {
-        if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-            pb.finish_and_clear();
-            return Ok(Some(client));
+        if syncweb_core::daemon::daemon_client(data_dir)?.is_some() {
+            return Ok(());
         }
-        if let Some(child) = daemon_child.as_mut()
-            && let Some(status) = child.try_wait()?
+        if let Some(proc) = child.as_mut()
+            && let Some(status) = proc.try_wait()?
         {
-            pb.finish_and_clear();
-            anyhow::bail!("daemon exited before becoming ready (status: {status})");
+            anyhow::bail!(
+                "daemon exited before becoming ready (status: {status}); \
+                 rerun without --bg to see the startup error, or pass --log-file"
+            );
         }
         if Instant::now() >= deadline {
-            pb.finish_and_clear();
-            anyhow::bail!("timed out waiting for daemon to become ready");
+            anyhow::bail!("timed out after {timeout:?} waiting for the daemon to become ready");
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
-        pb.tick();
+        if let Some(progress) = spinner {
+            progress.tick();
+        }
     }
 }
 
@@ -844,7 +928,7 @@ fn render_snapshot_rows(rows: &[syncweb_core::daemon::SnapshotInfo], output_json
                 })
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&values)?);
+        println!("{}", json_list("snapshots", values)?);
     } else {
         let mut table = Table::new();
         table.set_header(["ID", "Created", "Size", "Files", "Description"]);
@@ -923,7 +1007,7 @@ async fn handle_import(ctx: &CliContext<'_>, command: ImportArgs) -> Result<()> 
             .iter()
             .map(|entry| serde_json::json!({"path": entry.relative_path}))
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&values)?);
+        println!("{}", json_list("imported", values)?);
     } else {
         for entry in &entries {
             println!("imported\t{}", entry.relative_path.display());
@@ -1653,7 +1737,7 @@ fn handle_transfer_info(ctx: &CliContext<'_>, args: &TransferInfoArgs) -> Result
                 })
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        println!("{}", json_list("jobs", output)?);
     } else {
         let mut table = Table::new();
         if args.group_by.is_some() {
@@ -1744,7 +1828,7 @@ fn handle_transfer_remaining(ctx: &CliContext<'_>) -> Result<()> {
         }));
     }
     if ctx.output_json {
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        println!("{}", json_list("roots", output)?);
     } else {
         let mut table = Table::new();
         table.set_header([
@@ -2901,7 +2985,7 @@ fn dry_run_filters(engine: &FilterEngine, paths: Vec<PathBuf>, output_json: bool
         }
     }
     if output_json {
-        println!("{}", serde_json::to_string_pretty(&results)?);
+        println!("{}", json_list("results", results)?);
     }
     Ok(())
 }
@@ -3603,7 +3687,7 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
 
     if rows.is_empty() {
         if output_json {
-            println!("[]");
+            println!("{}", json_list("folders", Vec::<serde_json::Value>::new())?);
         } else {
             println!("no access records");
         }
@@ -4031,7 +4115,7 @@ fn handle_package_versions(packages: &PackageManager, collection_id: &str, outpu
         .ok_or_else(|| anyhow::anyhow!("collection is not installed: {collection}"))?;
     if output_json {
         let versions = installed.versions.keys().cloned().collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&versions)?);
+        println!("{}", json_list("versions", versions)?);
     } else {
         for version in installed.versions.keys() {
             println!("{version}");
@@ -4306,7 +4390,7 @@ fn print_package_archive_exports(results: &[DropExportResult], output_json: bool
                 })
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&values)?);
+        println!("{}", json_list("archives", values)?);
     } else {
         for result in results {
             println!(
@@ -4461,7 +4545,7 @@ fn handle_package_list(packages: &PackageManager, output_json: bool) -> Result<(
                 })
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&entries)?);
+        println!("{}", json_list("collections", entries)?);
     } else {
         let mut table = Table::new();
         table.set_header(["Collection", "Current"]);
@@ -4585,7 +4669,7 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
     apply_limit(&mut all_results, args.limit);
 
     if output_json {
-        println!("{}", serde_json::to_string_pretty(&all_results)?);
+        println!("{}", json_list("results", all_results)?);
         return Ok(());
     }
 
@@ -5112,7 +5196,7 @@ fn handle_network_list(manager: &NetworkManager, name: Option<String>, output_js
                     })
                 })
                 .collect::<Vec<_>>();
-            println!("{}", serde_json::to_string_pretty(&values)?);
+            println!("{}", json_list("networks", values)?);
         } else {
             let mut table = Table::new();
             table.set_header(["Name", "ID", "Members", "Folders"]);
@@ -5206,7 +5290,7 @@ fn handle_network_health(
                     })
                 })
                 .collect();
-            println!("{}", serde_json::to_string(&summary)?);
+            println!("{}", json_list("networks", summary)?);
         } else {
             for net in &networks {
                 let id = net.id.to_string();
@@ -5392,7 +5476,7 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let folders = client.list_folders().await?;
         if output_json {
-            println!("{}", serde_json::to_string_pretty(&folders)?);
+            println!("{}", json_list("folders", &folders)?);
         } else {
             let mut table = Table::new();
             table.set_header(["Namespace", "Mode", "Path", "Active", "Last Sync", "Entries", "Errors"]);
@@ -5422,7 +5506,7 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     let folders = manager.list().await?;
     if folders.is_empty() {
         if output_json {
-            println!("[]");
+            println!("{}", json_list("folders", Vec::<serde_json::Value>::new())?);
         } else {
             println!("No folders found. Create one with `syncweb folders create [path]`");
         }
@@ -5439,7 +5523,7 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
                 })
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&values)?);
+        println!("{}", json_list("folders", values)?);
     } else {
         let mut table = Table::new();
         table.set_header(["Namespace", "Mode"]);
@@ -5974,7 +6058,7 @@ fn handle_ls_disk(path: &Path, threads: usize, output_json: bool) -> Result<()> 
             .iter()
             .map(|entry| entry.relative_path.display().to_string())
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&paths)?);
+        println!("{}", json_list("paths", paths)?);
     } else {
         for entry in entries {
             println!("{}", entry.relative_path.display());
@@ -6174,7 +6258,7 @@ fn handle_find_disk(command: &crate::cli::commands::FindArgs, output_json: bool)
                 }
             })
             .collect::<Vec<_>>();
-        println!("{}", serde_json::to_string_pretty(&paths)?);
+        println!("{}", json_list("paths", paths)?);
     } else {
         for entry in entries {
             if command.absolute_path {
@@ -6356,7 +6440,7 @@ fn handle_sort_disk(ctx: &CliContext<'_>, command: &crate::cli::commands::SortAr
 
     if output_json {
         let paths: Vec<_> = result.iter().map(|entry| entry.path.display().to_string()).collect();
-        println!("{}", serde_json::to_string_pretty(&paths)?);
+        println!("{}", json_list("paths", paths)?);
     } else {
         for entry in &result {
             println!("{}", entry.path.display());

@@ -37,7 +37,7 @@ use crate::{
 
 use super::{
     ManagedPool,
-    state::{DaemonStatus, daemon_socket_path},
+    state::{DaemonStatus, daemon_socket_path, load_filter_engine},
 };
 
 use std::time::Duration;
@@ -165,6 +165,14 @@ pub enum IpcCommand {
     AddFolder {
         namespace: String,
         path: PathBuf,
+    },
+    WatchStart {
+        namespace: String,
+        path: PathBuf,
+        #[serde(default)]
+        exclude: Vec<String>,
+        #[serde(default)]
+        filter: Option<FilterConfig>,
     },
     TriggerSync {
         namespace: Option<String>,
@@ -554,6 +562,36 @@ pub struct BlobPeerAvailability {
 /// A managed folder summary returned by the daemon.
 pub use crate::daemon::state::FolderStatusReport as FolderStatus;
 
+/// Per-folder watch configuration owned by the daemon.
+///
+/// `exclude` holds glob patterns skipped during filesystem import. `filter`
+/// is an optional per-folder override for the daemon's canonical
+/// `filters.toml` engine; when `None` the daemon-wide engine applies.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct WatchConfig {
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    #[serde(default)]
+    pub filter: Option<FilterConfig>,
+}
+
+impl WatchConfig {
+    #[must_use]
+    pub const fn new(exclude: Vec<String>, filter: Option<FilterConfig>) -> Self {
+        Self { exclude, filter }
+    }
+
+    /// Compile the per-folder filter override, if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the filter configuration is invalid.
+    pub fn compiled_filter(&self) -> Result<Option<FilterEngine>> {
+        self.filter.clone().map(FilterEngine::new).transpose()
+    }
+}
+
 /// A folder managed by the daemon.
 #[non_exhaustive]
 pub struct FolderEntry {
@@ -565,6 +603,7 @@ pub struct FolderEntry {
     pub sync_count: u64,
     pub entries_synced: u64,
     pub errors: Vec<String>,
+    pub watch: WatchConfig,
 }
 
 impl FolderEntry {
@@ -579,7 +618,18 @@ impl FolderEntry {
             sync_count: 0,
             entries_synced: 0,
             errors: Vec::new(),
+            watch: WatchConfig {
+                exclude: Vec::new(),
+                filter: None,
+            },
         }
+    }
+
+    /// Attach the folder's watch configuration.
+    #[must_use]
+    pub fn with_watch(mut self, watch: WatchConfig) -> Self {
+        self.watch = watch;
+        self
     }
 
     /// Attach the folder's sync mode (empty when unknown).
@@ -653,6 +703,33 @@ impl FolderRegistry {
         self.removed.remove(&key);
         self.folders.insert(key, entry);
         Ok(())
+    }
+
+    /// Upsert a folder's path and watch configuration, preserving any existing
+    /// sync mode. Unlike [`FolderRegistry::add_or_update`], this never errors
+    /// when the folder is already managed.
+    pub fn add_or_update_watch(&mut self, entry: FolderEntry) {
+        let key = entry.namespace.to_string();
+        self.removed.remove(&key);
+        if let Some(existing) = self.folders.get_mut(&key) {
+            if !entry.path.as_os_str().is_empty() {
+                existing.path = entry.path;
+            }
+            if existing.mode.is_empty() && !entry.mode.is_empty() {
+                existing.mode = entry.mode;
+            }
+            existing.watch = entry.watch;
+            return;
+        }
+        self.folders.insert(key, entry);
+    }
+
+    /// Return the watch configuration registered for a folder namespace.
+    #[must_use]
+    pub fn watch_for(&self, namespace: &str) -> WatchConfig {
+        self.folders
+            .get(namespace)
+            .map_or_else(WatchConfig::default, |entry| entry.watch.clone())
     }
 
     pub fn remove(&mut self, namespace: &iroh_docs::NamespaceId) -> Option<FolderEntry> {
@@ -884,6 +961,7 @@ struct ArchiveContext {
     node: Arc<IrohNode>,
     pool: Arc<ManagedPool>,
     indexing: Option<IndexingService>,
+    data_dir: PathBuf,
 }
 
 /// Boolean toggles for the join workflow, bundled to keep the handler signature
@@ -950,6 +1028,7 @@ impl IpcServer {
     #[must_use]
     pub fn with_archive_context(
         socket_path: PathBuf,
+        data_dir: PathBuf,
         daemon_handle: DaemonHandle,
         node: Arc<IrohNode>,
         pool: Arc<ManagedPool>,
@@ -958,7 +1037,12 @@ impl IpcServer {
         Self {
             listener: IpcListener::new(socket_path),
             daemon_handle,
-            archive_context: Some(Arc::new(ArchiveContext { node, pool, indexing })),
+            archive_context: Some(Arc::new(ArchiveContext {
+                node,
+                pool,
+                indexing,
+                data_dir,
+            })),
             folder_manager: None,
             node_db: None,
             network_manager: None,
@@ -1215,6 +1299,7 @@ impl IpcServer {
             C::Status
             | C::ListFolders
             | C::AddFolder { .. }
+            | C::WatchStart { .. }
             | C::TriggerSync { .. }
             | C::SetLogLevel { .. }
             | C::ReloadConfig
@@ -1248,6 +1333,12 @@ impl IpcServer {
         match request.command {
             C::Status | C::ListFolders | C::ReloadConfig => self.handle_simple_group(request.command).await,
             C::AddFolder { namespace, path } => self.handle_add_folder(namespace, path).await,
+            C::WatchStart {
+                namespace,
+                path,
+                exclude,
+                filter,
+            } => self.handle_watch_start(namespace, path, exclude, filter).await,
             C::TriggerSync { namespace } => self.handle_trigger_sync(namespace),
             C::SetLogLevel { level } => Self::handle_set_log_level(&level),
             C::Shutdown { force } => self.handle_shutdown(force),
@@ -1319,6 +1410,49 @@ impl IpcServer {
         }
     }
 
+    async fn handle_watch_start(
+        &self,
+        namespace: String,
+        path: PathBuf,
+        exclude: Vec<String>,
+        filter: Option<FilterConfig>,
+    ) -> IpcResponse {
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(namespace_id) => namespace_id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid folder namespace: {error}"),
+                };
+            }
+        };
+        let watch = WatchConfig::new(exclude, filter);
+        if let Some(node_db) = &self.node_db {
+            if let Err(error) = node_db.upsert_folder_mount(&namespace, &path) {
+                return response_from_error(error);
+            }
+            match serde_json::to_string(&watch) {
+                Ok(encoded) => {
+                    if let Err(error) = node_db.save_folder_watch_config(&namespace, &encoded) {
+                        return response_from_error(error);
+                    }
+                }
+                Err(error) => {
+                    return IpcResponse::Error {
+                        message: format!("failed to encode watch configuration: {error}"),
+                    };
+                }
+            }
+        }
+        self.daemon_handle
+            .folder_registry
+            .write()
+            .await
+            .add_or_update_watch(FolderEntry::new(namespace_id, path).with_watch(watch));
+        IpcResponse::Ok {
+            message: format!("watching: {namespace}"),
+        }
+    }
+
     async fn handle_leave_folder(&self, namespace: String, delete_files: bool) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -1347,10 +1481,13 @@ impl IpcServer {
                     let _ = node_db.save_app_config(&config);
                 }
                 let removed = self.daemon_handle.folder_registry.write().await.remove(&namespace_id);
-                if let Some(ref node_db) = self.node_db
-                    && let Err(error) = node_db.remove_folder_mount(&namespace)
-                {
-                    tracing::warn!(%error, %namespace, "failed to remove folder mount");
+                if let Some(ref node_db) = self.node_db {
+                    if let Err(error) = node_db.remove_folder_mount(&namespace) {
+                        tracing::warn!(%error, %namespace, "failed to remove folder mount");
+                    }
+                    if let Err(error) = node_db.remove_folder_watch_config(&namespace) {
+                        tracing::warn!(%error, %namespace, "failed to remove folder watch config");
+                    }
                 }
                 if delete_files
                     && let Some(entry) = removed.as_ref()
@@ -1655,14 +1792,22 @@ impl IpcServer {
                 .map_err(|error| SyncwebError::operation("invalid managed folder namespace", error))?
         };
         let folder = FolderManager::new(&context.node).get(namespace_id).await?;
+        let folder_key = namespace_id.to_string();
+        let watch = self.daemon_handle.folder_registry.read().await.watch_for(&folder_key);
+        let effective_exclude = if exclude.is_empty() { watch.exclude } else { exclude };
+        let filter_engine = match filter.or(watch.filter) {
+            Some(config) => Some(FilterEngine::new(config)?),
+            None => match &self.node_db {
+                Some(node_db) => load_filter_engine(node_db, &context.data_dir)?,
+                None => None,
+            },
+        };
         let root = if path.is_dir() {
             path
         } else {
             path.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf)
         };
-        let scanned = Scanner::new(&root, exclude).scan()?;
-        let filter_engine = filter.map(FilterEngine::new).transpose()?;
-        let folder_key = namespace_id.to_string();
+        let scanned = Scanner::new(&root, effective_exclude).scan()?;
         let mut accepted = Vec::with_capacity(scanned.len());
         let mut rejected = Vec::new();
         for entry in scanned {
@@ -3566,6 +3711,34 @@ impl IpcClient {
         )
     }
 
+    /// Register a folder with the daemon for continuous watching, including
+    /// the filesystem exclude globs and optional per-folder filter override.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the daemon request fails or returns an unexpected response.
+    pub async fn watch_start(
+        &self,
+        namespace: String,
+        path: PathBuf,
+        exclude: Vec<String>,
+        filter: Option<FilterConfig>,
+    ) -> Result<String> {
+        Self::expect_message(
+            "watch start",
+            self.request(
+                IpcCommand::WatchStart {
+                    namespace,
+                    path,
+                    exclude,
+                    filter,
+                },
+                "watch start",
+            )
+            .await?,
+        )
+    }
+
     /// Ask the daemon to trigger synchronization.
     ///
     /// # Errors
@@ -4436,17 +4609,31 @@ mod tests {
     }
 
     #[test]
-    fn watch_once_and_fetch_blob_round_trip_as_json() {
-        let watch = IpcRequest::new(IpcCommand::WatchOnce {
+    fn watch_config_round_trips_as_json() {
+        let watch = IpcRequest::new(IpcCommand::WatchStart {
+            namespace: "namespace".to_owned(),
+            path: PathBuf::from("/tmp/folder"),
+            exclude: vec!["*.tmp".to_owned()],
+            filter: None,
+        });
+        let watch_encoded = serde_json::to_vec(&watch).expect("serialize watch start request");
+        let watch_decoded: IpcRequest =
+            serde_json::from_slice(&watch_encoded).expect("deserialize watch start request");
+        assert!(matches!(
+            watch_decoded.command,
+            IpcCommand::WatchStart { exclude, .. } if exclude == ["*.tmp".to_owned()]
+        ));
+
+        let once = IpcRequest::new(IpcCommand::WatchOnce {
             namespace: Some("namespace".to_owned()),
             path: PathBuf::from("/tmp/folder"),
             filter: None,
             exclude: vec!["*.tmp".to_owned()],
         });
-        let watch_encoded = serde_json::to_vec(&watch).expect("serialize watch request");
-        let watch_decoded: IpcRequest = serde_json::from_slice(&watch_encoded).expect("deserialize watch request");
+        let once_encoded = serde_json::to_vec(&once).expect("serialize watch once request");
+        let once_decoded: IpcRequest = serde_json::from_slice(&once_encoded).expect("deserialize watch once request");
         assert!(matches!(
-            watch_decoded.command,
+            once_decoded.command,
             IpcCommand::WatchOnce { exclude, .. } if exclude == ["*.tmp".to_owned()]
         ));
 
@@ -4467,6 +4654,25 @@ mod tests {
         let publish_decoded: IpcRequest =
             serde_json::from_slice(&publish_encoded).expect("deserialize publish request");
         assert!(matches!(publish_decoded.command, IpcCommand::LinkPublish { .. }));
+    }
+
+    #[test]
+    fn folder_registry_upserts_watch_config() {
+        let namespace = iroh_docs::NamespaceSecret::from_bytes(&[9; 32]).id();
+        let mut registry = FolderRegistry::new();
+        registry.add_or_update_watch(
+            FolderEntry::new(namespace, PathBuf::from("/tmp/folder"))
+                .with_watch(WatchConfig::new(vec!["*.tmp".to_owned()], None)),
+        );
+        let watch = registry.watch_for(&namespace.to_string());
+        assert_eq!(watch.exclude, ["*.tmp".to_owned()]);
+
+        registry.add_or_update_watch(
+            FolderEntry::new(namespace, PathBuf::from("/tmp/folder"))
+                .with_watch(WatchConfig::new(vec!["*.bak".to_owned()], None)),
+        );
+        let updated = registry.watch_for(&namespace.to_string());
+        assert_eq!(updated.exclude, ["*.bak".to_owned()]);
     }
 
     #[tokio::test]
@@ -4956,7 +5162,8 @@ mod tests {
             DaemonStatus::Running,
         );
         let handle = DaemonHandle::new(daemon_state);
-        let server = IpcServer::with_archive_context(socket_path(), handle, node.clone(), pool, None);
+        let server =
+            IpcServer::with_archive_context(socket_path(), directory.clone(), handle, node.clone(), pool, None);
 
         IpcTestFixture {
             server,

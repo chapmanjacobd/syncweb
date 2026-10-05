@@ -46,8 +46,14 @@ async fn daemon_enrich_sort_returns_path_peer_map() -> Result<()> {
         DaemonStatus::Running,
     ));
     let pool = Arc::new(ManagedPool::new("sort-enrich-test", 1)?);
-    let server =
-        IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
+    let server = IpcServer::with_archive_context(
+        directory.path().join("daemon.sock"),
+        directory.path().to_path_buf(),
+        handle,
+        node.clone(),
+        pool,
+        None,
+    );
 
     let response = server
         .handle_request(IpcRequest::new(IpcCommand::EnrichSort {
@@ -83,8 +89,14 @@ async fn daemon_enrich_sort_returns_empty_for_unknown_folder() -> Result<()> {
         DaemonStatus::Running,
     ));
     let pool = Arc::new(ManagedPool::new("sort-enrich-unknown", 1)?);
-    let server =
-        IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
+    let server = IpcServer::with_archive_context(
+        directory.path().join("daemon.sock"),
+        directory.path().to_path_buf(),
+        handle,
+        node.clone(),
+        pool,
+        None,
+    );
 
     let response = server
         .handle_request(IpcRequest::new(IpcCommand::EnrichSort {
@@ -134,8 +146,14 @@ async fn daemon_peer_availability_returns_report_shape() -> Result<()> {
         DaemonStatus::Running,
     ));
     let pool = Arc::new(ManagedPool::new("peer-availability-test", 1)?);
-    let server =
-        IpcServer::with_archive_context(directory.path().join("daemon.sock"), handle, node.clone(), pool, None);
+    let server = IpcServer::with_archive_context(
+        directory.path().join("daemon.sock"),
+        directory.path().to_path_buf(),
+        handle,
+        node.clone(),
+        pool,
+        None,
+    );
 
     let response = server
         .handle_request(IpcRequest::new(IpcCommand::PeerAvailability { folder: ns.to_string() }))

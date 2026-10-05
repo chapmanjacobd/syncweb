@@ -2334,3 +2334,37 @@ Plan-syntax mismatches found (not code bugs): `find --type f --ext mp3 --local-o
 ### Lint
 
 `cargo clippy --all-targets --all-features` reports the same pre-existing 67 core errors as the base commit (none introduced by these changes). `cargo check` and the full `cargo test` suite pass.
+
+---
+
+## Follow-up Run: 2026-10-05 (daemon-owned watch + canonical filters)
+
+- VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`) via `iiab-vm` + `nsenter`.
+- Binary SHA-256: `818a03180369ff5b2b1affab10d6f1b500bcdff2d8636667bb95a6ab063e15d8`.
+- Scope: closed the UX gap where the daemon's folder watcher imported every change unfiltered while `watch` filters lived only in `filters.toml`. Implemented the two agreed options:
+  1. **Single filter source** — the daemon loads `DATA_DIR/filters.toml` as its canonical filter engine at startup and on `reload` (falling back to `node_db.filter_rules` when the file is absent), and applies it in `process_watch_event`.
+  2. **Daemon-owned watch registration** — `watch` is now a `WatchStart { namespace, path, exclude, filter }` registration. The daemon owns the watcher and the per-folder ignore globs/filter override, persists them in `folder_watch_config`, and applies them per event. `watch --once` reuses the same engine + exclude resolution.
+
+### New / changed IPC
+
+- `WatchStart { namespace, path, exclude, filter }` → `Ok` — replaces `AddFolder` for `watch`; upserts the registry and persists the watch config. (`AddFolder` remains for compatibility.)
+- `WatchOnce` now falls back to the daemon's canonical `filters.toml` engine and the folder's persisted exclude when the CLI does not pass an explicit `--filters` override.
+- `node_db.folder_watch_config` table + `save/load/remove_folder_watch_config`.
+- `FolderEntry.watch: WatchConfig`; `FolderRegistry::add_or_update_watch` / `watch_for`.
+- `process_watch_event` applies the folder's `filter`/`exclude`; `handle_watch_events` reconciles watchers on the 100 ms tick so registrations take effect immediately.
+
+### Verified
+
+| Status | Test | Command / output |
+|---|---|---|
+| PASS | Daemon watcher honors `filters.toml` | With `filters.toml` rejecting `*.tmp`, creating `new.tmp` after the folder is watched leaves it out of the folder listing; `new.txt` is imported. A later `probe.tmp` is also rejected. |
+| PASS | `watch --once` uses the canonical engine (no `--filters`) | `rejected new.tmp`, `rejected skip.tmp`, `imported: 2` with the daemon running. |
+| PASS | Per-folder `--exclude` registration | `watch --exclude '*.log' /root/exclude-watch-test` → `watching: 3b6ebe2f...`; `a.log` not imported, `b.txt` imported. |
+| PASS | Exclude persistence across daemon restart | After `stop`/`start`, `c.log` still excluded and `d.txt` imported. |
+| PASS | Multi-folder path resolution | `watch <path>` now resolves through `resolve_selector_via_daemon` (previously errored "more than one synchronized folder is available" whenever several folders existed). |
+| PASS | `watch --no-daemon` embedded | Unchanged scan-once semantics with the local `filters.toml` engine. |
+
+### Notes / remaining
+
+- `--filters <custom>` with a running daemon is sent as a per-folder override and persisted; without the flag the daemon's canonical `filters.toml` is used. Because the daemon caches the engine at startup, editing `filters.toml` requires `syncweb reload` for the watcher to pick it up (same as `config.toml`).
+- Lint is now clean: `cargo clippy --all-targets --all-features` reports no errors; `cargo check` and the full `cargo test` suite pass.

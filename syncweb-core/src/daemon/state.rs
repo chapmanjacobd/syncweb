@@ -10,10 +10,29 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::RUNTIME_SOCKET_FILE_PREFIX;
 use crate::error::{Result, SyncwebError};
+use crate::filter::FilterEngine;
 use crate::storage::node_db::NodeDatabase;
 
 const LOCK_FILE_NAME: &str = "daemon.lock";
 const SOCKET_FILE_NAME: &str = "daemon.sock";
+
+/// Load the daemon's filter engine from the canonical `filters.toml` file when
+/// present, falling back to rules persisted in the node database.
+///
+/// Keeping this shared lets the daemon watcher, `watch --once`, and the
+/// CLI-filtered commands evaluate the same rules.
+///
+/// # Errors
+///
+/// Returns an error if the filter file or database cannot be read or the rules
+/// cannot be compiled.
+pub fn load_filter_engine(node_db: &NodeDatabase, data_dir: &Path) -> Result<Option<FilterEngine>> {
+    let path = data_dir.join("filters.toml");
+    if path.exists() {
+        return FilterEngine::load(&path).map(Some);
+    }
+    node_db.load_filter_engine()
+}
 
 /// The lifecycle state persisted by a running daemon.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

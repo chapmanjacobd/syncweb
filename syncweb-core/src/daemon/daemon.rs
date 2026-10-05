@@ -30,9 +30,9 @@ use crate::{
 use crate::node::iroh_node::discovery_scope;
 
 use super::{
-    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, current_timestamp,
-    daemon_socket_path,
-    state::{BandwidthSnapshot, DaemonStatusReport, ScheduleStatus},
+    DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, WatchConfig,
+    current_timestamp, daemon_socket_path,
+    state::{BandwidthSnapshot, DaemonStatusReport, ScheduleStatus, load_filter_engine},
     supervisor::{IntentControls, IntentSupervisor, SupervisionOptions},
 };
 
@@ -120,6 +120,13 @@ pub struct Daemon {
 struct PendingWatch {
     paths: HashMap<PathBuf, bool>,
     ready_at: Instant,
+}
+
+/// The filter and ignore-pattern set applied to one folder's watch events.
+#[derive(Clone, Copy)]
+struct WatchEvaluation<'a> {
+    filter: Option<&'a FilterEngine>,
+    exclude: &'a [String],
 }
 
 /// The daemon's spawned listener tasks: Unix-socket IPC, WebSocket bridge, and
@@ -223,7 +230,7 @@ impl Daemon {
                 return Err(error);
             }
         };
-        let filter_engine = node_db.load_filter_engine().inspect_err(|_error| {
+        let filter_engine = load_filter_engine(node_db, data_dir).inspect_err(|_error| {
             let _ = pid_lock.release();
         })?;
         let initial_state = DaemonState::new(
@@ -388,6 +395,7 @@ impl Daemon {
     ) -> IpcServer {
         IpcServer::with_archive_context(
             daemon_socket_path(&config.data_dir),
+            config.data_dir.clone(),
             handle.clone(),
             node.clone(),
             archive_pool.clone(),
@@ -818,6 +826,10 @@ impl Daemon {
     }
 
     async fn handle_watch_events(&self) -> Result<()> {
+        // Reconcile watchers with the registry on every tick so a `watch`
+        // registration is picked up promptly rather than at the next sync
+        // interval.
+        self.start_watching().await?;
         let mut observed = Vec::new();
         {
             let mut watchers = self
@@ -878,16 +890,22 @@ impl Daemon {
             return Ok(());
         }
 
-        let roots: HashMap<_, _> = self
-            .handle
-            .folder_registry
-            .read()
-            .await
-            .statuses()
-            .into_iter()
-            .map(|status| (status.namespace, status.path))
-            .collect();
+        let (roots, watch_configs): (HashMap<_, _>, HashMap<_, _>) = {
+            let registry = self.handle.folder_registry.read().await;
+            let statuses = registry.statuses();
+            let roots = statuses
+                .iter()
+                .map(|status| (status.namespace.clone(), status.path.clone()))
+                .collect();
+            let watch_configs = statuses
+                .iter()
+                .map(|status| (status.namespace.clone(), registry.watch_for(&status.namespace)))
+                .collect();
+            drop(registry);
+            (roots, watch_configs)
+        };
         let live_folders = self.enabled_subscribe_filters();
+        let global_engine = self.filter_engine.read().await.clone();
         for (namespace, paths) in ready {
             let Some(root) = roots.get(&namespace) else {
                 continue;
@@ -895,9 +913,22 @@ impl Daemon {
             let namespace_id = namespace
                 .parse::<NamespaceId>()
                 .map_err(|error| SyncwebError::operation("invalid watched folder namespace", error))?;
+            let watch = watch_configs.get(&namespace).cloned().unwrap_or_default();
+            let folder_engine = watch.compiled_filter()?;
+            let evaluation = WatchEvaluation {
+                filter: folder_engine.as_ref().or(global_engine.as_ref()),
+                exclude: &watch.exclude,
+            };
             for (path, removed) in paths {
-                self.process_watch_event(namespace_id, root, &path, removed, live_folders.get(&namespace_id))
-                    .await?;
+                self.process_watch_event(
+                    namespace_id,
+                    root,
+                    &path,
+                    removed,
+                    live_folders.get(&namespace_id),
+                    evaluation,
+                )
+                .await?;
             }
         }
         self.save_status_report().await?;
@@ -911,14 +942,15 @@ impl Daemon {
         path: &Path,
         removed: bool,
         live_filters: Option<&SubscribeFilters>,
+        evaluation: WatchEvaluation<'_>,
     ) -> Result<()> {
         let relative = path.strip_prefix(root).unwrap_or(path);
         if relative.as_os_str().is_empty() {
             return Ok(());
         }
         let size = std::fs::metadata(path).map_or(0, |metadata| metadata.len());
-        let accepted = self.filter_engine.read().await.as_ref().is_none_or(|filter| {
-            filter.evaluate_for_folder(&namespace.to_string(), &FilterEntry::new(relative.to_path_buf(), size))
+        let accepted = evaluation.filter.is_none_or(|active| {
+            active.evaluate_for_folder(&namespace.to_string(), &FilterEntry::new(relative.to_path_buf(), size))
                 != FilterAction::Reject
         });
         if !accepted {
@@ -938,7 +970,8 @@ impl Daemon {
                 folder.doc().clone(),
                 folder.author(),
             )
-            .with_root(root);
+            .with_root(root)
+            .with_ignore_patterns(evaluation.exclude.to_vec());
             importer
                 .import_path(path)
                 .await
@@ -1031,6 +1064,16 @@ impl Daemon {
             .load_folder_mounts()?
             .into_iter()
             .collect::<HashMap<_, _>>();
+        let watch_configs: HashMap<String, WatchConfig> = self
+            .node_db
+            .load_folder_watch_configs()?
+            .into_iter()
+            .filter_map(|(namespace, encoded)| {
+                serde_json::from_str::<WatchConfig>(&encoded)
+                    .ok()
+                    .map(|watch| (namespace, watch))
+            })
+            .collect();
         let mut registry = self.handle.folder_registry.write().await;
         for folder in folders {
             let namespace_key = folder.namespace_id().to_string();
@@ -1043,7 +1086,12 @@ impl Daemon {
                 .any(|status| status.namespace == namespace_key)
             {
                 let path = folder_mounts.get(&namespace_key).cloned().unwrap_or_default();
-                registry.add(FolderEntry::new(folder.namespace_id(), path).with_mode(folder.mode().to_string()))?;
+                let watch = watch_configs.get(&namespace_key).cloned().unwrap_or_default();
+                registry.add(
+                    FolderEntry::new(folder.namespace_id(), path)
+                        .with_mode(folder.mode().to_string())
+                        .with_watch(watch),
+                )?;
             }
         }
         drop(registry);
@@ -1088,7 +1136,7 @@ impl Daemon {
         let parsed_schedule = ScheduleManager::from_config(&app_config.schedule)?;
         let schedule_manager =
             (app_config.schedule != crate::schedule::ScheduleConfig::default()).then_some(parsed_schedule);
-        let filter = self.node_db.load_filter_engine()?;
+        let filter = load_filter_engine(&self.node_db, &self.config.data_dir)?;
         *self.schedule_manager.write().await = schedule_manager;
         *self.filter_engine.write().await = filter;
         let statuses = self.handle.folder_registry.read().await.statuses();

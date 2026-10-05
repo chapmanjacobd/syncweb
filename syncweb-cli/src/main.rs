@@ -2707,6 +2707,9 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     } else {
         FilterEngine::new(FilterConfig::default())?
     };
+    // A custom `--filters` path is an explicit per-folder override; when the
+    // flag is absent the daemon uses its canonical `filters.toml` engine.
+    let filter_override = command.filters.as_ref().map(|_path| engine.config());
     if command.show_filters {
         return print_filter_config(&engine, output_json);
     }
@@ -2724,20 +2727,11 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
             .await?
             .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or pass --no-daemon"))?;
 
-        let namespace = if let Ok(namespace) = command.path.to_string_lossy().parse::<iroh_docs::NamespaceId>() {
-            namespace.to_string()
-        } else {
-            let folders = client.list_folders().await?;
-            match folders.as_slice() {
-                [folder] => folder.namespace.clone(),
-                [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-                _ => anyhow::bail!(
-                    "folder path is not a namespace ID and more than one synchronized folder is available"
-                ),
-            }
-        };
-
-        let message = client.add_folder(namespace, command.path.clone()).await?;
+        let resolved = resolve_selector_via_daemon(&client, &command.path).await?;
+        let watch_path = resolved.mount_root.clone().unwrap_or_else(|| command.path.clone());
+        let message = client
+            .watch_start(resolved.namespace, watch_path, command.exclude.clone(), filter_override)
+            .await?;
         print_daemon_ok(&message, output_json);
         return Ok(());
     }
@@ -2823,11 +2817,12 @@ async fn watch_once(ctx: &CliContext<'_>, command: &WatchArgs, engine: &FilterEn
     if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
         let resolved = resolve_selector_via_daemon(&client, &command.path).await?;
         let watch_path = resolved.mount_root.clone().unwrap_or_else(|| command.path.clone());
+        let filter_override = command.filters.as_ref().map(|_path| engine.config());
         let (imported, rejected) = client
             .watch_once(
                 Some(resolved.namespace.clone()),
                 watch_path,
-                Some(engine.config().clone()),
+                filter_override,
                 command.exclude.clone(),
             )
             .await?;

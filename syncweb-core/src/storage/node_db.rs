@@ -265,6 +265,11 @@ impl NodeDatabase {
             priority INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS folder_watch_config (
+            namespace_id TEXT PRIMARY KEY,
+            config TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS public_subscriptions (
             hash TEXT PRIMARY KEY,
             size INTEGER NOT NULL,
@@ -766,6 +771,75 @@ impl NodeDatabase {
                 params![namespace_id],
             )
             .map_err(|error| SyncwebError::operation("failed to remove folder mount", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Persist a folder's watch configuration (exclude globs and an optional
+    /// per-folder filter override) as opaque JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn save_folder_watch_config(&self, namespace_id: &str, config: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO folder_watch_config(namespace_id, config, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(namespace_id) DO UPDATE SET
+                    config = excluded.config,
+                    updated_at = excluded.updated_at",
+                params![namespace_id, config, now],
+            )
+            .map_err(|error| SyncwebError::operation("failed to save folder watch config", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load every persisted folder watch configuration as `(namespace_id,
+    /// config_json)` pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be read.
+    pub fn load_folder_watch_configs(&self) -> Result<Vec<(String, String)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare("SELECT namespace_id, config FROM folder_watch_config")
+            .map_err(|error| SyncwebError::operation("failed to prepare folder watch config query", error))?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|error| SyncwebError::operation("failed to query folder watch configs", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read folder watch config rows", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(rows)
+    }
+
+    /// Remove a folder's persisted watch configuration (e.g. on `leave`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be written.
+    pub fn remove_folder_watch_config(&self, namespace_id: &str) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        connection
+            .execute(
+                "DELETE FROM folder_watch_config WHERE namespace_id = ?1",
+                params![namespace_id],
+            )
+            .map_err(|error| SyncwebError::operation("failed to remove folder watch config", error))?;
         drop(connection);
         Ok(())
     }

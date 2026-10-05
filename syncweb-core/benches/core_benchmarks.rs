@@ -571,7 +571,8 @@ fn bench_ipc_create_folder(c: &mut Criterion) {
             (node, handle, pool)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-create-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
+        let server =
+            IpcServer::with_archive_context(socket_path.clone(), directory.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory)
     };
 
@@ -625,6 +626,7 @@ fn bench_ipc_health_check(c: &mut Criterion) {
             let pool = Arc::new(ManagedPool::new("syncweb-bench", 1).expect("benchmark pool should start"));
             let server = IpcServer::with_archive_context(
                 std::path::PathBuf::from(""),
+                directory.clone(),
                 handle.clone(),
                 node.clone(),
                 pool.clone(),
@@ -649,7 +651,8 @@ fn bench_ipc_health_check(c: &mut Criterion) {
             (node, handle, pool, namespace)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-health-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
+        let server =
+            IpcServer::with_archive_context(socket_path.clone(), directory.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory, namespace)
     };
 
@@ -701,6 +704,7 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
             let pool = Arc::new(ManagedPool::new("syncweb-bench", 1).expect("benchmark pool should start"));
             let server = IpcServer::with_archive_context(
                 std::path::PathBuf::from(""),
+                directory.clone(),
                 handle.clone(),
                 node.clone(),
                 pool.clone(),
@@ -725,7 +729,8 @@ fn bench_ipc_verify_integrity(c: &mut Criterion) {
             (node, handle, pool, namespace)
         });
         let socket_path = std::env::temp_dir().join(format!("syncweb-bench-verify-{}.sock", uuid::Uuid::new_v4()));
-        let server = IpcServer::with_archive_context(socket_path.clone(), handle, node.clone(), pool, None);
+        let server =
+            IpcServer::with_archive_context(socket_path.clone(), directory.clone(), handle, node.clone(), pool, None);
         (node, server, socket_path, directory, namespace)
     };
 

@@ -165,6 +165,126 @@ fn test_create_routes_through_daemon() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_no_daemon_fails_fast_when_daemon_owns_store() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("no-daemon-guard")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    // Embedded commands must fail fast instead of blocking on the store locks
+    // the daemon holds. `access` previously hung indefinitely.
+    for command in [vec!["access"], vec!["folders"], vec!["ls", "."]] {
+        let mut args = vec!["--data-dir", data_dir_arg, "--no-daemon"];
+        args.extend(command);
+        let output = syncweb(&args)?;
+        ensure!(
+            !output.status.success(),
+            "embedded command should fail while a daemon owns the store"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        ensure!(
+            stderr.contains("a daemon owns"),
+            "expected the daemon-owns error, got: {stderr}"
+        );
+    }
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_folders_create_is_idempotent_per_path() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("create-idempotent")?;
+    let dir = cli_test_dir("create-idempotent-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let dir_arg = dir.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let first = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "create",
+        "--no-indexing",
+        dir_arg,
+    ])?;
+    ensure!(first.status.success(), "first create should succeed");
+    let second = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "create",
+        "--no-indexing",
+        dir_arg,
+    ])?;
+    ensure!(second.status.success(), "second create should succeed");
+
+    let folders = syncweb(&["--data-dir", data_dir_arg, "--json", "folders"])?;
+    ensure!(folders.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&folders.stdout).context("parse folders json")?;
+    let list = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .context("folders array")?;
+    ensure!(
+        list.len() == 1,
+        "repeated create for one path must not register duplicate namespaces, got {}",
+        list.len()
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_embedded_folders_create_is_idempotent_per_path() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("embedded-create-idempotent")?;
+    let dir = cli_test_dir("embedded-create-idempotent-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let dir_arg = dir.to_str().context("UTF-8 path")?;
+
+    for _ in 0..2 {
+        let output = syncweb(&[
+            "--data-dir",
+            data_dir_arg,
+            "--no-daemon",
+            "folders",
+            "create",
+            "--no-indexing",
+            dir_arg,
+        ])?;
+        ensure!(output.status.success(), "embedded create should succeed");
+    }
+
+    let folders = syncweb(&["--data-dir", data_dir_arg, "--no-daemon", "--json", "folders"])?;
+    ensure!(folders.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&folders.stdout).context("parse folders json")?;
+    let list = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .context("folders array")?;
+    ensure!(
+        list.len() == 1,
+        "repeated embedded create for one path must not register duplicates, got {}",
+        list.len()
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
 fn test_daemon_shutdown() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-shutdown")?;
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
@@ -2123,5 +2243,859 @@ fn test_network_peers_returns_envelope_via_daemon() -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&folder);
     let _ = std::fs::remove_dir_all(&data_dir);
     let _ = std::fs::remove_dir_all(&no_daemon_dir);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// MANUAL_TESTING_PLAN.md regression coverage for the sections removed from the
+// plan because they now pass.
+// ---------------------------------------------------------------------------
+
+fn stdout_str(output: &std::process::Output) -> String {
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+/// Plan 4.2/22: `find --local-only --json` wraps results under `paths`.
+#[test]
+fn test_find_local_only_json_uses_paths_key() -> anyhow::Result<()> {
+    let dir = cli_test_dir("find-paths")?;
+    std::fs::write(dir.join("a.mp3"), b"x")?;
+    std::fs::create_dir_all(dir.join("sub"))?;
+    std::fs::write(dir.join("sub/b.txt"), b"y")?;
+
+    let out = syncweb(&["--json", "find", "--local-only", "*", dir.to_str().context("utf8")?])?;
+    ensure!(out.status.success(), "find --local-only: {}", stdout_str(&out));
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).context("parse json")?;
+    let paths = value
+        .get("paths")
+        .and_then(serde_json::Value::as_array)
+        .context("paths array")?;
+    ensure!(paths.len() == 2, "expected 2 paths, got {value}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+/// Plan 14: `watch --show-filters` and `watch --dry-run --paths`.
+#[test]
+fn test_watch_show_filters_and_dry_run() -> anyhow::Result<()> {
+    let data = cli_test_dir("watch-filters-data")?;
+    let dir = cli_test_dir("watch-filters-dir")?;
+    std::fs::write(dir.join("keep.txt"), b"keep")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let dir_arg = dir.to_str().context("utf8")?;
+
+    let show = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "watch",
+        "--show-filters",
+        dir_arg,
+    ])?;
+    ensure!(show.status.success(), "show-filters: {}", stdout_str(&show));
+    ensure!(
+        stdout_str(&show).contains("default_action"),
+        "show-filters should print the loaded rules: {}",
+        stdout_str(&show)
+    );
+
+    let paths_arg = dir.join("keep.txt").to_string_lossy().to_string();
+    let dry = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "watch",
+        "--dry-run",
+        "--paths",
+        &paths_arg,
+        dir_arg,
+    ])?;
+    ensure!(dry.status.success(), "dry-run: {}", stdout_str(&dry));
+    ensure!(
+        stdout_str(&dry).contains("accept"),
+        "dry-run should report the accept decision: {}",
+        stdout_str(&dry)
+    );
+
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+/// Plan 21: `discovery.mdns` is the supported key; the old `discovery.local_mdns`
+/// is rejected with a list of valid keys.
+#[test]
+fn test_config_discovery_mdns_toggle() -> anyhow::Result<()> {
+    let data = cli_test_dir("discovery-config")?;
+    let arg = data.to_str().context("utf8")?;
+
+    let off = syncweb(&[
+        "--data-dir",
+        arg,
+        "--no-daemon",
+        "config",
+        "set",
+        "discovery.mdns",
+        "false",
+    ])?;
+    ensure!(off.status.success(), "set false: {}", stdout_str(&off));
+    let show = syncweb(&["--data-dir", arg, "--no-daemon", "config", "show", "discovery"])?;
+    ensure!(show.status.success());
+    ensure!(
+        stdout_str(&show).contains("mdns = false"),
+        "discovery show: {}",
+        stdout_str(&show)
+    );
+
+    let on = syncweb(&[
+        "--data-dir",
+        arg,
+        "--no-daemon",
+        "config",
+        "set",
+        "discovery.mdns",
+        "true",
+    ])?;
+    ensure!(on.status.success());
+
+    let bad = syncweb(&[
+        "--data-dir",
+        arg,
+        "--no-daemon",
+        "config",
+        "set",
+        "discovery.local_mdns",
+        "true",
+    ])?;
+    ensure!(!bad.status.success(), "discovery.local_mdns must be rejected");
+
+    let _ = std::fs::remove_dir_all(&data);
+    Ok(())
+}
+
+/// Plan 9.3: `package import --filter` drops filtered entries while importing.
+#[test]
+fn test_package_import_filter_drops_entries() -> anyhow::Result<()> {
+    let data = cli_test_dir("pkg-filter-data")?;
+    let imp = cli_test_dir("pkg-filter-imp")?;
+    let src = cli_test_dir("pkg-filter-src")?;
+    let out_dir = cli_test_dir("pkg-filter-out")?;
+    std::fs::write(src.join("keep.txt"), b"keep")?;
+    std::fs::write(src.join("drop.tmp"), b"drop")?;
+    std::fs::write(src.join("also.txt"), b"also")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let imp_arg = imp.to_str().context("utf8")?;
+    let src_arg = src.to_str().context("utf8")?;
+    let archive = out_dir.join("demo.car.zst");
+    let archive_arg = archive.to_str().context("utf8")?;
+
+    let add = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "package",
+        "add",
+        "--name",
+        "demo",
+        src_arg,
+    ])?;
+    ensure!(add.status.success(), "package add: {}", stdout_str(&add));
+    let export = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "package",
+        "export",
+        src_arg,
+        archive_arg,
+    ])?;
+    ensure!(export.status.success(), "package export: {}", stdout_str(&export));
+    ensure!(archive.exists(), "export should write {archive_arg}");
+
+    let import = syncweb(&[
+        "--data-dir",
+        imp_arg,
+        "--no-daemon",
+        "package",
+        "import",
+        "--filter",
+        "name!=*.tmp",
+        archive_arg,
+    ])?;
+    ensure!(import.status.success(), "package import: {}", stdout_str(&import));
+    ensure!(
+        stdout_str(&import).contains("(2 entries)"),
+        "filter should drop *.tmp: {}",
+        stdout_str(&import)
+    );
+
+    for dir in [&data, &imp, &src, &out_dir] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+/// Plan 13.2: `stats network --json` emits the documented keys.
+#[test]
+fn test_stats_network_json_shape() -> anyhow::Result<()> {
+    let data = cli_test_dir("stats-network")?;
+    let arg = data.to_str().context("utf8")?;
+    let out = syncweb(&["--data-dir", arg, "--no-daemon", "--json", "stats", "network"])?;
+    ensure!(out.status.success(), "stats network: {}", stdout_str(&out));
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).context("parse json")?;
+    for key in [
+        "total_upload",
+        "total_download",
+        "per_folder",
+        "per_peer",
+        "period_start",
+    ] {
+        ensure!(value.get(key).is_some(), "missing {key}: {value}");
+    }
+    let _ = std::fs::remove_dir_all(&data);
+    Ok(())
+}
+
+/// Plan 19: the daemon's WebSocket bridge accepts a connection, answers a valid
+/// `IpcRequest`, and reports invalid JSON as an error.
+#[test]
+fn test_websocket_bridge_round_trip() -> anyhow::Result<()> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+
+    let data = cli_test_dir("ws-bridge")?;
+    let arg = data.to_str().context("utf8")?;
+    let start = daemon_start_bg(arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(arg)?;
+
+    let mut stream = TcpStream::connect("127.0.0.1:9192").context("connect ws bridge")?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+    stream.write_all(
+        b"GET /bridge HTTP/1.1\r\nHost: 127.0.0.1:9192\r\nUpgrade: websocket\r\n\
+          Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+          Sec-WebSocket-Version: 13\r\n\r\n",
+    )?;
+    let mut buf = [0_u8; 1024];
+    let n = stream.read(&mut buf)?;
+    let handshake = String::from_utf8_lossy(buf.get(..n).unwrap_or_default()).to_string();
+    ensure!(
+        handshake.contains("101 Switching Protocols"),
+        "handshake should upgrade: {handshake}"
+    );
+
+    let send_text = |sink: &mut TcpStream, text: &str| -> anyhow::Result<()> {
+        let payload = text.as_bytes();
+        ensure!(payload.len() < 126, "test payload must be a short frame");
+        let mask = [1_u8, 2, 3, 4];
+        let mut frame = vec![0x81, 0x80 | u8::try_from(payload.len())?];
+        frame.extend_from_slice(&mask);
+        frame.extend(payload.iter().zip(mask.iter().cycle()).map(|(b, m)| *b ^ *m));
+        sink.write_all(&frame)?;
+        Ok(())
+    };
+    let read_text = |sink: &mut TcpStream| -> anyhow::Result<String> {
+        let mut header = [0_u8; 2];
+        sink.read_exact(&mut header)?;
+        let len = usize::from(header[1] & 0x7f);
+        let mut body = vec![0_u8; len];
+        sink.read_exact(&mut body)?;
+        Ok(String::from_utf8_lossy(&body).to_string())
+    };
+
+    send_text(&mut stream, r#"{"command":{"command":"status"}}"#)?;
+    let response = read_text(&mut stream)?;
+    ensure!(response.contains("\"response\":\"status\""), "ws status: {response}");
+
+    send_text(&mut stream, "not-json")?;
+    let invalid = read_text(&mut stream)?;
+    ensure!(invalid.contains("invalid JSON"), "ws invalid json: {invalid}");
+
+    let shutdown = syncweb(&["--data-dir", arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let _ = std::fs::remove_dir_all(&data);
+    Ok(())
+}
+
+/// Plan 18: the standalone media server serves blobs by hash, supports byte
+/// ranges, and rejects malformed or unknown hashes without dropping the
+/// connection.
+#[test]
+fn test_media_server_endpoints() -> anyhow::Result<()> {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    let data = cli_test_dir("media-data")?;
+    let folder = cli_test_dir("media-folder")?;
+    std::fs::write(folder.join("clip.txt"), b"hello media body")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let folder_arg = folder.to_str().context("utf8")?;
+
+    let create = syncweb(&["--data-dir", data_arg, "--no-daemon", "folders", "create", folder_arg])?;
+    ensure!(create.status.success(), "create: {}", stdout_str(&create));
+    let ls = syncweb(&["--data-dir", data_arg, "--no-daemon", "--json", "ls", folder_arg])?;
+    ensure!(ls.status.success(), "ls: {}", stdout_str(&ls));
+    let value: serde_json::Value = serde_json::from_slice(&ls.stdout).context("parse ls json")?;
+    let hash = value
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry.get("hash"))
+        .and_then(serde_json::Value::as_str)
+        .context("blob hash")?
+        .to_owned();
+
+    let port = {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.local_addr()?.port()
+    };
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--data-dir",
+            data_arg,
+            "start",
+            "--media-only",
+            "--media-listen",
+            &format!("127.0.0.1:{port}"),
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .context("spawn media server")?;
+
+    let mut up = false;
+    for _ in 0..60 {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            up = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    ensure!(up, "media server did not start listening");
+
+    let status_line = |path: &str, range_header: Option<&str>| -> anyhow::Result<String> {
+        use std::fmt::Write as _;
+        let mut stream = TcpStream::connect(("127.0.0.1", port))?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+        let mut request = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n");
+        if let Some(byte_range) = range_header {
+            let _ = write!(request, "Range: {byte_range}\r\n");
+        }
+        request.push_str("\r\n");
+        stream.write_all(request.as_bytes())?;
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf)?;
+        let text = String::from_utf8_lossy(&buf);
+        Ok(text.lines().next().unwrap_or_default().to_owned())
+    };
+
+    ensure!(status_line("/", None)?.contains("404"), "/ should return 404");
+    ensure!(
+        status_line("/media/deadbeef", None)?.contains("400"),
+        "short hash should return 400"
+    );
+    let zeros = "0".repeat(64);
+    ensure!(
+        status_line(&format!("/media/{zeros}"), None)?.contains("404"),
+        "unknown 64-hex hash should return 404"
+    );
+    ensure!(
+        status_line(&format!("/media/{hash}"), None)?.contains("200"),
+        "known blob should return 200"
+    );
+    ensure!(
+        status_line(&format!("/media/{hash}"), Some("bytes=0-4"))?.contains("206"),
+        "byte range should return 206"
+    );
+
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&folder);
+    Ok(())
+}
+
+/// A folder joined from a read-only ticket cannot accept local writes, so the
+/// daemon must not watch it: materialized files would otherwise be re-imported
+/// in a failing retry loop (`Attempted to insert to read only replica`). Assert
+/// that no watcher error is recorded for a read-only replica.
+#[test]
+fn test_read_only_folder_does_not_record_watcher_errors() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("ro-watch-alice")?;
+    let alice_folder = cli_test_dir("ro-watch-alice-folder")?;
+    let bob_data = cli_test_dir("ro-watch-bob")?;
+    let bob_folder = cli_test_dir("ro-watch-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let alice_folder_arg = alice_folder.to_str().context("UTF-8 path")?;
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+
+    std::fs::write(alice_folder.join("alpha.txt"), b"alpha content")?;
+    std::fs::write(alice_folder.join("beta.bin"), vec![b'x'; 8192])?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    // `folders create` (no `--write`) publishes a read-only ticket.
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder_arg,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "alice create: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let namespace = String::from_utf8(create.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
+    ensure!(
+        share.status.success(),
+        "alice share: {}",
+        String::from_utf8_lossy(&share.stderr)
+    );
+    let ticket = String::from_utf8(share.stdout)
+        .context("UTF-8 output")?
+        .trim()
+        .to_owned();
+
+    let start_b = daemon_start_bg(bob_data_arg)?;
+    ensure!(start_b.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&["--data-dir", bob_data_arg, "folders", "join", &ticket, bob_folder_arg])?;
+    ensure!(
+        join.status.success(),
+        "bob join: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+
+    let mut saw_entries = false;
+    for _ in 0..60 {
+        let ls = syncweb(&["--data-dir", bob_data_arg, "--json", "ls", bob_folder_arg])?;
+        if ls.status.success() && String::from_utf8_lossy(&ls.stdout).contains("alpha.txt") {
+            saw_entries = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(saw_entries, "bob should see alice's entries");
+
+    // Materialize the content to disk, then give the daemon watcher time to
+    // (incorrectly) notice and retry the read-only import.
+    let download = syncweb(&["--data-dir", bob_data_arg, "download", bob_folder_arg])?;
+    ensure!(
+        download.status.success(),
+        "bob download: {}",
+        String::from_utf8_lossy(&download.stderr)
+    );
+    std::thread::sleep(std::time::Duration::from_secs(4));
+
+    let folders = syncweb(&["--data-dir", bob_data_arg, "--json", "folders"])?;
+    ensure!(folders.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&folders.stdout).context("parse folders json")?;
+    let entry = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|rows| {
+            rows.iter()
+                .find(|folder| folder.get("namespace").and_then(serde_json::Value::as_str) == Some(namespace.as_str()))
+        })
+        .context("bob folder row")?;
+    let errors = entry
+        .get("errors")
+        .and_then(serde_json::Value::as_array)
+        .context("errors array")?;
+    ensure!(
+        errors.is_empty(),
+        "read-only folder must not record watcher import errors: {errors:?}"
+    );
+
+    let shutdown = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success());
+    let shutdown_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown_b.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_data, &alice_folder, &bob_data, &bob_folder] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+/// Plan 14 (`NF-4`): `watch --dry-run --paths` must report a non-existent path
+/// instead of aborting the whole run.
+#[test]
+fn test_watch_dry_run_missing_path_is_reported() -> anyhow::Result<()> {
+    let data = cli_test_dir("watch-dryrun-missing-data")?;
+    let dir = cli_test_dir("watch-dryrun-missing-dir")?;
+    std::fs::write(dir.join("present.txt"), b"present")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let present = dir.join("present.txt");
+    let missing = dir.join("missing.tmp");
+
+    let out = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "watch",
+        "--dry-run",
+        "--paths",
+        present.to_str().context("utf8")?,
+        missing.to_str().context("utf8")?,
+        dir.to_str().context("utf8")?,
+    ])?;
+    ensure!(
+        out.status.success(),
+        "dry-run with a missing path must not abort: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = stdout_str(&out);
+    ensure!(
+        stdout.contains("present.txt"),
+        "dry-run should evaluate the existing path: {stdout}"
+    );
+    ensure!(
+        stdout.contains("missing.tmp"),
+        "dry-run should report the missing path: {stdout}"
+    );
+
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+/// Plan 13.2 (`NF-8`): a live subscription transfer must be reflected in
+/// `stats network` while the daemon is still running.
+#[test]
+fn test_subscribe_transfer_records_bandwidth_stats() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("bw-stats-alice-data")?;
+    let alice_folder = cli_test_dir("bw-stats-alice-folder")?;
+    let bob_data = cli_test_dir("bw-stats-bob-data")?;
+    let bob_folder = cli_test_dir("bw-stats-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let alice_folder_arg = alice_folder.to_str().context("UTF-8 path")?;
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder_arg,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = stdout_str(&create).trim().to_owned();
+    ensure!(!namespace.is_empty(), "create should print a namespace");
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world")?;
+    let import = syncweb(&["--data-dir", alice_data_arg, "folders", "import", alice_folder_arg])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = stdout_str(&share).trim().to_owned();
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "folders",
+        "join",
+        "--subscribe",
+        &ticket,
+        bob_folder_arg,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bob join --subscribe should succeed: {}",
+        String::from_utf8_lossy(&join.stderr)
+    );
+
+    let mut saw_first = false;
+    for _ in 0..60 {
+        let ls = syncweb(&["--data-dir", bob_data_arg, "ls", bob_folder_arg])?;
+        if ls.status.success() && stdout_str(&ls).contains("hello.txt") {
+            saw_first = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(saw_first, "bob should see alice's first entry");
+
+    // Add a new, larger blob after Bob's supervision is established; the
+    // download must be accounted for in Bob's `stats network`.
+    std::fs::write(alice_folder.join("big.bin"), vec![7_u8; 1_048_576])?;
+    let import_big = syncweb(&["--data-dir", alice_data_arg, "folders", "import", alice_folder_arg])?;
+    ensure!(import_big.status.success(), "alice import of big.bin should succeed");
+
+    let mut download_bytes = 0_u64;
+    for _ in 0..120 {
+        let stats = syncweb(&["--data-dir", bob_data_arg, "--json", "stats", "network"])?;
+        if stats.status.success() {
+            let value: serde_json::Value = serde_json::from_slice(&stats.stdout).unwrap_or_default();
+            download_bytes = value
+                .get("total_download")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            if download_bytes > 0 {
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(
+        download_bytes > 0,
+        "live subscription transfer should be reflected in stats network"
+    );
+
+    let _ = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    let _ = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_data, &alice_folder, &bob_data, &bob_folder] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+/// Daemon inventory (`NF-9`): a folder registered with a relative path must be
+/// resolved to an absolute path so the daemon's watcher can find it.
+#[test]
+fn test_relative_folder_paths_are_absolute_in_daemon() -> anyhow::Result<()> {
+    let data = cli_test_dir("relative-path-data")?;
+    let work = cli_test_dir("relative-path-work")?;
+    let relative = work.join("rel");
+    std::fs::create_dir_all(&relative)?;
+    let data_arg = data.to_str().context("utf8")?;
+
+    let start = daemon_start_bg(data_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_arg)?;
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .current_dir(&work)
+        .args([
+            "--data-dir",
+            data_arg,
+            "folders",
+            "create",
+            "--no-indexing",
+            "--no-share",
+            "rel",
+        ])
+        .output()
+        .context("create with a relative path")?;
+    ensure!(
+        create.status.success(),
+        "relative create should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+
+    let folders = syncweb(&["--data-dir", data_arg, "--json", "folders"])?;
+    ensure!(folders.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&folders.stdout).context("parse folders json")?;
+    let path = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|rows| rows.first())
+        .and_then(|row| row.get("path"))
+        .and_then(serde_json::Value::as_str)
+        .context("folder path")?;
+    ensure!(
+        std::path::Path::new(path).is_absolute(),
+        "registered folder path should be absolute, got {path}"
+    );
+    ensure!(
+        path.ends_with("rel"),
+        "registered path should point at the relative folder: {path}"
+    );
+
+    let _ = syncweb(&["--data-dir", data_arg, "stop", "--yes", "--force"])?;
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&work);
+    let _ = std::fs::remove_dir_all(&data);
+    Ok(())
+}
+
+/// Plan 15 (`NF-10`): `.syncignore` patterns must exclude matching files from a
+/// `watch --once` import, and the ignore file itself must not be imported.
+#[test]
+fn test_watch_once_honors_syncignore() -> anyhow::Result<()> {
+    let data = cli_test_dir("watch-syncignore-data")?;
+    let dir = cli_test_dir("watch-syncignore-dir")?;
+    std::fs::write(dir.join("keep.txt"), b"keep")?;
+    std::fs::write(dir.join("drop.tmp"), b"drop")?;
+    std::fs::write(dir.join(".syncignore"), b"# comment\n*.tmp\n")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let dir_arg = dir.to_str().context("utf8")?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "folders",
+        "create",
+        "--no-indexing",
+        "--no-share",
+        dir_arg,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "create should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+
+    let out = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "--json",
+        "watch",
+        "--once",
+        dir_arg,
+    ])?;
+    ensure!(
+        out.status.success(),
+        "watch --once should succeed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).context("parse watch json")?;
+    let imported = value.get("imported").and_then(serde_json::Value::as_u64).unwrap_or(999);
+    ensure!(
+        imported == 1,
+        "only keep.txt should be imported, got {imported}: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    let ls = syncweb(&["--data-dir", data_arg, "--no-daemon", "ls", dir_arg])?;
+    ensure!(ls.status.success());
+    let listing = stdout_str(&ls);
+    ensure!(listing.contains("keep.txt"), "keep.txt should be present: {listing}");
+    ensure!(!listing.contains("drop.tmp"), "drop.tmp should be ignored: {listing}");
+    ensure!(
+        !listing.contains(".syncignore"),
+        ".syncignore should be ignored: {listing}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data);
+    Ok(())
+}
+
+/// Plan 13.2 (`NF-12`): a folder outside its scheduled active window must not
+/// report an active session after the daemon starts.
+#[test]
+fn test_inactive_schedule_window_pauses_folder() -> anyhow::Result<()> {
+    let data = cli_test_dir("schedule-inactive-data")?;
+    let dir = cli_test_dir("schedule-inactive-folder")?;
+    let data_arg = data.to_str().context("utf8")?;
+    let dir_arg = dir.to_str().context("utf8")?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "folders",
+        "create",
+        "--no-indexing",
+        "--no-share",
+        dir_arg,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "create should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let namespace = stdout_str(&create).trim().to_owned();
+    ensure!(!namespace.is_empty(), "create should print a namespace");
+
+    // Pick a one-hour window that starts two hours from the current UTC minute,
+    // guaranteeing the current time is outside it regardless of when this runs.
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    let minute = u16::try_from((seconds.rem_euclid(86_400)).div_euclid(60)).unwrap_or(0);
+    let start = (minute + 120).rem_euclid(1_440);
+    let end = (start + 60).rem_euclid(1_440);
+    let clock = |value: u16| format!("{:02}:{:02}", value.div_euclid(60), value.rem_euclid(60));
+    let window = format!("{}-{}", clock(start), clock(end));
+
+    let set = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "config",
+        "schedule",
+        "set",
+        "--active",
+        &window,
+    ])?;
+    ensure!(
+        set.status.success(),
+        "schedule set should succeed: {}",
+        String::from_utf8_lossy(&set.stderr)
+    );
+
+    let subscribe_key = format!("{namespace}.subscribe");
+    let subscribe = syncweb(&[
+        "--data-dir",
+        data_arg,
+        "--no-daemon",
+        "config",
+        "set",
+        &subscribe_key,
+        "on",
+    ])?;
+    ensure!(
+        subscribe.status.success(),
+        "subscribe config should succeed: {}",
+        String::from_utf8_lossy(&subscribe.stderr)
+    );
+
+    let start_bg = daemon_start_bg(data_arg)?;
+    ensure!(start_bg.status.success(), "daemon should start");
+    wait_for_daemon_ready(data_arg)?;
+
+    let folders = syncweb(&["--data-dir", data_arg, "--json", "folders"])?;
+    ensure!(folders.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&folders.stdout).context("parse folders json")?;
+    let session_active = value
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row.get("namespace").and_then(serde_json::Value::as_str) == Some(&namespace))
+        })
+        .and_then(|row| row.get("session_active"))
+        .and_then(serde_json::Value::as_bool)
+        .context("folder session_active")?;
+    ensure!(
+        !session_active,
+        "folder outside its active window must not report an active session: {}",
+        stdout_str(&folders)
+    );
+
+    let _ = syncweb(&["--data-dir", data_arg, "stop", "--yes", "--force"])?;
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data);
     Ok(())
 }

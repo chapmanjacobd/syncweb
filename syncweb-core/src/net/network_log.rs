@@ -126,6 +126,46 @@ impl NetworkLogger {
             .record_sync_session_finish(session_id, files, bytes, errors, status)
     }
 
+    /// Record downloaded bytes for a folder/network as a bandwidth event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn record_bandwidth_download(
+        &self,
+        bytes: u64,
+        files: u64,
+        folder_namespace: Option<&str>,
+        peer: Option<&str>,
+        network_id: Option<&str>,
+    ) -> Result<()> {
+        if bytes == 0 {
+            return Ok(());
+        }
+        self.database
+            .record_download(bytes, files, folder_namespace, peer, network_id)
+    }
+
+    /// Record uploaded bytes for a folder/network as a bandwidth event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn record_bandwidth_upload(
+        &self,
+        bytes: u64,
+        files: u64,
+        folder_namespace: Option<&str>,
+        peer: Option<&str>,
+        network_id: Option<&str>,
+    ) -> Result<()> {
+        if bytes == 0 {
+            return Ok(());
+        }
+        self.database
+            .record_upload(bytes, files, folder_namespace, peer, network_id)
+    }
+
     /// Record a relay health check result.
     ///
     /// # Errors

@@ -96,12 +96,7 @@ async fn test_sync_modes() -> anyhow::Result<()> {
     anyhow::ensure!(ro.mode().can_receive());
     anyhow::ensure!(ro.mode().to_string() == "receiveonly");
 
-    let re = manager.create(SyncMode::ReceiveEncrypted).await?;
-    anyhow::ensure!(!re.mode().can_write_locally());
-    anyhow::ensure!(re.mode().can_receive());
-    anyhow::ensure!(re.mode().to_string() == "receiveencrypted");
-
-    anyhow::ensure!(manager.list().await?.len() == 4);
+    anyhow::ensure!(manager.list().await?.len() == 3);
 
     test_node.stop().await?;
     Ok(())

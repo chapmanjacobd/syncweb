@@ -35,6 +35,12 @@ pub struct SyncwebFolder {
     blob_store: BlobStore,
     docs_engine: DocsEngine,
     sync_mode: SyncMode,
+    /// Whether the local replica holds the write key for this namespace.
+    ///
+    /// A folder joined from a read-only ticket can never accept local writes,
+    /// regardless of the requested [`SyncMode`]; the daemon must not attempt to
+    /// import local filesystem changes into it.
+    writable: bool,
     capabilities: Arc<RwLock<HashMap<PublicKey, Capability>>>,
 }
 
@@ -46,6 +52,7 @@ impl SyncwebFolder {
         blob_store: BlobStore,
         docs_engine: DocsEngine,
         sync_mode: SyncMode,
+        writable: bool,
     ) -> Self {
         let namespace_id = doc.id();
         Self {
@@ -55,8 +62,16 @@ impl SyncwebFolder {
             blob_store,
             docs_engine,
             sync_mode,
+            writable,
             capabilities: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Whether local filesystem changes can be written to this folder's
+    /// document. False for namespaces joined with a read-only capability.
+    #[must_use]
+    pub const fn is_writable(&self) -> bool {
+        self.writable
     }
 
     /// Drop this folder's namespace from the docs engine.

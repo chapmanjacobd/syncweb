@@ -148,7 +148,7 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (create)
 _arguments "${_arguments_options[@]}" : \
-'--mode=[Sync mode\: sendreceive, receiveonly, receiveencrypted, or sendonly]:MODE:_default' \
+'--mode=[Sync mode\: sendreceive, receiveonly, or sendonly]:MODE:_default' \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--relay-fallback[Enable Syncthing relay fallback for this folder]' \

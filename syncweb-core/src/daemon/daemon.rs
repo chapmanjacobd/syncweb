@@ -33,7 +33,7 @@ use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, WatchConfig,
     current_timestamp, daemon_socket_path,
     state::{BandwidthSnapshot, DaemonStatusReport, ScheduleStatus, load_filter_engine},
-    supervisor::{IntentControls, IntentSupervisor, SupervisionOptions},
+    supervisor::{BandwidthAccountant, IntentControls, IntentSupervisor, SupervisionOptions},
 };
 
 /// Configuration used to construct and run a daemon.
@@ -597,56 +597,98 @@ impl Daemon {
                 }
                 continue;
             };
-            let active = {
-                let schedule_manager = self.schedule_manager.read().await;
-                schedule_manager
-                    .as_ref()
-                    .is_none_or(|manager| manager.is_active(folder_name.as_deref()))
-            };
-            self.start_supervision(namespace, filters).await?;
-            if active {
-                self.set_intent_active(namespace, true)?;
-            } else {
-                self.set_intent_active(namespace, false)?;
-            }
+            self.apply_folder_schedule(namespace, filters, folder_name.as_deref())
+                .await?;
         }
         self.save_status_report().await?;
         Ok(())
     }
 
+    /// Start or stop one folder's live session according to its schedule.
+    async fn apply_folder_schedule(
+        &self,
+        namespace: NamespaceId,
+        filters: &SubscribeFilters,
+        folder_name: Option<&str>,
+    ) -> Result<()> {
+        let active = {
+            let schedule_manager = self.schedule_manager.read().await;
+            schedule_manager
+                .as_ref()
+                .is_none_or(|manager| manager.is_active(folder_name))
+        };
+        if active {
+            self.start_supervision(namespace, filters).await?;
+            self.set_intent_active(namespace, true)
+        } else if cancel_session(namespace) {
+            tracing::debug!(%namespace, "outside scheduled active window; pausing intent");
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
     async fn run_trigger(&self, namespace: Option<String>) -> Result<()> {
         match namespace {
-            Some(value) => {
-                let parsed_namespace = value
-                    .parse::<NamespaceId>()
-                    .map_err(|error| SyncwebError::operation("invalid sync namespace", error))?;
-                let tracked = self
-                    .handle
-                    .folder_registry
-                    .read()
-                    .await
-                    .statuses()
-                    .iter()
-                    .any(|status| status.namespace == value);
-                if !tracked {
-                    tracing::warn!(%parsed_namespace, "not a syncweb folder; nothing to synchronize");
-                    return Ok(());
-                }
-                let Some(filters) = self.enabled_subscribe_filters().get(&parsed_namespace).cloned() else {
-                    tracing::warn!(
-                        %parsed_namespace,
-                        "live syncing is disabled for this folder; enable it with `join --subscribe` \
-                         or `config set <folder>.subscribe on`"
-                    );
-                    return Ok(());
-                };
-                self.start_supervision(parsed_namespace, &filters).await?;
-                self.set_intent_active(parsed_namespace, true)?;
-                self.save_status_report().await?;
-                Ok(())
-            }
+            Some(value) => self.trigger_namespace(value).await,
             None => self.run_cycle().await,
         }
+    }
+
+    async fn trigger_namespace(&self, value: String) -> Result<()> {
+        let parsed_namespace = value
+            .parse::<NamespaceId>()
+            .map_err(|error| SyncwebError::operation("invalid sync namespace", error))?;
+        let tracked = self
+            .handle
+            .folder_registry
+            .read()
+            .await
+            .statuses()
+            .iter()
+            .any(|status| status.namespace == value);
+        if !tracked {
+            tracing::warn!(%parsed_namespace, "not a syncweb folder; nothing to synchronize");
+            return Ok(());
+        }
+        let Some(filters) = self.enabled_subscribe_filters().get(&parsed_namespace).cloned() else {
+            tracing::warn!(
+                %parsed_namespace,
+                "live syncing is disabled for this folder; enable it with `join --subscribe` \
+                 or `config set <folder>.subscribe on`"
+            );
+            return Ok(());
+        };
+        if !self.schedule_active_for(parsed_namespace).await {
+            tracing::debug!(%parsed_namespace, "outside scheduled active window; not starting sync");
+            if cancel_session(parsed_namespace) {
+                self.save_status_report().await?;
+            }
+            return Ok(());
+        }
+        self.start_supervision(parsed_namespace, &filters).await?;
+        self.set_intent_active(parsed_namespace, true)?;
+        self.save_status_report().await?;
+        Ok(())
+    }
+
+    /// Return whether the schedule lets a folder synchronize right now.
+    async fn schedule_active_for(&self, namespace: NamespaceId) -> bool {
+        let folder_name = self
+            .handle
+            .folder_registry
+            .read()
+            .await
+            .statuses()
+            .into_iter()
+            .find(|status| status.namespace == namespace.to_string())
+            .and_then(|status| {
+                (!status.path.as_os_str().is_empty()).then(|| status.path.to_string_lossy().into_owned())
+            });
+        let schedule_manager = self.schedule_manager.read().await;
+        schedule_manager
+            .as_ref()
+            .is_none_or(|manager| manager.is_active(folder_name.as_deref()))
     }
 
     /// The `subscribe-changes` folders with live syncing enabled, mapped to their filters.
@@ -718,15 +760,12 @@ impl Daemon {
             params = params.with_bandwidth_limits(limits);
         }
         let (ready_sender, ready_receiver) = oneshot::channel();
+        let accountant = BandwidthAccountant::new(network_logger.clone(), network_id.clone(), namespace.to_string());
         let task = tokio::spawn(async move {
+            let options =
+                SupervisionOptions::with_ready(controls, filter, ready_sender).with_bandwidth(accountant.clone());
             let result = supervisor
-                .supervise_with_controls_and_ready(
-                    &sync,
-                    namespace,
-                    params,
-                    shutdown,
-                    SupervisionOptions::with_ready(controls, filter, ready_sender),
-                )
+                .supervise_with_controls_and_ready(&sync, namespace, params, shutdown, options)
                 .await;
             if network_id.is_some()
                 && let Some(sid) = session_id
@@ -734,8 +773,8 @@ impl Daemon {
                 match &result {
                     Ok(supervised) => {
                         let has_error = supervised.last_error.is_some();
-                        let files = 0;
-                        let bytes = 0;
+                        let bytes = accountant.total();
+                        let files = supervised.files_transferred;
                         let errors = u64::from(has_error);
                         let status = if has_error { "failed" } else { "completed" };
                         let _ = network_logger.record_sync_finish(sid, files, bytes, errors, status);
@@ -806,22 +845,70 @@ impl Daemon {
             .filter(|status| !status.path.as_os_str().is_empty())
             .map(|status| (status.namespace.clone(), status.path.clone()))
             .collect();
+        let candidates = self.watcher_candidates(&wanted)?;
+        let mut to_add = Vec::new();
+        for (namespace, path) in candidates {
+            if self.watcher_allowed(&namespace, &path).await {
+                to_add.push((namespace, path));
+            }
+        }
+        self.install_watchers(to_add)
+    }
+
+    /// Drop watchers whose folder left the registry and return the newly-wanted
+    /// namespaces. The watcher mutex is a `std::sync::Mutex`, so it is dropped
+    /// before the async capability lookup in [`Self::watcher_allowed`].
+    fn watcher_candidates(&self, wanted: &HashMap<String, PathBuf>) -> Result<Vec<(String, PathBuf)>> {
         let mut watchers = self
             .watchers
             .lock()
             .map_err(|error| SyncwebError::operation("daemon watcher mutex is poisoned", error))?;
         watchers.retain(|namespace, _| wanted.contains_key(namespace));
-        for (namespace, path) in wanted {
-            if watchers.contains_key(&namespace) {
-                continue;
-            }
-            if !path.exists() {
-                tracing::warn!(%namespace, path = %path.display(), "managed folder path does not exist; watcher deferred");
-                continue;
-            }
-            watchers.insert(namespace, FsWatcher::new(&path)?);
-        }
+        let candidates = wanted
+            .iter()
+            .filter(|(namespace, _)| !watchers.contains_key(*namespace))
+            .map(|(namespace, path)| (namespace.clone(), path.clone()))
+            .collect();
         drop(watchers);
+        Ok(candidates)
+    }
+
+    /// Whether a filesystem watcher should be created for `namespace`.
+    ///
+    /// A replica joined from a read-only ticket cannot accept local writes:
+    /// watching it would try to import every materialized file and fail in a
+    /// retry loop, so it is skipped entirely.
+    async fn watcher_allowed(&self, namespace: &str, path: &Path) -> bool {
+        let Ok(namespace_id) = namespace.parse::<NamespaceId>() else {
+            return false;
+        };
+        match self.folder_manager.get(namespace_id).await {
+            Ok(folder) if !folder.is_writable() => {
+                tracing::debug!(%namespace, "read-only folder; not watching for local changes");
+                false
+            }
+            Ok(_) if path.exists() => true,
+            Ok(_) => {
+                tracing::warn!(%namespace, path = %path.display(), "managed folder path does not exist; watcher deferred");
+                false
+            }
+            Err(error) => {
+                tracing::debug!(%namespace, %error, "folder capability unavailable; watcher deferred");
+                false
+            }
+        }
+    }
+
+    fn install_watchers(&self, to_add: Vec<(String, PathBuf)>) -> Result<()> {
+        let mut watchers = self
+            .watchers
+            .lock()
+            .map_err(|error| SyncwebError::operation("daemon watcher mutex is poisoned", error))?;
+        for (namespace, path) in to_add {
+            if let std::collections::hash_map::Entry::Vacant(slot) = watchers.entry(namespace) {
+                slot.insert(FsWatcher::new(&path)?);
+            }
+        }
         Ok(())
     }
 
@@ -958,6 +1045,12 @@ impl Daemon {
         }
 
         let folder = self.folder_manager.get(namespace).await?;
+        // A read-only replica has no write key, so importing or deleting here
+        // can only fail. Ignore the event instead of looping on the error.
+        if !folder.is_writable() {
+            tracing::debug!(%namespace, path = %path.display(), "ignoring filesystem change for read-only folder");
+            return Ok(());
+        }
         let result = if removed || !path.exists() {
             folder
                 .delete_entry(relative.as_os_str().as_encoded_bytes())

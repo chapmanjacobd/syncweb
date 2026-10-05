@@ -2606,8 +2606,8 @@ mod tests {
     fn status_round_trips_kind_mode_and_sync_count() {
         let db = test_db();
         let mut folder = FolderStatusReport::new("ns-1", "/tmp/one", true, Some(1_700_000_000), 12, Vec::new());
-        folder.kind = "encrypted".to_owned();
-        folder.mode = "receiveencrypted".to_owned();
+        folder.kind = "folder".to_owned();
+        folder.mode = "receiveonly".to_owned();
         folder.sync_count = 4;
 
         let mut report = DaemonStatusReport::from_state(
@@ -2630,8 +2630,8 @@ mod tests {
         let loaded = db.load_status().unwrap().expect("status should be persisted");
         let saved = loaded.folders.first().expect("the folder row should be present");
         assert_eq!(saved.namespace, "ns-1");
-        assert_eq!(saved.kind, "encrypted", "kind must survive a restart");
-        assert_eq!(saved.mode, "receiveencrypted", "mode must survive a restart");
+        assert_eq!(saved.kind, "folder", "kind must survive a restart");
+        assert_eq!(saved.mode, "receiveonly", "mode must survive a restart");
         assert_eq!(saved.sync_count, 4, "sync_count must survive a restart");
         assert_eq!(saved.entries_synced, 12);
         assert_eq!(saved, &folder);

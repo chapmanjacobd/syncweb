@@ -188,13 +188,38 @@ pub struct Scanner {
     ignore: IgnoreSet,
 }
 
+/// Name of the per-folder ignore file, resolved relative to a scan root.
+pub const SYNCIGNORE_FILE: &str = ".syncignore";
+
+/// Merge explicit ignore patterns with any `.syncignore` entries found at the
+/// scan root. The ignore file itself is always excluded from the scan.
+#[must_use]
+fn with_syncignore_patterns(root: &Path, base: Vec<String>) -> Vec<String> {
+    let mut patterns = base;
+    if root.is_dir() {
+        if let Ok(contents) = fs::read_to_string(root.join(SYNCIGNORE_FILE)) {
+            for line in contents.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                patterns.push(trimmed.to_owned());
+            }
+        }
+        patterns.push(SYNCIGNORE_FILE.to_owned());
+    }
+    patterns
+}
+
 impl Scanner {
     #[must_use]
     pub fn new(root: impl Into<PathBuf>, ignore_patterns_arg: impl Into<IgnoreFilter>) -> Self {
         let ignore_patterns = ignore_patterns_arg.into();
+        let root_path = root.into();
+        let patterns = with_syncignore_patterns(&root_path, ignore_patterns.patterns().to_vec());
         Self {
-            root: root.into(),
-            ignore: IgnoreSet::new(ignore_patterns.patterns()),
+            root: root_path,
+            ignore: IgnoreSet::new(patterns),
         }
     }
 

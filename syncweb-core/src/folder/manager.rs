@@ -58,6 +58,7 @@ impl FolderManager {
             self.blob_store.clone(),
             self.docs_engine.clone(),
             mode,
+            true,
         );
         folder.grant(self.node_id, Capability::Admin).await;
         self.folders.write().await.insert(folder.namespace_id(), folder.clone());
@@ -89,8 +90,9 @@ impl FolderManager {
         metadata_only: bool,
     ) -> Result<SyncwebFolder> {
         let ticket = crate::uri::parse_folder_ticket(ticket_str.as_ref())?;
+        let writable = matches!(ticket.capability.kind(), iroh_docs::CapabilityKind::Write);
         let doc = self.docs_engine.import_ticket(ticket).await?;
-        let folder = self.folder_from_doc(doc, mode).await?;
+        let folder = self.folder_from_doc(doc, mode, writable).await?;
         if metadata_only {
             folder.set_metadata_only().await?;
         }
@@ -121,8 +123,9 @@ impl FolderManager {
         if let Some(folder) = existing_folder {
             return Ok(folder);
         }
-        let (doc, _ticket) = self.docs_engine.create_or_open_namespace(Some(namespace_id)).await?;
-        let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly).await?;
+        let (doc, ticket) = self.docs_engine.create_or_open_namespace(Some(namespace_id)).await?;
+        let writable = matches!(ticket.capability.kind(), iroh_docs::CapabilityKind::Write);
+        let folder = self.folder_from_doc(doc, SyncMode::ReceiveOnly, writable).await?;
         self.folders.write().await.insert(namespace_id, folder.clone());
         self.announce_namespace(namespace_id).await;
         Ok(folder)
@@ -257,12 +260,13 @@ impl FolderManager {
             if self.docs_engine.get_any(&doc, NETWORK_MEMBERS_KEY).await?.is_some() {
                 continue;
             }
+            let writable = matches!(capability, iroh_docs::CapabilityKind::Write);
             let fallback_mode = match capability {
                 iroh_docs::CapabilityKind::Write => SyncMode::SendReceive,
                 iroh_docs::CapabilityKind::Read => SyncMode::ReceiveOnly,
             };
             let mode = self.mode_from_doc(&doc, fallback_mode).await?;
-            let folder = self.folder_from_doc(doc, mode).await?;
+            let folder = self.folder_from_doc(doc, mode, writable).await?;
             if let Entry::Vacant(entry) = self.folders.write().await.entry(namespace_id) {
                 entry.insert(folder);
             }
@@ -332,13 +336,14 @@ impl FolderManager {
         folder.ticket(writable).await
     }
 
-    async fn folder_from_doc(&self, doc: Doc, mode: SyncMode) -> Result<SyncwebFolder> {
+    async fn folder_from_doc(&self, doc: Doc, mode: SyncMode, writable: bool) -> Result<SyncwebFolder> {
         Ok(SyncwebFolder::new(
             doc,
             self.docs_engine.author().await?,
             self.blob_store.clone(),
             self.docs_engine.clone(),
             mode,
+            writable,
         ))
     }
 

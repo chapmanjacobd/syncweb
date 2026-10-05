@@ -10,7 +10,6 @@ pub enum SyncMode {
     SendReceive,
     SendOnly,
     ReceiveOnly,
-    ReceiveEncrypted,
 }
 
 impl SyncMode {
@@ -36,7 +35,6 @@ impl fmt::Display for SyncMode {
             Self::SendReceive => "sendreceive",
             Self::SendOnly => "sendonly",
             Self::ReceiveOnly => "receiveonly",
-            Self::ReceiveEncrypted => "receiveencrypted",
         })
     }
 }
@@ -65,7 +63,6 @@ impl FromStr for SyncMode {
             "send-receive" | "sendreceive" => Ok(Self::SendReceive),
             "send-only" | "sendonly" => Ok(Self::SendOnly),
             "receive-only" | "receiveonly" => Ok(Self::ReceiveOnly),
-            "receive-encrypted" | "receiveencrypted" => Ok(Self::ReceiveEncrypted),
             _ => Err(SyncwebError::InvalidSyncMode(value.to_owned())),
         }
     }

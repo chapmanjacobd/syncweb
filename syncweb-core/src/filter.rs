@@ -132,6 +132,7 @@ impl FilterEntry {
 
 /// Serializable global and per-folder filter configuration.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct FilterConfig {
     #[serde(default)]
@@ -562,5 +563,30 @@ mod size_bound_tests {
         )
         .expect_err("garbage should not parse");
         assert!(error.to_string().contains("size"), "unhelpful error: {error}");
+    }
+}
+
+#[cfg(test)]
+mod config_parsing_tests {
+    use super::*;
+
+    /// Plan 14: unknown top-level tables (e.g. a `[general]` typo or a singular
+    /// `[[rule]]`) must be reported instead of silently ignored.
+    #[test]
+    fn unknown_top_level_tables_are_rejected() {
+        let error = toml::from_str::<FilterConfig>("[general]\ntotally_bogus = 42\n")
+            .expect_err("unknown tables must not be silently ignored");
+        assert!(
+            error.to_string().contains("general"),
+            "the error should name the unknown table: {error}"
+        );
+        assert!(
+            toml::from_str::<FilterConfig>("[[rule]]\naction = \"reject\"\n").is_err(),
+            "a singular [[rule]] table must be rejected"
+        );
+        assert!(
+            toml::from_str::<FilterConfig>("[[rules]]\naction = \"accept\"\n[rules.match]\nname = \"*.mp3\"\n").is_ok(),
+            "a valid [[rules]] table must still parse"
+        );
     }
 }

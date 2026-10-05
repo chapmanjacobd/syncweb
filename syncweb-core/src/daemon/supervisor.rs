@@ -1,7 +1,10 @@
 use std::time::Duration;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use iroh_docs::NamespaceId;
@@ -15,6 +18,7 @@ use crate::{
     daemon::current_timestamp,
     error::{Result, SyncwebError},
     filter::FilterEngine,
+    net::NetworkLogger,
     sync::{ActiveSession, IntentControl, IntentHandle, SubscribeParams, SyncEngine, SyncEvent},
 };
 
@@ -26,7 +30,59 @@ pub struct SupervisedIntent {
     pub retry_count: u32,
     pub last_error: Option<String>,
     pub last_started_at: Option<u64>,
+    /// Total bytes received by this intent since it was first started.
+    pub bytes_transferred: u64,
+    /// Total files received by this intent since it was first started.
+    pub files_transferred: u64,
     session: Option<ActiveSession>,
+}
+
+/// Live bandwidth accounting for a supervised intent.
+///
+/// Records the delta between successive [`SyncEvent::Stats`] reports as
+/// download events so `stats network` reflects transfers while the daemon is
+/// still running (a continuous intent only returns on shutdown).
+#[derive(Clone, Debug)]
+pub struct BandwidthAccountant {
+    logger: NetworkLogger,
+    network_id: Option<String>,
+    folder: String,
+    recorded: Arc<AtomicU64>,
+}
+
+impl BandwidthAccountant {
+    #[must_use]
+    pub fn new(logger: NetworkLogger, network_id: Option<String>, folder: impl Into<String>) -> Self {
+        Self {
+            logger,
+            network_id,
+            folder: folder.into(),
+            recorded: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// Record any newly observed bytes as a download event.
+    pub fn observe(&self, total_bytes: u64, files: u64) {
+        let previous = self.recorded.load(Ordering::Relaxed);
+        if total_bytes > previous
+            && let Err(error) = self.logger.record_bandwidth_download(
+                total_bytes.saturating_sub(previous),
+                files,
+                Some(&self.folder),
+                None,
+                self.network_id.as_deref(),
+            )
+        {
+            tracing::warn!(%error, "failed to record bandwidth event");
+        }
+        self.recorded.store(total_bytes.max(previous), Ordering::Relaxed);
+    }
+
+    /// Total bytes recorded so far.
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.recorded.load(Ordering::Relaxed)
+    }
 }
 
 impl std::fmt::Debug for SupervisedIntent {
@@ -38,6 +94,7 @@ impl std::fmt::Debug for SupervisedIntent {
             .field("retry_count", &self.retry_count)
             .field("last_error", &self.last_error)
             .field("last_started_at", &self.last_started_at)
+            .field("bytes_transferred", &self.bytes_transferred)
             .finish_non_exhaustive()
     }
 }
@@ -59,6 +116,7 @@ pub struct SupervisionOptions {
     controls: Option<IntentControls>,
     filter: Option<FilterEngine>,
     ready: Option<oneshot::Sender<()>>,
+    bandwidth: Option<BandwidthAccountant>,
 }
 
 impl SupervisionOptions {
@@ -71,7 +129,15 @@ impl SupervisionOptions {
             controls: Some(controls),
             filter,
             ready: Some(ready),
+            bandwidth: None,
         }
+    }
+
+    /// Attach a live bandwidth accountant to the supervised intent.
+    #[must_use]
+    pub fn with_bandwidth(mut self, bandwidth: BandwidthAccountant) -> Self {
+        self.bandwidth = Some(bandwidth);
+        self
     }
 }
 
@@ -119,6 +185,8 @@ impl IntentSupervisor {
                     retry_count: 0,
                     last_error: None,
                     last_started_at: Some(current_timestamp()),
+                    bytes_transferred: 0,
+                    files_transferred: 0,
                     session: Some(session),
                 }
             }
@@ -128,6 +196,8 @@ impl IntentSupervisor {
                 retry_count: 0,
                 last_error: Some(error.to_string()),
                 last_started_at: None,
+                bytes_transferred: 0,
+                files_transferred: 0,
                 session: None,
             },
         }
@@ -159,6 +229,7 @@ impl IntentSupervisor {
                 controls: None,
                 filter: None,
                 ready: None,
+                bandwidth: None,
             },
         )
         .await
@@ -188,6 +259,7 @@ impl IntentSupervisor {
                 controls: Some(controls),
                 filter,
                 ready: None,
+                bandwidth: None,
             },
         )
         .await
@@ -283,7 +355,15 @@ impl IntentSupervisor {
                     supervised.handle = None;
                     drop(session);
                 }
-                Some(SyncEvent::Progress { .. } | SyncEvent::Stats(_) | SyncEvent::Paused | SyncEvent::Resumed) => {
+                Some(SyncEvent::Progress { .. } | SyncEvent::Paused | SyncEvent::Resumed) => {
+                    supervised.handle = Some(handle);
+                    supervised.session = session;
+                }
+                Some(SyncEvent::Stats(stats)) => {
+                    supervised.bytes_transferred = stats.bytes_transferred;
+                    if let Some(accountant) = options.bandwidth.as_ref() {
+                        accountant.observe(stats.bytes_transferred, 0);
+                    }
                     supervised.handle = Some(handle);
                     supervised.session = session;
                 }

@@ -2084,20 +2084,11 @@ impl IpcServer {
                 return response_from_error(error);
             }
         }
-        if options.subscribe {
-            let sync = SyncEngine::new(
-                manager.clone(),
-                context.node.blob_store().clone(),
-                context.node.docs_engine().clone(),
-                Some(context.node.topic_tracker().clone()),
-            );
-            let params = match SubscribeParams::from_filters(filters) {
-                Ok(params) => params,
-                Err(error) => return response_from_error(error),
-            };
-            if let Err(error) = sync.subscribe(folder.namespace_id(), params).await {
-                return response_from_error(error);
-            }
+        // Wake the daemon's supervisor immediately instead of starting a
+        // throwaway intent here. The supervised intent is the one that accounts
+        // bandwidth, so it must be running before the initial transfer begins.
+        if options.subscribe && self.daemon_handle.sync_trigger.send(Some(namespace.clone())).is_err() {
+            tracing::warn!(%namespace, "failed to trigger live sync after join");
         }
         let downloaded = if options.download {
             match self.materialize_folder(context, manager, folder, filters, path).await {
@@ -2293,6 +2284,24 @@ impl IpcServer {
                 };
             }
         };
+        // `folders create` is idempotent per path: re-running it for a path that
+        // is already registered would otherwise mint a fresh namespace each time,
+        // leaving a previously shared URL pointing at a namespace the sender no
+        // longer imports into. Reuse the existing registration instead.
+        let existing = {
+            let registry = self.daemon_handle.folder_registry.read().await;
+            registry
+                .statuses()
+                .into_iter()
+                .filter(|status| status.kind == "folder" && !status.path.as_os_str().is_empty())
+                .find(|status| same_absolute_path(&status.path, &path))
+                .map(|status| status.namespace)
+        };
+        if let Some(namespace) = existing {
+            return IpcResponse::Ok {
+                message: format!("namespace: {namespace}"),
+            };
+        }
         let manager = FolderManager::new(&context.node);
         match manager.create(sync_mode).await {
             Ok(folder) => {
@@ -3550,6 +3559,25 @@ fn response_from_error(error: impl std::fmt::Display) -> IpcResponse {
     IpcResponse::Error {
         message: error.to_string(),
     }
+}
+
+/// Whether two folder mount paths refer to the same directory.
+///
+/// Mount paths are stored exactly as the user typed them (`./shared` vs
+/// `shared`), so compare canonicalized absolute forms and fall back to a plain
+/// equality when a path does not exist on disk yet.
+fn same_absolute_path(left: &Path, right: &Path) -> bool {
+    let canonical = |path: &Path| {
+        std::fs::canonicalize(path).unwrap_or_else(|_| {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            }
+        })
+    };
+    canonical(left) == canonical(right)
 }
 
 fn build_ipc_verify_filter(

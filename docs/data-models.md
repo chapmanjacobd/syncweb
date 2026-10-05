@@ -16,7 +16,7 @@ struct SyncwebFolder {
     blob_store: BlobStore,            // iroh-blobs persistent store
 
     // Sync state
-    sync_mode: SyncMode,              // SendReceive | SendOnly | ReceiveOnly | ReceiveEncrypted
+    sync_mode: SyncMode,              // SendReceive | SendOnly | ReceiveOnly
 
     // Limits (inspired by iroh-willow)
     max_entries: Option<u64>,         // Maximum entries to sync (0 = unlimited)
@@ -115,7 +115,6 @@ impl SyncwebFolder {
 | `sendreceive` | `SyncMode::SendReceive` | Namespace key shared, full doc write |
 | `sendonly` | `SyncMode::SendOnly` | Namespace key local only, share read cap |
 | `receiveonly` | `SyncMode::ReceiveOnly` | Import doc with read cap only |
-| `receiveencrypted` | `SyncMode::ReceiveEncrypted` | Encrypted blob store, no namespace key |
 
 ### 3. Capability System
 

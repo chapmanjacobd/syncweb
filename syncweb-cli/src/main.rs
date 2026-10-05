@@ -189,6 +189,18 @@ async fn execute_cli(cli: Cli) -> Result<()> {
     }
 
     let effective = effective_data_dir(&cli.data_dir, cli.network.as_deref());
+    // A daemon owns the embedded blob/docs store, so opening a second node on
+    // the same data dir blocks on the store locks. Fail fast here instead of
+    // hanging, for every embedded command (not just `watch`).
+    if cli.no_daemon
+        && !matches!(cli.command, Command::Version)
+        && syncweb_core::daemon::daemon_client(&effective)?.is_some()
+    {
+        anyhow::bail!(
+            "a daemon owns {}; stop it before using --no-daemon",
+            effective.display()
+        );
+    }
     let ctx = CliContext {
         data_dir: &effective,
         output_json: cli.json,
@@ -2968,15 +2980,27 @@ fn print_filter_config(engine: &FilterEngine, output_json: bool) -> Result<()> {
 
 fn dry_run_filters(engine: &FilterEngine, paths: Vec<PathBuf>, output_json: bool) -> Result<()> {
     let mut results = Vec::new();
+    let action_label = |action: FilterAction| match action {
+        FilterAction::Accept => "accept",
+        FilterAction::Reject => "reject",
+        _ => "unknown",
+    };
     for path in paths {
+        // Dry-run evaluates hypothetical paths, so a path that does not exist is
+        // reported (with zero size) instead of aborting the whole run.
+        if !path.exists() {
+            let filter_entry = FilterEntry::new(path.clone(), 0);
+            let label = action_label(engine.evaluate(&filter_entry));
+            if output_json {
+                results.push(serde_json::json!({"action": label, "path": path, "missing": true}));
+            } else {
+                println!("{label}\t{}", path.display());
+            }
+            continue;
+        }
         for entry in ParallelScanner::new(&path, Vec::<String>::new(), 0).scan()? {
             let filter_entry = FilterEntry::from_file(&entry);
-            let action = engine.evaluate(&filter_entry);
-            let label = match action {
-                FilterAction::Accept => "accept",
-                FilterAction::Reject => "reject",
-                _ => "unknown",
-            };
+            let label = action_label(engine.evaluate(&filter_entry));
             if output_json {
                 results.push(serde_json::json!({"action": label, "path": entry.path}));
             } else {
@@ -3018,7 +3042,7 @@ fn share_label(write: bool, url: &str) -> String {
 }
 
 #[async_recursion]
-async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::FolderCreate) -> Result<()> {
+async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::FolderCreate) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
@@ -3026,6 +3050,9 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     let write = command.write;
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
+    // Resolve to an absolute path so the daemon's filesystem watcher (whose
+    // working directory differs from the CLI's) can locate the folder.
+    command.path = canonical_path(&command.path);
     let do_import = command.import && !command.no_import;
     let namespace = if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let message = client
@@ -3085,7 +3112,21 @@ async fn handle_create(ctx: &CliContext<'_>, command: crate::cli::commands::Fold
     } else {
         let node = open_node(data_dir).await?;
         let manager = FolderManager::new(&node);
-        let folder = manager.create(SyncMode::from_str(&command.mode)?).await?;
+        // Embedded `folders create` is idempotent per path too: reuse the
+        // existing registration rather than minting a duplicate namespace.
+        let existing_namespace = {
+            let canonical = canonical_path(&command.path);
+            live_folder_mounts(data_dir, &manager)
+                .await?
+                .into_iter()
+                .find(|(_, mount)| canonical_path(mount) == canonical)
+                .map(|(namespace, _)| namespace)
+        };
+        let folder = if let Some(namespace) = existing_namespace {
+            manager.get(namespace.parse::<iroh_docs::NamespaceId>()?).await?
+        } else {
+            manager.create(SyncMode::from_str(&command.mode)?).await?
+        };
         if let Some(network_name) = command.network {
             add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
         }
@@ -3170,7 +3211,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let filters = subscribe_filters_from(&command);
     let subscribe = command.effective_subscribe();
     let download_existing = command.download_existing;
-    let effective_path = if let Some(prefix) = &command.prefix {
+    let mut effective_path = if let Some(prefix) = &command.prefix {
         prefix.join(&command.path)
     } else {
         command.path.clone()
@@ -3189,6 +3230,9 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
 
     std::fs::create_dir_all(&effective_path)
         .with_context(|| format!("failed to create folder path {}", effective_path.display()))?;
+    // Resolve to an absolute path so the daemon's filesystem watcher (whose
+    // working directory differs from the CLI's) can locate the folder.
+    effective_path = canonical_path(&effective_path);
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let message = client
             .join(

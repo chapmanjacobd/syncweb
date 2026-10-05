@@ -17,7 +17,12 @@ use syncweb_core::{
 };
 
 use iroh_blobs::{Hash, ticket::BlobTicket};
-use syncweb_core::init::open_node;
+use syncweb_core::{
+    daemon::{IpcCommand, IpcRequest},
+    init::open_node,
+};
+
+use crate::print_daemon_message;
 
 use super::output::confirm_destructive;
 
@@ -34,6 +39,14 @@ pub async fn handle_indexing(ctx: &CliContext<'_>, command: IndexingCommand) -> 
     match command {
         IndexingCommand::Enable { folder } => {
             let namespace = resolve_folder_namespace(ctx, &folder).await?;
+            if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::IndexingEnable {
+                        namespace: namespace.to_string(),
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             let node = open_node(data_dir).await?;
             let manager = FolderManager::new(&node);
             let selected = manager.get(namespace).await?;
@@ -71,6 +84,16 @@ pub async fn handle_catalog_publish(ctx: &CliContext<'_>, args: PublishCatalogAr
     let output_json = ctx.output_json;
     let PublishCatalogArgs { folder, catalog, tags } = args;
     let namespace = resolve_folder_namespace(ctx, &folder).await?;
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::IndexingPublish {
+                namespace: namespace.to_string(),
+                catalog,
+                tags,
+            }))
+            .await?;
+        return print_daemon_message(response, output_json);
+    }
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let selected = manager.get(namespace).await?;

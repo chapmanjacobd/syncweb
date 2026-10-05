@@ -122,6 +122,14 @@ struct PendingWatch {
     ready_at: Instant,
 }
 
+/// The daemon's spawned listener tasks: Unix-socket IPC, WebSocket bridge, and
+/// the optional media HTTP server.
+type ServerTasks = (
+    JoinHandle<Result<()>>,
+    Option<JoinHandle<Result<()>>>,
+    Option<JoinHandle<Result<()>>>,
+);
+
 type SignalTask<'a> = std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
 impl Daemon {
@@ -424,7 +432,7 @@ impl Daemon {
             "daemon runtime initialized"
         );
         self.run_initial_setup().await?;
-        let (mut server_task, media_task) = self.spawn_server_tasks();
+        let (mut server_task, bridge_task, media_task) = self.spawn_server_tasks()?;
         let (mut shutdown, mut signal_task, mut interval, mut watch_interval, shutdown_sender) = self.runtime_timers();
         if let Err(error) = self.run_cycle().await {
             tracing::error!(%error, "initial daemon cycle failed");
@@ -441,7 +449,7 @@ impl Daemon {
             )
             .await;
         send_shutdown(&shutdown_sender);
-        self.wait_for_server_tasks(server_task, media_task).await?;
+        self.wait_for_server_tasks(server_task, bridge_task, media_task).await?;
         result
     }
 
@@ -477,22 +485,28 @@ impl Daemon {
         self.spawn_maintenance_task().await;
     }
 
-    fn spawn_server_tasks(&self) -> (JoinHandle<Result<()>>, Option<JoinHandle<Result<()>>>) {
+    fn spawn_server_tasks(&self) -> Result<ServerTasks> {
         let server = self.ipc_server.clone();
         let server_task = tokio::spawn(async move { server.serve().await });
 
+        let bridge =
+            crate::media::BridgeServer::new(crate::media::bridge::DEFAULT_BRIDGE_LISTEN, self.ipc_server.clone())?;
+        let bridge_shutdown = self.handle.shutdown_sender.clone();
+        let bridge_task = tokio::spawn(async move { bridge.run(bridge_shutdown).await });
+
         let media_task = self.config.media_listen.map(|addr| {
             let media_srv = crate::media::MediaServer::new(addr, self.node.blob_store().clone());
-            let shutdown = self.handle.shutdown_sender.clone();
-            tokio::spawn(async move { media_srv.run(shutdown).await })
+            let media_shutdown = self.handle.shutdown_sender.clone();
+            tokio::spawn(async move { media_srv.run(media_shutdown).await })
         });
 
-        (server_task, media_task)
+        Ok((server_task, Some(bridge_task), media_task))
     }
 
     async fn wait_for_server_tasks(
         &self,
         server_task: JoinHandle<Result<()>>,
+        bridge_task: Option<JoinHandle<Result<()>>>,
         media_task: Option<JoinHandle<Result<()>>>,
     ) -> Result<()> {
         if !server_task.is_finished() {
@@ -500,6 +514,12 @@ impl Daemon {
                 Ok(server_result) => server_result?,
                 Err(error) => return Err(SyncwebError::operation("daemon IPC task failed", error)),
             }
+        }
+        if let Some(task) = bridge_task
+            && !task.is_finished()
+            && let Err(error) = task.await
+        {
+            tracing::warn!(%error, "websocket bridge task failed");
         }
         if let Some(task) = media_task
             && !task.is_finished()

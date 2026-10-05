@@ -3811,6 +3811,10 @@ async fn handle_package_publish(
     let root = resolve_package_root(&paths, root_override);
     let resolved_namespace = if let Some(provided) = namespace {
         provided
+    } else if let Some(client) = syncweb_core::daemon::daemon_client(ctx.data_dir)? {
+        resolve_selector_via_daemon(&client, std::path::Path::new("."))
+            .await?
+            .namespace
     } else {
         let node = open_node(ctx.data_dir).await?;
         let manager = syncweb_core::folder::FolderManager::new(&node);
@@ -3913,8 +3917,22 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
                 handle_package_archive_import(ctx, archive, filter.clone()).await?;
             }
         }
-        PackageCommand::Info { ticket, hash, node_id } => handle_package_info(ctx, ticket, hash, node_id).await?,
+        PackageCommand::Info { ticket, hash, node_id } => {
+            if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::PackageInfo { ticket, hash, node_id }))
+                    .await?;
+                return print_package_info_response(response, output_json);
+            }
+            handle_package_info(ctx, ticket, hash, node_id).await?;
+        }
         PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
+            if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::PackageInstall { ticket }))
+                    .await?;
+                return print_package_install_response(response, output_json);
+            }
             handle_package_install(ctx, &packages, ticket, path).await?;
         }
         PackageCommand::Remove {
@@ -3934,6 +3952,85 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
         } => handle_package_switch(&packages, &collection_id, &version, output_json)?,
     }
     Ok(())
+}
+
+/// Render a daemon-provided `package info` response.
+fn print_package_info_response(response: IpcResponse, output_json: bool) -> Result<()> {
+    match response {
+        IpcResponse::PackageInfo(info) => {
+            if output_json {
+                println!("{}", serde_json::to_string_pretty(&info)?);
+            } else {
+                let mut table = Table::new();
+                table.add_row(["Collection", &info.collection_id]);
+                if let Some(name) = &info.name {
+                    table.add_row(["Name", name]);
+                }
+                table.add_row(["Version", &info.version]);
+                if let Some(parent) = &info.parent {
+                    table.add_row(["Parent", parent]);
+                }
+                table.add_row(["Entries", &info.entries.to_string()]);
+                println!("{table}");
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        IpcResponse::Ok { .. }
+        | IpcResponse::Status(_)
+        | IpcResponse::FolderList(_)
+        | IpcResponse::DownloadComplete { .. }
+        | IpcResponse::TransferJobsProcessed { .. }
+        | IpcResponse::ImportFilesComplete { .. }
+        | IpcResponse::ImportComplete(_)
+        | IpcResponse::ExportComplete(_)
+        | IpcResponse::EnrichData(_)
+        | IpcResponse::FileStats(_)
+        | IpcResponse::Entries(_)
+        | IpcResponse::PeerAvailability(_)
+        | IpcResponse::SnapshotList(_)
+        | IpcResponse::SnapshotDiff(_)
+        | IpcResponse::PackageInstall { .. }
+        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+    }
+}
+
+/// Render a daemon-provided `package install` response.
+fn print_package_install_response(response: IpcResponse, output_json: bool) -> Result<()> {
+    match response {
+        IpcResponse::PackageInstall { collection_id, version } => {
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "status": "installed",
+                        "collection": collection_id,
+                        "version": version,
+                    })
+                );
+            } else {
+                println!("installed: {collection_id} {version}");
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        IpcResponse::Ok { .. }
+        | IpcResponse::Status(_)
+        | IpcResponse::FolderList(_)
+        | IpcResponse::DownloadComplete { .. }
+        | IpcResponse::TransferJobsProcessed { .. }
+        | IpcResponse::ImportFilesComplete { .. }
+        | IpcResponse::ImportComplete(_)
+        | IpcResponse::ExportComplete(_)
+        | IpcResponse::EnrichData(_)
+        | IpcResponse::FileStats(_)
+        | IpcResponse::Entries(_)
+        | IpcResponse::PeerAvailability(_)
+        | IpcResponse::SnapshotList(_)
+        | IpcResponse::SnapshotDiff(_)
+        | IpcResponse::PackageInfo(_)
+        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+    }
 }
 
 async fn handle_package_info(
@@ -4120,6 +4217,66 @@ async fn handle_package_archive_import(
     let node_db = open_node_db(data_dir)?;
     let packages = PackageManager::new(data_dir.join("packages"), node_db);
     let filter = parse_drop_filters(&filters)?;
+
+    // Prefer the running daemon: it already owns the live blob/docs store, so
+    // a second embedded node on the same data dir would block on the store lock
+    // instead of starting. The daemon imports the archive into its store,
+    // materializes to a staging dir, and publishes to a fresh folder; we then
+    // install the staged content into the package manager.
+    if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+        let staging = data_dir.join(format!(
+            "{}{}",
+            syncweb_core::constants::DROP_SOURCE_STAGING_PREFIX,
+            uuid::Uuid::new_v4()
+        ));
+        let response = client
+            .send(IpcRequest::new(IpcCommand::ImportArchive {
+                input: archive.clone(),
+                target: staging.clone(),
+                filter: filter.as_ref().map(FilterEngine::config),
+            }))
+            .await?;
+        let IpcResponse::ImportComplete(result) = response else {
+            return print_daemon_message(response, output_json);
+        };
+        if packages
+            .state()?
+            .current(result.collection_id)
+            .is_some_and(|installed| installed.versions.contains_key(&result.version))
+        {
+            let _ = std::fs::remove_dir_all(&staging);
+            anyhow::bail!(
+                "collection version {} {} is already installed",
+                result.collection_id,
+                result.version
+            );
+        }
+        let install_result = packages.install(&result.collection_manifest, &staging);
+        let cleanup_result = std::fs::remove_dir_all(&staging);
+        install_result?;
+        cleanup_result?;
+        if output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "status": "imported",
+                    "collection": result.collection_id.to_string(),
+                    "version": result.version,
+                    "manifest": result.manifest.to_string(),
+                    "entries": result.imported_entry_count,
+                    "skipped_entries": result.skipped_entry_count,
+                    "namespace": result.namespace_id.map(|id| id.to_string()),
+                })
+            );
+        } else {
+            println!(
+                "imported: {} {} ({} entries)",
+                result.collection_id, result.version, result.imported_entry_count
+            );
+        }
+        return Ok(());
+    }
+
     let mut options = DropImportOptions::default().with_available_dependencies(packages.available_versions()?);
     if let Some(engine) = filter {
         options = options.with_filter(engine);
@@ -4494,8 +4651,7 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
         }
     }
 
-    let needs_node = matches!(args.kind, SearchKind::All | SearchKind::Package | SearchKind::Channel)
-        && (matches!(args.kind, SearchKind::Package | SearchKind::Channel) || args.channel.is_some());
+    let needs_node = args.channel.is_some();
 
     if needs_node {
         let node = open_node(data_dir).await?;

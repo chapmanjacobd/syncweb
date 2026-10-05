@@ -2102,10 +2102,10 @@ syncweb --data-dir /tmp/bob-data start --bg --log-file /tmp/bob-daemon.log
 ### New-failure summary
 
 New failures (all under the stop limit of ten):
-1. **Section 19 — WebSocket bridge not implemented** (no listener / no code).
-2. **Section 9 — Bob's `package info`/`install` cannot fetch the manifest blob** over a blob ticket in this offline, relay-less VM pair (publisher self-fetch works; folder doc sync works).
-3. **Section 16 — conflict auto-resolution not observed**; a concurrent edit leaves the entry remote with no `.conflict`/`.diff` file.
-4. **Section 8 — `snapshot restore` "snapshot not found"** (environmental: manifest blobs were lost during the run).
-5. **Sections 6/24 — no per-blob corruption test** because blob content lives in `blobs.db`, so "corrupt a blob file" is not cleanly reproducible in this store layout.
+1. Section 19 — WebSocket bridge not implemented (no listener / no code).
+2. Section 9 — Bob's `package info`/`install` cannot fetch the manifest blob over a blob ticket in this offline, relay-less VM pair (publisher self-fetch works; folder doc sync works).
+3. Section 16 — conflict auto-resolution not observed; a concurrent edit leaves the entry remote with no `.conflict`/`.diff` file.
+4. Section 8 — `snapshot restore` "snapshot not found" (environmental: manifest blobs were lost during the run).
+5. Sections 6/24 — no per-blob corruption test because blob content lives in `blobs.db`, so "corrupt a blob file" is not cleanly reproducible in this store layout.
 
 Environmental notes (not code failures): relay/DNS unreachable in the VMs (`network test-relay`); the stale-`status`-after-SIGKILL is cosmetic and self-corrects on restart.

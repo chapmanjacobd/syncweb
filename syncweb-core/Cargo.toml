@@ -55,6 +55,8 @@ hyper.workspace = true
 tokio-util.workspace = true
 mime.workspace = true
 parking_lot.workspace = true
+tokio-tungstenite.workspace = true
+futures-util = "0.3"
 
 [dev-dependencies]
 anyhow.workspace = true

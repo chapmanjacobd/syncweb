@@ -232,6 +232,26 @@ pub enum IpcCommand {
     PeerAvailability {
         folder: String,
     },
+    PackageInfo {
+        #[serde(default)]
+        ticket: Option<String>,
+        #[serde(default)]
+        hash: Option<String>,
+        #[serde(default)]
+        node_id: Option<String>,
+    },
+    PackageInstall {
+        ticket: String,
+    },
+    IndexingEnable {
+        namespace: String,
+    },
+    IndexingPublish {
+        namespace: String,
+        catalog: String,
+        #[serde(default)]
+        tags: Vec<String>,
+    },
 }
 
 /// A response returned by the daemon control channel.
@@ -253,7 +273,39 @@ pub enum IpcResponse {
     PeerAvailability(Box<PeerAvailabilityReport>),
     SnapshotList(Vec<SnapshotInfo>),
     SnapshotDiff(Box<SnapshotDiffReport>),
+    PackageInfo(Box<PackageInfoResult>),
+    PackageInstall { collection_id: String, version: String },
     Error { message: String },
+}
+
+/// Metadata about a package manifest returned by the daemon for `package info`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct PackageInfoResult {
+    pub collection_id: String,
+    pub name: Option<String>,
+    pub version: String,
+    pub parent: Option<String>,
+    pub entries: usize,
+}
+
+impl PackageInfoResult {
+    #[must_use]
+    pub const fn new(
+        collection_id: String,
+        name: Option<String>,
+        version: String,
+        parent: Option<String>,
+        entries: usize,
+    ) -> Self {
+        Self {
+            collection_id,
+            name,
+            version,
+            parent,
+            entries,
+        }
+    }
 }
 
 /// Path-level changes between two snapshots, as returned by the daemon.
@@ -970,15 +1022,11 @@ impl IpcServer {
                 delete_files,
             } => self.handle_leave_folder(namespace, delete_files).await,
             C::Share { .. } | C::ShareList | C::Unshare { .. } => self.handle_share_group(request.command).await,
-            C::SnapshotCreate {
-                path,
-                description,
-                threads,
-            } => self.handle_snapshot_create(path, description, threads).await,
-            C::SnapshotList { path } => self.handle_snapshot_list(path).await,
-            C::SnapshotDelete { id } => self.handle_snapshot_delete(id).await,
-            C::SnapshotDiff { first, second, .. } => self.handle_snapshot_diff(first, second).await,
-            C::SnapshotRestore { path, snapshot } => self.handle_snapshot_restore(path, snapshot).await,
+            C::SnapshotCreate { .. }
+            | C::SnapshotList { .. }
+            | C::SnapshotDelete { .. }
+            | C::SnapshotDiff { .. }
+            | C::SnapshotRestore { .. } => self.handle_snapshot_group(request.command).await,
             C::CollectionPublish {
                 path,
                 namespace,
@@ -996,6 +1044,13 @@ impl IpcServer {
             | C::NetworkCreate { .. }
             | C::NetworkJoin { .. } => self.handle_network_group(request.command).await,
             C::PeerAvailability { folder } => self.handle_peer_availability(folder).await,
+            C::PackageInfo { .. } | C::PackageInstall { .. } => self.handle_package_group(request.command).await,
+            C::IndexingEnable { namespace } => self.handle_indexing_enable(namespace).await,
+            C::IndexingPublish {
+                namespace,
+                catalog,
+                tags,
+            } => self.handle_indexing_publish(namespace, catalog, tags).await,
         }
     }
 
@@ -2073,6 +2128,32 @@ impl IpcServer {
         }
     }
 
+    async fn handle_snapshot_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if let IpcCommand::SnapshotCreate {
+            path,
+            description,
+            threads,
+        } = cmd
+        {
+            return self.handle_snapshot_create(path, description, threads).await;
+        }
+        if let IpcCommand::SnapshotList { path } = cmd {
+            return self.handle_snapshot_list(path).await;
+        }
+        if let IpcCommand::SnapshotDelete { id } = cmd {
+            return self.handle_snapshot_delete(id).await;
+        }
+        if let IpcCommand::SnapshotDiff { first, second, .. } = cmd {
+            return self.handle_snapshot_diff(first, second).await;
+        }
+        if let IpcCommand::SnapshotRestore { path, snapshot } = cmd {
+            return self.handle_snapshot_restore(path, snapshot).await;
+        }
+        IpcResponse::Error {
+            message: format!("unhandled snapshot command: {cmd:?}"),
+        }
+    }
+
     async fn handle_share(&self, namespace: String, blob: Option<String>, options: ShareOptions) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
@@ -2560,6 +2641,214 @@ impl IpcServer {
         }
     }
 
+    async fn handle_package_group(&self, cmd: IpcCommand) -> IpcResponse {
+        if let IpcCommand::PackageInfo { ticket, hash, node_id } = cmd {
+            return self.handle_package_info(ticket, hash, node_id).await;
+        }
+        if let IpcCommand::PackageInstall { ticket } = cmd {
+            return self.handle_package_install(ticket).await;
+        }
+        IpcResponse::Error {
+            message: format!("unhandled package command: {cmd:?}"),
+        }
+    }
+
+    async fn handle_package_info(
+        &self,
+        ticket: Option<String>,
+        hash: Option<String>,
+        node_id: Option<String>,
+    ) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon package IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manifest = match self.fetch_package_manifest(&context, ticket, hash, node_id).await {
+            Ok(manifest) => manifest,
+            Err(error) => return response_from_error(error),
+        };
+        IpcResponse::PackageInfo(Box::new(PackageInfoResult::new(
+            manifest.collection_id.to_string(),
+            manifest.package.as_ref().map(|package| package.name.clone()),
+            manifest.version.clone(),
+            manifest.parent.map(|parent| parent.to_string()),
+            manifest.entries.len(),
+        )))
+    }
+
+    async fn handle_package_install(&self, ticket: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon package IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let Some(node_db) = self.node_db.clone() else {
+            return IpcResponse::Error {
+                message: "daemon package install is unavailable: node database is missing".to_owned(),
+            };
+        };
+        let blob_ticket = match ticket.parse::<iroh_blobs::ticket::BlobTicket>() {
+            Ok(parsed_ticket) => parsed_ticket,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid blob ticket: {error}"),
+                };
+            }
+        };
+        let data_dir = self.daemon_handle.state.read().await.data_dir.clone();
+        let packages = crate::folder::PackageManager::new(data_dir.join("packages"), node_db);
+        match packages
+            .install_from_ticket(&blob_ticket, context.node.endpoint(), context.node.blob_store())
+            .await
+        {
+            Ok(manifest) => IpcResponse::PackageInstall {
+                collection_id: manifest.collection_id.to_string(),
+                version: manifest.version,
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn fetch_package_manifest(
+        &self,
+        context: &ArchiveContext,
+        ticket: Option<String>,
+        hash: Option<String>,
+        node_id: Option<String>,
+    ) -> Result<CollectionManifest> {
+        if let Some(ticket_text) = ticket {
+            let blob_ticket = ticket_text
+                .parse::<iroh_blobs::ticket::BlobTicket>()
+                .map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+            if !context.node.blob_store().has(blob_ticket.hash()).await? {
+                context
+                    .node
+                    .blob_store()
+                    .fetch(context.node.endpoint(), &blob_ticket)
+                    .await?;
+            }
+            let manifest = CollectionManifest::from_bytes(context.node.blob_store().get(blob_ticket.hash()).await?)?;
+            if manifest.blob_id()? != blob_ticket.hash() {
+                return Err(SyncwebError::InvalidTicket(
+                    "manifest ticket hash does not match manifest content".to_owned(),
+                ));
+            }
+            return Ok(manifest);
+        }
+        if let (Some(hash_str), Some(node_id_str)) = (hash, node_id) {
+            let blob_hash = hash_str
+                .parse::<iroh_blobs::Hash>()
+                .map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+            let peer_id = node_id_str
+                .parse::<iroh::PublicKey>()
+                .map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
+            let blob_ticket = crate::node::blob_store::raw_blob_ticket(iroh::EndpointAddr::new(peer_id), blob_hash);
+            if !context.node.blob_store().has(blob_hash).await? {
+                context
+                    .node
+                    .blob_store()
+                    .fetch(context.node.endpoint(), &blob_ticket)
+                    .await?;
+            }
+            return CollectionManifest::from_bytes(context.node.blob_store().get(blob_hash).await?);
+        }
+        Err(SyncwebError::InvalidTicket(
+            "provide a blob ticket or hash with --node-id".to_owned(),
+        ))
+    }
+
+    async fn handle_indexing_enable(&self, namespace: String) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon indexing IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let Some(indexing) = context.indexing.clone() else {
+            return IpcResponse::Error {
+                message: "daemon indexing IPC is unavailable: indexing service is disabled".to_owned(),
+            };
+        };
+        let namespace_id = match namespace.parse::<iroh_docs::NamespaceId>() {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(folder) => folder,
+            Err(error) => return response_from_error(error),
+        };
+        match indexing.enable_folder(&folder).await {
+            Ok(handle) => IpcResponse::Ok {
+                message: format!("enabled: {}", handle.namespace_id()),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_indexing_publish(&self, namespace: String, catalog: String, tags: Vec<String>) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon indexing IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let Some(indexing) = context.indexing.clone() else {
+            return IpcResponse::Error {
+                message: "daemon indexing IPC is unavailable: indexing service is disabled".to_owned(),
+            };
+        };
+        let namespace_id = match namespace.parse::<iroh_docs::NamespaceId>() {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match manager.get(namespace_id).await {
+            Ok(folder) => folder,
+            Err(error) => return response_from_error(error),
+        };
+        let publish_result = async {
+            indexing.enable_folder(&folder).await?;
+            let author = context.node.docs_engine().author().await?;
+            let catalog_service =
+                indexing.catalog_service(context.node.docs_engine(), context.node.blob_store(), author);
+            let catalog_handle = catalog_service.get_or_create_catalog(&catalog).await?;
+            let published = catalog_service
+                .publish_folder_with_metadata(&catalog_handle, &folder, namespace, &tags)
+                .await?;
+            let ticket = catalog_service.ticket(&catalog_handle, false).await?;
+            Ok::<_, SyncwebError>((published, catalog_handle.namespace_id().to_string(), ticket.to_string()))
+        }
+        .await;
+        match publish_result {
+            Ok((published, catalog_namespace, ticket)) => IpcResponse::Ok {
+                message: format!(
+                    "published: {published}\ncatalog: {catalog}\nnamespace: {catalog_namespace}\nticket: {ticket}"
+                ),
+            },
+            Err(error) => response_from_error(error),
+        }
+    }
+
     #[cfg(unix)]
     async fn handle_connection(&self, stream: tokio::net::UnixStream) -> Result<()> {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -2787,7 +3076,9 @@ impl IpcClient {
                 | IpcResponse::PeerAvailability(_)
                 | IpcResponse::SnapshotList(_)
                 | IpcResponse::SnapshotDiff(_)
-                | IpcResponse::TransferJobsProcessed { .. } => Err(SyncwebError::operation(
+                | IpcResponse::TransferJobsProcessed { .. }
+                | IpcResponse::PackageInfo(_)
+                | IpcResponse::PackageInstall { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),

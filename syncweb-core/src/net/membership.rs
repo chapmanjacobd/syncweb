@@ -13,6 +13,7 @@ use crate::{
     error::Result,
     init::open_node,
     net::{Network, NetworkManager, membership_doc::write_member_list},
+    node::iroh_node::IrohNode,
 };
 
 /// Provision the owner-signed membership doc for a network and persist its
@@ -25,13 +26,27 @@ use crate::{
 /// be signed or written, or the network manager cannot persist the doc ticket.
 pub async fn provision(data_dir: &Path, network: &Network, manager: &mut NetworkManager) -> Result<()> {
     let node = open_node(data_dir).await?;
+    let result = provision_with_node(&node, network, manager).await;
+    node.stop().await?;
+    result
+}
+
+/// Provision the membership doc using an already-open node.
+///
+/// The daemon owns the live data directory and holds its store locks, so it
+/// must provision through its own node rather than opening a second one.
+///
+/// # Errors
+///
+/// Returns an error if the namespace cannot be created, the member list cannot
+/// be signed or written, or the network manager cannot persist the doc ticket.
+pub async fn provision_with_node(node: &IrohNode, network: &Network, manager: &mut NetworkManager) -> Result<()> {
     let docs = node.docs_engine();
-    let bytes = signed_member_list_bytes(&node, network)?;
+    let bytes = signed_member_list_bytes(node, network)?;
     let provisioned = docs
         .provision(crate::node::docs_engine::ProvisionKind::NetworkMembership, None, bytes)
         .await?;
     let read_ticket = docs.share_ticket(&provisioned.doc, false).await?;
-    node.stop().await?;
     manager.set_doc_ticket(network.id, &Some(read_ticket.to_string()))?;
     Ok(())
 }
@@ -44,10 +59,25 @@ pub async fn provision(data_dir: &Path, network: &Network, manager: &mut Network
 /// Returns an error if the doc ticket is missing or cannot be imported, or the
 /// member list cannot be signed or written.
 pub async fn refresh(data_dir: &Path, network: &Network) -> Result<()> {
-    let Some(ref doc_ticket) = network.doc_ticket else {
+    let Some(_) = network.doc_ticket else {
         return Ok(());
     };
     let node = open_node(data_dir).await?;
+    let result = refresh_with_node(&node, network).await;
+    node.stop().await?;
+    result
+}
+
+/// Re-sign and re-publish the member list using an already-open node.
+///
+/// # Errors
+///
+/// Returns an error if the doc ticket is missing or cannot be imported, or the
+/// member list cannot be signed or written.
+pub async fn refresh_with_node(node: &IrohNode, network: &Network) -> Result<()> {
+    let Some(ref doc_ticket) = network.doc_ticket else {
+        return Ok(());
+    };
     let docs = node.docs_engine();
     let doc = docs
         .import_ticket(
@@ -59,11 +89,10 @@ pub async fn refresh(data_dir: &Path, network: &Network) -> Result<()> {
     let author = docs.author().await?;
     let signing = SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
     write_member_list(docs, node.blob_store(), &doc, author, &signing, network).await?;
-    node.stop().await?;
     Ok(())
 }
 
-fn signed_member_list_bytes(node: &crate::node::iroh_node::IrohNode, network: &Network) -> Result<Vec<u8>> {
+fn signed_member_list_bytes(node: &IrohNode, network: &Network) -> Result<Vec<u8>> {
     let signing = SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
     let mut list = crate::net::membership_doc::SignedMemberList::from_network(network);
     list.sequence = 1;

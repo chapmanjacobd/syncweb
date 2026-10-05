@@ -5025,6 +5025,37 @@ fn scan_collection_entries(
     Ok((root, deduped))
 }
 
+fn print_network_create_response(response: IpcResponse, output_json: bool) -> Result<()> {
+    match response {
+        IpcResponse::NetworkCreated { name, id } => {
+            if output_json {
+                println!("{}", serde_json::json!({"status": "created", "name": name, "id": id}));
+            } else {
+                println!("created: {name}\t{id}");
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        IpcResponse::Ok { .. }
+        | IpcResponse::Status(_)
+        | IpcResponse::FolderList(_)
+        | IpcResponse::DownloadComplete { .. }
+        | IpcResponse::TransferJobsProcessed { .. }
+        | IpcResponse::ImportFilesComplete { .. }
+        | IpcResponse::ImportComplete(_)
+        | IpcResponse::ExportComplete(_)
+        | IpcResponse::EnrichData(_)
+        | IpcResponse::FileStats(_)
+        | IpcResponse::Entries(_)
+        | IpcResponse::PeerAvailability(_)
+        | IpcResponse::SnapshotList(_)
+        | IpcResponse::SnapshotDiff(_)
+        | IpcResponse::PackageInfo(_)
+        | IpcResponse::PackageInstall { .. }
+        | _ => anyhow::bail!("{ERR_UNEXPECTED_RESPONSE}"),
+    }
+}
+
 #[async_recursion]
 async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -5036,6 +5067,17 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             label,
             invite_only,
         } => {
+            if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::NetworkCreate {
+                        name: name.clone(),
+                        label,
+                        invite_only,
+                        doc_ticket: None,
+                    }))
+                    .await?;
+                return print_network_create_response(response, output_json);
+            }
             let mut options = NetworkOptions::default();
             options.label = label;
             options.invite_only = invite_only;
@@ -5079,6 +5121,17 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
         NetworkCommand::List { name } => handle_network_list(&manager, name, output_json)?,
         NetworkCommand::Invite { name, device } => {
             let id = network_id_by_name(&manager, &name)?;
+            if let Some(node_id) = device.clone()
+                && let Some(client) = syncweb_core::daemon::daemon_client(data_dir)?
+            {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::NetworkInvite {
+                        network_id: id.to_string(),
+                        device: node_id,
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             let ticket = if let Some(node_id) = device {
                 manager.invite(id, node_id.parse()?)?
             } else {
@@ -5102,6 +5155,15 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 return Ok(());
             }
             let id = network_id_by_name(&manager, &name)?;
+            if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
+                let response = client
+                    .send(IpcRequest::new(IpcCommand::NetworkKick {
+                        network_id: id.to_string(),
+                        device: device.clone(),
+                    }))
+                    .await?;
+                return print_daemon_message(response, output_json);
+            }
             manager.kick(id, &device.parse()?)?;
             if let Some(network) = manager.get(&id).cloned()
                 && network.doc_ticket.is_some()

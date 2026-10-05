@@ -275,6 +275,7 @@ pub enum IpcResponse {
     SnapshotDiff(Box<SnapshotDiffReport>),
     PackageInfo(Box<PackageInfoResult>),
     PackageInstall { collection_id: String, version: String },
+    NetworkCreated { name: String, id: String },
     Error { message: String },
 }
 
@@ -2473,9 +2474,20 @@ impl IpcServer {
         };
         let result = net_mgr.write().await.invite(net_id, peer);
         match result {
-            Ok(ticket) => IpcResponse::Ok {
-                message: ticket.to_string(),
-            },
+            Ok(ticket) => {
+                if let Some(context) = &self.archive_context {
+                    let manager = net_mgr.write().await;
+                    if let Some(network) = manager.get(&net_id).cloned()
+                        && network.doc_ticket.is_some()
+                        && let Err(error) = crate::net::membership::refresh_with_node(&context.node, &network).await
+                    {
+                        tracing::warn!(%error, "failed to refresh network membership doc");
+                    }
+                }
+                IpcResponse::Ok {
+                    message: ticket.to_string(),
+                }
+            }
             Err(e) => response_from_error(e),
         }
     }
@@ -2500,9 +2512,20 @@ impl IpcServer {
         };
         let result = net_mgr.write().await.kick(net_id, &peer);
         match result {
-            Ok(()) => IpcResponse::Ok {
-                message: "member kicked".to_owned(),
-            },
+            Ok(()) => {
+                if let Some(context) = &self.archive_context {
+                    let manager = net_mgr.write().await;
+                    if let Some(network) = manager.get(&net_id).cloned()
+                        && network.doc_ticket.is_some()
+                        && let Err(error) = crate::net::membership::refresh_with_node(&context.node, &network).await
+                    {
+                        tracing::warn!(%error, "failed to refresh network membership doc");
+                    }
+                }
+                IpcResponse::Ok {
+                    message: "member kicked".to_owned(),
+                }
+            }
             Err(e) => response_from_error(e),
         }
     }
@@ -2543,12 +2566,23 @@ impl IpcServer {
             invite_only,
             ..crate::net::NetworkOptions::default()
         };
-        let result = net_mgr.write().await.create_with_doc_ticket(&name, options, doc_ticket);
-        match result {
-            Ok(id) => IpcResponse::Ok {
-                message: format!("created network {id}"),
-            },
-            Err(e) => response_from_error(e),
+        let created = net_mgr.write().await.create_with_doc_ticket(&name, options, doc_ticket);
+        let id = match created {
+            Ok(id) => id,
+            Err(e) => return response_from_error(e),
+        };
+        if let Some(context) = &self.archive_context {
+            let mut manager = net_mgr.write().await;
+            if let Some(network) = manager.get(&id).cloned()
+                && let Err(error) =
+                    crate::net::membership::provision_with_node(&context.node, &network, &mut manager).await
+            {
+                tracing::warn!(%error, "network created without a membership doc (doc_ticket)");
+            }
+        }
+        IpcResponse::NetworkCreated {
+            name,
+            id: id.to_string(),
         }
     }
 
@@ -3078,7 +3112,8 @@ impl IpcClient {
                 | IpcResponse::SnapshotDiff(_)
                 | IpcResponse::TransferJobsProcessed { .. }
                 | IpcResponse::PackageInfo(_)
-                | IpcResponse::PackageInstall { .. } => Err(SyncwebError::operation(
+                | IpcResponse::PackageInstall { .. }
+                | IpcResponse::NetworkCreated { .. } => Err(SyncwebError::operation(
                     "daemon status request returned an unexpected response",
                     "unexpected response",
                 )),

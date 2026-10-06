@@ -10,7 +10,4 @@ pub use crate::node::identity::DeviceId;
 pub use network::{Network, NetworkId, NetworkOptions, NetworkTicket};
 pub use network_log::NetworkLogger;
 pub use network_manager::NetworkManager;
-pub use relay::{
-    JoinRelayRequest, JoinSessionRequest, RelayConfig, RelayMessage, SessionInvitation, SyncthingRelayTransport,
-    TransportFallback,
-};
+pub use relay::{RelayConfig, RelayManager, RelayManagerOptions, SyncthingRelayTransport, TestRelayReport};

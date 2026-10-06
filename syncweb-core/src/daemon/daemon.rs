@@ -20,7 +20,7 @@ use crate::{
     folder::{FolderManager, PublicSubscription},
     fs::{FsWatcher, Importer},
     indexing::IndexingService,
-    net::{NetworkLogger, NetworkManager},
+    net::{NetworkLogger, NetworkManager, RelayManager, RelayManagerOptions},
     node::{identity::IdentityManager, iroh_node::IrohNode},
     schedule::ScheduleManager,
     storage::{config::SubscribeFilters, node_db::NodeDatabase, stats_db::StatsDatabase},
@@ -58,6 +58,9 @@ pub struct DaemonConfig {
     pub discovery: crate::node::iroh_node::DiscoveryConfig,
     /// Shared address lookup for tests that need multiple daemons to discover each other.
     pub address_lookup: Option<iroh::address_lookup::memory::MemoryLookup>,
+    /// Syncthing (BEP) relay configuration. When `enabled`, the daemon starts
+    /// a relay manager and installs its custom transport on the endpoint.
+    pub bep: crate::storage::config::BepConfig,
 }
 
 impl Default for DaemonConfig {
@@ -78,6 +81,7 @@ impl Default for DaemonConfig {
             media_listen: None,
             discovery: crate::node::iroh_node::DiscoveryConfig::default(),
             address_lookup: None,
+            bep: crate::storage::config::BepConfig::default(),
         }
     }
 }
@@ -154,6 +158,10 @@ impl Daemon {
         self.node.endpoint().clone()
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "daemon bootstrap passes each subsystem its config"
+    )]
     async fn open_identity_and_node(
         data_dir: &Path,
         node_db: &NodeDatabase,
@@ -162,6 +170,7 @@ impl Daemon {
         discovery: crate::node::iroh_node::DiscoveryConfig,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
         address_lookup: Option<iroh::address_lookup::memory::MemoryLookup>,
+        bep: &crate::storage::config::BepConfig,
     ) -> Result<(Arc<IrohNode>, FolderManager, SyncEngine)> {
         let identity = IdentityManager::new(data_dir.join("identity.key")).inspect_err(|_| {
             let _ = node_db.remove_lifecycle();
@@ -171,20 +180,34 @@ impl Daemon {
             let _ = node_db.remove_lifecycle();
             let _ = pid_lock.release();
         };
+        let relay = if bep.enabled {
+            let options = RelayManagerOptions::new(bep.relay_config(), data_dir.join("relay"));
+            Some(RelayManager::start(options, identity.node_id()).inspect_err(err_cleanup)?)
+        } else {
+            None
+        };
         let node = Arc::new(match address_lookup {
-            Some(lookup) => IrohNode::new_with_address_lookup(
+            Some(lookup) => IrohNode::new_with_address_lookup_and_relay(
                 identity,
                 data_dir.join("data"),
                 relay_mode,
                 lookup,
                 discovery,
                 member_keys,
+                relay,
             )
             .await
             .inspect_err(err_cleanup)?,
-            None => IrohNode::new(identity, data_dir.join("data"), relay_mode, member_keys, discovery)
-                .await
-                .inspect_err(err_cleanup)?,
+            None => IrohNode::new_with_relay(
+                identity,
+                data_dir.join("data"),
+                relay_mode,
+                member_keys,
+                discovery,
+                relay,
+            )
+            .await
+            .inspect_err(err_cleanup)?,
         });
         let folder_manager = FolderManager::new(&node);
         let sync_engine = SyncEngine::new(
@@ -290,6 +313,7 @@ impl Daemon {
             node_discovery,
             member_keys.clone(),
             config.address_lookup.clone(),
+            &config.bep,
         )
         .await
         {

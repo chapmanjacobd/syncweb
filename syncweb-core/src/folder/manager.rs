@@ -91,6 +91,12 @@ impl FolderManager {
     ) -> Result<SyncwebFolder> {
         let ticket = crate::uri::parse_folder_ticket(ticket_str.as_ref())?;
         let writable = matches!(ticket.capability.kind(), iroh_docs::CapabilityKind::Write);
+        // Remember the sharer's advertised addresses (including the Syncthing
+        // relay custom address) so content fetches that only know the node id
+        // can still reach them when direct paths are blocked.
+        for node in &ticket.nodes {
+            self.blob_store.add_endpoint_addr(node.clone());
+        }
         let doc = self.docs_engine.import_ticket(ticket).await?;
         let folder = self.folder_from_doc(doc, mode, writable).await?;
         if metadata_only {

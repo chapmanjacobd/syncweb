@@ -39,6 +39,13 @@ impl BlobStore {
         &self.store
     }
 
+    /// Register a peer's known addresses so later connections (such as blob
+    /// downloads that only carry the peer's node id) can resolve the peer
+    /// without LAN discovery.
+    pub fn add_endpoint_addr(&self, addr: EndpointAddr) {
+        self.address_lookup.add_endpoint_info(addr);
+    }
+
     /// Create a reader for the given hash.
     ///
     /// The reader implements [`tokio::io::AsyncRead`] and [`tokio::io::AsyncSeek`],

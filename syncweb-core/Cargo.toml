@@ -32,7 +32,8 @@ uuid.workspace = true
 
 # Iroh stack
 dashmap.workspace = true
-iroh = { workspace = true, features = ["test-utils"] }
+iroh = { workspace = true, features = ["test-utils", "unstable-custom-transports"] }
+iroh-base.workspace = true
 iroh-blobs.workspace = true
 iroh-docs.workspace = true
 iroh-gossip.workspace = true
@@ -41,6 +42,7 @@ distributed-topic-tracker.workspace = true
 ed25519-dalek.workspace = true
 iroh-io.workspace = true
 n0-future.workspace = true
+n0-watcher.workspace = true
 globset.workspace = true
 notify.workspace = true
 regex.workspace = true
@@ -57,6 +59,14 @@ mime.workspace = true
 parking_lot.workspace = true
 tokio-tungstenite.workspace = true
 futures-util = "0.3"
+
+# Syncthing relay (BEP) support
+rustls.workspace = true
+tokio-rustls.workspace = true
+rcgen.workspace = true
+reqwest.workspace = true
+url.workspace = true
+noq-udp.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

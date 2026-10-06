@@ -52,14 +52,27 @@ pub struct ProvisionedDoc {
 pub struct DocsEngine {
     docs: Docs,
     blob_store: BlobStore,
+    /// The local endpoint's node id, used to stamp the local relay address
+    /// onto shared tickets.
+    local_id: iroh::PublicKey,
+    /// The Syncthing (BEP) relay custom address to advertise in shared tickets,
+    /// when relaying is enabled.
+    relay_addr: Option<iroh_base::CustomAddr>,
 }
 
 impl DocsEngine {
     #[must_use]
-    pub fn new(docs: &Docs, blob_store: &BlobStore) -> Self {
+    pub fn new(
+        docs: &Docs,
+        blob_store: &BlobStore,
+        local_id: iroh::PublicKey,
+        relay_addr: Option<iroh_base::CustomAddr>,
+    ) -> Self {
         Self {
             docs: docs.clone(),
             blob_store: blob_store.clone(),
+            local_id,
+            relay_addr,
         }
     }
 
@@ -181,9 +194,18 @@ impl DocsEngine {
     ///
     /// Returns an error if the document cannot be shared.
     pub async fn share(&self, doc: &Doc, mode: ShareMode) -> Result<DocTicket> {
-        doc.share(mode, AddrInfoOptions::RelayAndAddresses)
+        let mut ticket = doc
+            .share(mode, AddrInfoOptions::RelayAndAddresses)
             .await
-            .map_err(|error| SyncwebError::operation("failed to share document", error))
+            .map_err(|error| SyncwebError::operation("failed to share document", error))?;
+        if let Some(relay_addr) = &self.relay_addr {
+            for node in &mut ticket.nodes {
+                if node.id == self.local_id {
+                    node.addrs.insert(iroh::TransportAddr::Custom(relay_addr.clone()));
+                }
+            }
+        }
+        Ok(ticket)
     }
 
     /// Share a read or write ticket for a document.

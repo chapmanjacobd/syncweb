@@ -1,406 +1,625 @@
+//! End-to-end tests for the Syncthing relay (BEP) support.
+//!
+//! A small mock relay speaks the real bep-relay protocol against
+//! [`RelayManager`]: a TLS control listener with ALPN `bep-relay` and a
+//! client certificate requirement, XDR-framed messages, keepalive ping/pong,
+//! and a plain TCP session listener that brokers `JoinSessionRequest`
+//! handshakes. Building the mock on the crate's own `protocol` module keeps
+//! both directions of every frame honest.
+//!
+//! Sessions are driven over the manager's inbound path: the mock delivers a
+//! `SessionInvitation` on the registration connection and the manager must
+//! dial the session listener and join with the invited key. The outbound
+//! dial path (`ConnectRequest`) is exercised only through iroh endpoint
+//! wiring, which lands at the daemon stage.
+
+use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::Context;
-use syncweb_core::{
-    net::{
-        JoinRelayRequest, JoinSessionRequest, RelayConfig, RelayMessage, SessionInvitation, SyncthingRelayTransport,
-        TransportFallback,
-    },
-    node::identity::{DeviceId, IdentityManager},
-};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-};
+use rcgen::{CertificateParams, DnType, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType};
+use rustls::SignatureScheme;
+use rustls::pki_types::CertificateDer;
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use syncweb_core::net::relay::protocol::{self, Message};
+use syncweb_core::net::{RelayConfig, RelayManager, RelayManagerOptions};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
+use tokio::time::timeout;
+use tokio_rustls::TlsAcceptor;
 
-fn device_id() -> anyhow::Result<DeviceId> {
-    let path = std::env::temp_dir().join(format!("syncweb-relay-{}", uuid::Uuid::new_v4()));
-    let identity = IdentityManager::new(&path)?;
-    let device_id = DeviceId::from_node_id(identity.node_id());
-    std::fs::remove_file(path)?;
-    Ok(device_id)
+/// How the mock relay answers a `JoinRelayRequest`.
+#[derive(Debug, Clone, Copy)]
+enum JoinPolicy {
+    /// Accept every registration, then verify the client answers a keepalive
+    /// ping with a pong.
+    Accept,
+    /// Reject every registration with a wrong-token response.
+    Reject,
+    /// Answer every registration with `RelayFull`.
+    RelayFull,
+    /// Accept the registration, verify the keepalive, then send one
+    /// `SessionInvitation` that points at our session listener.
+    AcceptThenInvite { key: [u8; 32], from: [u8; 32] },
+    /// Accept the registration, verify the keepalive, then answer any
+    /// `ConnectRequest` with a `SessionInvitation` for the requested device.
+    AcceptThenConnect { key: [u8; 32] },
+}
+
+/// A control-plane event recorded by the mock relay.
+#[derive(Debug)]
+enum ControlEvent {
+    #[expect(dead_code)]
+    Joined {
+        token: String,
+    },
+    PongReceived,
+}
+
+/// A running mock relay with a TLS control listener and a raw session
+/// listener.
+struct MockRelay {
+    control_addr: SocketAddr,
+    control_receiver: mpsc::UnboundedReceiver<ControlEvent>,
+    session_receiver: mpsc::UnboundedReceiver<Vec<u8>>,
+    _control_task: tokio::task::JoinHandle<anyhow::Result<()>>,
+    _session_task: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
+
+impl MockRelay {
+    async fn spawn(policy: JoinPolicy) -> anyhow::Result<Self> {
+        let acceptor = TlsAcceptor::from(Arc::new(mock_server_config()?));
+        let control_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .context("bind control listener")?;
+        let session_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .context("bind session listener")?;
+        let control_addr = control_listener.local_addr().context("control address")?;
+        let session_port = session_listener.local_addr().context("session address")?.port();
+        let (control_sender, control_receiver) = mpsc::unbounded_channel();
+        let (session_sender, session_receiver) = mpsc::unbounded_channel();
+        let invite_gate = Arc::new(AtomicBool::new(false));
+        let control_task = tokio::spawn(serve_control(
+            acceptor,
+            control_listener,
+            policy,
+            session_port,
+            control_sender,
+            invite_gate,
+        ));
+        let session_task = tokio::spawn(serve_session_listener(session_listener, session_sender));
+        Ok(Self {
+            control_addr,
+            control_receiver,
+            session_receiver,
+            _control_task: control_task,
+            _session_task: session_task,
+        })
+    }
+
+    async fn next_control_event(&mut self) -> anyhow::Result<ControlEvent> {
+        timeout(Duration::from_secs(5), self.control_receiver.recv())
+            .await
+            .context("timed out waiting for a control event")?
+            .context("control event channel closed")
+    }
+
+    async fn next_session_key(&mut self) -> anyhow::Result<Vec<u8>> {
+        timeout(Duration::from_secs(5), self.session_receiver.recv())
+            .await
+            .context("timed out waiting for a session join")?
+            .context("session event channel closed")
+    }
+}
+
+/// Accept every TLS control connection: the client certificate is the relay
+/// identity, but these tests do not need to inspect it.
+#[derive(Debug)]
+struct AcceptAnyClientCert;
+
+impl ClientCertVerifier for AcceptAnyClientCert {
+    fn root_hint_subjects(&self) -> &[rustls::DistinguishedName] {
+        &[]
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: rustls::pki_types::UnixTime,
+    ) -> std::result::Result<ClientCertVerified, rustls::Error> {
+        Ok(ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> std::result::Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> std::result::Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        true
+    }
+}
+
+/// Build a self-signed TLS server config for the mock relay.
+fn mock_server_config() -> anyhow::Result<rustls::ServerConfig> {
+    let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).context("generate test key pair")?;
+    let mut params = CertificateParams::new(Vec::new()).context("certificate parameters")?;
+    params.distinguished_name.push(DnType::CommonName, "syncweb test relay");
+    params.is_ca = rcgen::IsCa::NoCa;
+    params.key_usages = vec![KeyUsagePurpose::KeyEncipherment, KeyUsagePurpose::DigitalSignature];
+    params.subject_alt_names = vec![SanType::IpAddress(IpAddr::from([127, 0, 0, 1]))];
+    let certificate = params.self_signed(&key_pair).context("sign the relay certificate")?;
+    let server_chain = vec![CertificateDer::from(certificate.der().to_vec())];
+    let private_key =
+        rustls::pki_types::PrivateKeyDer::from(rustls::pki_types::PrivatePkcs8KeyDer::from(key_pair.serialize_der()));
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut config = rustls::ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+        .context("server protocol versions")?
+        .with_client_cert_verifier(Arc::new(AcceptAnyClientCert))
+        .with_single_cert(server_chain, private_key)
+        .context("server certificate")?;
+    config.alpn_protocols = vec![protocol::PROTOCOL_NAME.to_vec()];
+    Ok(config)
+}
+
+/// Accept control connections and handle each on its own task.
+async fn serve_control(
+    acceptor: TlsAcceptor,
+    listener: TcpListener,
+    policy: JoinPolicy,
+    session_port: u16,
+    events: mpsc::UnboundedSender<ControlEvent>,
+    invite_gate: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+    loop {
+        let (socket, _peer) = listener.accept().await.context("control accept")?;
+        tokio::spawn(control_connection(
+            acceptor.clone(),
+            socket,
+            policy,
+            session_port,
+            events.clone(),
+            invite_gate.clone(),
+        ));
+    }
+}
+
+/// Serve one control (TLS) connection: registration, keepalives and, when
+/// configured, a session invitation.
+async fn control_connection(
+    acceptor: TlsAcceptor,
+    socket: TcpStream,
+    policy: JoinPolicy,
+    session_port: u16,
+    events: mpsc::UnboundedSender<ControlEvent>,
+    invite_gate: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+    let mut stream = acceptor.accept(socket).await.context("control TLS handshake")?;
+    loop {
+        match protocol::read_message(&mut stream).await.context("control frame")? {
+            Message::Pong => {}
+            Message::Ping => {
+                protocol::write_message(&mut stream, &Message::Pong)
+                    .await
+                    .context("write pong")?;
+            }
+            Message::JoinRelayRequest { token: _ } => match policy {
+                JoinPolicy::Accept => {
+                    write_response(&mut stream, Message::RESPONSE_SUCCESS, "joined").await?;
+                    events
+                        .send(ControlEvent::Joined { token: String::new() })
+                        .map_err(|e| send_error(&e))?;
+                    serve_keepalive(&mut stream, &events).await?;
+                }
+                JoinPolicy::AcceptThenInvite { key, from } => {
+                    write_response(&mut stream, Message::RESPONSE_SUCCESS, "joined").await?;
+                    events
+                        .send(ControlEvent::Joined { token: String::new() })
+                        .map_err(|e| send_error(&e))?;
+                    serve_keepalive(&mut stream, &events).await?;
+                    if !invite_gate.swap(true, Ordering::Relaxed) {
+                        protocol::write_message(
+                            &mut stream,
+                            &Message::SessionInvitation {
+                                from: from.to_vec(),
+                                key: key.to_vec(),
+                                address: vec![127, 0, 0, 1],
+                                port: session_port,
+                                server_socket: false,
+                            },
+                        )
+                        .await
+                        .context("write session invitation")?;
+                    }
+                }
+                JoinPolicy::AcceptThenConnect { key } => {
+                    write_response(&mut stream, Message::RESPONSE_SUCCESS, "joined").await?;
+                    events
+                        .send(ControlEvent::Joined { token: String::new() })
+                        .map_err(|e| send_error(&e))?;
+                    serve_keepalive(&mut stream, &events).await?;
+                    loop {
+                        match protocol::read_message(&mut stream).await.context("connect frame")? {
+                            Message::ConnectRequest { id } => {
+                                protocol::write_message(
+                                    &mut stream,
+                                    &Message::SessionInvitation {
+                                        from: id,
+                                        key: key.to_vec(),
+                                        address: vec![127, 0, 0, 1],
+                                        port: session_port,
+                                        server_socket: false,
+                                    },
+                                )
+                                .await
+                                .context("write connect invitation")?;
+                            }
+                            Message::Ping => {
+                                protocol::write_message(&mut stream, &Message::Pong)
+                                    .await
+                                    .context("write pong")?;
+                            }
+                            Message::Pong | Message::Response { .. } => {}
+                            // Package the remaining known control messages
+                            // (and any future ones: `Message` is
+                            // `#[non_exhaustive]` in this crate) into a bail.
+                            Message::RelayFull
+                            | Message::JoinRelayRequest { .. }
+                            | Message::JoinSessionRequest { .. }
+                            | Message::SessionInvitation { .. }
+                            | _ => {
+                                anyhow::bail!("unexpected message after registration");
+                            }
+                        }
+                    }
+                }
+                JoinPolicy::Reject => {
+                    write_response(&mut stream, Message::RESPONSE_WRONG_TOKEN, "bad token").await?;
+                }
+                JoinPolicy::RelayFull => {
+                    protocol::write_message(&mut stream, &Message::RelayFull)
+                        .await
+                        .context("write relay full")?;
+                }
+            },
+            Message::ConnectRequest { .. }
+            | Message::JoinSessionRequest { .. }
+            | Message::Response { .. }
+            | Message::SessionInvitation { .. }
+            | Message::RelayFull
+            | _ => {
+                write_response(&mut stream, Message::RESPONSE_UNEXPECTED, "unexpected message").await?;
+            }
+        }
+    }
+}
+
+/// Send a keepalive ping and require the client to answer with a pong.
+async fn serve_keepalive<W>(stream: &mut W, events: &mpsc::UnboundedSender<ControlEvent>) -> anyhow::Result<()>
+where
+    W: AsyncRead + AsyncWrite + Unpin,
+{
+    protocol::write_message(stream, &Message::Ping)
+        .await
+        .context("write keepalive ping")?;
+    let reply = protocol::read_message(stream).await.context("keepalive pong")?;
+    if reply != Message::Pong {
+        anyhow::bail!("expected Pong to keepalive ping, got {reply:?}");
+    }
+    events.send(ControlEvent::PongReceived).map_err(|e| send_error(&e))?;
+    Ok(())
+}
+
+/// Accept raw session connections and join them with the invited key.
+async fn serve_session_listener(listener: TcpListener, sessions: mpsc::UnboundedSender<Vec<u8>>) -> anyhow::Result<()> {
+    loop {
+        let (socket, _peer) = listener.accept().await.context("session accept")?;
+        tokio::spawn(session_connection(socket, sessions.clone()));
+    }
+}
+
+/// Handle one session connection: verify the join, then relay a beacon frame.
+async fn session_connection(mut stream: TcpStream, sessions: mpsc::UnboundedSender<Vec<u8>>) -> anyhow::Result<()> {
+    let message = protocol::read_message(&mut stream)
+        .await
+        .context("session join frame")?;
+    let Message::JoinSessionRequest { key } = message else {
+        anyhow::bail!("expected JoinSessionRequest, got {message:?}");
+    };
+    sessions.send(key).map_err(|e| send_error(&e))?;
+    write_response(&mut stream, Message::RESPONSE_SUCCESS, "joined").await?;
+    protocol::write_data_frame(&mut stream, b"relay beacon")
+        .await
+        .context("session beacon")?;
+    Ok(())
+}
+
+/// Write a `Response` message.
+async fn write_response<W>(stream: &mut W, code: i32, message: &str) -> anyhow::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    protocol::write_message(
+        stream,
+        &Message::Response {
+            code,
+            message: message.to_owned(),
+        },
+    )
+    .await
+    .context("write response")
+}
+
+/// Turn a closed test channel into a readable error.
+fn send_error<T>(error: &mpsc::error::SendError<T>) -> anyhow::Error {
+    anyhow::anyhow!("relay event channel closed: {error}")
+}
+
+/// Wait until the mock has seen a join request and the resulting pong.
+///
+/// Both the supervisor registration loop and a `test_relay` probe open
+/// control connections, so the events arrive in an arbitrary order.
+async fn receive_join_and_pong(mock: &mut MockRelay) -> anyhow::Result<()> {
+    let mut joined = false;
+    let mut ponged = false;
+    let mut seen = 0_u8;
+    while seen < 8 && !(joined && ponged) {
+        match mock.next_control_event().await? {
+            ControlEvent::Joined { .. } => joined = true,
+            ControlEvent::PongReceived => ponged = true,
+        }
+        seen = seen.saturating_add(1);
+    }
+    anyhow::ensure!(joined, "the relay never saw a join request");
+    anyhow::ensure!(ponged, "the relay never saw a pong reply");
+    Ok(())
+}
+
+/// Build a fresh data directory for a [`RelayManager`].
+fn temp_relay_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("syncweb-relay-test-{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// Start a [`RelayManager`] pointed at the relay under test.
+fn manager(relay_url: String) -> anyhow::Result<(RelayManager, PathBuf)> {
+    let dir = temp_relay_dir();
+    let mut config = RelayConfig::default();
+    config.relay_urls = vec![relay_url];
+    config.timeout = Duration::from_secs(5);
+    let options = RelayManagerOptions::new(config, dir.clone());
+    let node = iroh::SecretKey::generate().public();
+    let relay_manager = RelayManager::start(options, node)?;
+    Ok((relay_manager, dir))
 }
 
 #[test]
 fn relay_messages_round_trip() -> anyhow::Result<()> {
-    let id = device_id()?;
-    let messages = [
-        RelayMessage::JoinRelayRequest(JoinRelayRequest::new(id)),
-        RelayMessage::SessionInvitation(SessionInvitation::new([9_u8; 32], true)),
-        RelayMessage::JoinSessionRequest(JoinSessionRequest::new([3_u8; 32], id)),
-        RelayMessage::ResponseSuccess,
-        RelayMessage::ResponseNotFound,
-        RelayMessage::RelayFull,
+    let messages = vec![
+        Message::Ping,
+        Message::Pong,
+        Message::RelayFull,
+        Message::JoinRelayRequest {
+            token: "s3cret".to_owned(),
+        },
+        Message::JoinSessionRequest { key: vec![3_u8; 32] },
+        Message::Response {
+            code: 0,
+            message: "ok".to_owned(),
+        },
+        Message::ConnectRequest { id: vec![5_u8; 32] },
+        Message::SessionInvitation {
+            from: vec![1_u8; 32],
+            key: vec![2_u8; 32],
+            address: vec![127, 0, 0, 1],
+            port: 22_067,
+            server_socket: true,
+        },
     ];
     for message in messages {
-        anyhow::ensure!(RelayMessage::decode(&message.encode())? == message);
+        let frame = message.encode_frame()?;
+        anyhow::ensure!(Message::decode_frame(&frame)? == message);
     }
-    anyhow::ensure!(RelayMessage::decode(&[1_u8; 4]).is_err());
+    anyhow::ensure!(Message::decode_frame(&[1_u8; 4]).is_err());
     Ok(())
 }
 
 #[tokio::test]
-async fn relay_transport_frames_packets() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await?;
-        let join_length = usize::try_from(stream.read_u32().await?)?;
-        let mut join = vec![0_u8; join_length];
-        stream.read_exact(&mut join).await?;
-        anyhow::ensure!(matches!(
-            RelayMessage::decode(&join)?,
-            RelayMessage::JoinRelayRequest(_)
-        ));
-        let packet_length = usize::try_from(stream.read_u32().await?)?;
-        let mut packet = vec![0_u8; packet_length];
-        stream.read_exact(&mut packet).await?;
-        stream.write_u32(u32::try_from(packet.len())?).await?;
-        stream.write_all(&packet).await?;
-        anyhow::Ok(())
-    });
-
-    let transport =
-        SyncthingRelayTransport::connect(format!("tcp://{address}"), device_id()?, Duration::from_secs(1)).await?;
-    transport.send_packet(b"packet").await?;
-    anyhow::ensure!(transport.recv_packet().await? == b"packet");
-    server.await??;
+async fn control_and_session_frames_round_trip() -> anyhow::Result<()> {
+    let (mut writer, mut reader) = tokio::io::duplex(128);
+    let message = Message::SessionInvitation {
+        from: vec![1_u8; 32],
+        key: vec![2_u8; 32],
+        address: vec![127, 0, 0, 1],
+        port: 1,
+        server_socket: false,
+    };
+    protocol::write_message(&mut writer, &message).await?;
+    anyhow::ensure!(protocol::read_message(&mut reader).await? == message);
+    protocol::write_data_frame(&mut writer, b"payload").await?;
+    anyhow::ensure!(protocol::read_data_frame(&mut reader).await? == b"payload");
     Ok(())
 }
 
 #[tokio::test]
-async fn relay_fallback_uses_the_next_configured_relay() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await?;
-        let length = usize::try_from(stream.read_u32().await?)?;
-        let mut join = vec![0_u8; length];
-        stream.read_exact(&mut join).await?;
-        anyhow::ensure!(matches!(
-            RelayMessage::decode(&join)?,
-            RelayMessage::JoinRelayRequest(_)
-        ));
-        anyhow::Ok(())
-    });
+async fn test_relay_accepts_registration() -> anyhow::Result<()> {
+    let mut mock = MockRelay::spawn(JoinPolicy::Accept).await?;
+    let relay_url = format!("tcp://{}", mock.control_addr);
+    let (relay_manager, _dir) = manager(relay_url.clone())?;
 
-    let mut config = RelayConfig::default();
-    config.relay_urls = vec!["tcp://relay.invalid:22270".to_owned(), format!("tcp://{address}")];
-    config.timeout = Duration::from_secs(1);
-    config.auto_fallback = true;
-    let fallback = TransportFallback::new(config);
-    let transport = fallback.connect_relay(device_id()?).await?;
-    anyhow::ensure!(transport.relay_url == format!("tcp://{address}"));
-    server.await??;
+    let report = relay_manager.test_relay(&relay_url).await?;
+    anyhow::ensure!(report.url == relay_url);
+    anyhow::ensure!(!report.elapsed.is_zero());
+    anyhow::ensure!(!report.own_relay_id.is_empty());
+
+    receive_join_and_pong(&mut mock).await?;
+    relay_manager.shutdown().await;
     Ok(())
 }
 
 #[tokio::test]
-async fn relay_fallback_can_be_disabled() -> anyhow::Result<()> {
+async fn test_relay_rejects_wrong_token() -> anyhow::Result<()> {
+    let mock = MockRelay::spawn(JoinPolicy::Reject).await?;
+    let relay_url = format!("tcp://{}", mock.control_addr);
+    let (relay_manager, _dir) = manager(relay_url.clone())?;
+
+    let error = relay_manager.test_relay(&relay_url).await.unwrap_err();
+    anyhow::ensure!(error.to_string().contains("rejected our registration"));
+    relay_manager.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_relay_reports_full_relay() -> anyhow::Result<()> {
+    let mock = MockRelay::spawn(JoinPolicy::RelayFull).await?;
+    let relay_url = format!("tcp://{}", mock.control_addr);
+    let (relay_manager, _dir) = manager(relay_url.clone())?;
+
+    let error = relay_manager.test_relay(&relay_url).await.unwrap_err();
+    anyhow::ensure!(error.to_string().contains("is full"));
+    relay_manager.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn inbound_invitation_brokers_a_session() -> anyhow::Result<()> {
+    let session_key = [9_u8; 32];
+    let initiator = [1_u8; 32];
+    let mut mock = MockRelay::spawn(JoinPolicy::AcceptThenInvite {
+        key: session_key,
+        from: initiator,
+    })
+    .await?;
+    let relay_url = format!("tcp://{}", mock.control_addr);
+    let (relay_manager, _dir) = manager(relay_url.clone())?;
+
+    receive_join_and_pong(&mut mock).await?;
+    let joined_key = mock.next_session_key().await?;
+    anyhow::ensure!(joined_key == session_key);
+
+    relay_manager.shutdown().await;
+    Ok(())
+}
+
+/// Regression: the address advertised immediately must encode the node's
+/// relay id and iroh node id, so a shared ticket carries it before the
+/// supervisor has connected anywhere.
+#[tokio::test]
+async fn local_addr_is_published_immediately() -> anyhow::Result<()> {
     let mut config = RelayConfig::default();
     config.relay_urls = vec!["tcp://127.0.0.1:1".to_owned()];
-    config.timeout = Duration::from_millis(10);
-    config.auto_fallback = false;
-    let fallback = TransportFallback::new(config);
-    let result = fallback.connect_relay(device_id()?).await;
-    anyhow::ensure!(result.is_err());
-    if let Err(error) = result {
-        anyhow::ensure!(error.to_string().contains("disabled"));
-    }
+    let node = iroh::SecretKey::generate().public();
+    let relay_manager = RelayManager::start(RelayManagerOptions::new(config, temp_relay_dir()), node)?;
+
+    let addr = relay_manager.local_addr();
+    anyhow::ensure!(addr.id() == syncweb_core::net::relay::BEP_TRANSPORT_ID);
+    let data = addr.data();
+    let (version, rest) = data.split_first().context("address payload must not be empty")?;
+    let (node_part, relay_part) = rest.split_at(node.as_bytes().len());
+    anyhow::ensure!(*version == 1, "unexpected address version {version}");
+    anyhow::ensure!(node_part == node.as_bytes(), "node id mismatch");
+    anyhow::ensure!(
+        relay_part == relay_manager.relay_id(),
+        "relay id mismatch ({} bytes)",
+        relay_part.len()
+    );
     Ok(())
 }
 
-async fn write_relay_message(stream: &mut tokio::net::TcpStream, msg: &RelayMessage) -> anyhow::Result<()> {
-    let bytes = msg.encode();
-    stream.write_u32(u32::try_from(bytes.len())?).await?;
-    stream.write_all(&bytes).await?;
-    stream.flush().await?;
-    Ok(())
-}
-
-async fn read_relay_message(stream: &mut tokio::net::TcpStream) -> anyhow::Result<RelayMessage> {
-    let len = usize::try_from(stream.read_u32().await?)?;
-    let mut buf = vec![0_u8; len];
-    stream.read_exact(&mut buf).await?;
-    Ok(RelayMessage::decode(&buf)?)
-}
-
+/// Regression: a folder ticket shared by a relay-enabled node must carry the
+/// node's Syncthing relay custom address, so a joining peer can reach it when
+/// direct paths are blocked.
 #[tokio::test]
-async fn test_quic_over_tcp() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
+async fn shared_ticket_carries_relay_custom_addr() -> anyhow::Result<()> {
+    use syncweb_core::folder::{FolderManager, SyncMode};
+    use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
 
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await?;
-        let join = read_relay_message(&mut stream).await?;
-        anyhow::ensure!(matches!(join, RelayMessage::JoinRelayRequest(_)));
-
-        write_relay_message(
-            &mut stream,
-            &RelayMessage::SessionInvitation(SessionInvitation::new([42_u8; 32], false)),
-        )
-        .await?;
-
-        let join_session = read_relay_message(&mut stream).await?;
-        anyhow::ensure!(matches!(join_session, RelayMessage::JoinSessionRequest(_)));
-
-        write_relay_message(&mut stream, &RelayMessage::ResponseSuccess).await?;
-
-        for i in 0_u32..20 {
-            let pkt = format!("stream-{i}");
-            stream.write_u32(u32::try_from(pkt.len())?).await?;
-            stream.write_all(pkt.as_bytes()).await?;
-        }
-        stream.flush().await?;
-
-        for _ in 0..5 {
-            let len = usize::try_from(stream.read_u32().await?)?;
-            let mut buf = vec![0_u8; len];
-            stream.read_exact(&mut buf).await?;
-            anyhow::ensure!(buf.starts_with(b"client-"));
-        }
-        anyhow::Ok(())
-    });
-
-    let transport =
-        SyncthingRelayTransport::connect(format!("tcp://{address}"), device_id()?, Duration::from_secs(2)).await?;
-
-    let join_invitation = transport.recv_message().await?;
-    let session_key = match join_invitation {
-        RelayMessage::SessionInvitation(inv) => inv.session_key,
-        RelayMessage::JoinSessionRequest(_)
-        | RelayMessage::ResponseSuccess
-        | RelayMessage::ResponseNotFound
-        | RelayMessage::RelayFull
-        | _ => {
-            anyhow::bail!("expected SessionInvitation, got {join_invitation:?}")
-        }
-    };
-
-    transport
-        .send_message(&RelayMessage::JoinSessionRequest(JoinSessionRequest::new(
-            session_key,
-            device_id()?,
-        )))
-        .await?;
-
-    let response = transport.recv_message().await?;
-    anyhow::ensure!(matches!(response, RelayMessage::ResponseSuccess));
-
-    for i in 0_u32..20 {
-        let pkt = transport.recv_packet().await?;
-        anyhow::ensure!(pkt == format!("stream-{i}").as_bytes());
-    }
-
-    for i in 0_u32..5 {
-        transport.send_packet(format!("client-{i}").as_bytes()).await?;
-    }
-
-    server.await??;
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_relay_connection() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let relay_addr = listener.local_addr()?;
-
-    let server = tokio::spawn(async move {
-        let (mut stream_a, _) = listener.accept().await?;
-        let join_a = read_relay_message(&mut stream_a).await?;
-        let _device_a = match join_a {
-            RelayMessage::JoinRelayRequest(req) => req.device_id,
-            RelayMessage::JoinSessionRequest(_)
-            | RelayMessage::ResponseSuccess
-            | RelayMessage::ResponseNotFound
-            | RelayMessage::RelayFull
-            | _ => {
-                anyhow::bail!("expected JoinRelayRequest from A, got {join_a:?}")
-            }
-        };
-
-        let (mut stream_b, _) = listener.accept().await?;
-        let join_b = read_relay_message(&mut stream_b).await?;
-        let _device_b = match join_b {
-            RelayMessage::JoinRelayRequest(req) => req.device_id,
-            RelayMessage::JoinSessionRequest(_)
-            | RelayMessage::ResponseSuccess
-            | RelayMessage::ResponseNotFound
-            | RelayMessage::RelayFull
-            | _ => {
-                anyhow::bail!("expected JoinRelayRequest from B, got {join_b:?}")
-            }
-        };
-
-        let session_key: [u8; 32] = [7_u8; 32];
-
-        write_relay_message(
-            &mut stream_a,
-            &RelayMessage::SessionInvitation(SessionInvitation::new(session_key, false)),
-        )
-        .await?;
-        write_relay_message(
-            &mut stream_b,
-            &RelayMessage::SessionInvitation(SessionInvitation::new(session_key, true)),
-        )
-        .await?;
-
-        let js_a = read_relay_message(&mut stream_a).await?;
-        anyhow::ensure!(matches!(js_a, RelayMessage::JoinSessionRequest(_)));
-        let js_b = read_relay_message(&mut stream_b).await?;
-        anyhow::ensure!(matches!(js_b, RelayMessage::JoinSessionRequest(_)));
-
-        write_relay_message(&mut stream_a, &RelayMessage::ResponseSuccess).await?;
-        write_relay_message(&mut stream_b, &RelayMessage::ResponseSuccess).await?;
-
-        let mut buf_a = [0_u8; 1024];
-        let mut buf_b = [0_u8; 1024];
-        loop {
-            tokio::select! {
-                result = stream_a.read(&mut buf_a) => {
-                    let n = result?;
-                    if n == 0 { break; }
-                    let slice = buf_a.get(..n).context("slice read_a")?;
-                    stream_b.write_all(slice).await?;
-                }
-                result = stream_b.read(&mut buf_b) => {
-                    let n = result?;
-                    if n == 0 { break; }
-                    let slice = buf_b.get(..n).context("slice read_b")?;
-                    stream_a.write_all(slice).await?;
-                }
-            }
-        }
-        anyhow::Ok(())
-    });
-
-    let id_a = device_id()?;
-    let id_b = device_id()?;
-    let addr = format!("tcp://{relay_addr}");
-
-    let client_a = tokio::spawn({
-        let addr_for_a = addr.clone();
-        async move {
-            let transport = SyncthingRelayTransport::connect(addr_for_a, id_a, Duration::from_secs(5)).await?;
-            let invitation = transport.recv_message().await?;
-            let session_key = match invitation {
-                RelayMessage::SessionInvitation(inv) => inv.session_key,
-                RelayMessage::JoinSessionRequest(_)
-                | RelayMessage::ResponseSuccess
-                | RelayMessage::ResponseNotFound
-                | RelayMessage::RelayFull
-                | _ => {
-                    anyhow::bail!("expected invitation for A")
-                }
-            };
-            transport
-                .send_message(&RelayMessage::JoinSessionRequest(JoinSessionRequest::new(
-                    session_key,
-                    id_a,
-                )))
-                .await?;
-            anyhow::ensure!(matches!(transport.recv_message().await?, RelayMessage::ResponseSuccess));
-            transport.send_packet(b"hello from A").await?;
-            let received = transport.recv_packet().await?;
-            anyhow::ensure!(received == b"hello from B");
-            anyhow::Ok(())
-        }
-    });
-
-    let client_b = tokio::spawn(async move {
-        let transport = SyncthingRelayTransport::connect(addr, id_b, Duration::from_secs(5)).await?;
-        let invitation = transport.recv_message().await?;
-        let session_key = match invitation {
-            RelayMessage::SessionInvitation(inv) => inv.session_key,
-            RelayMessage::JoinSessionRequest(_)
-            | RelayMessage::ResponseSuccess
-            | RelayMessage::ResponseNotFound
-            | RelayMessage::RelayFull
-            | _ => {
-                anyhow::bail!("expected invitation for B")
-            }
-        };
-        transport
-            .send_message(&RelayMessage::JoinSessionRequest(JoinSessionRequest::new(
-                session_key,
-                id_b,
-            )))
-            .await?;
-        anyhow::ensure!(matches!(transport.recv_message().await?, RelayMessage::ResponseSuccess));
-        let received = transport.recv_packet().await?;
-        anyhow::ensure!(received == b"hello from A");
-        transport.send_packet(b"hello from B").await?;
-        anyhow::Ok(())
-    });
-
-    client_a.await??;
-    client_b.await??;
-    server.await??;
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_relay_fallback_chain() -> anyhow::Result<()> {
-    let dead_listener_1 = TcpListener::bind("127.0.0.1:0").await?;
-    let dead_addr_1 = dead_listener_1.local_addr()?;
-    drop(dead_listener_1);
-
-    let dead_listener_2 = TcpListener::bind("127.0.0.1:0").await?;
-    let dead_addr_2 = dead_listener_2.local_addr()?;
-    drop(dead_listener_2);
-
-    let working_listener = TcpListener::bind("127.0.0.1:0").await?;
-    let working_addr = working_listener.local_addr()?;
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = working_listener.accept().await?;
-        let join = read_relay_message(&mut stream).await?;
-        anyhow::ensure!(matches!(join, RelayMessage::JoinRelayRequest(_)));
-        write_relay_message(
-            &mut stream,
-            &RelayMessage::SessionInvitation(SessionInvitation::new([55_u8; 32], false)),
-        )
-        .await?;
-        let join_session = read_relay_message(&mut stream).await?;
-        anyhow::ensure!(matches!(join_session, RelayMessage::JoinSessionRequest(_)));
-        write_relay_message(&mut stream, &RelayMessage::ResponseSuccess).await?;
-        anyhow::Ok(())
-    });
-
+    let directory = crate::test_utils::TestDirectory::new("syncweb-relay-ticket")?;
+    let root = directory.path().join("node");
+    let identity = syncweb_core::node::identity::IdentityManager::new(root.join("identity.key"))?;
     let mut config = RelayConfig::default();
-    config.relay_urls = vec![
-        format!("tcp://{dead_addr_1}"),
-        format!("tcp://{dead_addr_2}"),
-        format!("tcp://{working_addr}"),
-    ];
-    config.timeout = Duration::from_millis(200);
-    config.auto_fallback = true;
+    config.relay_urls = vec!["tcp://127.0.0.1:1".to_owned()];
+    let relay = RelayManager::start(RelayManagerOptions::new(config, root.join("relay")), identity.node_id())?;
+    let expected = relay.local_addr();
+    let node = IrohNode::new_with_relay(
+        identity,
+        root.join("data"),
+        RelayMode::None,
+        crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
+        Some(relay),
+    )
+    .await?;
 
-    let fallback = TransportFallback::new(config);
-    let transport = fallback.connect_relay(device_id()?).await?;
-    anyhow::ensure!(transport.relay_url == format!("tcp://{working_addr}"));
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::SendReceive).await?;
+    let ticket = folder.ticket(true).await?;
+    let carried = ticket
+        .nodes
+        .iter()
+        .flat_map(|n| n.addrs.iter())
+        .any(|addr| matches!(addr, iroh::TransportAddr::Custom(custom) if custom == &expected));
+    anyhow::ensure!(carried, "ticket should carry the relay custom address: {ticket:?}");
 
-    let invitation = transport.recv_message().await?;
-    let session_key = match invitation {
-        RelayMessage::SessionInvitation(inv) => inv.session_key,
-        RelayMessage::JoinSessionRequest(_)
-        | RelayMessage::ResponseSuccess
-        | RelayMessage::ResponseNotFound
-        | RelayMessage::RelayFull
-        | _ => {
-            anyhow::bail!("expected invitation, got {invitation:?}")
-        }
-    };
-    anyhow::ensure!(session_key == [55_u8; 32]);
+    node.stop().await?;
+    Ok(())
+}
 
-    transport
-        .send_message(&RelayMessage::JoinSessionRequest(JoinSessionRequest::new(
-            session_key,
-            device_id()?,
-        )))
-        .await?;
-    anyhow::ensure!(matches!(transport.recv_message().await?, RelayMessage::ResponseSuccess));
+/// Regression: a `ConnectRequest` sent over the existing registration
+/// connection must be answered by a session invitation that the registration
+/// reader turns into a session. (The old code opened a fresh, duplicate
+/// registration connection, which real relays drop with `early eof`.)
+#[tokio::test]
+async fn outbound_connect_request_brokers_a_session() -> anyhow::Result<()> {
+    let session_key = [7_u8; 32];
+    let peer = [4_u8; 32];
+    let mut mock = MockRelay::spawn(JoinPolicy::AcceptThenConnect { key: session_key }).await?;
+    let relay_url = format!("tcp://{}", mock.control_addr);
+    let (relay_manager, _dir) = manager(relay_url)?;
 
-    drop(transport);
-    server.await??;
+    receive_join_and_pong(&mut mock).await?;
+    let node = iroh::SecretKey::generate().public();
+    relay_manager.dial_peer_for_test(peer, node)?;
+    let joined_key = mock.next_session_key().await?;
+    anyhow::ensure!(joined_key == session_key);
+
+    relay_manager.shutdown().await;
     Ok(())
 }

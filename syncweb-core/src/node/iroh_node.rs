@@ -9,6 +9,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use crate::error::{Result, SyncwebError};
+use crate::net::RelayManager;
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::blob_store::BlobStore;
@@ -158,6 +159,9 @@ pub struct IrohNode {
     blob_store: BlobStore,
     docs_engine: DocsEngine,
     topic_tracker: TopicTracker,
+    /// The Syncthing (BEP) relay manager, when `bep.enabled` is set. Keeps the
+    /// registration loops and the custom transport's backend alive.
+    relay: Option<RelayManager>,
 }
 
 impl IrohNode {
@@ -184,6 +188,36 @@ impl IrohNode {
         .await
     }
 
+    /// Creates a node with the Syncthing (BEP) relay transport installed.
+    ///
+    /// When `relay` is `Some`, the manager's custom transport is registered on
+    /// the endpoint and the manager is kept alive for the node's lifetime; the
+    /// node's share tickets then carry the node's relay address so peers can
+    /// reach it through a Syncthing relay when direct paths fail.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
+    pub async fn new_with_relay(
+        identity: IdentityManager,
+        data_dir: PathBuf,
+        relay_mode: RelayMode,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        discovery: DiscoveryConfig,
+        relay: Option<RelayManager>,
+    ) -> Result<Self> {
+        Self::new_with_address_lookup_and_relay(
+            identity,
+            data_dir,
+            relay_mode,
+            MemoryLookup::new(),
+            discovery,
+            member_keys,
+            relay,
+        )
+        .await
+    }
+
     /// # Errors
     ///
     /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
@@ -195,6 +229,30 @@ impl IrohNode {
         discovery: DiscoveryConfig,
         member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
     ) -> Result<Self> {
+        Self::new_with_address_lookup_and_relay(
+            identity,
+            data_dir,
+            relay_mode,
+            address_lookup,
+            discovery,
+            member_keys,
+            None,
+        )
+        .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the directory structure cannot be created, if binding the endpoint fails, or if starting the background services fails.
+    pub async fn new_with_address_lookup_and_relay(
+        identity: IdentityManager,
+        data_dir: PathBuf,
+        relay_mode: RelayMode,
+        address_lookup: MemoryLookup,
+        discovery: DiscoveryConfig,
+        member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>>,
+        relay: Option<RelayManager>,
+    ) -> Result<Self> {
         tokio::fs::create_dir_all(&data_dir)
             .await
             .map_err(|error| SyncwebError::operation("failed to create node data directory", error))?;
@@ -203,7 +261,7 @@ impl IrohNode {
             .await
             .map_err(|error| SyncwebError::operation("failed to create docs directory", error))?;
 
-        let builder = match relay_mode {
+        let base = match relay_mode {
             RelayMode::Default => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
             RelayMode::Custom { map, insecure } => {
                 let mut b = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
@@ -221,10 +279,14 @@ impl IrohNode {
         let hook = MembershipHook {
             member_keys: member_keys.clone(),
         };
-        let endpoint = builder
+        let mut builder = base
             .address_lookup(address_lookup.clone())
             .secret_key(identity.secret_key().clone())
-            .hooks(hook)
+            .hooks(hook);
+        if let Some(manager) = &relay {
+            builder = builder.add_custom_transport(Arc::new(manager.transport()));
+        }
+        let endpoint = builder
             .bind()
             .await
             .map_err(|error| SyncwebError::operation("failed to bind Iroh endpoint", error))?;
@@ -254,7 +316,8 @@ impl IrohNode {
             .spawn();
 
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
-        let docs_engine = DocsEngine::new(&docs, blobs.store());
+        let relay_addr = relay.as_ref().map(RelayManager::local_addr);
+        let docs_engine = DocsEngine::new(&docs, blobs.store(), endpoint.id(), relay_addr);
         let topic_tracker = TopicTracker::new(&gossip, &endpoint);
 
         Ok(Self {
@@ -266,7 +329,15 @@ impl IrohNode {
             blob_store,
             docs_engine,
             topic_tracker,
+            relay,
         })
+    }
+
+    /// The relay custom address this node advertises, when Syncthing (BEP)
+    /// relaying is enabled.
+    #[must_use]
+    pub fn relay_addr(&self) -> Option<iroh_base::CustomAddr> {
+        self.relay.as_ref().map(RelayManager::local_addr)
     }
 
     #[must_use]
@@ -322,6 +393,9 @@ impl IrohNode {
             .shutdown()
             .await
             .map_err(|error| SyncwebError::operation("failed to stop node router", error))?;
+        if let Some(relay) = &self.relay {
+            relay.shutdown().await;
+        }
         Ok(())
     }
 

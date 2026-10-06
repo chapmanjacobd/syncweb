@@ -62,6 +62,14 @@ hyper = "1"
 tokio-util = { version = "0.7", features = ["io"] }
 mime = "0.3"
 parking_lot = "0.12"
+iroh-base = "1.0"
+n0-watcher = "1.0"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "log", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+rcgen = "0.14"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
+url = "2"
+noq-udp = "1.1"
 
 [profile.release]
 lto = true

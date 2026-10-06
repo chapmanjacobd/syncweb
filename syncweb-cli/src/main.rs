@@ -44,7 +44,7 @@ use syncweb_core::{
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner, Scanner},
     init::open_node,
-    net::{NetworkLogger, NetworkManager, NetworkOptions, TransportFallback},
+    net::{NetworkLogger, NetworkManager, NetworkOptions, RelayManager, RelayManagerOptions},
     node::{
         identity::{DeviceId, IdentityManager},
         iroh_node::IrohNode,
@@ -500,19 +500,22 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
     } else {
         syncweb_core::node::iroh_node::RelayMode::Default
     };
+    daemon_config.bep = app_config.bep.clone();
     let media_listen = match args.media_listen {
         Some(addr) => addr,
         None => DEFAULT_MEDIA_LISTEN.parse()?,
     };
     daemon_config.media_listen = Some(media_listen);
-    daemon_config.discovery.mdns = !args.no_mdns;
-    daemon_config.discovery.beacon = !args.no_beacon;
-    if let Some(port) = args.beacon_port {
-        daemon_config.discovery.beacon_base_port = port;
-    }
-    if let Some(interface) = args.discovery_interface.clone() {
-        daemon_config.discovery.interface = Some(interface);
-    }
+    // The persisted `discovery.*` config provides the defaults; the CLI flags
+    // only ever turn a mechanism off (or override the beacon settings).
+    daemon_config.discovery.mdns = app_config.discovery.mdns && !args.no_mdns;
+    daemon_config.discovery.beacon = app_config.discovery.beacon && !args.no_beacon;
+    daemon_config.discovery.beacon_base_port = args.beacon_port.unwrap_or(app_config.discovery.beacon_base_port);
+    daemon_config.discovery.beacon_interval = Duration::from_millis(app_config.discovery.beacon_interval_ms);
+    daemon_config.discovery.interface = args
+        .discovery_interface
+        .clone()
+        .or_else(|| app_config.discovery.interface.clone());
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     // Log the startup record: `--log-file` is useless if the file stays empty
@@ -593,6 +596,18 @@ fn spawn_daemon_process(data_dir: &std::path::Path, args: &StartArgs, network: O
     }
     if args.no_relay {
         command.arg("--no-relay");
+    }
+    if args.no_mdns {
+        command.arg("--no-mdns");
+    }
+    if args.no_beacon {
+        command.arg("--no-beacon");
+    }
+    if let Some(port) = args.beacon_port {
+        command.arg("--beacon-port").arg(port.to_string());
+    }
+    if let Some(interface) = &args.discovery_interface {
+        command.arg("--discovery-interface").arg(interface);
     }
     if let Some(addr) = args.media_listen {
         command.arg("--media-listen").arg(addr.to_string());
@@ -1248,7 +1263,7 @@ async fn download_from_stdin(ctx: &CliContext<'_>, command: crate::cli::commands
         }
         let mut one = command.clone();
         one.source = std::path::PathBuf::from(trimmed);
-        download_one(ctx, one).await?;
+        Box::pin(download_one(ctx, one)).await?;
     }
     Ok(())
 }
@@ -5148,13 +5163,16 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             let mut config = app_config.relay_config();
             config.relay_urls = vec![relay_url.clone()];
             config.auto_fallback = true;
-            TransportFallback::new(config)
-                .connect_relay(DeviceId::from_node_id(identity.node_id()))
-                .await?;
+            let relay_manager = RelayManager::start(
+                RelayManagerOptions::new(config, data_dir.join("relay")),
+                identity.node_id(),
+            )?;
+            let report = relay_manager.test_relay(&relay_url).await?;
+            relay_manager.shutdown().await;
             if output_json {
                 println!("{}", serde_json::json!({"status": "reachable", "relay_url": relay_url}));
             } else {
-                println!("relay reachable: {relay_url}");
+                println!("{report}");
             }
         }
         NetworkCommand::Status { name } => {

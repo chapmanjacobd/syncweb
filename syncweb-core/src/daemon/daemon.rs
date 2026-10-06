@@ -300,7 +300,9 @@ impl Daemon {
                 return Err(error);
             }
         };
-        sync_engine = sync_engine.with_node_db(node_db.clone());
+        sync_engine = sync_engine
+            .with_node_db(node_db.clone())
+            .with_reconciler(build_reconciler(node.clone(), folder_manager.clone(), node_db.clone()));
 
         let archive_pool = match ManagedPool::new("syncweb-archive", config.rayon_threads) {
             Ok(value) => Arc::new(value),
@@ -1709,6 +1711,105 @@ fn send_shutdown(sender: &broadcast::Sender<()>) {
     match sender.send(()) {
         Ok(_) | Err(broadcast::error::SendError(())) => {}
     }
+}
+
+/// Always remove a namespace from a shared busy set, ignoring a poisoned lock.
+fn fully_remove(set: &std::sync::Mutex<HashSet<NamespaceId>>, namespace: &NamespaceId) {
+    let mut guard = set.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.remove(namespace);
+}
+
+/// Build the daemon's folder reconciler.
+///
+/// The reconciler is invoked by the sync engine after remote content becomes
+/// local for a writable folder. It coalesces the burst of `ContentReady`
+/// events from a sync pass into one trailing-edge materialization per folder:
+/// mark the folder busy, wait a short settle window, then materialize
+/// everything that is local. Later blob completions re-trigger the reconciler
+/// and are picked up on the next trailing edge, so nothing is lost to timing.
+fn build_reconciler(
+    node: Arc<IrohNode>,
+    manager: FolderManager,
+    db: NodeDatabase,
+) -> Arc<dyn Fn(NamespaceId) + Send + Sync> {
+    const RECONCILE_SETTLE: Duration = Duration::from_millis(750);
+    let busy = Arc::new(std::sync::Mutex::new(HashSet::<NamespaceId>::new()));
+    Arc::new(move |namespace| {
+        let mut busy_guard = match busy.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if !busy_guard.insert(namespace) {
+            return;
+        }
+        drop(busy_guard);
+        tracing::debug!(%namespace, "folder reconciler triggered");
+        let node_handle = node.clone();
+        let manager_handle = manager.clone();
+        let db_handle = db.clone();
+        let busy_set = busy.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(RECONCILE_SETTLE).await;
+            let mounts = match db_handle.load_folder_mounts() {
+                Ok(mounts) => mounts,
+                Err(error) => {
+                    tracing::warn!(%namespace, %error, "reconciler could not read folder mounts");
+                    fully_remove(&busy_set, &namespace);
+                    return;
+                }
+            };
+            let Some((_, mount_root)) = mounts
+                .into_iter()
+                .find(|(mounted, _)| mounted.parse::<NamespaceId>().is_ok_and(|id| id == namespace))
+            else {
+                fully_remove(&busy_set, &namespace);
+                return;
+            };
+            let folder = match manager_handle.get(namespace).await {
+                Ok(folder) => folder,
+                Err(error) => {
+                    tracing::warn!(%namespace, %error, "reconciler could not open folder");
+                    fully_remove(&busy_set, &namespace);
+                    return;
+                }
+            };
+            // Read-only replicas materialize on explicit download only; a
+            // subscribe replica must not auto-write the mount.
+            if !folder.is_writable() {
+                fully_remove(&busy_set, &namespace);
+                return;
+            }
+            match crate::sync::materialize_folder_content(&node_handle, &manager_handle, namespace, &mount_root).await {
+                Ok(outcome) => {
+                    if outcome.summary.materialized > 0 || outcome.summary.conflicts > 0 {
+                        tracing::info!(
+                            %namespace,
+                            materialized = outcome.summary.materialized,
+                            conflicts = outcome.summary.conflicts,
+                            pending = outcome.summary.pending,
+                            "reconciled folder after live sync"
+                        );
+                    }
+                    // Pending blobs may finish shortly after this pass; nudge
+                    // once more so the next trailing edge picks them up.
+                    if outcome.summary.pending > 0 {
+                        tokio::time::sleep(RECONCILE_SETTLE).await;
+                        let _ = crate::sync::materialize_folder_content(
+                            &node_handle,
+                            &manager_handle,
+                            namespace,
+                            &mount_root,
+                        )
+                        .await;
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%namespace, %error, "reconciler failed to materialize folder");
+                }
+            }
+            fully_remove(&busy_set, &namespace);
+        });
+    })
 }
 
 fn is_recoverable_watch_error(error: &SyncwebError) -> bool {

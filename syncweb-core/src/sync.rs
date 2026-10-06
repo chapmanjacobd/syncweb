@@ -2,6 +2,7 @@
 
 pub mod actor;
 pub mod checkpoint;
+pub mod conflict;
 pub mod deleted;
 pub mod engine;
 pub mod intents;
@@ -13,6 +14,7 @@ pub mod sessions;
 pub mod subscribe;
 
 pub use actor::{Actor, ActorHandle, ActorPanic};
+pub use conflict::{MaterializeOutcome, MaterializeSummary, conflict_path, materialize_folder_content, select_winner};
 pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};
 pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};

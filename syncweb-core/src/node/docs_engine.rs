@@ -309,6 +309,31 @@ impl DocsEngine {
         Ok(output)
     }
 
+    /// Read every non-empty entry for one document key, including variants
+    /// written by different authors (the CRDT does not lose them; the collapsed
+    /// [`Self::list_latest`] view hides them).
+    ///
+    /// Used by conflict resolution so every author's version of a divergent path
+    /// remains materializable.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document query fails.
+    pub async fn list_all_entries(&self, doc: &Doc) -> Result<Vec<Entry>> {
+        let entries = doc
+            .get_many(Query::all().build())
+            .await
+            .map_err(|error| SyncwebError::operation("failed to query document entries", error))?;
+        tokio::pin!(entries);
+        let mut output = Vec::new();
+        while let Some(entry_result) = n0_future::StreamExt::next(&mut entries).await {
+            let entry =
+                entry_result.map_err(|error| SyncwebError::operation("failed to read document entry", error))?;
+            output.push(entry);
+        }
+        Ok(output)
+    }
+
     /// Delete the current value for a document key.
     ///
     /// # Errors

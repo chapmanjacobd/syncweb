@@ -79,6 +79,21 @@ impl Importer {
     }
 
     async fn import_one(&self, entry: FileEntry) -> Result<ImportEntry> {
+        // Conflict copies (`<path>.conflict.<hash>`) are materialization
+        // artifacts, not folder content: re-importing one would echo it to
+        // peers as a brand-new key. Skip them so they stay purely local.
+        if entry
+            .relative_path
+            .to_string_lossy()
+            .contains(crate::fs::CONFLICT_COPY_MARKER)
+        {
+            return Ok(ImportEntry {
+                path: entry.path,
+                relative_path: entry.relative_path,
+                hash: Hash::from_bytes(*entry.hash.as_bytes()),
+                size: entry.size,
+            });
+        }
         let before = fs::metadata(&entry.path)?;
         if !metadata_matches_entry(&before, &entry) {
             return Err(file_changed_error(&entry.path));
@@ -88,14 +103,28 @@ impl Importer {
         if !metadata_matches_entry(&after, &entry) || hash != Hash::from_bytes(*entry.hash.as_bytes()) {
             return Err(file_changed_error(&entry.path));
         }
-        self.docs_engine
-            .set_blob(
-                &self.doc,
-                self.author,
-                entry.relative_path.as_os_str().as_encoded_bytes(),
+        let key = entry.relative_path.as_os_str().as_encoded_bytes();
+        // Guard against the watcher re-stamping content that materialization
+        // (or a previous remote sync) already recorded for this key. iroh-docs
+        // stamps a fresh timestamp on every `set`, so re-importing an identical
+        // file would turn a remote winner into a newer local edit and flip-flop
+        // LWW forever. If the current latest entry already carries this hash,
+        // the block content is unchanged; leave the doc alone.
+        if self
+            .docs_engine
+            .get_any(&self.doc, key)
+            .await?
+            .is_some_and(|existing| existing.content_hash() == hash)
+        {
+            return Ok(ImportEntry {
+                path: entry.path,
+                relative_path: entry.relative_path,
                 hash,
-                entry.size,
-            )
+                size: entry.size,
+            });
+        }
+        self.docs_engine
+            .set_blob(&self.doc, self.author, key, hash, entry.size)
             .await?;
         Ok(ImportEntry {
             path: entry.path,

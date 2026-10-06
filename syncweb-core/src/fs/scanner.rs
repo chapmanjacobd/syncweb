@@ -191,8 +191,24 @@ pub struct Scanner {
 /// Name of the per-folder ignore file, resolved relative to a scan root.
 pub const SYNCIGNORE_FILE: &str = ".syncignore";
 
+/// Marker embedded in conflict copies written by materialization
+/// (`<path>.conflict.<short-hash>`).
+///
+/// These are derived artifacts, not folder content; they must never be
+/// re-imported (which would echo them to peers as new keys) or listed as
+/// syncable entries.
+pub const CONFLICT_COPY_MARKER: &str = ".conflict.";
+
+/// Glob matching conflict copies at any depth.
+///
+/// globset's `*` does not cross a path separator, but [`IgnoreSet::matches`]
+/// tests each component separately, so the bare marker suffices for files in
+/// subdirectories too.
+pub const CONFLICT_COPY_GLOB: &str = "*.conflict.*";
+
 /// Merge explicit ignore patterns with any `.syncignore` entries found at the
-/// scan root. The ignore file itself is always excluded from the scan.
+/// scan root. The ignore file itself and conflict copies are always excluded
+/// from the scan.
 #[must_use]
 fn with_syncignore_patterns(root: &Path, base: Vec<String>) -> Vec<String> {
     let mut patterns = base;
@@ -208,6 +224,7 @@ fn with_syncignore_patterns(root: &Path, base: Vec<String>) -> Vec<String> {
         }
         patterns.push(SYNCIGNORE_FILE.to_owned());
     }
+    patterns.push(CONFLICT_COPY_GLOB.to_owned());
     patterns
 }
 

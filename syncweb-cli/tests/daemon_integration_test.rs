@@ -3099,3 +3099,254 @@ fn test_inactive_schedule_window_pauses_folder() -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&data);
     Ok(())
 }
+
+/// Flag a directory as containing a conflict copy (`<path>.conflict.<hash>`).
+fn has_conflict_copy(dir: &std::path::Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries
+        .flatten()
+        .any(|entry| entry.file_name().to_string_lossy().contains(".conflict."))
+}
+
+/// `NF-7`: live-synced remote entries created offline must be materialized to
+/// the writable peer's disk automatically — no explicit `download` required.
+#[test]
+fn test_writable_subscribe_materializes_remote_entries() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("mat-alice-data")?;
+    let alice_folder = cli_test_dir("mat-alice-folder")?;
+    let bob_data = cli_test_dir("mat-bob-data")?;
+    let bob_folder = cli_test_dir("mat-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let alice_folder_arg = alice_folder.to_str().context("UTF-8 path")?;
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder_arg,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = stdout_str(&create).trim().to_owned();
+    ensure!(!namespace.is_empty(), "create should print a namespace");
+
+    std::fs::write(alice_folder.join("hello.txt"), b"hello world")?;
+    let import = syncweb(&["--data-dir", alice_data_arg, "folders", "import", alice_folder_arg])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = ticket_from_share_output(&stdout_str(&share));
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "folders",
+        "join",
+        "--mode",
+        "sendreceive",
+        "--subscribe",
+        &ticket,
+        bob_folder_arg,
+    ])?;
+    ensure!(
+        join.status.success(),
+        "bob join --subscribe should succeed: {}",
+        stdout_str(&join)
+    );
+
+    // The writable replica must materialize the remote entry on disk without
+    // an explicit download (the reconcile hook).
+    let mut materialized = false;
+    for _ in 0..120 {
+        if std::fs::read(bob_folder.join("hello.txt")).is_ok_and(|bytes| bytes == b"hello world") {
+            materialized = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(materialized, "writable replica should auto-materialize remote entries");
+
+    let _ = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    let _ = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_data, &alice_folder, &bob_data, &bob_folder] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+/// `NF-6` + `NF-7`: divergent offline edits must converge. The LWW winner stays
+/// at the original path on both nodes; the loser is preserved as
+/// `<path>.conflict.<hash>`. Distinct offline files must reach the peer.
+#[test]
+fn test_offline_conflict_materializes_conflict_copy() -> anyhow::Result<()> {
+    let alice_data = cli_test_dir("conflict-alice-data")?;
+    let alice_folder = cli_test_dir("conflict-alice-folder")?;
+    let bob_data = cli_test_dir("conflict-bob-data")?;
+    let bob_folder = cli_test_dir("conflict-bob-folder")?;
+    let alice_data_arg = alice_data.to_str().context("UTF-8 path")?;
+    let bob_data_arg = bob_data.to_str().context("UTF-8 path")?;
+    let alice_folder_arg = alice_folder.to_str().context("UTF-8 path")?;
+    let bob_folder_arg = bob_folder.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(alice_data_arg)?;
+    ensure!(start.status.success(), "alice daemon should start");
+    wait_for_daemon_ready(alice_data_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "folders",
+        "create",
+        "--no-share",
+        alice_folder_arg,
+    ])?;
+    ensure!(create.status.success(), "alice create should succeed");
+    let namespace = stdout_str(&create).trim().to_owned();
+
+    std::fs::write(alice_folder.join("note.txt"), b"base version")?;
+    let import = syncweb(&["--data-dir", alice_data_arg, "folders", "import", alice_folder_arg])?;
+    ensure!(import.status.success(), "alice import should succeed");
+
+    let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
+    ensure!(share.status.success(), "share should succeed");
+    let ticket = ticket_from_share_output(&stdout_str(&share));
+
+    let bob_start = daemon_start_bg(bob_data_arg)?;
+    ensure!(bob_start.status.success(), "bob daemon should start");
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let join = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "folders",
+        "join",
+        "--mode",
+        "sendreceive",
+        "--subscribe",
+        &ticket,
+        bob_folder_arg,
+    ])?;
+    ensure!(join.status.success(), "bob join should succeed");
+
+    // Let the base version propagate to Bob so both start converged.
+    let mut converged = false;
+    for _ in 0..120 {
+        if std::fs::read(bob_folder.join("note.txt")).is_ok_and(|bytes| bytes == b"base version") {
+            converged = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(converged, "base version should materialize on bob");
+
+    // Stop both daemons, then diverge offline.
+    let stop_a = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(stop_a.status.success());
+    let stop_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    ensure!(stop_b.status.success());
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.7));
+
+    std::fs::write(alice_folder.join("note.txt"), b"alice text version")?;
+    std::fs::write(alice_folder.join("alice-only.txt"), b"alice")?;
+    std::fs::write(bob_folder.join("note.txt"), b"bob text version")?;
+    std::fs::write(bob_folder.join("bob-only.txt"), b"bob")?;
+
+    let imp_a = syncweb(&[
+        "--data-dir",
+        alice_data_arg,
+        "--no-daemon",
+        "watch",
+        "--once",
+        alice_folder_arg,
+    ])?;
+    ensure!(imp_a.status.success(), "alice offline import should succeed");
+    let imp_b = syncweb(&[
+        "--data-dir",
+        bob_data_arg,
+        "--no-daemon",
+        "watch",
+        "--once",
+        bob_folder_arg,
+    ])?;
+    ensure!(imp_b.status.success(), "bob offline import should succeed");
+
+    // Restart both daemons and sync.
+    let start_a = daemon_start_bg(alice_data_arg)?;
+    ensure!(start_a.status.success());
+    wait_for_daemon_ready(alice_data_arg)?;
+    let start_b = daemon_start_bg(bob_data_arg)?;
+    ensure!(start_b.status.success());
+    wait_for_daemon_ready(bob_data_arg)?;
+
+    let sync_a = syncweb(&["--data-dir", alice_data_arg, "sync"])?;
+    ensure!(sync_a.status.success());
+    let sync_b = syncweb(&["--data-dir", bob_data_arg, "sync"])?;
+    ensure!(sync_b.status.success());
+
+    // Bob's `note.txt` should now match Alice's (LWW convergence) and both
+    // sides must hold a `.conflict.<hash>` copy preserving the loser. The winner
+    // is whichever edit carries the newest record timestamp, so only assert that
+    // the two replicas converge on identical content.
+    let (mut converged_note, mut conflict_a, mut conflict_b) = (false, false, false);
+    for _ in 0..180 {
+        let on_alice = std::fs::read(alice_folder.join("note.txt")).ok();
+        let on_bob = std::fs::read(bob_folder.join("note.txt")).ok();
+        let a_has_conflict = has_conflict_copy(&alice_folder);
+        let b_has_conflict = has_conflict_copy(&bob_folder);
+        if let (Some(alice_content), Some(bob_content)) = (&on_alice, &on_bob)
+            && alice_content == bob_content
+            && (alice_content == b"alice text version" || alice_content == b"bob text version")
+        {
+            converged_note = true;
+        }
+        if a_has_conflict {
+            conflict_a = true;
+        }
+        if b_has_conflict {
+            conflict_b = true;
+        }
+        if converged_note && conflict_a && conflict_b {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    ensure!(
+        converged_note,
+        "bob and alice should converge on the same LWW winner for note.txt"
+    );
+    ensure!(conflict_a, "alice should retain a conflict copy of the loser");
+    ensure!(conflict_b, "bob should retain a conflict copy of the loser");
+
+    // Distinct offline files propagate to the peer (NF-7).
+    ensure!(
+        alice_folder.join("bob-only.txt").exists(),
+        "bob-only.txt should reach alice"
+    );
+    ensure!(
+        bob_folder.join("alice-only.txt").exists(),
+        "alice-only.txt should reach bob"
+    );
+
+    let _ = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
+    let _ = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
+    std::thread::sleep(std::time::Duration::from_secs_f64(0.5));
+    for dir in [&alice_data, &alice_folder, &bob_data, &bob_folder] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    Ok(())
+}

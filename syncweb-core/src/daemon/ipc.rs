@@ -2314,6 +2314,23 @@ impl IpcServer {
                 }
                 self.register_folder(folder.namespace_id(), &namespace, &path, sync_mode)
                     .await;
+                // A created folder is two-way by default: the owner should also
+                // receive remote changes. Enable live sync so the reconciler can
+                // materialize peers' edits into the mount.
+                if let Some(ref node_db) = self.node_db {
+                    let mut config = match node_db.load_app_config() {
+                        Ok(config) => config,
+                        Err(error) => return response_from_error(error),
+                    };
+                    config.set_subscribe(
+                        &namespace,
+                        true,
+                        &SubscribeFilters::new(false, true, None, None, None, None),
+                    );
+                    if let Err(error) = node_db.save_app_config(&config) {
+                        return response_from_error(error);
+                    }
+                }
                 match folder.ticket(true).await {
                     Ok(_ticket) => IpcResponse::Ok {
                         message: format!("namespace: {namespace}"),

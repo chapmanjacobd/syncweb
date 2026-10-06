@@ -1,8 +1,8 @@
 # Syncweb Manual Testing Plan
 
 Only sections and tests that are not fully passing are listed. Fully passing
-sections and tests are omitted; status reflects the 2026-10-05 runs against
-binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450`.
+sections and tests are omitted; status reflects the 2026-10-05/06 runs against
+binary SHA-256 `e37534b7a32f7c9a5c12aa7caf676261fdfe8fd99ccba45e99d352083b145242`.
 
 ## Setup & Prerequisites
 
@@ -18,23 +18,26 @@ binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450
 - VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`) via `iiab-vm` +
   `nsenter` (enter the container-init PID under the `systemd-nspawn@…` unit,
   not the supervisor).
-- Binary SHA-256: `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450`.
+- Binary SHA-256: `e37534b7a32f7c9a5c12aa7caf676261fdfe8fd99ccba45e99d352083b145242`.
 - Data: fresh profiles; Alice `shared`/`twoway`, Bob `received`/`shared`; daemons
   run with `start --bg --no-relay`. Folder paths were registered absolute; see
-  `NF-9`.
-- Regression tests: `cargo nextest run` → 678 passed. Coverage added for the
+  `NF-9`. Offline edits were imported with `--no-daemon watch --once`.
+- Regression tests: `cargo nextest run` → 686 passed. Coverage added for the
   fixes below: `syncweb-cli/tests/daemon_integration_test.rs`:
   `test_watch_dry_run_missing_path_is_reported`,
   `test_subscribe_transfer_records_bandwidth_stats`,
   `test_relative_folder_paths_are_absolute_in_daemon`,
   `test_watch_once_honors_syncignore`,
-  `test_inactive_schedule_window_pauses_folder`;
+  `test_inactive_schedule_window_pauses_folder`,
+  `test_writable_subscribe_materializes_remote_entries`,
+  `test_offline_conflict_materializes_conflict_copy`;
   `syncweb-cli/tests/cli_test.rs`: `config_transfer_limits_round_trip`;
   `syncweb-core/src/filter.rs`:
   `config_parsing_tests::unknown_top_level_tables_are_rejected`;
   `syncweb-core/src/transfer_limits.rs`: `tests::*`;
   `syncweb-core/src/daemon/supervisor.rs`:
-  `tests::retry_window_is_measured_from_first_attempt`.
+  `tests::retry_window_is_measured_from_first_attempt`;
+  `syncweb-core/src/sync/conflict.rs`: `tests::*`.
 - VM network isolation: `iiab-vm` installs a bridge-forward rule that drops
   container-to-container traffic:
   `nft list table bridge iiab` → `iifname "vb-*" oifname "vb-*" drop`. This is
@@ -168,46 +171,44 @@ binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450
   3-attempt cap. A failing intent (e.g. `Remote peer aborted sync: NotFound`)
   keeps retrying instead of giving up after three tries. Regression:
   `daemon::supervisor::tests::retry_window_is_measured_from_first_attempt`.
+- `NF-6` (Section 16) conflict resolution: no conflict handling existed —
+  divergent edits never converged on disk and no `.diff`/`.conflict.<hash>`
+  file was written. Now `materialize_folder_content`
+  (`syncweb-core/src/sync/conflict.rs`) enumerates every CRDT variant per key
+  (`docs_engine.list_all_entries`, plain `Query::all()`), selects the LWW
+  winner (greatest record `timestamp()`, ties broken deterministically by
+  author bytes), writes the winner at the original path, and writes each loser
+  as `<path>.conflict.<8-hex-hash>`. The daemon's per-folder reconciler
+  (`daemon.rs` `build_reconciler`, attached via `SyncEngine::with_reconciler`)
+  coalesces `ContentReady`/`InsertRemote`/`SyncFinished` sync events into a
+  trailing-edge materialization pass. The watcher/Importer no longer re-stamps
+  a materialized winner as a new local edit (identical hash short-circuits
+  `set_blob`), and conflict copies (`.conflict.*`) are excluded from scans and
+  never re-imported. `folders create` now enables live sync for the owner too,
+  so the creator's mount receives remote edits. Verified on the VM pair after
+  both sides edited `note.txt` offline:
+  ```text
+  A note.txt: bob text version        B note.txt: bob text version
+  A note.txt.conflict.4a313a7e alice  B note.txt.conflict.4a313a7e alice
+  ```
+  The loser was preserved on both sides as `note.txt.conflict.4a313a7e`.
+  Regressions: `test_offline_conflict_materializes_conflict_copy`,
+  `sync::conflict::tests::*`.
+- `NF-7` (Section 17) offline queue: remote entries stayed doc-only — files
+  created offline by the peer never appeared on disk (and in the previous run
+  did not even propagate reliably). Now the reconciler materializes remote
+  entries of writable folders automatically, so a file added offline by one
+  side appears on the peer's disk without any explicit `download`. Verified:
+  ```text
+  A ls:  alice-only.txt bob-only.txt note.txt
+  A disk: alice-only.txt bob-only.txt note.txt note.txt.conflict.4a313a7e
+  B disk: alice-only.txt bob-only.txt note.txt note.txt.conflict.4a313a7e
+  ```
+  No `WARN`/`retry`/`NotFound` lines in either daemon log. Regressions:
+  `test_writable_subscribe_materializes_remote_entries`,
+  `test_offline_conflict_materializes_conflict_copy`.
 
 ---
-
-## 16. Conflict Resolution
-
-- FAIL (`NF-6`): no conflict handling exists. Alice (`sendreceive`) and Bob
-  (`sendreceive`, joined from a `share --write` ticket) started from
-  `note.txt = "base version"`; both daemons were stopped, each side rewrote
-  `note.txt`, imported with `--no-daemon`, and the daemons were restarted and
-  synced. Afterwards each node still had its own text and no `.diff` or
-  `.conflict.<hash>` file:
-  ```text
-  A note.txt: alice text version   B note.txt: bob text version
-  A conflicts: (none)              B conflicts: (none)
-  ```
-  Divergent entries simply do not converge on disk. `docs/offline-conflict.md`
-  describes the intended LWW + `.diff`/`.conflict.<hash>` UX, but no code
-  implements it, and there is no automatic materialization of remote entries.
-
-## 17. Offline Queue
-
-- FAIL / unstable (`NF-7`): after both daemons were stopped, Alice created
-  `alice-only.txt` and Bob created `bob-only.txt`; after restart, import, and
-  `sync`, the new files did not appear on the peer at all in this run —
-  Alice's `ls` listed only `alice-only.txt` + `note.txt`, Bob's only
-  `bob-only.txt` + `note.txt`:
-  ```text
-  A ls: alice-only.txt note.txt
-  B ls: bob-only.txt note.txt
-  ```
-  Bob's daemon log showed the supervised intent exhausting its retries:
-  ```text
-  WARN sync failed ... err="Remote peer aborted sync: NotFound"
-  WARN supervised intent stopped ... retry_count=3, error="Remote peer aborted
-  sync: NotFound"
-  ```
-  A previous run did observe doc-level propagation of distinct files, so the
-  behavior is not deterministic; it is coupled to `NF-6`
-  (no conflict/materialization) and peer re-discovery/serving timing. No file
-  is materialized to disk in any case.
 
 ## 20. Syncthing Relay (BEP)
 
@@ -226,19 +227,36 @@ binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450
   `bep.*` is never consumed by the daemon/sync transport (it is only read by
   `network test-relay` via `relay_config()`). The actual runtime relay is
   iroh's own `RelayMode`. No "relay connected" log is emitted.
+- `network test-relay`: `tcp://relay.syncthing.net:22270` from the previous run
+  no longer resolves (`relay.syncthing.net` is NXDOMAIN as of 2026-10-05/06;
+  the live pool endpoint is `relays.syncthing.net`). Against a live pool relay
+  the command succeeds:
+  ```text
+  $ syncweb network test-relay tcp://91.189.82.132:22067
+  relay reachable: tcp://91.189.82.132:22067
+  ```
 - `syncweb devices` Syncthing DeviceId format should still be confirmed against
   a reference implementation.
 
 ## 21. Discovery Mechanisms
 
 - Untested: two nodes on different networks discovering via DHT (~5-10 s) or
-  gossip.
+  gossip. On a shared bridge the VM pair discovers each other and syncs in
+  both modes: default relay (no `nft` accept rule needed) and `--no-relay`
+  with the direct accept rule (beacon/mDNS). The base-version propagation and
+  the offline-conflict reruns above both rely on this discovery working
+  end-to-end on the `iiab-vm` bridge.
 
 ## 24. Integrity & Error Recovery
 
 - BLOCKED: real corruption/repair (delete a blob, `verify` reports it, `--fix`
   re-downloads) is not reproducible because blob content lives inside the
   `redb` store — there is no per-blob file to delete or corrupt.
+- Non-destructive `verify` passes on both nodes of the sync pair:
+  ```text
+  A verify /root/mt/shared   → total: 3, verified: 3, corrupted: 0, missing: 0, valid: true
+  B verify /root/mt/received → total: 3, verified: 3, corrupted: 0, missing: 0, valid: true
+  ```
 
 ## 25. Performance Smoke Tests
 
@@ -257,13 +275,12 @@ binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450
 - `receiveencrypted` was removed as a `SyncMode` (it never had an
   encryption-at-rest implementation); `--mode receiveencrypted` is now rejected
   as an invalid mode. Use `receiveonly` for read-only joins.
-- Conflict resolution (`docs/offline-conflict.md`) and automatic
-  materialization of remote entries are unimplemented; see
-  `docs/conflict-resolution-plan.md` for options and the recommended approach.
-- Offline reconnect after a daemon restart is unstable: a supervised intent can
-  see `Remote peer aborted sync: NotFound` when the peer has the folder open but
-  is not itself running a live-sync intent (NF-7). It now retries with
-  exponential backoff for up to 3 months instead of giving up after 3 attempts.
+- Conflict resolution (LWW winner at the original path + `<path>.conflict.<hash>`
+  losers) is implemented at materialize time and is also run automatically by
+  the daemon reconciler for writable folders (`docs/conflict-resolution-plan.md`
+  Phase 1 + a guarded Phase 2; the watcher/Importer guards prevent the
+  materialized winner from being re-stamped as a new local edit). Text `.diff`
+  files and `syncweb conflicts` are not implemented yet.
 - `.syncignore` lines are merged with `--exclude` globs by
   `Scanner`/`Importer`; the ignore file itself is always excluded (NF-10 fix).
 - A folder outside its scheduled `active_hours` is not supervised at all

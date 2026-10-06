@@ -6540,7 +6540,7 @@ fn copy_path(
         anyhow::bail!("cannot download a directory into itself: {}", destination.display());
     }
     let mut walked = Vec::new();
-    collect_copy_files(source, destination, &mut walked)?;
+    collect_copy_files(&source_root, destination, &mut walked)?;
     // When content filters are set, keep only the walked entries that satisfy
     // the path prefix/glob and the shared group predicates. --remote-only is
     // intentionally not applied here: a local copy is not a sync fetch, so

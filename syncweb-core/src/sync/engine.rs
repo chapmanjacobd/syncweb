@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     pin::Pin,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -77,6 +78,9 @@ pub struct SyncEngine {
     docs_engine: DocsEngine,
     node_db: Option<NodeDatabase>,
     topic_tracker: Option<TopicTracker>,
+    /// Optional reconciler invoked after live synchronization ingests remote
+    /// entries. The daemon uses it to materialize writable folders.
+    reconciler: Option<Arc<dyn Fn(NamespaceId) + Send + Sync>>,
 }
 
 impl SyncEngine {
@@ -93,6 +97,7 @@ impl SyncEngine {
             docs_engine,
             node_db: None,
             topic_tracker,
+            reconciler: None,
         }
     }
 
@@ -100,6 +105,13 @@ impl SyncEngine {
     #[must_use]
     pub fn with_node_db(mut self, node_db: NodeDatabase) -> Self {
         self.node_db = Some(node_db);
+        self
+    }
+
+    /// Attach a reconciliation hook called after remote entries are ingested.
+    #[must_use]
+    pub fn with_reconciler(mut self, reconciler: Arc<dyn Fn(NamespaceId) + Send + Sync>) -> Self {
+        self.reconciler = Some(reconciler);
         self
     }
 
@@ -230,9 +242,15 @@ impl SyncEngine {
         }
         let (events, commands, handle) = IntentHandle::channel();
         let node_db = self.node_db.clone();
+        let reconciler = self.reconciler.clone();
         tokio::spawn(run_intent(
             folder,
-            IntentConfig { mode, params, filter },
+            IntentConfig {
+                mode,
+                params,
+                filter,
+                reconciler,
+            },
             self.blob_store.clone(),
             live_events,
             events,
@@ -247,6 +265,7 @@ struct IntentConfig {
     mode: SessionMode,
     params: SubscribeParams,
     filter: Option<FilterEngine>,
+    reconciler: Option<Arc<dyn Fn(NamespaceId) + Send + Sync>>,
 }
 
 async fn run_intent(
@@ -295,70 +314,132 @@ async fn run_intent(
                 return;
             }
             next_event = live_events.next(), if !state.paused => {
-                let Some(event_result) = next_event else {
-                    let _result = events.send(SyncEvent::Finished);
-                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                    return;
+                let processor = IntentEventProcessor {
+                    folder: &folder,
+                    config: &config,
+                    blob_store: &blob_store,
+                    events: &events,
+                    checkpoint: checkpoint.as_ref(),
+                    state: &mut state,
+                    completed_keys: &completed_keys,
+                    started,
                 };
-                let live_event = match event_result {
-                    Ok(event) => event,
-                    Err(error) => {
-                        let _result = events.send(SyncEvent::Failed(error.to_string()));
-                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                        return;
-                    }
-                };
-                if !include_event(&config.params, &live_event) {
-                    continue;
-                }
-                let entry_key = match &live_event {
-                    LiveEvent::InsertLocal { entry } | LiveEvent::InsertRemote { entry, .. } => {
-                        Some(entry.key().to_vec())
-                    }
-                    LiveEvent::ContentReady { .. }
-                    | LiveEvent::PendingContentReady
-                    | LiveEvent::NeighborUp(_)
-                    | LiveEvent::NeighborDown(_)
-                    | LiveEvent::SyncFinished(_) => None,
-                };
-                if let Some(key) = &entry_key && completed_keys.contains(key) {
-                    continue;
-                }
-                if let LiveEvent::ContentReady { hash } = &live_event {
-                    match blob_store.has(*hash).await {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            let msg = format!("content-ready blob {hash} is missing locally");
-                            let _result = events.send(SyncEvent::Failed(msg));
-                            finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                            return;
-                        }
-                        Err(error) => {
-                            let _result = events.send(SyncEvent::Failed(error.to_string()));
-                            finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                            return;
-                        }
-                    }
-                    if let Some(ref cp) = checkpoint {
-                        let _ = cp.mark_completed(hash.as_bytes(), *hash, state.sizes.get(hash).copied().unwrap_or(0));
-                    }
-                }
-                if let Err(error) = state.apply(live_event, &config.params, config.filter.as_ref()) {
-                    let _result = events.send(SyncEvent::Failed(error));
-                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                    return;
+                match processor.process(next_event).await {
+                    IntentEventOutcome::Finished => return,
+                    IntentEventOutcome::Skipped => continue,
+                    IntentEventOutcome::Applied => {}
                 }
                 if !config.mode.is_continuous() && state.sync_finished {
                     let now = tokio::time::Instant::now();
                     quiesce.as_mut().reset(now.checked_add(SETTLE).unwrap_or(now));
                     forced_quiesce.as_mut().reset(now.checked_add(FORCED_QUIESCE).unwrap_or(now));
                 }
-                if !send_progress(&events, &state, started.elapsed()) {
-                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                    return;
-                }
             }
         }
+    }
+}
+
+enum IntentEventOutcome {
+    Finished,
+    Skipped,
+    Applied,
+}
+
+struct IntentEventProcessor<'a> {
+    folder: &'a crate::folder::SyncwebFolder,
+    config: &'a IntentConfig,
+    blob_store: &'a BlobStore,
+    events: &'a mpsc::UnboundedSender<SyncEvent>,
+    checkpoint: Option<&'a SyncCheckpoint>,
+    state: &'a mut IntentState,
+    completed_keys: &'a HashSet<Vec<u8>>,
+    started: Instant,
+}
+
+impl IntentEventProcessor<'_> {
+    async fn process(self, next_event: Option<Result<LiveEvent>>) -> IntentEventOutcome {
+        let Some(event_result) = next_event else {
+            let _result = self.events.send(SyncEvent::Finished);
+            finalize_checkpoint(self.checkpoint, self.state, self.events);
+            return IntentEventOutcome::Finished;
+        };
+        let live_event = match event_result {
+            Ok(event) => event,
+            Err(error) => {
+                let _result = self.events.send(SyncEvent::Failed(error.to_string()));
+                finalize_checkpoint(self.checkpoint, self.state, self.events);
+                return IntentEventOutcome::Finished;
+            }
+        };
+        let event_name = match &live_event {
+            LiveEvent::InsertLocal { .. } => "InsertLocal",
+            LiveEvent::InsertRemote { .. } => "InsertRemote",
+            LiveEvent::ContentReady { .. } => "ContentReady",
+            LiveEvent::PendingContentReady => "PendingContentReady",
+            LiveEvent::NeighborUp(_) => "NeighborUp",
+            LiveEvent::NeighborDown(_) => "NeighborDown",
+            LiveEvent::SyncFinished(_) => "SyncFinished",
+        };
+        tracing::info!(
+            namespace_id = %self.folder.namespace_id(),
+            event = event_name,
+            included = include_event(&self.config.params, &live_event),
+            "engine live event"
+        );
+        if !include_event(&self.config.params, &live_event) {
+            return IntentEventOutcome::Skipped;
+        }
+        if event_key(&live_event).is_some_and(|key| self.completed_keys.contains(&key)) {
+            return IntentEventOutcome::Skipped;
+        }
+        if let LiveEvent::ContentReady { hash } = &live_event {
+            tracing::info!(%hash, "engine saw ContentReady");
+            match self.blob_store.has(*hash).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    let message = format!("content-ready blob {hash} is missing locally");
+                    let _result = self.events.send(SyncEvent::Failed(message));
+                    finalize_checkpoint(self.checkpoint, self.state, self.events);
+                    return IntentEventOutcome::Finished;
+                }
+                Err(error) => {
+                    let _result = self.events.send(SyncEvent::Failed(error.to_string()));
+                    finalize_checkpoint(self.checkpoint, self.state, self.events);
+                    return IntentEventOutcome::Finished;
+                }
+            }
+            if let Some(cp) = self.checkpoint {
+                let _ = cp.mark_completed(hash.as_bytes(), *hash, self.state.sizes.get(hash).copied().unwrap_or(0));
+            }
+            reconcile_after_sync(self.folder.namespace_id(), self.config);
+        }
+        if matches!(live_event, LiveEvent::InsertRemote { .. } | LiveEvent::SyncFinished(_)) {
+            reconcile_after_sync(self.folder.namespace_id(), self.config);
+        }
+        if let Err(error) = self
+            .state
+            .apply(live_event, &self.config.params, self.config.filter.as_ref())
+        {
+            let _result = self.events.send(SyncEvent::Failed(error));
+            finalize_checkpoint(self.checkpoint, self.state, self.events);
+            return IntentEventOutcome::Finished;
+        }
+        if !send_progress(self.events, self.state, self.started.elapsed()) {
+            finalize_checkpoint(self.checkpoint, self.state, self.events);
+            return IntentEventOutcome::Finished;
+        }
+        IntentEventOutcome::Applied
+    }
+}
+
+fn event_key(event: &LiveEvent) -> Option<Vec<u8>> {
+    match event {
+        LiveEvent::InsertLocal { entry } | LiveEvent::InsertRemote { entry, .. } => Some(entry.key().to_vec()),
+        LiveEvent::ContentReady { .. }
+        | LiveEvent::PendingContentReady
+        | LiveEvent::NeighborUp(_)
+        | LiveEvent::NeighborDown(_)
+        | LiveEvent::SyncFinished(_) => None,
     }
 }
 
@@ -580,4 +661,17 @@ fn include_event(params: &SubscribeParams, event: &LiveEvent) -> bool {
 
 fn entry_path(entry: &iroh_docs::Entry) -> std::path::PathBuf {
     Path::new(String::from_utf8_lossy(entry.key()).as_ref()).to_path_buf()
+}
+
+/// Notify a folder's reconciler that content just arrived locally.
+///
+/// The daemon attaches a reconciler to writable folders so remote entries are
+/// materialized (with conflict resolution) as soon as their blobs are local.
+/// The reconciler is fire-and-forget: materialization is idempotent and skips
+/// blobs that are already on disk.
+fn reconcile_after_sync(namespace: NamespaceId, config: &IntentConfig) {
+    if let Some(reconciler) = &config.reconciler {
+        tracing::info!(%namespace, "sync engine invoking folder reconciler");
+        reconciler(namespace);
+    }
 }

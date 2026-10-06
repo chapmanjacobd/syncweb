@@ -1,36 +1,46 @@
 # Conflict Resolution Plan
 
-Status: proposal. No conflict handling is implemented today. This document
-surveys the design space, compares the options, and recommends a phased
-approach.
+Status: partially implemented (2026-10-06). Option B/C Phase 1 (LWW +
+conflict copies at materialize time) plus a guarded version of Option D
+(daemon auto-materialization) are now in place; the text `.diff`
+optimization of Option C and the `syncweb conflicts` CLI are not. This
+document surveys the design space, compares the options, and records the
+recommended phased approach and what shipped.
 
 ## 1. Problem
 
 iroh-docs is a multi-writer CRDT: records are keyed by
 `(namespace, author, key)`, so two devices that edit the same path while
 offline both keep a record for that key. There is no lost update at the CRDT
-level — but syncweb never surfaces the divergence:
+level:
 
-- Every read path collapses variants with
+- Normal read paths collapse variants with
   `Query::single_latest_per_key()` (`syncweb-core/src/node/docs_engine.rs:282,299`).
   The winner is the entry with the greatest `timestamp()`; ties keep the first.
-- `SyncEngine` observes `LiveEvent`s only to update counters/checkpoints
-  (`syncweb-core/src/sync/engine.rs:487-545`); it never writes files.
-- Materialization is explicit (`download`/`join --download`) and also reads the
-  collapsed view (`syncweb-core/src/sync/partial_fetch.rs:66-93`,
-  `syncweb-core/src/daemon/ipc.rs:2119-2161`).
-- The daemon watcher re-imports on-disk files under the local author with a
-  fresh timestamp (`syncweb-core/src/daemon/daemon.rs:1018-1030`), so a
-  materialized remote winner can immediately be re-stamped as a newer local
-  edit and "win" again.
+- Conflict resolution reads every variant
+  (`DocsEngine::list_all_entries`, a plain `Query::all()`), picks the LWW
+  winner by `timestamp()` (ties broken by author bytes), writes the winner at
+  the original path, and writes each loser as `<path>.conflict.<hash>`.
+  (`syncweb-core/src/sync/conflict.rs`).
+- The daemon materializes remote entries of writable folders automatically via
+  `SyncEngine::with_reconciler` -> `build_reconciler`
+  (`syncweb-core/src/daemon/daemon.rs`), coalescing `ContentReady`/`InsertRemote`/
+  `SyncFinished` sync events into a trailing-edge pass. Read-only replicas still
+  materialize only on explicit `download`.
+- The watcher/Importer guards (identical hash to the current latest entry
+  short-circuits `set_blob`; `.conflict.*` files are excluded from scans and
+  never re-imported) prevent a materialized winner from being re-stamped as a
+  newer local edit.
 
-Observed behavior (manual run 2026-10-05, `NF-6`): both nodes edited `a.txt`;
-after re-import + sync each node still showed its own text on disk and no
-`.diff`/`.conflict.<hash>` file. Distinct new files do converge at the doc
-level (`NF-7`) but are not materialized.
+Observed behavior after the fix (manual run 2026-10-06): both nodes edited
+`note.txt` offline; after re-import + sync each node materialized the same
+winner (`bob text version`) at `note.txt` and kept the loser as
+`note.txt.conflict.4a313a7e`. Distinct new files converge and materialize on
+both sides.
 
-The intended UX is already sketched in `docs/offline-conflict.md`.
-`docs/data-models.md` no longer advertises an unimplemented encrypted store.
+The intended UX is sketched in `docs/offline-conflict.md`; this implementation
+covers the "full file saved" fallback (Option B) and leaves the text `.diff`
+optimization (Option C) and `syncweb conflicts` for a follow-up.
 
 ## 2. Requirements and constraints
 

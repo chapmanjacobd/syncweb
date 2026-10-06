@@ -27,7 +27,15 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
         candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
     }
-    let selected = strategy.select(&candidates);
+    let mut selected = strategy.select(&candidates);
+    // Complete short blobs first so a large transfer does not delay the first
+    // useful results of a mixed-size download.
+    selected.sort_by(|left, right| {
+        left.size
+            .cmp(&right.size)
+            .then(left.path.cmp(&right.path))
+            .then(left.hash.cmp(&right.hash))
+    });
     let peers = node
         .topic_tracker()
         .find_peers(folder.namespace_id())

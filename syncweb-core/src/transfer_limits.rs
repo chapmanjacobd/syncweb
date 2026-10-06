@@ -292,7 +292,11 @@ impl PendingTransfer {
     }
 }
 
-/// FIFO queue of blobs waiting for their download quota.
+/// Size-prioritized queue of blobs waiting for their download quota.
+///
+/// Shorter blobs are started first when they fit the remaining budget. This
+/// improves time-to-first-content for mixed workloads while leaving the quota
+/// accounting unchanged.
 #[derive(Debug, Default)]
 pub struct TransferQueue {
     inner: Mutex<VecDeque<PendingTransfer>>,
@@ -319,12 +323,16 @@ impl TransferQueue {
         true
     }
 
-    /// Remove and return the first item that fits the download budget.
+    /// Remove and return the smallest item that fits the download budget.
     pub fn pop_fitting(&self, budget: &TransferBudget) -> Option<PendingTransfer> {
         let mut queue = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let available = budget.available(Direction::Download);
         let position = queue
             .iter()
-            .position(|item| item.size <= budget.available(Direction::Download))?;
+            .enumerate()
+            .filter(|(_, item)| item.size <= available)
+            .min_by_key(|(_, item)| item.size)
+            .map(|(position, _)| position)?;
         queue.remove(position)
     }
 
@@ -457,13 +465,36 @@ mod tests {
         )));
         assert_eq!(queue.len(), 2);
 
-        // A 500-byte budget pops the 400-byte head and leaves the 900-byte item.
+        // A 500-byte budget skips the 900-byte item and pops the 400-byte item.
         let tight = TransferBudget::new(limits((Some(500), None, None), (None, None, None)));
         let popped = queue.pop_fitting(&tight).expect("400-byte item fits");
         assert_eq!(popped.size, 400);
         assert_eq!(queue.len(), 1);
         assert!(queue.pop_fitting(&tight).is_none(), "900 bytes must not fit");
         assert_eq!(queue.pending_bytes(), 900);
+    }
+
+    #[test]
+    fn queue_prioritizes_shorter_fitting_transfers() {
+        let namespace = NamespaceId::from([8_u8; 32]);
+        let queue = TransferQueue::new();
+        queue.enqueue(PendingTransfer::new(
+            namespace,
+            Hash::from_bytes([1; 32]),
+            900,
+            PathBuf::from("large"),
+        ));
+        queue.enqueue(PendingTransfer::new(
+            namespace,
+            Hash::from_bytes([2; 32]),
+            400,
+            PathBuf::from("small"),
+        ));
+
+        let budget = TransferBudget::new(limits((None, None, None), (None, None, None)));
+        let popped = queue.pop_fitting(&budget).expect("a queued transfer fits");
+        assert_eq!(popped.path, PathBuf::from("small"));
+        assert_eq!(queue.len(), 1);
     }
 
     #[test]

@@ -774,24 +774,12 @@ pub enum ScheduleCommand {
     Set {
         #[arg(long)]
         active: Option<String>,
-        #[arg(long, help = "Bandwidth rate (e.g. '500K', '2M')")]
-        bandwidth: Option<String>,
-        #[arg(
-            long,
-            requires = "bandwidth",
-            help = "Time window for the bandwidth limit (e.g. '08:00-18:00')"
-        )]
-        period: Option<String>,
     },
     #[command(about = "Set schedule overrides for a named folder")]
     Folder {
         name: String,
         #[arg(long)]
         active: Option<String>,
-        #[arg(long)]
-        max_upload: Option<String>,
-        #[arg(long)]
-        max_download: Option<String>,
     },
 }
 

@@ -1,10 +1,11 @@
 # Throughput- and availability-oriented defaults.
-[bandwidth]
-max_upload = "0"
-max_download = "0"
-
 [schedule]
 active_hours = ""
+
+# No transfer quotas: omit [transfer_limits], or set keys to "0" for unlimited.
+[transfer_limits]
+max_upload_per_month = "0"
+max_download_per_month = "0"
 
 [parallel]
 threads = 0

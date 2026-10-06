@@ -1,7 +1,7 @@
 # Storage- and battery-constrained defaults.
-[bandwidth]
-max_upload = "100KB/s"
-max_download = "500KB/s"
+[transfer_limits]
+max_upload_per_day = "250M"
+max_download_per_day = "1G"
 
 [parallel]
 threads = 1

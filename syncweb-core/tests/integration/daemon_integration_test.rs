@@ -15,7 +15,6 @@ use syncweb_core::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
-    schedule::BandwidthWindowConfig,
     storage::{config::SubscribeFilters, node_db::NodeDatabase},
 };
 use tokio::task::JoinHandle;
@@ -211,7 +210,7 @@ async fn test_daemon_reload_and_sync_over_ipc() -> Result<()> {
     {
         let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
         let mut config = node_db.load_app_config()?;
-        config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
+        config.schedule.active_hours = "00:00-24:00".to_owned();
         node_db.save_app_config(&config)?;
     }
 
@@ -550,7 +549,6 @@ async fn test_daemon_schedule_pause_resume() -> Result<()> {
         let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
         let mut config = node_db.load_app_config()?;
         config.schedule.active_hours = inactive_window.clone();
-        config.schedule.bandwidth = vec![BandwidthWindowConfig::new("00:00-24:00", "0", "1MB/s")];
         node_db.save_app_config(&config)?;
     }
 

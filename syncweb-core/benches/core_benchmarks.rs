@@ -46,7 +46,7 @@ use syncweb_core::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
-    schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
+    schedule::{ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
     search::{FindEngine, FindQuery},
     sort::{SortConfig, SortCriterion, SortEntry, Sorter},
 };
@@ -182,18 +182,12 @@ fn bench_schedule(c: &mut Criterion) {
     let mut folders = std::collections::BTreeMap::new();
     let mut media = ScheduleFolderConfig::default();
     media.active_hours = Some(String::from("01:00-05:00"));
-    media.max_download = Some(String::from("50MB/s"));
     folders.insert(String::from("media"), media);
     let mut backup = ScheduleFolderConfig::default();
     backup.active_hours = Some(String::from("02:00-06:00"));
-    backup.max_upload = Some(String::from("20MB/s"));
     folders.insert(String::from("backup"), backup);
     let mut config = ScheduleConfig::default();
     config.active_hours = String::from("22:00-06:00");
-    config.bandwidth = vec![
-        BandwidthWindowConfig::new("08:00-18:00", "1MB/s", "5MB/s"),
-        BandwidthWindowConfig::new("18:00-08:00", "0", "0"),
-    ];
     config.folders = folders;
     let Ok(manager) = ScheduleManager::from_config(&config) else {
         unreachable!();
@@ -207,19 +201,11 @@ fn bench_schedule(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("current_limits_at", |b| {
-        b.iter(|| {
-            for minute in (0..1440).step_by(10) {
-                let _ = std::hint::black_box(manager.current_limits_at(None, minute));
-            }
-        });
-    });
-
     group.bench_function("per_folder_evaluate", |b| {
         b.iter(|| {
             for minute in (0..1440).step_by(10) {
                 let _ = std::hint::black_box(manager.is_active_at(Some("media"), minute));
-                let _ = std::hint::black_box(manager.current_limits_at(Some("backup"), minute));
+                let _ = std::hint::black_box(manager.is_active_at(Some("backup"), minute));
             }
         });
     });
@@ -357,8 +343,11 @@ fn bench_ipc_round_trip(c: &mut Criterion) {
 }
 
 fn bench_supervisor_restart_latency(c: &mut Criterion) {
-    let supervisor =
-        syncweb_core::daemon::IntentSupervisor::new(3, Duration::from_millis(1), Duration::from_millis(500));
+    let supervisor = syncweb_core::daemon::IntentSupervisor::new(
+        std::time::Duration::from_hours(2_160),
+        Duration::from_millis(1),
+        Duration::from_millis(500),
+    );
     let mut group = c.benchmark_group("daemon_supervisor");
     group.bench_function("restart_latency", |b| {
         b.iter(|| std::hint::black_box(supervisor.backoff_delay(1)));

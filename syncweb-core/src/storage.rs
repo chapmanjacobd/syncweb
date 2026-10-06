@@ -2,7 +2,7 @@ pub mod config;
 pub mod node_db;
 pub mod stats_db;
 
-pub use config::{AdvancedConfig, BandwidthConfig, BepConfig, CacheConfig, Config, ParallelConfig};
+pub use config::{AdvancedConfig, BepConfig, CacheConfig, Config, ParallelConfig};
 
 /// Common trait for database maintenance operations.
 pub trait Vacuumable {

@@ -53,8 +53,6 @@ fn test_config_load_save() -> anyhow::Result<()> {
     config.bep.relay_timeout = 20;
     config.bep.auto_fallback = false;
     config.schedule.active_hours = "08:00-22:00".to_owned();
-    config.bandwidth.max_upload = "2MB/s".to_owned();
-    config.bandwidth.max_download = "10MB/s".to_owned();
     config.parallel.threads = 8;
     config.cache.max_cache_size = 20000;
     config.advanced.blob_cache_size_gb = 50;
@@ -66,8 +64,6 @@ fn test_config_load_save() -> anyhow::Result<()> {
     anyhow::ensure!(loaded == config, "loaded config must equal saved config");
     anyhow::ensure!(loaded.bep.relay_timeout == 20);
     anyhow::ensure!(loaded.schedule.active_hours == "08:00-22:00");
-    anyhow::ensure!(loaded.bandwidth.max_upload == "2MB/s");
-    anyhow::ensure!(loaded.bandwidth.max_download == "10MB/s");
     anyhow::ensure!(loaded.parallel.threads == 8);
     anyhow::ensure!(loaded.cache.max_cache_size == 20000);
     anyhow::ensure!(loaded.advanced.blob_cache_size_gb == 50);
@@ -87,17 +83,11 @@ fn test_per_folder_overrides() -> anyhow::Result<()> {
 [schedule]
 active_hours = "08:00-22:00"
 
-[bandwidth]
-max_upload = "2MB/s"
-max_download = "10MB/s"
-
 [schedule.folders.media]
 active_hours = "01:00-05:00"
-max_download = "50MB/s"
 
 [schedule.folders.backup]
 active_hours = "02:00-06:00"
-max_upload = "20MB/s"
 "#;
     std::fs::create_dir_all(&directory)?;
     std::fs::write(&path, toml_content)?;
@@ -113,15 +103,44 @@ max_upload = "20MB/s"
     );
     let media = config.schedule.folders.get("media").context("media folder")?;
     anyhow::ensure!(media.active_hours.as_deref() == Some("01:00-05:00"));
-    anyhow::ensure!(media.max_download.as_deref() == Some("50MB/s"));
 
     let backup = config.schedule.folders.get("backup").context("backup folder")?;
     anyhow::ensure!(backup.active_hours.as_deref() == Some("02:00-06:00"));
-    anyhow::ensure!(backup.max_upload.as_deref() == Some("20MB/s"));
 
     config.save(&path)?;
     let reloaded = Config::load(&path)?;
     anyhow::ensure!(reloaded == config, "reloaded config must equal original");
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn transfer_limits_round_trip_and_parse() -> anyhow::Result<()> {
+    use syncweb_core::transfer_limits::{TransferLimits, TransferLimitsConfig};
+
+    let mut config = Config::default();
+    config.set("transfer_limits.max_download_per_hour", "1G")?;
+    config.set("transfer_limits.max_download_per_day", "10G")?;
+    config.set("transfer_limits.max_upload_per_month", "500M")?;
+    anyhow::ensure!(!config.transfer_limits.is_empty());
+
+    let directory = std::env::temp_dir().join(format!("syncweb-config-limits-{}", uuid::Uuid::new_v4()));
+    let path = directory.join("config.toml");
+    config.save(&path)?;
+    let loaded = Config::load(&path)?;
+    anyhow::ensure!(loaded == config, "transfer limits must round-trip");
+
+    let limits = TransferLimits::from_config(&loaded.transfer_limits)?;
+    anyhow::ensure!(!limits.download.is_unlimited());
+    anyhow::ensure!(limits.download.per_hour == Some(1_000_000_000));
+    anyhow::ensure!(limits.download.per_day == Some(10_000_000_000));
+    anyhow::ensure!(limits.upload.per_month == Some(500_000_000));
+
+    // Unknown keys are rejected, and an empty config is unlimited.
+    let mut empty = TransferLimitsConfig::default();
+    anyhow::ensure!(empty.set("transfer_limits.nope", "1G").is_ok_and(|applied| !applied));
+    anyhow::ensure!(TransferLimits::from_config(&empty)?.is_unlimited());
 
     std::fs::remove_dir_all(directory)?;
     Ok(())

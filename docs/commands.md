@@ -559,8 +559,8 @@ syncweb stats files --folder ./documents
 syncweb verify ./documents
 syncweb config schedule
 syncweb config schedule set --active "22:00-06:00"
-syncweb config schedule set --bandwidth "5MB/s" --period "08:00-18:00"
 syncweb config schedule folder --active "01:00-05:00" media
+syncweb config set transfer_limits.max_download_per_day 20G
 
 # Download with limits (max entries)
 syncweb download --max-count 10 /path/to/files
@@ -730,14 +730,6 @@ default_sync_mode = "SendReceive"
 default_max_entries = 0  # 0 = unlimited
 default_max_size = 0     # 0 = unlimited
 
-[bandwidth]
-# Global bandwidth limits (bytes/sec, 0 = unlimited)
-max_upload = 0
-max_download = 0
-# Per-peer limits (applied to all peers unless overridden)
-per_peer_upload = 0
-per_peer_download = 0
-
 [public]
 # Public folder settings
 announce_enabled = true
@@ -759,21 +751,18 @@ auto_fallback = true
 # Global sync schedule
 active_hours = ""  # empty = always active
 
-# Bandwidth limits by time of day
-[[schedule.bandwidth]]
-hours = "08:00-18:00"
-max_upload = "1MB/s"
-max_download = "5MB/s"
-
-[[schedule.bandwidth]]
-hours = "18:00-08:00"
-max_upload = "0"  # unlimited
-max_download = "0"
-
 # Per-folder schedule overrides
 [schedule.folders.media]
 active_hours = "01:00-05:00"
-max_download = "50MB/s"
+
+[transfer_limits]
+# Rolling byte quotas; omit a key (or use "0") for unlimited.
+max_download_per_hour = "2G"
+max_download_per_day = "20G"
+max_download_per_month = "400G"
+max_upload_per_hour = "1G"
+max_upload_per_day = "10G"
+max_upload_per_month = "200G"
 
 [networks]
 # Networks are auto-discovered; this section can pin specific network config

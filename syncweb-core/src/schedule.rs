@@ -15,41 +15,7 @@ pub struct ScheduleConfig {
     #[serde(default)]
     pub active_hours: String,
     #[serde(default)]
-    pub bandwidth: Vec<BandwidthWindowConfig>,
-    #[serde(default)]
     pub folders: BTreeMap<String, ScheduleFolderConfig>,
-}
-
-/// A bandwidth window as represented in the configuration file.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub struct BandwidthWindowConfig {
-    pub hours: String,
-    #[serde(default = "unlimited_rate")]
-    pub max_upload: String,
-    #[serde(default = "unlimited_rate")]
-    pub max_download: String,
-}
-
-impl Default for BandwidthWindowConfig {
-    fn default() -> Self {
-        Self {
-            hours: "00:00-24:00".to_owned(),
-            max_upload: unlimited_rate(),
-            max_download: unlimited_rate(),
-        }
-    }
-}
-
-impl BandwidthWindowConfig {
-    #[must_use]
-    pub fn new(hours: impl Into<String>, max_upload: impl Into<String>, max_download: impl Into<String>) -> Self {
-        Self {
-            hours: hours.into(),
-            max_upload: max_upload.into(),
-            max_download: max_download.into(),
-        }
-    }
 }
 
 /// Per-folder schedule settings. Missing fields inherit the global schedule.
@@ -58,14 +24,6 @@ impl BandwidthWindowConfig {
 pub struct ScheduleFolderConfig {
     #[serde(default)]
     pub active_hours: Option<String>,
-    #[serde(default)]
-    pub max_upload: Option<String>,
-    #[serde(default)]
-    pub max_download: Option<String>,
-}
-
-fn unlimited_rate() -> String {
-    "0".to_owned()
 }
 
 /// A half-open time interval in minutes after midnight.
@@ -153,53 +111,53 @@ fn parse_clock(value: &str) -> Result<u16> {
     Ok(hour_value.saturating_mul(60).saturating_add(minute_value))
 }
 
-/// Parse a byte-per-second rate such as `5MB/s`, `500KB/s`, `2M`, `500K`, or `0`.
+/// Parse a byte size such as `5MB`, `500KB`, `2M`, `500K`, `4096`, or `0`.
 ///
 /// The scale letter (`k`/`m`/`g`/`t`) is case-insensitive; the unit letter
 /// distinguishes bytes (`B`) from bits (`b`). So `5KB` is 5000 bytes while
 /// `5Kb` is 5000 bits (625 bytes), and bare scales such as `2M` mean bytes.
+/// A trailing `/s` is accepted for backward compatibility but ignored.
 ///
 /// # Errors
 ///
-/// Returns an error if the rate is not a whole number of bytes per second
-/// with a supported suffix.
-pub fn parse_rate(value: &str) -> Result<Option<u64>> {
+/// Returns an error if the value is not a whole number of bytes with a
+/// supported suffix.
+pub fn parse_byte_size(value: &str) -> Result<Option<u64>> {
     let normalized = value.trim();
     if normalized.is_empty() || normalized == "0" || normalized.eq_ignore_ascii_case("unlimited") {
         return Ok(None);
     }
-    let rate_number = normalized
+    let size_number = normalized
         .strip_suffix("/s")
         .or_else(|| normalized.strip_suffix("/S"))
         .unwrap_or(normalized)
         .trim();
-    let (numeric_part, multiplier, is_bytes) = split_rate_suffix(rate_number);
+    let (numeric_part, multiplier, is_bytes) = split_size_suffix(size_number);
     let amount = numeric_part.trim().parse::<u64>().map_err(|error| {
         SyncwebError::InvalidConfig(format!(
-            "invalid bandwidth rate {value:?}; expected a whole number with an optional B/s, KB/s, or Kb/s suffix: {error}"
+            "invalid byte size {value:?}; expected a whole number with an optional B, KB, or Kb suffix: {error}"
         ))
     })?;
     let scaled = amount.checked_mul(multiplier);
     if is_bytes {
         scaled
             .map(Some)
-            .ok_or_else(|| SyncwebError::InvalidConfig(format!("bandwidth rate {value:?} is too large")))
+            .ok_or_else(|| SyncwebError::InvalidConfig(format!("byte size {value:?} is too large")))
     } else {
-        let bits =
-            scaled.ok_or_else(|| SyncwebError::InvalidConfig(format!("bandwidth rate {value:?} is too large")))?;
+        let bits = scaled.ok_or_else(|| SyncwebError::InvalidConfig(format!("byte size {value:?} is too large")))?;
         if bits.rem_euclid(8) != 0 {
             return Err(SyncwebError::InvalidConfig(format!(
-                "bandwidth rate {value:?} is not a whole number of bytes per second"
+                "byte size {value:?} is not a whole number of bytes"
             )));
         }
         Ok(Some(bits.checked_div(8).unwrap_or_default()))
     }
 }
 
-/// Split a rate into its numeric prefix, scale multiplier, and whether the
+/// Split a size into its numeric prefix, scale multiplier, and whether the
 /// unit is bytes (true) or bits (false).
 #[must_use]
-fn split_rate_suffix(value: &str) -> (&str, u64, bool) {
+fn split_size_suffix(value: &str) -> (&str, u64, bool) {
     let lower = value.to_ascii_lowercase();
     for (suffix, multiplier) in [
         ("tibit", 1_u64 << 40),
@@ -246,39 +204,17 @@ fn split_rate_suffix(value: &str) -> (&str, u64, bool) {
     (&value[..cut], multiplier, is_bytes)
 }
 
-/// A parsed bandwidth window.
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub struct BandwidthWindow {
-    pub hours: TimeWindow,
-    pub max_upload: Option<u64>,
-    pub max_download: Option<u64>,
-}
-
 /// Parsed schedule settings for one scope.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct Schedule {
     pub active_hours: Option<TimeWindow>,
-    pub bandwidth: Vec<BandwidthWindow>,
-}
-
-/// Effective limits at a point in time.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub struct BandwidthLimits {
-    pub max_upload: Option<u64>,
-    pub max_download: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
 struct FolderSchedule {
     active_hours: Option<TimeWindow>,
     active_hours_override: bool,
-    max_upload: Option<u64>,
-    max_upload_override: bool,
-    max_download: Option<u64>,
-    max_download_override: bool,
 }
 
 /// Evaluates global and per-folder schedules.
@@ -294,9 +230,9 @@ impl ScheduleManager {
     ///
     /// # Errors
     ///
-    /// Returns an error if a schedule interval or bandwidth rate is invalid.
+    /// Returns an error if a schedule interval is invalid.
     pub fn from_config(config: &ScheduleConfig) -> Result<Self> {
-        let global = parse_schedule(&config.active_hours, &config.bandwidth)?;
+        let global = parse_schedule(&config.active_hours)?;
         let folders = config
             .folders
             .iter()
@@ -307,27 +243,11 @@ impl ScheduleManager {
                     .map(TimeWindow::parse)
                     .transpose()?
                     .map_or((false, None), |hours| (true, hours));
-                let (max_upload_override, max_upload) = folder
-                    .max_upload
-                    .as_deref()
-                    .map(parse_rate)
-                    .transpose()?
-                    .map_or((false, None), |rate| (true, rate));
-                let (max_download_override, max_download) = folder
-                    .max_download
-                    .as_deref()
-                    .map(parse_rate)
-                    .transpose()?
-                    .map_or((false, None), |rate| (true, rate));
                 Ok((
                     name.clone(),
                     FolderSchedule {
                         active_hours,
                         active_hours_override,
-                        max_upload,
-                        max_upload_override,
-                        max_download,
-                        max_download_override,
                     },
                 ))
             })
@@ -350,35 +270,6 @@ impl ScheduleManager {
             .and_then(|schedule| schedule.active_hours)
             .or(self.global.active_hours);
         active_hours.is_none_or(|window| window.contains(minute))
-    }
-
-    /// Return the limits for a folder at the current local wall-clock time.
-    #[must_use]
-    pub fn current_limits(&self, folder: Option<&str>) -> BandwidthLimits {
-        self.current_limits_at(folder, current_minute())
-    }
-
-    /// Return the limits for a folder at a supplied minute after midnight.
-    #[must_use]
-    pub fn current_limits_at(&self, folder: Option<&str>, minute: u16) -> BandwidthLimits {
-        let mut limits = self
-            .global
-            .bandwidth
-            .iter()
-            .find(|window| window.hours.contains(minute))
-            .map_or_else(BandwidthLimits::default, |window| BandwidthLimits {
-                max_upload: window.max_upload,
-                max_download: window.max_download,
-            });
-        if let Some(folder_schedule) = folder.and_then(|name| self.folders.get(name)) {
-            if folder_schedule.max_upload_override {
-                limits.max_upload = folder_schedule.max_upload;
-            }
-            if folder_schedule.max_download_override {
-                limits.max_download = folder_schedule.max_download;
-            }
-        }
-        limits
     }
 
     /// Return the next minute at which the selected schedule becomes active.
@@ -407,23 +298,9 @@ impl ScheduleManager {
     }
 }
 
-fn parse_schedule(active_hours: &str, bandwidth_configs: &[BandwidthWindowConfig]) -> Result<Schedule> {
-    let bandwidth = bandwidth_configs
-        .iter()
-        .map(|window| {
-            let hours = TimeWindow::parse(&window.hours)?.ok_or_else(|| {
-                SyncwebError::InvalidConfig("bandwidth windows must specify a non-empty hours interval".to_owned())
-            })?;
-            Ok(BandwidthWindow {
-                hours,
-                max_upload: parse_rate(&window.max_upload)?,
-                max_download: parse_rate(&window.max_download)?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+fn parse_schedule(active_hours: &str) -> Result<Schedule> {
     Ok(Schedule {
         active_hours: TimeWindow::parse(active_hours)?,
-        bandwidth,
     })
 }
 
@@ -441,63 +318,77 @@ mod tests {
     use anyhow::ensure;
 
     #[test]
-    fn parse_rate_accepts_bare_scale_suffixes() -> anyhow::Result<()> {
-        ensure!(parse_rate("500K")? == Some(500_000), "500K should be 500_000");
-        ensure!(parse_rate("2M")? == Some(2_000_000), "2M should be 2_000_000");
-        ensure!(parse_rate("1G")? == Some(1_000_000_000), "1G should be 1_000_000_000");
-        ensure!(parse_rate("2m/s")? == Some(2_000_000), "2m/s should be 2_000_000");
+    fn parse_byte_size_accepts_bare_scale_suffixes() -> anyhow::Result<()> {
+        ensure!(parse_byte_size("500K")? == Some(500_000), "500K should be 500_000");
+        ensure!(parse_byte_size("2M")? == Some(2_000_000), "2M should be 2_000_000");
         ensure!(
-            parse_rate("2T")? == Some(2_000_000_000_000),
+            parse_byte_size("1G")? == Some(1_000_000_000),
+            "1G should be 1_000_000_000"
+        );
+        ensure!(
+            parse_byte_size("2T")? == Some(2_000_000_000_000),
             "2T should be 2_000_000_000_000"
         );
-        ensure!(parse_rate("0")?.is_none(), "0 should be unlimited");
-        ensure!(parse_rate("unlimited")?.is_none(), "unlimited should be unlimited");
+        ensure!(parse_byte_size("0")?.is_none(), "0 should be unlimited");
+        ensure!(parse_byte_size("unlimited")?.is_none(), "unlimited should be unlimited");
         Ok(())
     }
 
     #[test]
-    fn parse_rate_preserves_existing_suffixes() -> anyhow::Result<()> {
-        ensure!(parse_rate("5MB/s")? == Some(5_000_000), "5MB/s should be 5_000_000");
-        ensure!(parse_rate("2MiB")? == Some(2_097_152), "2MiB should be 2_097_152");
-        ensure!(parse_rate("3KiB")? == Some(3_072), "3KiB should be 3_072");
-        ensure!(parse_rate("250B")? == Some(250), "250B should be 250");
-        ensure!(parse_rate("4096")? == Some(4096), "plain number should be bytes");
-        Ok(())
-    }
-
-    #[test]
-    fn parse_rate_distinguishes_bytes_from_bits() -> anyhow::Result<()> {
-        ensure!(parse_rate("5KB")? == Some(5000), "5KB should be 5000 bytes");
-        ensure!(parse_rate("5Kb")? == Some(625), "5Kb should be 5000 bits = 625 bytes");
-        ensure!(parse_rate("1MB")? == Some(1_000_000), "1MB should be 1_000_000 bytes");
+    fn parse_byte_size_preserves_existing_suffixes() -> anyhow::Result<()> {
+        ensure!(parse_byte_size("5MB")? == Some(5_000_000), "5MB should be 5_000_000");
+        ensure!(parse_byte_size("2MiB")? == Some(2_097_152), "2MiB should be 2_097_152");
+        ensure!(parse_byte_size("3KiB")? == Some(3_072), "3KiB should be 3_072");
+        ensure!(parse_byte_size("250B")? == Some(250), "250B should be 250");
+        ensure!(parse_byte_size("4096")? == Some(4096), "plain number should be bytes");
         ensure!(
-            parse_rate("1Mb")? == Some(125_000),
+            parse_byte_size("5MB/s")? == Some(5_000_000),
+            "a legacy /s suffix should be ignored"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_byte_size_distinguishes_bytes_from_bits() -> anyhow::Result<()> {
+        ensure!(parse_byte_size("5KB")? == Some(5000), "5KB should be 5000 bytes");
+        ensure!(
+            parse_byte_size("5Kb")? == Some(625),
+            "5Kb should be 5000 bits = 625 bytes"
+        );
+        ensure!(
+            parse_byte_size("1MB")? == Some(1_000_000),
+            "1MB should be 1_000_000 bytes"
+        );
+        ensure!(
+            parse_byte_size("1Mb")? == Some(125_000),
             "1Mb should be 1_000_000 bits = 125_000 bytes"
         );
-        ensure!(parse_rate("2Mbit")? == Some(250_000), "2Mbit should be 250_000 bytes");
-        ensure!(parse_rate("5kb/s")? == Some(625), "5kb/s should be 625 bytes");
-        ensure!(parse_rate("8b")? == Some(1), "8b should be 1 byte");
-        ensure!(parse_rate("1b").is_err(), "1 bit should not be a whole byte");
         ensure!(
-            parse_rate("2TB")? == Some(2_000_000_000_000),
+            parse_byte_size("2Mbit")? == Some(250_000),
+            "2Mbit should be 250_000 bytes"
+        );
+        ensure!(parse_byte_size("8b")? == Some(1), "8b should be 1 byte");
+        ensure!(parse_byte_size("1b").is_err(), "1 bit should not be a whole byte");
+        ensure!(
+            parse_byte_size("2TB")? == Some(2_000_000_000_000),
             "2TB should be 2 TB bytes"
         );
         ensure!(
-            parse_rate("2Tb")? == Some(250_000_000_000),
+            parse_byte_size("2Tb")? == Some(250_000_000_000),
             "2Tb should be 2 TB bits = 250 GB bytes"
         );
         ensure!(
-            parse_rate("1TiB")? == Some(1_099_511_627_776),
+            parse_byte_size("1TiB")? == Some(1_099_511_627_776),
             "1TiB should be 2^40 bytes"
         );
         Ok(())
     }
 
     #[test]
-    fn parse_rate_rejects_invalid_values() -> anyhow::Result<()> {
-        ensure!(parse_rate("banana").is_err(), "non-numeric rate should fail");
-        ensure!(parse_rate("-2M").is_err(), "negative rate should fail");
-        ensure!(parse_rate("M").is_err(), "bare suffix should fail");
+    fn parse_byte_size_rejects_invalid_values() -> anyhow::Result<()> {
+        ensure!(parse_byte_size("banana").is_err(), "non-numeric size should fail");
+        ensure!(parse_byte_size("-2M").is_err(), "negative size should fail");
+        ensure!(parse_byte_size("M").is_err(), "bare suffix should fail");
         Ok(())
     }
 }

@@ -510,8 +510,8 @@ fn stats_network_filters_and_reset() -> anyhow::Result<()> {
 }
 
 #[test]
-fn config_schedule_bandwidth_and_period() -> anyhow::Result<()> {
-    let directory = cli_test_dir("config-schedule-bandwidth");
+fn config_schedule_active_and_period() -> anyhow::Result<()> {
+    let directory = cli_test_dir("config-schedule-active");
     let data_dir = directory.to_str().context("UTF-8 path")?;
 
     let set = syncweb(&[
@@ -522,14 +522,10 @@ fn config_schedule_bandwidth_and_period() -> anyhow::Result<()> {
         "set",
         "--active",
         "08:00-18:00",
-        "--bandwidth",
-        "2M",
-        "--period",
-        "08:00-18:00",
     ])?;
     ensure!(
         set.status.success(),
-        "config schedule set bandwidth: {}",
+        "config schedule set: {}",
         String::from_utf8_lossy(&set.stderr)
     );
 
@@ -540,8 +536,6 @@ fn config_schedule_bandwidth_and_period() -> anyhow::Result<()> {
         stdout.contains("08:00-18:00"),
         "schedule active hours persisted: {stdout}"
     );
-    ensure!(stdout.contains("2M"), "schedule bandwidth rate persisted: {stdout}");
-    ensure!(stdout.contains("[[bandwidth]]"), "bandwidth window persisted: {stdout}");
 
     std::fs::remove_dir_all(directory)?;
     Ok(())
@@ -561,10 +555,6 @@ fn config_schedule_folder_override() -> anyhow::Result<()> {
         "project",
         "--active",
         "09:00-17:00",
-        "--max-upload",
-        "500K",
-        "--max-download",
-        "1M",
     ])?;
     ensure!(
         set.status.success(),
@@ -579,8 +569,45 @@ fn config_schedule_folder_override() -> anyhow::Result<()> {
         stdout.contains("[folders.project]"),
         "folder override persisted: {stdout}"
     );
-    ensure!(stdout.contains("500K"), "max_upload persisted: {stdout}");
-    ensure!(stdout.contains("1M"), "max_download persisted: {stdout}");
+    ensure!(stdout.contains("09:00-17:00"), "active hours persisted: {stdout}");
+
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn config_transfer_limits_round_trip() -> anyhow::Result<()> {
+    let directory = cli_test_dir("config-transfer-limits");
+    let data_dir = directory.to_str().context("UTF-8 path")?;
+
+    let set = syncweb(&[
+        "--data-dir",
+        data_dir,
+        "config",
+        "set",
+        "transfer_limits.max_download_per_day",
+        "2G",
+    ])?;
+    ensure!(
+        set.status.success(),
+        "config set transfer_limits: {}",
+        String::from_utf8_lossy(&set.stderr)
+    );
+
+    let show = syncweb(&["--data-dir", data_dir, "config", "show", "transfer_limits"])?;
+    ensure!(show.status.success());
+    let stdout = String::from_utf8(show.stdout)?;
+    ensure!(stdout.contains("2G"), "transfer limit persisted: {stdout}");
+
+    let bad = syncweb(&[
+        "--data-dir",
+        data_dir,
+        "config",
+        "set",
+        "transfer_limits.max_download_per_day",
+        "not-a-size",
+    ])?;
+    ensure!(!bad.status.success(), "an invalid byte count must be rejected");
 
     std::fs::remove_dir_all(directory)?;
     Ok(())

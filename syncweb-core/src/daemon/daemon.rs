@@ -25,6 +25,7 @@ use crate::{
     schedule::ScheduleManager,
     storage::{config::SubscribeFilters, node_db::NodeDatabase, stats_db::StatsDatabase},
     sync::{SubscribeParams, SyncEngine, cancel_session, is_active},
+    transfer_limits::{Direction, PendingTransfer, TransferBudget, TransferLimits, TransferQueue},
 };
 
 use crate::node::iroh_node::discovery_scope;
@@ -33,7 +34,7 @@ use super::{
     DaemonHandle, DaemonState, DaemonStatus, FolderEntry, IpcServer, ManagedPool, PidLock, WatchConfig,
     current_timestamp, daemon_socket_path,
     state::{BandwidthSnapshot, DaemonStatusReport, ScheduleStatus, load_filter_engine},
-    supervisor::{BandwidthAccountant, IntentControls, IntentSupervisor, SupervisionOptions},
+    supervisor::{BandwidthAccountant, DEFAULT_RETRY_WINDOW, IntentControls, IntentSupervisor, SupervisionOptions},
 };
 
 /// Configuration used to construct and run a daemon.
@@ -44,7 +45,8 @@ pub struct DaemonConfig {
     pub network: Option<String>,
     pub sync_interval: Duration,
     pub observation_ttl: Duration,
-    pub max_retries: u32,
+    /// Window after the first intent attempt during which failures are retried.
+    pub retry_window: Duration,
     pub backoff_base: Duration,
     pub backoff_max: Duration,
     pub rayon_threads: usize,
@@ -65,7 +67,7 @@ impl Default for DaemonConfig {
             network: None,
             sync_interval: Duration::from_mins(1),
             observation_ttl: Duration::from_hours(1),
-            max_retries: 3,
+            retry_window: DEFAULT_RETRY_WINDOW,
             backoff_base: Duration::from_secs(1),
             backoff_max: Duration::from_mins(1),
             rayon_threads: std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
@@ -102,6 +104,11 @@ pub struct Daemon {
     folder_manager: FolderManager,
     sync_engine: SyncEngine,
     schedule_manager: tokio::sync::RwLock<Option<ScheduleManager>>,
+    transfer_budget: Arc<TransferBudget>,
+    transfer_queue: Arc<TransferQueue>,
+    /// Folders whose downloads were deferred to satisfy a download quota, so
+    /// the default download policy can be restored when limits are removed.
+    deferred_downloads: Mutex<HashSet<NamespaceId>>,
     node: Arc<IrohNode>,
     handle: DaemonHandle,
     sync_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Option<String>>>,
@@ -217,7 +224,12 @@ impl Daemon {
         node_db: &NodeDatabase,
         pid_lock: &PidLock,
         data_dir: &Path,
-    ) -> Result<(Option<ScheduleManager>, Option<FilterEngine>, DaemonState)> {
+    ) -> Result<(
+        Option<ScheduleManager>,
+        Option<FilterEngine>,
+        DaemonState,
+        TransferLimits,
+    )> {
         let app_config = node_db.load_app_config().inspect_err(|_error| {
             let _ = pid_lock.release();
         })?;
@@ -230,6 +242,9 @@ impl Daemon {
                 return Err(error);
             }
         };
+        let transfer_limits = TransferLimits::from_config(&app_config.transfer_limits).inspect_err(|_error| {
+            let _ = pid_lock.release();
+        })?;
         let filter_engine = load_filter_engine(node_db, data_dir).inspect_err(|_error| {
             let _ = pid_lock.release();
         })?;
@@ -243,7 +258,7 @@ impl Daemon {
         node_db.save_lifecycle(&initial_state).inspect_err(|_error| {
             let _ = pid_lock.release();
         })?;
-        Ok((schedule_manager, filter_engine, initial_state))
+        Ok((schedule_manager, filter_engine, initial_state, transfer_limits))
     }
 
     /// Create a daemon, acquire its process lock, and persist its running
@@ -257,7 +272,7 @@ impl Daemon {
         std::fs::create_dir_all(&config.data_dir)?;
         let (node_db, stats_db, pid_lock) = Self::init_databases(&config)?;
         node_db.recover_transfer_jobs()?;
-        let (schedule_manager, filter_engine, initial_state) =
+        let (schedule_manager, filter_engine, initial_state, transfer_limits) =
             Self::load_app_state(&node_db, &pid_lock, &config.data_dir)?;
 
         let member_keys: Arc<RwLock<HashSet<iroh::PublicKey>>> = {
@@ -326,7 +341,7 @@ impl Daemon {
                 None
             }
         };
-        let intent_supervisor = IntentSupervisor::new(config.max_retries, config.backoff_base, config.backoff_max);
+        let intent_supervisor = IntentSupervisor::new(config.retry_window, config.backoff_base, config.backoff_max);
         let network_logger = NetworkLogger::new(stats_db.clone());
         let local_node_id = node.endpoint().id();
         let nm_result =
@@ -359,6 +374,9 @@ impl Daemon {
             folder_manager,
             sync_engine,
             schedule_manager: tokio::sync::RwLock::new(schedule_manager),
+            transfer_budget: Arc::new(TransferBudget::new(transfer_limits)),
+            transfer_queue: Arc::new(TransferQueue::new()),
+            deferred_downloads: Mutex::new(HashSet::new()),
             node,
             handle,
             sync_receiver: tokio::sync::Mutex::new(sync_receiver),
@@ -583,6 +601,7 @@ impl Daemon {
             tracing::warn!(%error, "folder load cycle failed — continuing");
         }
         self.start_watching().await?;
+        self.refresh_transfer_limits();
         let live_folders = self.enabled_subscribe_filters();
         let statuses = self.handle.folder_registry.read().await.statuses();
         for folder in statuses {
@@ -600,6 +619,7 @@ impl Daemon {
             self.apply_folder_schedule(namespace, filters, folder_name.as_deref())
                 .await?;
         }
+        self.enforce_transfer_limits().await?;
         self.save_status_report().await?;
         Ok(())
     }
@@ -625,6 +645,168 @@ impl Daemon {
             Ok(())
         } else {
             Ok(())
+        }
+    }
+
+    /// Apply the configured per-hour/day/month transfer limits.
+    ///
+    /// When a download quota is configured, iroh-docs eager downloads are
+    /// disabled for managed folders and remote blobs are queued; the queue is
+    /// drained only while the rolling-window budget allows. When an upload
+    /// quota is exhausted, live sessions are paused so the node stops seeding
+    /// until the window frees budget.
+    /// Re-read `[transfer_limits]` from the node database into the live budget.
+    fn refresh_transfer_limits(&self) {
+        if let Ok(config) = self.node_db.load_app_config()
+            && let Ok(limits) = TransferLimits::from_config(&config.transfer_limits)
+        {
+            self.transfer_budget.set_limits(limits);
+        }
+    }
+
+    async fn enforce_transfer_limits(&self) -> Result<()> {
+        let download_limited = !self.transfer_budget.limits().download.is_unlimited();
+        let upload_limited = !self.transfer_budget.limits().upload.is_unlimited();
+        if !download_limited && !upload_limited {
+            return Ok(());
+        }
+
+        if upload_limited && self.transfer_budget.available(Direction::Upload) == 0 {
+            self.pause_sessions_for_upload_limit().await;
+        }
+
+        if !download_limited {
+            return self.restore_deferred_downloads().await;
+        }
+
+        let statuses = self.handle.folder_registry.read().await.statuses();
+        let mut deferred_now = Vec::new();
+        for status in &statuses {
+            if let Ok(namespace) = status.namespace.parse::<NamespaceId>() {
+                self.defer_folder_downloads(namespace, &mut deferred_now).await;
+            }
+        }
+        self.record_deferred_downloads(deferred_now)?;
+        self.drain_transfer_queue().await;
+        Ok(())
+    }
+
+    /// Stop seeding by cancelling every live session while upload budget is spent.
+    async fn pause_sessions_for_upload_limit(&self) {
+        let statuses = self.handle.folder_registry.read().await.statuses();
+        for status in &statuses {
+            if let Ok(namespace) = status.namespace.parse::<NamespaceId>()
+                && cancel_session(namespace)
+            {
+                tracing::info!(%namespace, "upload budget exhausted; pausing live session");
+            }
+        }
+    }
+
+    /// Restore the default download policy for folders we previously deferred.
+    async fn restore_deferred_downloads(&self) -> Result<()> {
+        let to_clear: Vec<NamespaceId> = {
+            let mut deferred = self
+                .deferred_downloads
+                .lock()
+                .map_err(|error| SyncwebError::operation("deferred download mutex is poisoned", error))?;
+            deferred.drain().collect()
+        };
+        for namespace in to_clear {
+            if let Ok(folder) = self.folder_manager.get(namespace).await {
+                let _ = folder.clear_metadata_only().await;
+            }
+        }
+        Ok(())
+    }
+
+    /// Disable eager downloads for a folder and queue its remote blobs.
+    async fn defer_folder_downloads(&self, namespace: NamespaceId, deferred: &mut Vec<NamespaceId>) {
+        let Ok(folder) = self.folder_manager.get(namespace).await else {
+            return;
+        };
+        if let Err(error) = folder.set_metadata_only().await {
+            tracing::debug!(%namespace, %error, "could not defer content downloads for transfer limits");
+            return;
+        }
+        deferred.push(namespace);
+        let Ok(entries) = folder.content_entries().await else {
+            return;
+        };
+        for entry in entries {
+            let hash = entry.content_hash();
+            if folder.has_local(hash).await.unwrap_or(false) {
+                continue;
+            }
+            let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
+            self.transfer_queue
+                .enqueue(PendingTransfer::new(namespace, hash, entry.content_len(), path));
+        }
+    }
+
+    fn record_deferred_downloads(&self, deferred_now: Vec<NamespaceId>) -> Result<()> {
+        let mut deferred = self
+            .deferred_downloads
+            .lock()
+            .map_err(|error| SyncwebError::operation("deferred download mutex is poisoned", error))?;
+        deferred.extend(deferred_now);
+        drop(deferred);
+        Ok(())
+    }
+
+    /// Fetch queued blobs while the download budget allows.
+    async fn drain_transfer_queue(&self) {
+        while let Some(item) = self.transfer_queue.pop_fitting(&self.transfer_budget) {
+            let peers = self
+                .node
+                .topic_tracker()
+                .find_peers(item.namespace)
+                .await
+                .unwrap_or_default();
+            let mut fetched = false;
+            for peer in peers {
+                if self
+                    .node
+                    .blob_store()
+                    .force_fetch_from_peer(self.node.endpoint(), &peer, item.hash)
+                    .await
+                    .is_ok()
+                {
+                    fetched = true;
+                    break;
+                }
+            }
+            if fetched {
+                self.transfer_budget.record(Direction::Download, item.size);
+                let network_id = self
+                    .network_manager
+                    .read()
+                    .await
+                    .network_for_folder(&item.namespace)
+                    .ok()
+                    .flatten();
+                let folder = item.namespace.to_string();
+                if let Err(error) = self.network_logger.record_bandwidth_download(
+                    item.size,
+                    1,
+                    Some(&folder),
+                    None,
+                    network_id.as_deref(),
+                ) {
+                    tracing::warn!(%error, "failed to record queued download");
+                }
+                tracing::debug!(
+                    namespace = %item.namespace,
+                    hash = %item.hash,
+                    size = item.size,
+                    queued = self.transfer_queue.len(),
+                    "queued transfer fetched within budget"
+                );
+            } else {
+                // No peer served it yet; keep it queued for a later cycle.
+                self.transfer_queue.enqueue(item);
+                break;
+            }
         }
     }
 
@@ -706,6 +888,7 @@ impl Daemon {
     }
 
     async fn start_supervision(&self, namespace: NamespaceId, filters: &SubscribeFilters) -> Result<()> {
+        self.refresh_transfer_limits();
         {
             let mut tasks = self
                 .intent_tasks
@@ -716,6 +899,14 @@ impl Daemon {
                 return Ok(());
             }
             tasks.insert(namespace, None);
+        }
+        // With a download quota configured, defer content before iroh-docs can
+        // eagerly fetch it; the transfer queue refills it within budget.
+        if !self.transfer_budget.limits().download.is_unlimited()
+            && let Ok(folder) = self.folder_manager.get(namespace).await
+            && let Err(error) = folder.set_metadata_only().await
+        {
+            tracing::debug!(%namespace, %error, "could not defer downloads before supervising");
         }
         let network_id = {
             let guard = self.network_manager.read().await;
@@ -732,33 +923,13 @@ impl Daemon {
         let controls = self.intent_controls.clone();
         let filter = self.filter_engine.read().await.clone();
         let network_logger = self.network_logger.clone();
-        let folder_name = self
-            .handle
-            .folder_registry
-            .read()
-            .await
-            .statuses()
-            .into_iter()
-            .find(|status| status.namespace == namespace.to_string())
-            .and_then(|status| {
-                (!status.path.as_os_str().is_empty()).then(|| status.path.to_string_lossy().into_owned())
-            });
-        let bandwidth = self
-            .schedule_manager
-            .read()
-            .await
-            .as_ref()
-            .map(|manager| manager.current_limits(folder_name.as_deref()));
-        let mut params = match SubscribeParams::from_filters(filters) {
+        let params = match SubscribeParams::from_filters(filters) {
             Ok(params) => params,
             Err(error) => {
                 tracing::warn!(%namespace, %error, "invalid subscription filters; supervising without them");
                 SubscribeParams::default()
             }
         };
-        if let Some(limits) = bandwidth {
-            params = params.with_bandwidth_limits(limits);
-        }
         let (ready_sender, ready_receiver) = oneshot::channel();
         let accountant = BandwidthAccountant::new(network_logger.clone(), network_id.clone(), namespace.to_string());
         let task = tokio::spawn(async move {
@@ -828,14 +999,6 @@ impl Daemon {
             .await
             .as_ref()
             .is_none_or(|manager| manager.is_active(None))
-    }
-
-    /// Return the configured download limit at the current wall-clock time.
-    pub async fn current_bandwidth_limit(&self) -> Option<u64> {
-        self.schedule_manager.read().await.as_ref().and_then(|manager| {
-            let limits = manager.current_limits(None);
-            limits.max_download.or(limits.max_upload)
-        })
     }
 
     async fn start_watching(&self) -> Result<()> {

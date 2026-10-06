@@ -24,4 +24,4 @@ pub use state::{
     BandwidthSnapshot, DaemonState, DaemonStatus, DaemonStatusReport, FolderStatusReport, PidLock, ScheduleStatus,
     StateFile, current_timestamp, daemon_socket_path, load_filter_engine, pid_is_alive,
 };
-pub use supervisor::{IntentSupervisor, SupervisedIntent};
+pub use supervisor::{DEFAULT_RETRY_WINDOW, IntentSupervisor, SupervisedIntent};

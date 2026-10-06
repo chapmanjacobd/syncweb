@@ -356,7 +356,7 @@ fn matches_rule(compiled: &CompiledRule, entry: &FilterEntry) -> bool {
 ///
 /// `min_size`/`max_size` accept `100MB`, `1.5GiB`, `500K` and plain byte counts
 /// so a hand-written `filters.toml` reads like the rest of the CLI (`--size`,
-/// `schedule set --bandwidth`).
+/// `transfer_limits`).
 /// Which end of a parsed `--size`-style constraint a bound wants.
 ///
 /// `min_size` and `max_size` accept the same grammar as `--size` for

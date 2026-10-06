@@ -160,9 +160,41 @@ Log files rotate daily, 7-day retention (via `tracing-appender`).
 
 ---
 
+## Transfer Limits
+
+qBittorrent-style rolling byte quotas. `syncweb-core/src/transfer_limits.rs`
+tracks transferred bytes per direction over the last hour, day (24 h), and
+month (30 days). A queued blob is fetched only when its full size fits the
+remaining allowance in every configured window; otherwise it stays queued.
+
+```toml
+[transfer_limits]
+# Optional byte counts; omit a key (or set it to "0") for unlimited.
+max_download_per_hour = "2G"
+max_download_per_day  = "20G"
+max_download_per_month = "400G"
+max_upload_per_hour   = "1G"
+max_upload_per_day    = "10G"
+max_upload_per_month  = "200G"
+```
+
+```bash
+syncweb config set transfer_limits.max_download_per_day 20G
+syncweb config show transfer_limits
+```
+
+When a download quota is configured the daemon switches managed folders to the
+metadata-only iroh-docs download policy and fetches queued blobs explicitly
+within budget. When an upload quota is exhausted it pauses live sessions so the
+node stops seeding until the window frees budget. Limits are re-read each sync
+cycle, so `config set` takes effect without a restart.
+
+---
+
 ## Sync Schedules
 
-Time-based sync rules for bandwidth management. Global settings with per-folder overrides.
+Time-based sync rules. Global settings with per-folder overrides. Byte quotas
+are separate; see [Transfer Limits](#transfer-limits).
 
 ### Configuration
 
@@ -173,27 +205,12 @@ Time-based sync rules for bandwidth management. Global settings with per-folder 
 # Global active hours (empty = always active)
 active_hours = ""
 
-# Bandwidth limits by time of day
-[[schedule.bandwidth]]
-hours = "08:00-18:00"
-max_upload = "1MB/s"
-max_download = "5MB/s"
-
-[[schedule.bandwidth]]
-hours = "18:00-08:00"
-max_upload = "0"   # unlimited
-max_download = "0"
-
-# Per-folder overrides (inherites global, overrides specific fields)
+# Per-folder overrides
 [schedule.folders.media]
 active_hours = "01:00-05:00"
-max_download = "50MB/s"
 
 [schedule.folders.backups]
-# Always sync backups, no bandwidth limit
 active_hours = ""
-max_upload = "0"
-max_download = "0"
 ```
 
 ### Implementation
@@ -201,26 +218,18 @@ max_download = "0"
 ```rust
 struct ScheduleManager {
     global: Schedule,
-    folder_overrides: HashMap<NamespaceId, Schedule>,
+    folders: BTreeMap<String, FolderSchedule>,
 }
 
 struct Schedule {
-    active_hours: Option<(u8, u8)>,  // (start_hour, end_hour) in 24h
-    bandwidth_limits: Vec<BandwidthWindow>,
-}
-
-struct BandwidthWindow {
-    hours: (u8, u8),
-    max_upload: Option<u64>,    // bytes/sec, None = unlimited
-    max_download: Option<u64>,
+    active_hours: Option<TimeWindow>,
 }
 
 impl ScheduleManager {
     /// Check if sync is currently allowed (within active hours)
-    fn is_active(&self, folder: Option<&NamespaceId>) -> bool;
-
-    /// Get current bandwidth limits (considering time of day)
-    fn current_limits(&self, folder: Option<&NamespaceId>) -> BandwidthLimits;
+    fn is_active(&self, folder: Option<&str>) -> bool;
+    /// Next minute the window opens (None when always active)
+    fn next_active_window_start_at(&self, folder: Option<&str>, minute: u16) -> Option<u16>;
 }
 ```
 
@@ -229,7 +238,6 @@ impl ScheduleManager {
 ```bash
 syncweb config schedule               # Show current schedule
 syncweb config schedule set --active "22:00-06:00"
-syncweb config schedule set --bandwidth "1MB/s" --period "08:00-18:00"
 syncweb config schedule folder --active "01:00-05:00" media
 ```
 
@@ -245,16 +253,12 @@ Suggested global configuration files for different use cases. These are not a "t
 # ~/.config/syncweb/config-laptop.toml
 # Optimized for battery life and mobile networks
 
-[bandwidth]
-max_upload = "500KB/s"
-max_download = "2MB/s"
-
 [schedule]
 active_hours = "08:00-22:00"
-[[schedule.bandwidth]]
-hours = "08:00-18:00"
-max_upload = "250KB/s"
-max_download = "1MB/s"
+
+[transfer_limits]
+max_upload_per_day = "1G"
+max_download_per_day = "5G"
 
 [parallel]
 threads = 2  # Limit CPU usage
@@ -266,10 +270,6 @@ max_cache_size = 5000  # Smaller cache for limited RAM
 ```toml
 # ~/.config/syncweb/config-server.toml
 # Optimized for throughput and availability
-
-[bandwidth]
-max_upload = "0"   # unlimited
-max_download = "0"
 
 [schedule]
 active_hours = ""  # always active
@@ -285,9 +285,9 @@ max_cache_size = 50000  # Large cache for plenty of RAM
 # ~/.config/syncweb/config-phone.toml
 # Optimized for storage and battery
 
-[bandwidth]
-max_upload = "100KB/s"
-max_download = "500KB/s"
+[transfer_limits]
+max_upload_per_day = "250M"
+max_download_per_day = "1G"
 
 [parallel]
 threads = 1  # Single-threaded for battery

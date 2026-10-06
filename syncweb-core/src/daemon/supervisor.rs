@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     collections::HashMap,
     sync::{
@@ -99,11 +99,18 @@ impl std::fmt::Debug for SupervisedIntent {
     }
 }
 
+/// Default retry window measured from an intent's first attempt.
+///
+/// Three months is the hard default; configure
+/// [`DaemonConfig::retry_window`](crate::daemon::DaemonConfig::retry_window) to
+/// override it.
+pub const DEFAULT_RETRY_WINDOW: Duration = Duration::from_hours(2_160);
+
 /// Starts synchronization intents and restarts failed intents with bounded
-/// exponential backoff.
+/// exponential backoff until a deadline measured from the first attempt.
 #[derive(Clone, Copy, Debug)]
 pub struct IntentSupervisor {
-    max_retries: u32,
+    retry_window: Duration,
     backoff_base: Duration,
     backoff_max: Duration,
 }
@@ -143,9 +150,9 @@ impl SupervisionOptions {
 
 impl IntentSupervisor {
     #[must_use]
-    pub const fn new(max_retries: u32, backoff_base: Duration, backoff_max: Duration) -> Self {
+    pub const fn new(retry_window: Duration, backoff_base: Duration, backoff_max: Duration) -> Self {
         Self {
-            max_retries,
+            retry_window,
             backoff_base,
             backoff_max,
         }
@@ -288,6 +295,7 @@ impl IntentSupervisor {
             .run_intent_with_filter(sync, namespace, params.clone(), options.filter.clone())
             .await;
         let mut ready = options.ready.take();
+        let first_attempt = Instant::now();
 
         loop {
             let Some(mut handle) = supervised.handle.take() else {
@@ -295,7 +303,13 @@ impl IntentSupervisor {
                     let _ = sender.send(());
                 }
                 Self::remove_control(options.controls.as_ref(), namespace)?;
-                if supervised.retry_count >= self.max_retries {
+                if self.retry_window_exhausted(first_attempt) {
+                    tracing::warn!(
+                        %namespace,
+                        retry_count = supervised.retry_count,
+                        window_secs = self.retry_window.as_secs(),
+                        "retry window elapsed; giving up on supervised intent"
+                    );
                     return Ok(supervised);
                 }
                 let retry_number = supervised.retry_count.saturating_add(1);
@@ -398,6 +412,12 @@ impl IntentSupervisor {
         Ok(())
     }
 
+    /// Return whether the retry window measured from `first_attempt` has elapsed.
+    #[must_use]
+    pub fn retry_window_exhausted(&self, first_attempt: Instant) -> bool {
+        first_attempt.elapsed() >= self.retry_window
+    }
+
     /// Return the delay for a one-based retry number.
     #[must_use]
     pub fn backoff_delay(&self, retry_number: u32) -> Duration {
@@ -434,20 +454,32 @@ mod tests {
 
     #[test]
     fn backoff_delay_starts_at_base() {
-        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_secs(1),
+            Duration::from_mins(1),
+        );
         assert_eq!(supervisor.backoff_delay(1), Duration::from_secs(1));
     }
 
     #[test]
     fn backoff_delay_doubles() {
-        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_secs(1),
+            Duration::from_mins(1),
+        );
         assert_eq!(supervisor.backoff_delay(2), Duration::from_secs(2));
         assert_eq!(supervisor.backoff_delay(3), Duration::from_secs(4));
     }
 
     #[test]
     fn backoff_delay_capped() {
-        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_secs(3));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_secs(1),
+            Duration::from_secs(3),
+        );
         assert_eq!(supervisor.backoff_delay(2), Duration::from_secs(2));
         assert_eq!(supervisor.backoff_delay(3), Duration::from_secs(3));
         assert_eq!(supervisor.backoff_delay(10), Duration::from_secs(3));
@@ -455,20 +487,28 @@ mod tests {
 
     #[test]
     fn backoff_delay_zero_retry() {
-        let supervisor = IntentSupervisor::new(3, Duration::from_secs(1), Duration::from_mins(1));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_secs(1),
+            Duration::from_mins(1),
+        );
         assert_eq!(supervisor.backoff_delay(0), Duration::ZERO);
     }
 
     #[test]
     fn backoff_delay_zero_base() {
-        let supervisor = IntentSupervisor::new(3, Duration::ZERO, Duration::from_mins(1));
+        let supervisor = IntentSupervisor::new(Duration::from_hours(2_160), Duration::ZERO, Duration::from_mins(1));
         assert_eq!(supervisor.backoff_delay(1), Duration::from_millis(100));
         assert_eq!(supervisor.backoff_delay(5), Duration::from_millis(1600));
     }
 
     #[test]
     fn auto_backoff_delay_respects_max_retries() {
-        let supervisor = IntentSupervisor::new(5, Duration::from_secs(2), Duration::from_secs(20));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_secs(2),
+            Duration::from_secs(20),
+        );
         let delays: Vec<_> = (1..=8).map(|n| supervisor.backoff_delay(n)).collect();
         let expected = [
             Duration::from_secs(2),
@@ -487,7 +527,21 @@ mod tests {
 
     #[test]
     fn backoff_delay_starting_value_equals_base() {
-        let supervisor = IntentSupervisor::new(1, Duration::from_millis(500), Duration::from_secs(5));
+        let supervisor = IntentSupervisor::new(
+            Duration::from_hours(2_160),
+            Duration::from_millis(500),
+            Duration::from_secs(5),
+        );
         assert_eq!(supervisor.backoff_delay(1), Duration::from_millis(500));
+    }
+
+    #[test]
+    fn retry_window_is_measured_from_first_attempt() {
+        let supervisor = IntentSupervisor::new(Duration::from_mins(1), Duration::from_secs(1), Duration::from_mins(1));
+        let now = Instant::now();
+        assert!(!supervisor.retry_window_exhausted(now));
+        let started_ago = now.checked_sub(Duration::from_secs(61)).expect("instant underflow");
+        assert!(supervisor.retry_window_exhausted(started_ago));
+        assert_eq!(DEFAULT_RETRY_WINDOW, Duration::from_hours(2_160));
     }
 }

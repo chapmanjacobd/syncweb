@@ -1377,8 +1377,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;config;schedule;set'= {
             cand --active 'active'
-            cand --bandwidth 'Bandwidth rate (e.g. ''500K'', ''2M'')'
-            cand --period 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -1391,8 +1389,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         }
         &'syncweb;config;schedule;folder'= {
             cand --active 'active'
-            cand --max-upload 'max-upload'
-            cand --max-download 'max-download'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

@@ -2,7 +2,7 @@
 
 Only sections and tests that are not fully passing are listed. Fully passing
 sections and tests are omitted; status reflects the 2026-10-05 runs against
-binary SHA-256 `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc`.
+binary SHA-256 `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450`.
 
 ## Setup & Prerequisites
 
@@ -18,19 +18,23 @@ binary SHA-256 `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc
 - VMs: `syncweb-a` (`10.0.3.2`) and `syncweb-b` (`10.0.3.3`) via `iiab-vm` +
   `nsenter` (enter the container-init PID under the `systemd-nspawn@…` unit,
   not the supervisor).
-- Binary SHA-256: `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc`.
+- Binary SHA-256: `38d8aefbe1eb08943f82f9e960f1a3271c0a58051dc28b87ffedacb807d15450`.
 - Data: fresh profiles; Alice `shared`/`twoway`, Bob `received`/`shared`; daemons
   run with `start --bg --no-relay`. Folder paths were registered absolute; see
   `NF-9`.
-- Regression tests: `cargo nextest run` → 668 passed. New coverage:
-  `syncweb-cli/tests/daemon_integration_test.rs`:
+- Regression tests: `cargo nextest run` → 678 passed. Coverage added for the
+  fixes below: `syncweb-cli/tests/daemon_integration_test.rs`:
   `test_watch_dry_run_missing_path_is_reported`,
   `test_subscribe_transfer_records_bandwidth_stats`,
   `test_relative_folder_paths_are_absolute_in_daemon`,
   `test_watch_once_honors_syncignore`,
   `test_inactive_schedule_window_pauses_folder`;
+  `syncweb-cli/tests/cli_test.rs`: `config_transfer_limits_round_trip`;
   `syncweb-core/src/filter.rs`:
-  `config_parsing_tests::unknown_top_level_tables_are_rejected`.
+  `config_parsing_tests::unknown_top_level_tables_are_rejected`;
+  `syncweb-core/src/transfer_limits.rs`: `tests::*`;
+  `syncweb-core/src/daemon/supervisor.rs`:
+  `tests::retry_window_is_measured_from_first_attempt`.
 - VM network isolation: `iiab-vm` installs a bridge-forward rule that drops
   container-to-container traffic:
   `nft list table bridge iiab` → `iifname "vb-*" oifname "vb-*" drop`. This is
@@ -132,25 +136,40 @@ binary SHA-256 `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc
   ```
   A valid `[[rules]]` file still parses. Regression:
   `config_parsing_tests::unknown_top_level_tables_are_rejected`.
+- `NF-11` rate throttling was removed and replaced with a quota policy.
+  The post-`ContentReady` `throttle_bandwidth` sleep is gone (`SyncEngine` no
+  longer takes `SubscribeParams.bandwidth`); iroh-blobs has no rate knob and
+  iroh-docs eager downloads made it unenforceable. In its place,
+  `syncweb-core/src/transfer_limits.rs` implements a qBittorrent-style policy:
+  `[transfer_limits]` sets `max_download_per_hour/day/month` and
+  `max_upload_per_hour/day/month` byte quotas, and `TransferQueue` holds blobs
+  until their full size fits every rolling window for that direction. When a
+  download quota is configured the daemon switches managed folders to the
+  metadata-only iroh-docs download policy and fetches queued blobs explicitly
+  within budget. Verified on the VM pair with `syncweb-a` publishing
+  `seed.txt` (5 B), `small.bin` (100 KB), and `big.bin` (10 MB) and a fresh
+  `syncweb-b` joined `--subscribe` with a 1 MB/month download limit:
+  ```text
+  B ls:  big.bin (9 MB) remote | seed.txt 5 B local | small.bin 100 KB local
+  B stats network → total_download: 102405   # 5 + 102400 fetched
+  ```
+  Raising the limit to 20 MB/month (picked up without a restart) let the queue
+  drain on the next cycle:
+  ```text
+  B ls:  big.bin (9 MB) local
+  B stats network → total_download: 10102405
+  ```
+  Regression: `transfer_limits::tests::*`,
+  `integration::config_test::transfer_limits_round_trip_and_parse`,
+  `config_transfer_limits_round_trip`.
+- Intent retries now use exponential backoff bounded by a hard window measured
+  from the first attempt, default 3 months
+  (`DaemonConfig::retry_window` = `DEFAULT_RETRY_WINDOW`), replacing the old
+  3-attempt cap. A failing intent (e.g. `Remote peer aborted sync: NotFound`)
+  keeps retrying instead of giving up after three tries. Regression:
+  `daemon::supervisor::tests::retry_window_is_measured_from_first_attempt`.
 
 ---
-
-## 13.2 Bandwidth Verification
-
-- FAIL (`NF-11`): the configured bandwidth cap is not enforced. With a global
-  window `[[schedule.bandwidth]] hours = "00:00-23:59" max_download = "2M"` on
-  the receiver, a live subscription transfer delivered a 10 000 000 B payload
-  in ~0.24 s (~42 MB/s), far above the 2 MB/s cap. Reproduced on `syncweb-b`
-  (receiver) subscribed to `syncweb-a` by polling `stats network` while
-  `syncweb-a` imported a 10 MB blob:
-  ```text
-  B total_download=10000016 delta=10000000 elapsed=0.237720021
-  ```
-  `SyncEngine` only pauses *after* `ContentReady`, but iroh-docs has already
-  eagerly downloaded the blob by then, so the throttle cannot bound the
-  transfer. iroh-blobs has no download-rate knob, and iroh-docs eager
-  downloads are not gated by a bandwidth policy, so a real fix needs a
-  download-policy + explicit throttled fetch design.
 
 ## 16. Conflict Resolution
 
@@ -172,7 +191,7 @@ binary SHA-256 `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc
 
 - FAIL / unstable (`NF-7`): after both daemons were stopped, Alice created
   `alice-only.txt` and Bob created `bob-only.txt`; after restart, import, and
-  `sync`, the new files did **not** appear on the peer at all in this run —
+  `sync`, the new files did not appear on the peer at all in this run —
   Alice's `ls` listed only `alice-only.txt` + `note.txt`, Bob's only
   `bob-only.txt` + `note.txt`:
   ```text
@@ -228,27 +247,6 @@ binary SHA-256 `d8df56b292da232bd3f135aef515410f2436831923ccf3420f4944715bcd9ccc
   bridge in ~1.29 s ≈ 396 MB/s (target is > 500 MB/s for 10 GB over LAN). This
   is a throughput observation, not a clean pass or fail.
 
-## New Failures Found (2026-10-05)
-
-These are the still-open new failures found while exercising the sections
-above. The run stopped short of ten.
-
-(NF-9 relative folder paths, NF-10 `.syncignore`, and NF-12 inactive schedule
-windows were found in previous runs and fixed; they are listed under "Fixed
-Since the Previous Run". NF-11 below remains open.)
-
-### NF-11 configured bandwidth cap is not enforced
-
-- Repro: receiver config `[[schedule.bandwidth]] hours="00:00-23:59"
-  max_download="2M"`; sender publishes a 10 MB blob over a live subscription.
-- Expected: download bounded near 2 MB/s (~5 s).
-- Actual: a 10 000 000 B payload arrived in ~0.24 s (~42 MB/s).
-- Location: `SyncEngine::throttle_bandwidth` runs on `ContentReady`, after
-  iroh-docs has already fetched the blob, so it cannot bound the transfer.
-  iroh-blobs exposes no download-rate limit and iroh-docs eager downloads are
-  not gated by a bandwidth policy, so a real fix needs a download-policy plus
-  explicit throttled-fetch design.
-
 ---
 
 ## Known Limitations / Notes
@@ -263,8 +261,9 @@ Since the Previous Run". NF-11 below remains open.)
   materialization of remote entries are unimplemented; see
   `docs/conflict-resolution-plan.md` for options and the recommended approach.
 - Offline reconnect after a daemon restart is unstable: a supervised intent can
-  exhaust its retries with `Remote peer aborted sync: NotFound` when the peer
-  has the folder open but is not itself running a live-sync intent (NF-7).
+  see `Remote peer aborted sync: NotFound` when the peer has the folder open but
+  is not itself running a live-sync intent (NF-7). It now retries with
+  exponential backoff for up to 3 months instead of giving up after 3 attempts.
 - `.syncignore` lines are merged with `--exclude` globs by
   `Scanner`/`Importer`; the ignore file itself is always excluded (NF-10 fix).
 - A folder outside its scheduled `active_hours` is not supervised at all
@@ -272,6 +271,16 @@ Since the Previous Run". NF-11 below remains open.)
   reports `Active no` / `Session: paused` until the window opens (NF-12 fix).
 - `FilterConfig` rejects unknown top-level tables, so `[general]` typos and a
   singular `[[rule]]` are parse errors (Section 14 fix).
+- Transfer limits are configured under `[transfer_limits]`
+  (`max_download_per_hour`, `_per_day`, `_per_month`, and the `max_upload_*`
+  equivalents). The legacy `[[schedule.bandwidth]]` and `[bandwidth] max_*`
+  rate settings have been removed entirely; `schedule` now only controls
+  `active_hours`.
+- Upload quotas are enforced by pausing live sessions when the upload budget is
+  exhausted, but no upload byte hook exists yet (uploads are still not
+  counted), so upload gating is structural until that hook lands.
+- A single blob larger than every configured download cap stays queued
+  indefinitely (by design: it can never fit the rolling budget).
 - `bep.*` config and `syncweb devices` Syncthing identity exist, but there is
   no BEP transport wired into sync.
 - The VM pair is not offline: DNS and HTTPS egress work, and both direct

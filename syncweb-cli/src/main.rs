@@ -49,7 +49,7 @@ use syncweb_core::{
         identity::{DeviceId, IdentityManager},
         iroh_node::IrohNode,
     },
-    schedule::{BandwidthWindowConfig, ScheduleManager, parse_rate},
+    schedule::ScheduleManager,
     search::{FindEngine, FindQuery, filter_entries},
     snapshot::SnapshotStore,
     sort::{SortConfig, SortEntry, Sorter},
@@ -373,10 +373,11 @@ async fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> 
         Some(ConfigCommand::Show { section: Some(section) }) => match section.as_str() {
             "bep" => print_config_section(&config.bep, output_json)?,
             "schedule" => print_config_section(&config.schedule, output_json)?,
+            "transfer_limits" => print_config_section(&config.transfer_limits, output_json)?,
             "discovery" => print_config_section(&config.discovery, output_json)?,
             "subscribe" => print_config_section(&config.subscribe, output_json)?,
             _ => anyhow::bail!(
-                "unsupported config section {section:?}; supported sections: bep, schedule, discovery, subscribe"
+                "unsupported config section {section:?}; supported sections: bep, schedule, transfer_limits, discovery, subscribe"
             ),
         },
         Some(ConfigCommand::Set { key, value }) => {
@@ -2729,27 +2730,12 @@ fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Re
                 println!("{}", toml::to_string_pretty(&config.schedule)?);
             }
         }
-        Some(ScheduleCommand::Set {
-            active,
-            bandwidth,
-            period,
-        }) => {
-            if active.is_none() && bandwidth.is_none() {
-                anyhow::bail!("schedule set requires --active or --bandwidth");
-            }
-            if let Some(a) = active {
-                syncweb_core::schedule::TimeWindow::parse(&a)?;
-                config.schedule.active_hours = a;
-            }
-            if let Some(bw) = bandwidth {
-                let p = period.ok_or_else(|| anyhow::anyhow!("--bandwidth requires --period"))?;
-                syncweb_core::schedule::TimeWindow::parse(&p)?;
-                parse_rate(&bw)?;
-                config
-                    .schedule
-                    .bandwidth
-                    .push(BandwidthWindowConfig::new(p, bw.clone(), bw));
-            }
+        Some(ScheduleCommand::Set { active }) => {
+            let Some(window) = active else {
+                anyhow::bail!("schedule set requires --active");
+            };
+            syncweb_core::schedule::TimeWindow::parse(&window)?;
+            config.schedule.active_hours = window;
             ScheduleManager::from_config(&config.schedule)?;
             node_db.save_app_config(&config)?;
             if output_json {
@@ -2758,28 +2744,12 @@ fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Re
                 println!("schedule updated");
             }
         }
-        Some(ScheduleCommand::Folder {
-            name,
-            active,
-            max_upload,
-            max_download,
-        }) => {
-            if active.is_none() && max_upload.is_none() && max_download.is_none() {
-                anyhow::bail!("schedule folder requires an override");
-            }
-            let folder = config.schedule.folders.entry(name).or_default();
-            if let Some(a) = active {
-                syncweb_core::schedule::TimeWindow::parse(&a)?;
-                folder.active_hours = Some(a);
-            }
-            if let Some(rate) = max_upload {
-                parse_rate(&rate)?;
-                folder.max_upload = Some(rate);
-            }
-            if let Some(rate) = max_download {
-                parse_rate(&rate)?;
-                folder.max_download = Some(rate);
-            }
+        Some(ScheduleCommand::Folder { name, active }) => {
+            let Some(window) = active else {
+                anyhow::bail!("schedule folder requires --active");
+            };
+            syncweb_core::schedule::TimeWindow::parse(&window)?;
+            config.schedule.folders.entry(name).or_default().active_hours = Some(window);
             ScheduleManager::from_config(&config.schedule)?;
             node_db.save_app_config(&config)?;
             if output_json {

@@ -339,11 +339,6 @@ async fn run_intent(
                             return;
                         }
                     }
-                    if let Some(cmd) = throttle_bandwidth(hash, &state, &config, &mut commands).await {
-                        let _ = handle_command(&folder, cmd, &mut state.paused, &events).await;
-                        finalize_checkpoint(checkpoint.as_ref(), &state, &events);
-                        return;
-                    }
                     if let Some(ref cp) = checkpoint {
                         let _ = cp.mark_completed(hash.as_bytes(), *hash, state.sizes.get(hash).copied().unwrap_or(0));
                     }
@@ -365,29 +360,6 @@ async fn run_intent(
             }
         }
     }
-}
-
-async fn throttle_bandwidth(
-    hash: &iroh_blobs::Hash,
-    state: &IntentState,
-    config: &IntentConfig,
-    commands: &mut mpsc::UnboundedReceiver<SyncCommand>,
-) -> Option<SyncCommand> {
-    if let Some(rate) = config.params.bandwidth.as_ref().and_then(|limits| limits.max_download)
-        && rate > 0
-    {
-        let bytes = state.sizes.get(hash).copied().unwrap_or(0);
-        let milliseconds = bytes.saturating_mul(1_000).div_ceil(rate);
-        if milliseconds > 0 {
-            tokio::select! {
-                () = tokio::time::sleep(Duration::from_millis(milliseconds)) => {}
-                received_command = commands.recv() => {
-                    return received_command;
-                }
-            }
-        }
-    }
-    None
 }
 
 fn setup_intent_checkpoint(folder: &crate::folder::SyncwebFolder, node_db: Option<&NodeDatabase>) -> IntentSetup {

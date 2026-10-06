@@ -1707,8 +1707,6 @@ _arguments "${_arguments_options[@]}" : \
             (set)
 _arguments "${_arguments_options[@]}" : \
 '--active=[]:ACTIVE:_default' \
-'--bandwidth=[Bandwidth rate (e.g. '\''500K'\'', '\''2M'\'')]:BANDWIDTH:_default' \
-'--period=[Time window for the bandwidth limit (e.g. '\''08\:00-18\:00'\'')]:PERIOD:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -1723,8 +1721,6 @@ _arguments "${_arguments_options[@]}" : \
 (folder)
 _arguments "${_arguments_options[@]}" : \
 '--active=[]:ACTIVE:_default' \
-'--max-upload=[]:MAX_UPLOAD:_default' \
-'--max-download=[]:MAX_DOWNLOAD:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \

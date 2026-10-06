@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use syncweb_core::{
     bandwidth_stats::BandwidthStats,
-    schedule::{BandwidthWindowConfig, ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
+    schedule::{ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
 };
 
 #[test]
@@ -10,11 +10,9 @@ fn schedule_evaluates_cross_midnight_windows_and_overrides() -> anyhow::Result<(
     let mut folders = BTreeMap::new();
     let mut media = ScheduleFolderConfig::default();
     media.active_hours = Some("01:00-05:00".to_owned());
-    media.max_download = Some("50MB/s".to_owned());
     folders.insert("media".to_owned(), media);
     let mut config = ScheduleConfig::default();
     config.active_hours = "22:00-06:00".to_owned();
-    config.bandwidth = vec![BandwidthWindowConfig::new("22:00-06:00", "1MB/s", "5MB/s")];
     config.folders = folders;
 
     let manager = ScheduleManager::from_config(&config)?;
@@ -22,8 +20,6 @@ fn schedule_evaluates_cross_midnight_windows_and_overrides() -> anyhow::Result<(
     anyhow::ensure!(!manager.is_active_at(None, 12 * 60));
     anyhow::ensure!(manager.is_active_at(Some("media"), 2 * 60));
     anyhow::ensure!(!manager.is_active_at(Some("media"), 12 * 60));
-    anyhow::ensure!(manager.current_limits_at(None, 23 * 60).max_upload == Some(1_000_000));
-    anyhow::ensure!(manager.current_limits_at(Some("media"), 23 * 60).max_download == Some(50_000_000));
     Ok(())
 }
 

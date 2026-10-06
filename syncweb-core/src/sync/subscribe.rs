@@ -4,8 +4,6 @@ use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::schedule::BandwidthLimits;
-
 /// Restricts subscription events to a portion of a folder.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
@@ -51,7 +49,6 @@ pub struct SubscribeParams {
     pub ignore_session: Option<Uuid>,
     pub area_filter: Option<AreaFilter>,
     pub area_of_interest: Option<AreaOfInterest>,
-    pub bandwidth: Option<BandwidthLimits>,
 }
 
 impl SubscribeParams {
@@ -62,7 +59,6 @@ impl SubscribeParams {
             ignore_session: None,
             area_filter: None,
             area_of_interest: None,
-            bandwidth: None,
         }
     }
 
@@ -73,7 +69,6 @@ impl SubscribeParams {
             ignore_session: Some(session_id),
             area_filter: None,
             area_of_interest: None,
-            bandwidth: None,
         }
     }
 
@@ -86,12 +81,6 @@ impl SubscribeParams {
     #[must_use]
     pub fn with_limits(mut self, area: AreaOfInterest) -> Self {
         self.area_of_interest = Some(area);
-        self
-    }
-
-    #[must_use]
-    pub const fn with_bandwidth_limits(mut self, bandwidth: BandwidthLimits) -> Self {
-        self.bandwidth = Some(bandwidth);
         self
     }
 

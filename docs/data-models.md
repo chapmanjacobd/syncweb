@@ -22,11 +22,6 @@ struct SyncwebFolder {
     max_entries: Option<u64>,         // Maximum entries to sync (0 = unlimited)
     max_size: Option<u64>,            // Maximum bytes to sync (0 = unlimited)
 
-    // Bandwidth limiting (per-folder and per-peer)
-    max_upload_speed: Option<u64>,    // Max upload bytes/sec (0 = unlimited)
-    max_download_speed: Option<u64>,  // Max download bytes/sec (0 = unlimited)
-    peer_limits: HashMap<NodeId, PeerLimits>, // Per-peer bandwidth limits
-
     // Deleted files tracking (inspired by iroh-willow)
     deleted_tracker: DeletedTracker,  // Track deleted-but-previously-seen files
 
@@ -42,13 +37,6 @@ struct SyncwebFolder {
 
     // Snapshots
     snapshots: Vec<Snapshot>,         // Content-addressed snapshots
-}
-
-/// Per-peer bandwidth limits
-struct PeerLimits {
-    max_upload: Option<u64>,          // Max upload to this peer (bytes/sec)
-    max_download: Option<u64>,        // Max download from this peer (bytes/sec)
-    priority: u8,                     // Sync priority (0-255, higher = more important)
 }
 
 /// Track deleted-but-previously-seen files (from iroh-willow)

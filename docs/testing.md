@@ -123,7 +123,7 @@
 15. Sort parity: niche/frecency/peers/random sorting with folder aggregates
 16. Stat parity: detailed file info with availability, version vectors, local/global diffs
 17. Logging: Structured tracing with configurable levels and log rotation
-18. Schedules: Global + per-folder bandwidth scheduling works
+18. Schedules: Global + per-folder active-hours scheduling works
 
 
 ```console

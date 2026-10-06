@@ -412,21 +412,13 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__config__subcmd__schedule__subcmd__folder)
-            opts="-h --active --max-upload --max-download --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --active --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --active)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --max-upload)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --max-download)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -442,21 +434,13 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__config__subcmd__schedule__subcmd__set)
-            opts="-h --active --bandwidth --period --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --active --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --active)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --bandwidth)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --period)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

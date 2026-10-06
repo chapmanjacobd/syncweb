@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayConfig;
-use crate::schedule::{ScheduleConfig, TimeWindow, parse_rate};
+use crate::schedule::{ScheduleConfig, TimeWindow};
+use crate::transfer_limits::TransferLimitsConfig;
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
@@ -18,7 +19,7 @@ pub struct Config {
     #[serde(default)]
     pub schedule: ScheduleConfig,
     #[serde(default)]
-    pub bandwidth: BandwidthConfig,
+    pub transfer_limits: TransferLimitsConfig,
     #[serde(default)]
     pub parallel: ParallelConfig,
     #[serde(default)]
@@ -85,13 +86,15 @@ impl Config {
                 TimeWindow::parse(value)?;
                 value.clone_into(&mut self.schedule.active_hours);
             }
-            "bandwidth.max_upload" => {
-                parse_rate(value)?;
-                value.clone_into(&mut self.bandwidth.max_upload);
-            }
-            "bandwidth.max_download" => {
-                parse_rate(value)?;
-                value.clone_into(&mut self.bandwidth.max_download);
+            _ if key.starts_with("transfer_limits.") => {
+                if !self.transfer_limits.set(key, value)? {
+                    return Err(SyncwebError::InvalidConfig(format!(
+                        "unsupported transfer_limits key {key:?}; supported: \
+                         transfer_limits.max_download_per_hour, max_download_per_day, \
+                         max_download_per_month, max_upload_per_hour, max_upload_per_day, \
+                         max_upload_per_month"
+                    )));
+                }
             }
             "parallel.threads" => {
                 self.parallel.threads = value.parse().map_err(|error| {
@@ -161,7 +164,10 @@ impl Config {
                 return Err(SyncwebError::InvalidConfig(format!(
                     "unsupported config key {key:?}; supported keys: \
                      bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback, schedule.active_hours, \
-                     bandwidth.max_upload, bandwidth.max_download, parallel.threads, cache.max_cache_size, \
+                     transfer_limits.max_download_per_hour, transfer_limits.max_download_per_day, \
+                     transfer_limits.max_download_per_month, transfer_limits.max_upload_per_hour, \
+                     transfer_limits.max_upload_per_day, transfer_limits.max_upload_per_month, \
+                     parallel.threads, cache.max_cache_size, \
                      advanced.blob_cache_size_gb, discovery.mdns, discovery.beacon, discovery.beacon_base_port, \
                      discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode, \
                      <namespace>.subscribe, channels.<name>.ticket"
@@ -268,23 +274,6 @@ impl SubscribeFilters {
 pub struct ChannelConfig {
     /// The iroh-docs doc ticket for subscribing to the channel catalog.
     pub ticket: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub struct BandwidthConfig {
-    #[serde(default)]
-    pub max_upload: String,
-    #[serde(default)]
-    pub max_download: String,
-}
-impl Default for BandwidthConfig {
-    fn default() -> Self {
-        Self {
-            max_upload: "0".to_owned(),
-            max_download: "0".to_owned(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

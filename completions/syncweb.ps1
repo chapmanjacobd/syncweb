@@ -1472,8 +1472,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;config;schedule;set' {
             [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
-            [CompletionResult]::new('--bandwidth', '--bandwidth', [CompletionResultType]::ParameterName, 'Bandwidth rate (e.g. ''500K'', ''2M'')')
-            [CompletionResult]::new('--period', '--period', [CompletionResultType]::ParameterName, 'Time window for the bandwidth limit (e.g. ''08:00-18:00'')')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')
@@ -1487,8 +1485,6 @@ Register-ArgumentCompleter -Native -CommandName 'syncweb' -ScriptBlock {
         }
         'syncweb;config;schedule;folder' {
             [CompletionResult]::new('--active', '--active', [CompletionResultType]::ParameterName, 'active')
-            [CompletionResult]::new('--max-upload', '--max-upload', [CompletionResultType]::ParameterName, 'max-upload')
-            [CompletionResult]::new('--max-download', '--max-download', [CompletionResultType]::ParameterName, 'max-download')
             [CompletionResult]::new('--data-dir', '--data-dir', [CompletionResultType]::ParameterName, 'Directory used for persistent node identity and data')
             [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable verbose structured logging')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)')

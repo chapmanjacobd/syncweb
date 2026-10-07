@@ -298,6 +298,8 @@ pub enum IpcCommand {
         pin: bool,
         #[serde(default)]
         persist: bool,
+        #[serde(default = "default_addr_info")]
+        addr_info: iroh_docs::api::protocol::AddrInfoOptions,
     },
     ShareList,
     Unshare {
@@ -508,6 +510,12 @@ pub struct EntryRow {
 /// that predate the `--no-enrich` flag.
 const fn default_entry_enrich() -> bool {
     true
+}
+
+/// Serde default for `Share.addr_info`: callers that predate the field still
+/// get full relay + address info in the ticket.
+const fn default_addr_info() -> iroh_docs::api::protocol::AddrInfoOptions {
+    iroh_docs::api::protocol::AddrInfoOptions::RelayAndAddresses
 }
 
 /// A read-only snapshot of which peers can serve a folder's blobs and which
@@ -1098,7 +1106,7 @@ impl IpcServer {
                                 error,
                             )
                         })?;
-                        if let Err(error) = self.handle_connection(stream).await {
+                        if let Err(error) = Box::pin(self.handle_connection(stream)).await {
                             tracing::error!(%error, "daemon IPC connection failed");
                             return Err(error);
                         }
@@ -2084,12 +2092,13 @@ impl IpcServer {
                 return response_from_error(error);
             }
         }
-        // Wake the daemon's supervisor immediately instead of starting a
-        // throwaway intent here. The supervised intent is the one that accounts
-        // bandwidth, so it must be running before the initial transfer begins.
-        if options.subscribe && self.daemon_handle.sync_trigger.send(Some(namespace.clone())).is_err() {
-            tracing::warn!(%namespace, "failed to trigger live sync after join");
-        }
+        // Run the initial download first. It opens a short-lived one-shot
+        // intent over the same document, and when it times out it cancels that
+        // intent, which calls `Doc::leave` and unregisters the namespace from
+        // the docs engine. Triggering the supervised intent before that would
+        // start live sync and then let the download tear it down, so peers
+        // would receive `NotFound` on the next sync and local changes would
+        // never propagate. Wake the supervisor only after the download is done.
         let downloaded = if options.download {
             match self.materialize_folder(context, manager, folder, filters, path).await {
                 Ok(count) => count,
@@ -2098,6 +2107,9 @@ impl IpcServer {
         } else {
             0
         };
+        if options.subscribe && self.daemon_handle.sync_trigger.send(Some(namespace.clone())).is_err() {
+            tracing::warn!(%namespace, "failed to trigger live sync after join");
+        }
         IpcResponse::Ok {
             message: if options.download {
                 format!("joined: {namespace}\ndownloaded: {downloaded} files")
@@ -2537,7 +2549,7 @@ impl IpcServer {
         if let Ok(live_peers) = context.node.topic_tracker().find_peers(namespace_id).await {
             let live: std::collections::HashSet<String> = live_peers
                 .into_iter()
-                .map(|peer| crate::node::identity::DeviceId::from_node_id(peer).to_syncthing())
+                .map(|peer| crate::node::identity::DeviceId::from_node_id(peer.id).to_syncthing())
                 .collect();
             for peer in &mut peers {
                 if live.contains(&peer.device_id) {
@@ -2743,9 +2755,15 @@ impl IpcServer {
             writable,
             pin,
             persist,
+            addr_info,
         } = cmd
         {
-            let options = ShareOptions { writable, pin, persist };
+            let options = ShareOptions {
+                writable,
+                pin,
+                persist,
+                addr_info,
+            };
             return self.handle_share(namespace, blob, options).await;
         }
         if matches!(cmd, IpcCommand::ShareList) {
@@ -3525,7 +3543,7 @@ impl IpcServer {
         let mut line = Vec::new();
         BufReader::new(read_half).read_until(b'\n', &mut line).await?;
         let response = match serde_json::from_slice::<IpcRequest>(line.trim_ascii()) {
-            Ok(request) => self.handle_request(request).await,
+            Ok(request) => Box::pin(self.handle_request(request)).await,
             Err(error) => IpcResponse::Error {
                 message: format!("invalid daemon request: {error}"),
             },
@@ -4222,6 +4240,7 @@ impl IpcClient {
                     writable: options.writable,
                     pin: options.pin,
                     persist: options.persist,
+                    addr_info: options.addr_info,
                 },
                 "share",
             )
@@ -4852,6 +4871,7 @@ mod tests {
             writable: false,
             pin: false,
             persist: false,
+            addr_info: default_addr_info(),
         });
         let enc3 = serde_json::to_vec(&req3).expect("serialize");
         let dec3: IpcRequest = serde_json::from_slice(&enc3).expect("deserialize");
@@ -4957,6 +4977,7 @@ mod tests {
                 writable: false,
                 pin: false,
                 persist: false,
+                addr_info: default_addr_info(),
             }))
             .await;
         assert!(matches!(
@@ -5482,6 +5503,7 @@ mod tests {
                     writable: false,
                     pin: false,
                     persist: false,
+                    addr_info: default_addr_info(),
                 }))
                 .await;
             assert!(matches!(response2, IpcResponse::Ok { .. }));
@@ -5508,6 +5530,7 @@ mod tests {
                 writable: false,
                 pin: false,
                 persist: false,
+                addr_info: default_addr_info(),
             }))
             .await;
         assert!(matches!(response, IpcResponse::Error { .. }));

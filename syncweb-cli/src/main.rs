@@ -2292,7 +2292,7 @@ async fn try_repair(
                     break;
                 }
                 Err(e) => {
-                    any_error = Some(format!("peer {peer}: {e}"));
+                    any_error = Some(format!("peer {}: {e}", peer.id));
                 }
             }
         }
@@ -3026,6 +3026,16 @@ fn share_label(write: bool, url: &str) -> String {
     }
 }
 
+/// The address info to embed in a share ticket. `--id-only` mints a
+/// node-id-only ticket so a peer must resolve the node over the DHT tracker.
+const fn share_addr_info(id_only: bool) -> iroh_docs::api::protocol::AddrInfoOptions {
+    if id_only {
+        iroh_docs::api::protocol::AddrInfoOptions::Id
+    } else {
+        iroh_docs::api::protocol::AddrInfoOptions::RelayAndAddresses
+    }
+}
+
 #[async_recursion]
 async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::FolderCreate) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -3064,7 +3074,8 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
                     None,
                     syncweb_core::folder::ShareOptions::new(write)
                         .with_pin(true)
-                        .with_persist(true),
+                        .with_persist(true)
+                        .with_addr_info(share_addr_info(command.id_only)),
                 )
                 .await?;
             if output_json {
@@ -3141,7 +3152,8 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
                 &folder,
                 syncweb_core::folder::ShareOptions::new(write)
                     .with_pin(true)
-                    .with_persist(true),
+                    .with_persist(true)
+                    .with_addr_info(share_addr_info(command.id_only)),
                 |ns, access, ticket| db.add_share(&ns.to_string(), access, &ticket.to_string()),
             )
             .await?;
@@ -3431,7 +3443,8 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
                 args.blob.clone(),
                 syncweb_core::folder::ShareOptions::new(args.write)
                     .with_pin(!args.no_pin)
-                    .with_persist(!args.no_persist),
+                    .with_persist(!args.no_persist)
+                    .with_addr_info(share_addr_info(args.id_only)),
             )
             .await?;
         if args.write && !output_json {
@@ -3464,7 +3477,8 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
         &folder,
         syncweb_core::folder::ShareOptions::new(args.write)
             .with_pin(!args.no_pin)
-            .with_persist(!args.no_persist),
+            .with_persist(!args.no_persist)
+            .with_addr_info(share_addr_info(args.id_only)),
         |ns, access, ticket| db.add_share(&ns.to_string(), access, &ticket.to_string()),
     )
     .await?;

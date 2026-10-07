@@ -784,6 +784,7 @@ async fn share_ticket(client: &IpcClient, namespace: &str) -> Result<String> {
             writable: true,
             pin: false,
             persist: false,
+            addr_info: iroh_docs::api::protocol::AddrInfoOptions::RelayAndAddresses,
         }))
         .await?;
     let IpcResponse::Ok { message } = &share else {

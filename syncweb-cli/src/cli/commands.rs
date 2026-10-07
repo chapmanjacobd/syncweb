@@ -301,6 +301,11 @@ pub struct FolderCreate {
     pub no_import: bool,
     #[arg(long, help = "Grant write access on the share ticket (default: read-only)")]
     pub write: bool,
+    #[arg(
+        long,
+        help = "Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker"
+    )]
+    pub id_only: bool,
     #[arg(long, help = "Create the folder without sharing it (no ticket/URL printed)")]
     pub no_share: bool,
     #[arg(
@@ -803,6 +808,11 @@ pub struct ShareArgs {
     pub blob: Option<String>,
     #[arg(long = "write", alias = "writable", help = "Grant write access (default: read-only)")]
     pub write: bool,
+    #[arg(
+        long,
+        help = "Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker"
+    )]
+    pub id_only: bool,
     #[arg(long, help = "Skip pinning the shared folder's blobs")]
     pub no_pin: bool,
     #[arg(long, help = "Skip persisting the share record")]

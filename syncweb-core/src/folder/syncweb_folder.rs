@@ -245,8 +245,22 @@ impl SyncwebFolder {
     ///
     /// Returns an error if the folder ticket cannot be created.
     pub async fn ticket(&self, writable: bool) -> Result<DocTicket> {
+        self.ticket_with_options(writable, iroh_docs::api::protocol::AddrInfoOptions::RelayAndAddresses)
+            .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the folder ticket cannot be created.
+    pub async fn ticket_with_options(
+        &self,
+        writable: bool,
+        addr_options: iroh_docs::api::protocol::AddrInfoOptions,
+    ) -> Result<DocTicket> {
         let can_write = writable && self.sync_mode.can_grant_write();
-        self.docs_engine.share_ticket(&self.doc, can_write).await
+        self.docs_engine
+            .share_ticket_with_options(&self.doc, can_write, addr_options)
+            .await
     }
 
     /// Create an unauthenticated ticket for a blob in this folder and pin it

@@ -602,6 +602,44 @@ async fn shared_ticket_carries_relay_custom_addr() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Regression: a node-id-only ticket must carry no addresses at all, even when
+/// the sharing node has a Syncthing relay address, so a peer is forced to
+/// resolve the node over the DHT topic tracker rather than the ticket.
+#[tokio::test]
+async fn id_only_ticket_carries_no_addresses() -> anyhow::Result<()> {
+    use syncweb_core::folder::{FolderManager, SyncMode};
+    use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
+
+    let directory = crate::test_utils::TestDirectory::new("syncweb-relay-id-ticket")?;
+    let root = directory.path().join("node");
+    let identity = syncweb_core::node::identity::IdentityManager::new(root.join("identity.key"))?;
+    let mut config = RelayConfig::default();
+    config.relay_urls = vec!["tcp://127.0.0.1:1".to_owned()];
+    let relay = RelayManager::start(RelayManagerOptions::new(config, root.join("relay")), identity.node_id())?;
+    let node = IrohNode::new_with_relay(
+        identity,
+        root.join("data"),
+        RelayMode::None,
+        crate::test_utils::empty_member_keys(),
+        DiscoveryConfig::disabled(),
+        Some(relay),
+    )
+    .await?;
+
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::SendReceive).await?;
+    let ticket = folder
+        .ticket_with_options(true, iroh_docs::api::protocol::AddrInfoOptions::Id)
+        .await?;
+    anyhow::ensure!(
+        ticket.nodes.iter().all(|n| n.addrs.is_empty()),
+        "id-only ticket should carry no addresses: {ticket:?}"
+    );
+
+    node.stop().await?;
+    Ok(())
+}
+
 /// Regression: a `ConnectRequest` sent over the existing registration
 /// connection must be answered by a session invitation that the registration
 /// reader turns into a session. (The old code opened a fresh, duplicate

@@ -194,11 +194,30 @@ impl DocsEngine {
     ///
     /// Returns an error if the document cannot be shared.
     pub async fn share(&self, doc: &Doc, mode: ShareMode) -> Result<DocTicket> {
+        self.share_with_options(doc, mode, AddrInfoOptions::RelayAndAddresses)
+            .await
+    }
+
+    /// Share a document with a specific [`AddrInfoOptions`], so callers can
+    /// mint node-id-only tickets that force a peer to resolve addresses via the
+    /// DHT topic tracker rather than from the ticket itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document cannot be shared.
+    pub async fn share_with_options(
+        &self,
+        doc: &Doc,
+        mode: ShareMode,
+        addr_options: AddrInfoOptions,
+    ) -> Result<DocTicket> {
         let mut ticket = doc
-            .share(mode, AddrInfoOptions::RelayAndAddresses)
+            .share(mode, addr_options)
             .await
             .map_err(|error| SyncwebError::operation("failed to share document", error))?;
-        if let Some(relay_addr) = &self.relay_addr {
+        if addr_options != AddrInfoOptions::Id
+            && let Some(relay_addr) = &self.relay_addr
+        {
             for node in &mut ticket.nodes {
                 if node.id == self.local_id {
                     node.addrs.insert(iroh::TransportAddr::Custom(relay_addr.clone()));
@@ -214,8 +233,24 @@ impl DocsEngine {
     ///
     /// Returns an error if the document cannot be shared.
     pub async fn share_ticket(&self, doc: &Doc, writable: bool) -> Result<DocTicket> {
+        self.share_ticket_with_options(doc, writable, AddrInfoOptions::RelayAndAddresses)
+            .await
+    }
+
+    /// Share a read or write ticket for a document with a specific
+    /// [`AddrInfoOptions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document cannot be shared.
+    pub async fn share_ticket_with_options(
+        &self,
+        doc: &Doc,
+        writable: bool,
+        addr_options: AddrInfoOptions,
+    ) -> Result<DocTicket> {
         let mode = if writable { ShareMode::Write } else { ShareMode::Read };
-        self.share(doc, mode).await
+        self.share_with_options(doc, mode, addr_options).await
     }
 
     /// # Errors

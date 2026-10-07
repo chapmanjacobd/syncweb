@@ -317,8 +317,8 @@ impl IrohNode {
 
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
         let relay_addr = relay.as_ref().map(RelayManager::local_addr);
-        let docs_engine = DocsEngine::new(&docs, blobs.store(), endpoint.id(), relay_addr);
-        let topic_tracker = TopicTracker::new(&gossip, &endpoint);
+        let docs_engine = DocsEngine::new(&docs, blobs.store(), endpoint.id(), relay_addr.clone());
+        let topic_tracker = TopicTracker::new(&gossip, &endpoint, relay_addr);
 
         Ok(Self {
             endpoint,

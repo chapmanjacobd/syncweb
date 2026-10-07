@@ -309,14 +309,21 @@ impl BlobStore {
         self.force_fetch_from_conn(conn, hash).await
     }
 
-    /// Force-fetch a blob from a known peer, connecting by public key alone.
+    /// Force-fetch a blob from a known peer, connecting by its discovered
+    /// address (which may include a relay or custom transport address).
     ///
     /// # Errors
     ///
     /// Returns an error if the connection or download fails.
-    pub async fn force_fetch_from_peer(&self, endpoint: &Endpoint, peer: &iroh::PublicKey, hash: Hash) -> Result<()> {
+    pub async fn force_fetch_from_peer(
+        &self,
+        endpoint: &Endpoint,
+        peer: &iroh::EndpointAddr,
+        hash: Hash,
+    ) -> Result<()> {
+        self.address_lookup.add_endpoint_info(peer.clone());
         let conn = endpoint
-            .connect(*peer, iroh_blobs::protocol::ALPN)
+            .connect(peer.id, iroh_blobs::protocol::ALPN)
             .await
             .map_err(|error| SyncwebError::operation("failed to connect to peer", error))?;
         self.force_fetch_from_conn(conn, hash).await

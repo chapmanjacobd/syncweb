@@ -228,11 +228,17 @@ impl SyncEngine {
         filter: Option<FilterEngine>,
     ) -> Result<IntentHandle> {
         let folder = self.folder_manager.get(folder_id).await?;
-        let live_events = self.docs_engine.watch_and_sync(folder.doc()).await?;
+        // Feed peers discovered over the topic tracker straight into the
+        // document sync below. Without this the tracker only logged the peers
+        // it found and the intent synced with nobody: the first local change
+        // after the initial join then never propagated, and a creator could
+        // not push to a joiner it had learned about out of band.
+        let mut discovered = Vec::new();
         if let Some(topic_tracker) = &self.topic_tracker {
             match topic_tracker.find_peers(folder_id).await {
                 Ok(peers) if !peers.is_empty() => {
                     tracing::debug!(%folder_id, peer_count = peers.len(), "discovered peers via topic tracker");
+                    discovered = peers;
                 }
                 Ok(_) => {}
                 Err(error) => {
@@ -240,6 +246,8 @@ impl SyncEngine {
                 }
             }
         }
+        let live_events = self.docs_engine.watch(folder.doc()).await?;
+        self.docs_engine.start_sync(folder.doc(), discovered).await?;
         let (events, commands, handle) = IntentHandle::channel();
         let node_db = self.node_db.clone();
         let reconciler = self.reconciler.clone();
@@ -416,14 +424,8 @@ impl IntentEventProcessor<'_> {
         if matches!(live_event, LiveEvent::InsertRemote { .. } | LiveEvent::SyncFinished(_)) {
             reconcile_after_sync(self.folder.namespace_id(), self.config);
         }
-        if let Err(error) = self
-            .state
-            .apply(live_event, &self.config.params, self.config.filter.as_ref())
-        {
-            let _result = self.events.send(SyncEvent::Failed(error));
-            finalize_checkpoint(self.checkpoint, self.state, self.events);
-            return IntentEventOutcome::Finished;
-        }
+        self.state
+            .apply(live_event, &self.config.params, self.config.filter.as_ref());
         if !send_progress(self.events, self.state, self.started.elapsed()) {
             finalize_checkpoint(self.checkpoint, self.state, self.events);
             return IntentEventOutcome::Finished;
@@ -537,12 +539,7 @@ struct IntentState {
 }
 
 impl IntentState {
-    fn apply(
-        &mut self,
-        event: LiveEvent,
-        params: &SubscribeParams,
-        filter: Option<&FilterEngine>,
-    ) -> std::result::Result<(), String> {
+    fn apply(&mut self, event: LiveEvent, params: &SubscribeParams, filter: Option<&FilterEngine>) {
         match event {
             LiveEvent::NeighborUp(_) => self.peer_count = self.peer_count.saturating_add(1),
             LiveEvent::NeighborDown(_) => self.peer_count = self.peer_count.saturating_sub(1),
@@ -564,11 +561,20 @@ impl IntentState {
                             .saturating_add(u64::try_from(details.entries_received).unwrap_or(u64::MAX));
                     }
                     Ok(_details) => {}
-                    Err(error) => return Err(error),
+                    Err(error) => {
+                        // A failed sync *attempt* is a normal, non-fatal event
+                        // in a peer-to-peer swarm: the remote peer may be
+                        // offline, busy, or already syncing. Tearing down the
+                        // continuous intent here would drop the live sync
+                        // connection and restart it with backoff, which both
+                        // stops local changes from being pushed and makes the
+                        // intent replay every entry on each restart. Record it
+                        // and keep syncing.
+                        tracing::debug!(error, "sync attempt failed; keeping the live intent alive");
+                    }
                 }
             }
         }
-        Ok(())
     }
 
     fn apply_insert(&mut self, entry: &iroh_docs::Entry, params: &SubscribeParams, filter: Option<&FilterEngine>) {
@@ -673,5 +679,36 @@ fn reconcile_after_sync(namespace: NamespaceId, config: &IntentConfig) {
     if let Some(reconciler) = &config.reconciler {
         tracing::info!(%namespace, "sync engine invoking folder reconciler");
         reconciler(namespace);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::SystemTime;
+
+    use iroh::SecretKey;
+    use iroh_docs::engine::{LiveEvent, Origin, SyncEvent};
+
+    use super::{IntentState, SubscribeParams};
+
+    /// Regression: a `SyncFinished` event carrying an `Err` describes a failed
+    /// sync *attempt* with one peer, which is routine in a swarm. It must not
+    /// fail the intent (the old behaviour terminated the continuous intent and
+    /// restarted it with backoff, dropping the live sync connection).
+    #[test]
+    fn failed_sync_attempt_does_not_fail_the_intent() {
+        let event = LiveEvent::SyncFinished(SyncEvent {
+            peer: SecretKey::generate().public(),
+            origin: Origin::Accept,
+            started: SystemTime::now(),
+            finished: SystemTime::now(),
+            result: Err("peer disconnected".to_owned()),
+        });
+        let mut state = IntentState::default();
+        state.apply(event, &SubscribeParams::default(), None);
+        assert!(
+            state.sync_finished,
+            "the intent should still record that a sync round finished"
+        );
     }
 }

@@ -5,14 +5,14 @@
 //! share record, and emit a `syncweb://folder/...` URL. This helper unifies that
 //! flow so the call sites share one implementation.
 
-use iroh_docs::{DocTicket, NamespaceId};
+use iroh_docs::{DocTicket, NamespaceId, api::protocol::AddrInfoOptions};
 
 use crate::error::Result;
 
 use super::SyncwebFolder;
 
 /// Options controlling how a folder is shared.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct ShareOptions {
     /// Grant write access on the ticket (default: read-only).
@@ -21,6 +21,10 @@ pub struct ShareOptions {
     pub pin: bool,
     /// Persist the share record so it can be listed and unshared later.
     pub persist: bool,
+    /// Which address information to embed in the ticket. Defaults to
+    /// [`AddrInfoOptions::RelayAndAddresses`]; use [`AddrInfoOptions::Id`] to
+    /// mint a node-id-only ticket that forces DHT-based address discovery.
+    pub addr_info: AddrInfoOptions,
 }
 
 impl ShareOptions {
@@ -30,9 +34,9 @@ impl ShareOptions {
             writable,
             pin: false,
             persist: false,
+            addr_info: AddrInfoOptions::RelayAndAddresses,
         }
     }
-
     #[must_use]
     pub const fn with_pin(mut self, pin: bool) -> Self {
         self.pin = pin;
@@ -42,6 +46,12 @@ impl ShareOptions {
     #[must_use]
     pub const fn with_persist(mut self, persist: bool) -> Self {
         self.persist = persist;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_addr_info(mut self, addr_info: AddrInfoOptions) -> Self {
+        self.addr_info = addr_info;
         self
     }
 }
@@ -83,7 +93,7 @@ where
     } else {
         0
     };
-    let ticket = folder.ticket(options.writable).await?;
+    let ticket = folder.ticket_with_options(options.writable, options.addr_info).await?;
     let result = ShareResult {
         namespace: folder.namespace_id(),
         writable: options.writable,

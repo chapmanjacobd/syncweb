@@ -63,7 +63,7 @@ impl BridgeServer {
                     })?;
                     let ipc = self.ipc.clone();
                     tokio::spawn(async move {
-                        if let Err(error) = serve_connection(stream, peer, ipc).await {
+                        if let Err(error) = Box::pin(serve_connection(stream, peer, ipc)).await {
                             tracing::warn!(%peer, %error, "websocket bridge connection failed");
                         }
                     });

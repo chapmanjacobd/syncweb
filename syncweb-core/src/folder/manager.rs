@@ -332,6 +332,23 @@ impl FolderManager {
     ///
     /// Returns an error if the ticket cannot be generated.
     pub async fn ticket(&self, namespace_id: NamespaceId, writable: bool) -> Result<DocTicket> {
+        self.ticket_with_options(
+            namespace_id,
+            writable,
+            iroh_docs::api::protocol::AddrInfoOptions::RelayAndAddresses,
+        )
+        .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the ticket cannot be generated.
+    pub async fn ticket_with_options(
+        &self,
+        namespace_id: NamespaceId,
+        writable: bool,
+        addr_options: iroh_docs::api::protocol::AddrInfoOptions,
+    ) -> Result<DocTicket> {
         let folder = self
             .folders
             .read()
@@ -339,7 +356,7 @@ impl FolderManager {
             .get(&namespace_id)
             .cloned()
             .ok_or(SyncwebError::FolderNotFound(namespace_id.to_string()))?;
-        folder.ticket(writable).await
+        folder.ticket_with_options(writable, addr_options).await
     }
 
     async fn folder_from_doc(&self, doc: Doc, mode: SyncMode, writable: bool) -> Result<SyncwebFolder> {

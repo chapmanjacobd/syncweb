@@ -155,6 +155,7 @@ _arguments "${_arguments_options[@]}" : \
 '--import[Scan and import existing files in the directory]' \
 '(--import)--no-import[Skip scanning existing files in the directory]' \
 '--write[Grant write access on the share ticket (default\: read-only)]' \
+'--id-only[Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker]' \
 '--no-share[Create the folder without sharing it (no ticket/URL printed)]' \
 '--no-indexing[Do not opt the folder into local indexing (indexing is enabled by default)]' \
 '--verbose[Enable verbose structured logging]' \
@@ -648,6 +649,7 @@ _arguments "${_arguments_options[@]}" : \
 '--blob=[Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)]:BLOB:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--write[Grant write access (default\: read-only)]' \
+'--id-only[Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker]' \
 '--no-pin[Skip pinning the shared folder'\''s blobs]' \
 '--no-persist[Skip persisting the share record]' \
 '--verbose[Enable verbose structured logging]' \

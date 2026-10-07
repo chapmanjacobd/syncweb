@@ -134,6 +134,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l import -d 'Scan and import existing files in the directory'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l no-import -d 'Skip scanning existing files in the directory'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l write -d 'Grant write access on the share ticket (default: read-only)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l id-only -d 'Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l no-share -d 'Create the folder without sharing it (no ticket/URL printed)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l no-indexing -d 'Do not opt the folder into local indexing (indexing is enabled by default)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l verbose -d 'Enable verbose structured logging'
@@ -485,6 +486,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand transfer; and __fish_see
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l blob -d 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l write -d 'Grant write access (default: read-only)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l id-only -d 'Share a node-id-only ticket (no addresses); peers must resolve the node over the DHT topic tracker'
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l no-pin -d 'Skip pinning the shared folder\'s blobs'
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l no-persist -d 'Skip persisting the share record'
 complete -c syncweb -n "__fish_syncweb_using_subcommand share; and not __fish_seen_subcommand_from list provider" -l verbose -d 'Enable verbose structured logging'

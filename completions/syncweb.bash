@@ -798,7 +798,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__folders__subcmd__create)
-            opts="-h --mode --relay-fallback --network --import --no-import --write --no-share --no-indexing --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --mode --relay-fallback --network --import --no-import --write --id-only --no-share --no-indexing --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1850,7 +1850,7 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__share)
-            opts="-h --blob --write --no-pin --no-persist --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help list provider"
+            opts="-h --blob --write --id-only --no-pin --no-persist --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help list provider"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

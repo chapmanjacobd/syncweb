@@ -4,7 +4,7 @@
 .SH NAME
 share \- Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH SYNOPSIS
-\fBshare\fR [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] [\fIsubcommands\fR]
+\fBshare\fR [\fB\-\-blob\fR] [\fB\-\-write\fR] [\fB\-\-id\-only\fR] [\fB\-\-no\-pin\fR] [\fB\-\-no\-persist\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPATH\fR] [\fIsubcommands\fR]
 .SH DESCRIPTION
 Share a folder, printing a ticket (read\-only by default, \-\-write for write access)
 .SH OPTIONS
@@ -14,6 +14,9 @@ Share a single content hash as an unauthenticated blob ticket (blobs are immutab
 .TP
 \fB\-\-write\fR
 Grant write access (default: read\-only)
+.TP
+\fB\-\-id\-only\fR
+Share a node\-id\-only ticket (no addresses); peers must resolve the node over the DHT topic tracker
 .TP
 \fB\-\-no\-pin\fR
 Skip pinning the shared folder\*(Aqs blobs

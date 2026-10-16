@@ -74,15 +74,15 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 - As an archivist, I want to fetch only the rare, least-seeded files
   first, so that the network heals and I don't fill my disk.
 - Today: `sort --by niche`, `download --max-peers 2`, `--min/max-count`, and
-  `find --type f --ext mp4 --size +500MB` work, but filters are spread across
-  `find`, `sort`, `download`, and `verify` with different flag spellings
-  (`--extension` in find vs `--ext` in docs, depth `+N/-N` vs `--min-depth`).
-- Friction: filter vocabulary is inconsistent across commands; users must
-  assemble pipelines (`find ... | download -`) to do one logical thing.
-- Improvement: unify the filter flags (same `--ext/--size/--depth/--newer`
-  spellings everywhere via a shared `ContentFilter` — it already exists
-  internally), and add `--dry-run`/`--preview` to `download` so Ari can see what
-  would be fetched before committing.
+  `find --type f --ext mp4 --size +500MB` work. `ls`, `find`, `sort`,
+  `download`, and `verify` share the same content-filter vocabulary:
+  `--ext`, `--size`, `--depth`, `--type`, `--modified-*`, and
+  `--remote-only`.
+- Friction: compatibility aliases preserve older spellings, so help output has
+  more names than a new user needs to learn.
+- Improvement: keep the canonical spellings prominent and retain aliases only
+  for compatibility; `download --dry-run`/`--preview` provides a safe fetch
+  preview before committing.
 
 ### 5. Sam onboards a new teammate to a work network
 
@@ -90,12 +90,9 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
   can touch, so that I don't hand out write access by accident.
 - Today: `network create work` → `network invite work` → teammate
   `network join <ticket>`. Capability/mode is set per-folder at `create`/`join`
-  time, and there's no `accept`/`drop` command in the current CLI even though
-  docs reference them.
-- Friction: invite + folder sharing are two hops with no "who has what"
-  dashboard; docs list `accept`/`drop` that don't exist — docs drift is itself a
-  UX trap (`syncweb-mirror.1` exists for a `mirror` command that isn't
-  implemented).
+  time, and `access` shows persisted shares, devices, and network membership.
+- Friction: invite + folder sharing are still two hops; there is no single
+  provisioning command for a network member and folder capability.
 - Improvement: one `syncweb network invite work --folder docs --write` that
   provisions the folder + capability + ticket in a single step; remove/deprecate
   commands from docs that aren't real, or implement them.
@@ -104,16 +101,15 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 - As an operator, I want to see sync health and progress at a glance,
   so that I can trust the box without SSH-ing in repeatedly.
-- Today: he must know `status`, `daemon-sync`, `stats network`,
-  `transfer info`, `stats files`, `networks`, `devices` — and `--json` is only
-  supported "where supported" (inconsistent).
-- Friction: no single health screen; progress of a big sync is only visible
-  in `transfer info`/`--verbose`. The daemon model (`start`, `shutdown`,
-  `reload`, `daemon-sync`) isn't auto-managed, so "is it even running?" is an
-  open question.
-- Improvement: a `syncweb status` that includes folders + connected devices +
-  current transfer progress + pending queue in one table, and `--json`
-  guaranteed on every list/status command.
+- Today: `syncweb status` shows daemon, folders, devices, networks, transfer
+  progress, and the pending queue in one view; `status --json` exposes the same
+  sections as one stable object. Other command handlers accept the global
+  `--json` output mode, with streaming network stats documented as NDJSON.
+- Friction: the daemon model (`start`, `stop`, `reload`, `sync`) is still
+  manually managed, so status reports whether it is running but does not
+  supervise it.
+- Improvement: add optional daemon supervision for headless deployments without
+  changing the status contract.
 
 ### 7. Oli recovers from a dead disk
 
@@ -140,13 +136,13 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 3. 35+ top-level commands → ~12 verbs — collapse to
    `setup, create, join, ls, find, download, share, publish, install, status,
    config, networks` with advanced subcommands.
-4. Docs drift is a UX bug — `accept`, `drop`, `conflicts`, `pending`,
-   `deleted`, `undelete`, `repl`, `mirror` appear in docs/man pages but not in
-   `commands.rs`.
+4. Docs drift is a UX bug — generated help and manpages must remain derived from
+   `commands.rs`; design-only proposals must be clearly marked as future work.
 5. Safety needs friction — write tickets and `leave --delete-files`/`unshare`
    need visual weight and undo hints.
-6. No unified filters/progress/JSON — shared `ContentFilter` exists in code;
-   expose it consistently, make `--json` universal.
+6. Filters/progress/JSON are now consistent for the supported command surface;
+   keep the shared `ContentFilter` and stable JSON envelopes when adding
+   commands.
 
 ---
 

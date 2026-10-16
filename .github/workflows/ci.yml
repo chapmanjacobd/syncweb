@@ -22,6 +22,18 @@ jobs:
       - name: Test
         run: make test
 
+  network-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run network scenario gate
+        run: make test-network
+
   test-windows:
     runs-on: windows-latest
     steps:

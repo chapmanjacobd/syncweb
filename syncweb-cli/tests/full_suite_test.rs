@@ -168,6 +168,18 @@ fn json_status_and_devices_envelopes() -> anyhow::Result<()> {
         "status envelope should carry a transfers object: {value}"
     );
 
+    let text_status = run_with_data(&data_dir, &["status"])?;
+    assert_success(&text_status, "text status")?;
+    let text = stdout_string(&text_status)?;
+    ensure!(
+        text.contains("device: iroh="),
+        "text status should show device identity: {text}"
+    );
+    ensure!(
+        text.contains("networks:"),
+        "text status should show network health: {text}"
+    );
+
     let devices = run_with_data(&data_dir, &["--json", "devices"])?;
     assert_success(&devices, "json devices")?;
     let dv: serde_json::Value = serde_json::from_slice(&devices.stdout)?;
@@ -670,6 +682,10 @@ fn publish_manifest_ticket(
     )?;
     assert_success(&publish, "package publish")?;
     let value: serde_json::Value = serde_json::from_slice(&publish.stdout)?;
+    ensure!(
+        value.get("status") == Some(&serde_json::Value::from("published")),
+        "publish should report a published status: {value}"
+    );
     Ok(value
         .get("manifest_ticket")
         .and_then(serde_json::Value::as_str)

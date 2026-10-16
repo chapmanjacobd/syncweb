@@ -29,6 +29,36 @@ trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 (always pinned, never persisted). `folders join` accepts either the `syncweb://...` URL or a bare
 ticket.
 
+## Common package publish/install flow
+
+Use the package commands when content should have a versioned manifest and an
+upgradeable installation. The normal online flow is:
+
+```bash
+# Create a managed folder and note the namespace printed by the command.
+syncweb folders create ./dataset --no-share
+
+# Create or update a package manifest from local content.
+syncweb package add ./dataset --name climate-hourly --version 1.0.0
+
+# Publish the manifest for that managed folder and receive its ticket.
+syncweb package publish --namespace <namespace> ./dataset
+
+# Inspect or install the published version elsewhere.
+syncweb package info <manifest-ticket>
+syncweb package install <manifest-ticket>
+
+# Publish a later version, then update an existing installation.
+syncweb package bump ./dataset --version 1.1.0 --changelog "New observations"
+syncweb package publish --namespace <namespace> ./dataset
+syncweb package upgrade <new-manifest-ticket>
+```
+
+Use `package export` and `package import` for a compressed offline archive.
+Installations are stored under the local data directory's package store.
+`--json` is available for automation on each step; package list-shaped results
+are wrapped under named keys rather than emitted as bare arrays.
+
 ## `find` Command Design
 
 Full-text search across folder entries with regex, glob, or exact substring matching,

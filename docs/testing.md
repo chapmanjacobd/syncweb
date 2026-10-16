@@ -1,5 +1,24 @@
 # Testing Strategy
 
+## CI gates
+
+The default CI suite runs `make check` and `make test` on Linux, Windows, and
+macOS. The Linux `network-scenarios` job also runs:
+
+```sh
+make test-network
+```
+
+This focused gate selects the in-process network scenarios for folder sync,
+network membership, blob transfer, snapshots, daemon synchronization, and the
+Syncthing relay mock. It is intentionally separate from the full suite so a
+network regression is visible as a named CI failure rather than being buried
+among unit and CLI tests.
+
+Tests that require an external Syncthing relay are opt-in with
+`SYNCWEB_INTEROP=1`; they are not part of the default CI gate because they
+depend on third-party network availability.
+
 ### Unit Tests
 - Identity management
 - DeviceId bidirectional conversion (Syncthing ↔ Iroh)

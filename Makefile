@@ -1,4 +1,4 @@
-.PHONY: all fmt lint test bench build clean check clippy install install-completions install-manpage manpage completions readme docs-check
+.PHONY: all fmt lint test test-network bench build clean check clippy install install-completions install-manpage manpage completions readme docs-check
 .SILENT:
 
 all: flint test lint fmt build manpage completions readme
@@ -25,6 +25,10 @@ lint:
 
 test:
 	cargo nextest run --show-progress only --no-fail-fast
+
+test-network:
+	cargo nextest run -p syncweb-core --test integration_tests --all-features --show-progress only --no-fail-fast \
+		--filter-expr 'test(/(blob_store_test|daemon_integration_test|folder_test|network_test|relay_test|snapshot_test)/)'
 
 test0:
 	cargo test -q --all-targets --all-features

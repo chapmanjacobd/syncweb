@@ -15,6 +15,7 @@ Focused documentation for the syncweb design and implementation.
 | [packages.md](packages.md) | Living folders, collection/package manifests, lifecycle |
 | [phases.md](phases.md) | Implementation phases (1-7) |
 | [testing.md](testing.md) | Testing strategy, performance targets, risks |
+| [status.md](status.md) | Current implemented-vs-planned product contract |
 | [api-reference.md](api-reference.md) | Iroh 1.0.2 API reference + implementation patterns |
 | [archive_format.md](archive_format.md) | Archive format design |
 | [indexing.md](indexing.md) | Opt-in indexing service |

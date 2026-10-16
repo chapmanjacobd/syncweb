@@ -708,18 +708,20 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
     let state_file = StateFile::new(data_dir);
     let Some(report) = state_file.load_status()? else {
         if output_json {
+            let networks = network_health_summary_json(data_dir)?;
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "daemon": {"status": "stopped"},
                     "folders": [],
                     "devices": devices_value(data_dir)?,
-                    "networks": [],
+                    "networks": networks,
                     "transfers": transfers,
                 }))?
             );
         } else {
             println!("daemon not running");
+            print_status_context(data_dir)?;
             print_transfer_summary(&transfers);
         }
         return Ok(());
@@ -758,6 +760,7 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
             }
         );
     }
+    print_status_context(data_dir)?;
     let mut table = Table::new();
     table.set_header(["Namespace", "Path", "Session", "Last sync", "Entries", "Errors"]);
     for folder in report.folders {
@@ -778,6 +781,48 @@ async fn handle_status(ctx: &CliContext<'_>) -> Result<()> {
     }
     println!("{table}");
     print_transfer_summary(&transfers);
+    Ok(())
+}
+
+fn print_status_context(data_dir: &std::path::Path) -> Result<()> {
+    let devices = devices_value(data_dir)?;
+    println!(
+        "device: iroh={} syncthing={}",
+        devices.get("iroh").and_then(serde_json::Value::as_str).unwrap_or("-"),
+        devices
+            .get("syncthing")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("-"),
+    );
+
+    let networks = network_health_summary_json(data_dir)?;
+    println!("networks:");
+    let Some(networks) = networks.as_array() else {
+        println!("  (unavailable)");
+        return Ok(());
+    };
+    if networks.is_empty() {
+        println!("  (none)");
+        return Ok(());
+    }
+    for network in networks {
+        println!(
+            "  {}  members={}  folders={}  last_event={}",
+            network.get("name").and_then(serde_json::Value::as_str).unwrap_or("-"),
+            network
+                .get("member_count")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            network
+                .get("folder_count")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            network
+                .get("last_event")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("never"),
+        );
+    }
     Ok(())
 }
 
@@ -3868,7 +3913,7 @@ async fn handle_collection_publish(
         let message = client
             .collection_publish(root, namespace, sequence, Vec::new(), Some(manifest_bytes.clone()))
             .await?;
-        print_daemon_ok(&message, output_json);
+        print_package_publish_response(&message, output_json)?;
         return Ok(());
     }
     let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
@@ -3887,22 +3932,59 @@ async fn handle_collection_publish(
     let store = syncweb_core::folder::CollectionStore::for_node(&node, &folder);
     let head = store.publish(&manifest, sequence).await?;
     let manifest_ticket = node.blob_store().ticket(node.endpoint(), head.manifest);
+    print_package_publish_values(
+        &head.manifest.to_string(),
+        &manifest_ticket.to_string(),
+        head.sequence,
+        output_json,
+    );
+    node.stop().await?;
+    Ok(())
+}
+
+fn print_package_publish_response(message: &str, output_json: bool) -> Result<()> {
+    if !output_json {
+        println!("{message}");
+        return Ok(());
+    }
+    let fields = message
+        .lines()
+        .filter_map(|line| line.split_once(':').map(|(key, value)| (key.trim(), value.trim())))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let manifest = fields
+        .get("manifest")
+        .copied()
+        .context("daemon package publish response is missing manifest")?;
+    let manifest_ticket = fields
+        .get("manifest_ticket")
+        .copied()
+        .context("daemon package publish response is missing manifest_ticket")?;
+    let sequence = fields
+        .get("sequence")
+        .copied()
+        .context("daemon package publish response is missing sequence")?
+        .parse::<u64>()
+        .context("daemon package publish response has an invalid sequence")?;
+    print_package_publish_values(manifest, manifest_ticket, sequence, true);
+    Ok(())
+}
+
+fn print_package_publish_values(manifest: &str, manifest_ticket: &str, sequence: u64, output_json: bool) {
     if output_json {
         println!(
             "{}",
             serde_json::json!({
-                "manifest": head.manifest.to_string(),
-                "manifest_ticket": manifest_ticket.to_string(),
-                "sequence": head.sequence,
+                "status": "published",
+                "manifest": manifest,
+                "manifest_ticket": manifest_ticket,
+                "sequence": sequence,
             })
         );
     } else {
-        println!("manifest: {}", head.manifest);
+        println!("manifest: {manifest}");
         println!("manifest_ticket: {manifest_ticket}");
-        println!("sequence: {}", head.sequence);
+        println!("sequence: {sequence}");
     }
-    node.stop().await?;
-    Ok(())
 }
 
 #[async_recursion]

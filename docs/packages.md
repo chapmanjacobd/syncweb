@@ -1,5 +1,24 @@
 # Packages, Policies, and Living Folders
 
+## Supported CLI workflow
+
+The implemented package lifecycle is intentionally small:
+
+```bash
+syncweb folders create ./dataset --no-share
+syncweb package add ./dataset --name climate-hourly --version 1.0.0
+syncweb package publish --namespace <namespace> ./dataset
+syncweb package info <manifest-ticket>
+syncweb package install <manifest-ticket>
+syncweb package upgrade <manifest-ticket>
+```
+
+Use `package export`/`package import` when the manifest and content must move
+through a compressed archive instead of a live blob ticket. `package list`,
+`versions`, `switch`, `verify`, and `remove` manage local installations.
+Installations use the local data directory's package store. All package
+commands honor the global `--json` flag for automation.
+
 ## Scoped Policy Modes (Integrates Public Read-Only Folders)
 
 ### Concept

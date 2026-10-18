@@ -1,8 +1,7 @@
 //! A UDP beacon address lookup, inspired by Zyre's passive discovery beacon.
 //!
-//! The beacon sends a node's current [`EndpointData`] (direct addresses and an
-//! optional relay URL) as a small JSON datagram on a fixed UDP port. It uses
-//! multicast for local fan-out and broadcast targets for LAN compatibility.
+//! The beacon broadcasts a node's current [`EndpointData`] (direct addresses
+//! and an optional relay URL) as a small JSON datagram on a fixed UDP port.
 //! Unlike mDNS there is no service-name registry; peers on the same LAN simply
 //! listen on the same port and accept datagrams that carry the expected scope
 //! token.
@@ -54,10 +53,6 @@ pub const DEFAULT_BEACON_PORT: u16 = 15_200;
 
 /// Number of ports a scope may spread over when deriving the effective port.
 pub const BEACON_PORT_SPREAD: u16 = 2_048;
-
-/// Administratively scoped multicast group used for same-host and LAN beacon
-/// fan-out. The payload scope still separates unrelated syncweb networks.
-const BEACON_MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 42, 99);
 
 /// How long a discovered peer's addresses stay usable without a refresh.
 pub const BEACON_PEER_TTL: Duration = Duration::from_secs(30);
@@ -138,10 +133,9 @@ impl BeaconAddressLookup {
     ///
     /// The receiver socket is bound to the effective port on all interfaces
     /// (or on the configured interface when one is given) and the sender
-    /// sends to the local multicast group, `255.255.255.255`, and the directed
-    /// broadcast of every up, non-loopback IPv4 interface (or only the
-    /// configured one). Loopback is used as a fallback when no broadcast-capable
-    /// interface is available.
+    /// broadcasts to `255.255.255.255` and the directed broadcast of every
+    /// up, non-loopback IPv4 interface (or only the configured one). Loopback
+    /// is used as a fallback when no broadcast-capable interface is available.
     ///
     /// # Errors
     ///
@@ -163,12 +157,7 @@ impl BeaconAddressLookup {
         let bind_addr = SocketAddr::new(bind_ip.map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), IpAddr::V4), port);
         let interfaces = ipv4_interfaces(interface);
         let targets = broadcast_targets_for_interfaces(&interfaces, port);
-        let multicast_interfaces = if interfaces.is_empty() {
-            vec![Ipv4Addr::UNSPECIFIED]
-        } else {
-            interfaces.iter().map(|value| value.addr).collect()
-        };
-        Self::with_bind_targets(endpoint_id, scope, bind_addr, targets, multicast_interfaces, interval)
+        Self::with_bind_targets(endpoint_id, scope, bind_addr, targets, interval)
     }
 
     /// Creates a beacon with an explicit bind address and set of targets.
@@ -177,24 +166,10 @@ impl BeaconAddressLookup {
         scope: Option<[u8; 16]>,
         bind_addr: SocketAddr,
         targets: Vec<SocketAddr>,
-        multicast_interfaces: Vec<Ipv4Addr>,
         beacon_interval: Duration,
     ) -> crate::error::Result<Self> {
         let recv_socket = tokio::net::UdpSocket::from_std(beacon_socket(bind_addr, true)?)?;
-        for interface in &multicast_interfaces {
-            if let Err(error) = recv_socket.join_multicast_v4(BEACON_MULTICAST_GROUP, *interface) {
-                warn!(%error, %interface, "failed to join beacon multicast group");
-            }
-        }
-        let send_socket = socket2::Socket::from(beacon_socket(SocketAddr::new(bind_addr.ip(), 0), false)?);
-        let multicast_interface = multicast_interfaces.first().copied().unwrap_or(Ipv4Addr::UNSPECIFIED);
-        if let Err(error) = send_socket.set_multicast_if_v4(&multicast_interface) {
-            warn!(%error, %multicast_interface, "failed to select beacon multicast interface; using the system default");
-        }
-        send_socket
-            .set_multicast_loop_v4(true)
-            .map_err(|error| SyncwebError::operation("failed to enable beacon multicast loopback", error))?;
-        let send_socket = tokio::net::UdpSocket::from_std(send_socket.into())?;
+        let send_socket = tokio::net::UdpSocket::from_std(beacon_socket(SocketAddr::new(bind_addr.ip(), 0), false)?)?;
 
         let (sender, mut recv) = mpsc::channel(64);
         let actor = async move {
@@ -292,11 +267,11 @@ fn beacon_socket(bind_addr: SocketAddr, reuse: bool) -> crate::error::Result<std
     Ok(socket.into())
 }
 
-/// The addresses every beacon is sent to: a multicast group, the limited
-/// broadcast, and the directed broadcast of every relevant IPv4 interface.
-/// Loopback is included only when interface discovery has no usable result.
-/// On Unix, loopback unicast is not safe with several `SO_REUSEPORT` receivers
-/// because each datagram can be delivered to just one receiver.
+/// The addresses every beacon is broadcast to: the limited broadcast plus the
+/// directed broadcast of every relevant IPv4 interface. Loopback is included
+/// only when interface discovery has no usable result. On Unix, loopback
+/// unicast is not safe with several `SO_REUSEPORT` receivers because each
+/// datagram can be delivered to just one receiver.
 #[cfg(test)]
 fn broadcast_targets(interface: Option<&str>, port: u16) -> Vec<SocketAddr> {
     broadcast_targets_for_interfaces(&ipv4_interfaces(interface), port)
@@ -307,7 +282,6 @@ fn broadcast_targets_for_interfaces(interfaces: &[InterfaceInfo], port: u16) -> 
     if interfaces.is_empty() {
         targets.push(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
     }
-    targets.push(SocketAddr::new(BEACON_MULTICAST_GROUP.into(), port));
     targets.push(SocketAddr::new(Ipv4Addr::BROADCAST.into(), port));
     for iface in interfaces {
         let target = SocketAddr::new(iface.broadcast.into(), port);
@@ -553,15 +527,8 @@ mod tests {
     fn make_beacon(id: PublicKey, scope: [u8; 16], bind_port: u16, target_port: u16) -> BeaconAddressLookup {
         let bind_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), bind_port);
         let targets = vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), target_port)];
-        BeaconAddressLookup::with_bind_targets(
-            id,
-            Some(scope),
-            bind_addr,
-            targets,
-            vec![Ipv4Addr::LOCALHOST],
-            Duration::from_secs(1),
-        )
-        .expect("beacon should bind")
+        BeaconAddressLookup::with_bind_targets(id, Some(scope), bind_addr, targets, Duration::from_secs(1))
+            .expect("beacon should bind")
     }
 
     #[tokio::test]
@@ -612,43 +579,6 @@ mod tests {
             published,
             BTreeSet::from([SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 42_001)])
         );
-    }
-
-    #[tokio::test]
-    async fn publish_and_resolve_over_multicast() {
-        let scope = [14_u8; 16];
-        let id_a = endpoint_id(7);
-        let id_b = endpoint_id(8);
-        let port = 21_006;
-        let interface = ipv4_interfaces(None)
-            .iter()
-            .find(|value| value.broadcast != value.addr)
-            .map_or(Ipv4Addr::UNSPECIFIED, |value| value.addr);
-        let make = |id, advertised_port| {
-            BeaconAddressLookup::with_bind_targets(
-                id,
-                Some(scope),
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
-                vec![SocketAddr::new(BEACON_MULTICAST_GROUP.into(), port)],
-                vec![interface],
-                Duration::from_secs(1),
-            )
-            .map(|beacon| (beacon, advertised_port))
-            .expect("beacon should bind")
-        };
-        let (beacon_a, port_a) = make(id_a, 42_006);
-        let (beacon_b, port_b) = make(id_b, 42_007);
-
-        beacon_a.publish(&endpoint_data(port_a));
-        beacon_b.publish(&endpoint_data(port_b));
-
-        let mut stream = beacon_a.resolve(id_b).expect("resolve stream");
-        let item = timeout(Duration::from_secs(5), stream.next())
-            .await
-            .expect("resolve should complete in time")
-            .expect("stream should yield an item")
-            .expect("resolve should succeed");
-        assert_eq!(item.endpoint_info().endpoint_id, id_b);
     }
 
     #[tokio::test]

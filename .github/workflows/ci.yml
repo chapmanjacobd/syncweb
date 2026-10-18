@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+env:
+  NEXTEST_STATUS_LEVEL: fail
+  NEXTEST_FINAL_STATUS_LEVEL: fail
+
 jobs:
   test:
     runs-on: ubuntu-latest

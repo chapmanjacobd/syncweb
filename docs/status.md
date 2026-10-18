@@ -1,9 +1,9 @@
 # Product status
 
 This is the current product contract for the alpha CLI. A behavior listed as
-**supported** is covered by the repository's normal test suite or by the
-focused `make test-network` CI gate. A behavior listed as **opt-in** or
-**planned** must not be presented as a default guarantee.
+supported is covered by the repository's normal test suite or by the
+focused `make test-network` CI gate. A behavior listed as opt-in or
+planned must not be presented as a default guarantee.
 
 ## Supported and CI-backed
 

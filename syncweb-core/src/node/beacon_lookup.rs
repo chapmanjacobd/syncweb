@@ -20,12 +20,14 @@ use std::{
     collections::{BTreeSet, HashMap},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     pin::Pin,
-    ptr,
     str::FromStr,
     sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+use std::ptr;
 
 use iroh::{
     PublicKey,
@@ -235,48 +237,25 @@ pub const fn beacon_port(base: u16, scope: Option<&[u8; 16]>) -> u16 {
 
 /// Builds a bound UDP socket with broadcast enabled and non-blocking I/O.
 fn beacon_socket(bind_addr: SocketAddr, reuse: bool) -> crate::error::Result<std::net::UdpSocket> {
-    let socket = std::net::UdpSocket::bind(bind_addr)
-        .map_err(|error| SyncwebError::operation("failed to bind beacon socket", error))?;
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )
+    .map_err(|error| SyncwebError::operation("failed to create beacon socket", error))?;
+    socket
+        .set_reuse_address(reuse)
+        .map_err(|error| SyncwebError::operation("failed to configure beacon socket reuse", error))?;
     socket
         .set_broadcast(true)
         .map_err(|error| SyncwebError::operation("failed to enable beacon broadcast", error))?;
     socket
+        .bind(&socket2::SockAddr::from(bind_addr))
+        .map_err(|error| SyncwebError::operation("failed to bind beacon socket", error))?;
+    socket
         .set_nonblocking(true)
         .map_err(|error| SyncwebError::operation("failed to set beacon socket non-blocking", error))?;
-    if reuse {
-        set_reuseaddr(&socket)?;
-    }
-    Ok(socket)
-}
-
-/// Sets `SO_REUSEADDR` on a UDP socket so multiple daemons on one host can
-/// share the same beacon port.
-fn set_reuseaddr(socket: &std::net::UdpSocket) -> crate::error::Result<()> {
-    use std::os::fd::AsRawFd;
-
-    let one: libc::c_int = 1;
-    let option_length = libc::socklen_t::try_from(std::mem::size_of::<libc::c_int>())
-        .map_err(|error| SyncwebError::operation("invalid beacon socket option length", error))?;
-    // SAFETY: `socket.as_raw_fd()` is a valid socket descriptor for the lifetime
-    // of `socket`, and setting SO_REUSEADDR on a UDP socket only affects the
-    // kernel's bind behavior; it cannot cause memory unsafety.
-    let result = unsafe {
-        libc::setsockopt(
-            socket.as_raw_fd(),
-            libc::SOL_SOCKET,
-            libc::SO_REUSEADDR,
-            ptr::from_ref(&one).cast(),
-            option_length,
-        )
-    };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(SyncwebError::operation(
-            "failed to set SO_REUSEADDR on beacon socket",
-            std::io::Error::last_os_error(),
-        ))
-    }
+    Ok(socket.into())
 }
 
 /// The addresses every beacon is broadcast to: the limited broadcast plus the
@@ -368,6 +347,7 @@ fn flag_is_set(flags: u32, flag: i32) -> bool {
 }
 
 /// Reads the IPv4 address from a `sockaddr`, if it is an IPv4 address.
+#[cfg(unix)]
 fn sockaddr_ipv4(raw: *mut libc::sockaddr) -> Option<Ipv4Addr> {
     if raw.is_null() {
         return None;
@@ -562,6 +542,14 @@ mod tests {
             published,
             BTreeSet::from([SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 42_001)])
         );
+    }
+
+    #[tokio::test]
+    async fn multiple_beacons_can_share_a_receive_port() {
+        let scope = [10_u8; 16];
+        let first = make_beacon(endpoint_id(5), scope, 21_002, 21_003);
+        let second = make_beacon(endpoint_id(6), scope, 21_002, 21_003);
+        drop((first, second));
     }
 
     #[tokio::test]

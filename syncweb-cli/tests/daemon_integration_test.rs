@@ -2470,7 +2470,15 @@ fn test_websocket_bridge_round_trip() -> anyhow::Result<()> {
     ensure!(start.status.success(), "daemon start should succeed");
     wait_for_daemon_ready(arg)?;
 
-    let mut stream = TcpStream::connect("127.0.0.1:9192").context("connect ws bridge")?;
+    let mut stream = (0..60)
+        .find_map(|_| match TcpStream::connect("127.0.0.1:9192") {
+            Ok(stream) => Some(stream),
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                None
+            }
+        })
+        .context("connect ws bridge")?;
     stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
     stream.write_all(

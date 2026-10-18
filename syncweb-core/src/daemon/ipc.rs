@@ -11,10 +11,9 @@ use std::{
 
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::{RwLock, broadcast, mpsc},
-    task::JoinSet,
-};
+use tokio::sync::{RwLock, broadcast, mpsc};
+#[cfg(unix)]
+use tokio::task::JoinSet;
 
 use crate::{
     bandwidth_stats::{FileStatsCollector, FileStatsReport},

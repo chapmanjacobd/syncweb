@@ -317,7 +317,9 @@ pub struct FolderCreate {
 
 #[derive(Debug, Args)]
 pub struct FolderJoin {
-    #[arg(help = "Iroh document ticket for a new folder, or a folder selector for an already-tracked folder")]
+    #[arg(
+        help = "Iroh document ticket for a new folder, or a folder selector for an already-tracked folder; use '-' to read it from stdin"
+    )]
     pub ticket: String,
     #[arg(default_value = ".")]
     pub path: PathBuf,

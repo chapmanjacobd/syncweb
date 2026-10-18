@@ -541,10 +541,22 @@ impl Daemon {
         let server = self.ipc_server.clone();
         let server_task = tokio::spawn(async move { server.serve().await });
 
-        let bridge =
-            crate::media::BridgeServer::new(crate::media::bridge::DEFAULT_BRIDGE_LISTEN, self.ipc_server.clone())?;
-        let bridge_shutdown = self.handle.shutdown_sender.clone();
-        let bridge_task = tokio::spawn(async move { bridge.run(bridge_shutdown).await });
+        let bridge_task =
+            match crate::media::BridgeServer::new(crate::media::bridge::DEFAULT_BRIDGE_LISTEN, self.ipc_server.clone())
+            {
+                Ok(bridge) => {
+                    let bridge_shutdown = self.handle.shutdown_sender.clone();
+                    Some(tokio::spawn(async move { bridge.run(bridge_shutdown).await }))
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        listen = crate::media::bridge::DEFAULT_BRIDGE_LISTEN,
+                        "websocket bridge unavailable; continuing without bridge"
+                    );
+                    None
+                }
+            };
 
         let media_task = self.config.media_listen.map(|addr| {
             let media_srv = crate::media::MediaServer::new(addr, self.node.blob_store().clone());
@@ -552,7 +564,7 @@ impl Daemon {
             tokio::spawn(async move { media_srv.run(media_shutdown).await })
         });
 
-        Ok((server_task, Some(bridge_task), media_task))
+        Ok((server_task, bridge_task, media_task))
     }
 
     async fn wait_for_server_tasks(

@@ -306,6 +306,7 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
     let output_json = ctx.output_json;
     match command {
         ProviderCommand::Add { collection, provider } => {
+            let provider = super::ticket::resolve_ticket(&provider)?;
             let ticket = provider.parse::<BlobTicket>()?;
             let store = open_link_store(data_dir)?;
             let expected_hash = store.collection_hash(&collection)?;

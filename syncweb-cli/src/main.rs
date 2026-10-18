@@ -1336,6 +1336,7 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
         if command.providers.from.is_empty() {
             anyhow::bail!("--from (or --provider) is required with --hash");
         }
+        let provider_values = cli::ticket::resolve_tickets(&command.providers.from)?;
         if command.max_peers.is_some()
             || command.min_peers.is_some()
             || command.min_count.is_some()
@@ -1348,9 +1349,11 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
             .providers
             .from
             .iter()
-            .map(|t| {
-                let ticket: iroh_blobs::ticket::BlobTicket =
-                    t.parse().map_err(|e| anyhow::anyhow!("invalid blob ticket: {e}"))?;
+            .zip(provider_values)
+            .map(|(original, resolved)| {
+                let ticket: iroh_blobs::ticket::BlobTicket = resolved
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("invalid blob ticket {original:?}: {e}"))?;
                 if ticket.hash() != content_hash {
                     anyhow::bail!("blob ticket hash does not match --hash");
                 }
@@ -2168,6 +2171,7 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    let provider_values = cli::ticket::resolve_tickets(&command.providers.from)?;
 
     // A content filter selects the exact entry set client-side. The daemon and
     // core verify filters cannot express the shared group, so the surviving
@@ -2204,7 +2208,7 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
                 path_filter,
                 glob_filter,
                 command.fix,
-                command.providers.from.clone(),
+                provider_values.clone(),
             )
             .await?;
         print_daemon_ok(&message, output_json);
@@ -2239,7 +2243,7 @@ async fn handle_verify(ctx: &CliContext<'_>, command: VerifyArgs) -> Result<()> 
 
     if command.fix {
         let result = checker.verify_folder_filtered(&folder, filter.as_ref()).await?;
-        let repair = try_repair(&node, &folder, &result.corrupted, &command.providers.from).await;
+        let repair = try_repair(&node, &folder, &result.corrupted, &provider_values).await;
         let fixed = syncweb_core::verify::FixedVerifyResult::new(result.clone(), Some(repair.clone()));
         if output_json {
             println!("{}", serde_json::to_string_pretty(&fixed)?);
@@ -3250,6 +3254,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    let ticket = cli::ticket::resolve_ticket(&command.ticket)?;
     let filters = subscribe_filters_from(&command);
     let subscribe = command.effective_subscribe();
     let download_existing = command.download_existing;
@@ -3261,13 +3266,12 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
 
     // `join --subscribe <folder>` (subscribe is an explicit opt-in) on an already-tracked
     // folder: idempotent enable. Without it there is nothing left for join to do.
-    let is_new_ticket =
-        command.ticket.parse::<iroh_docs::DocTicket>().is_ok() || command.ticket.trim_start().starts_with("syncweb://");
+    let is_new_ticket = ticket.parse::<iroh_docs::DocTicket>().is_ok() || ticket.trim_start().starts_with("syncweb://");
     if !is_new_ticket {
         if !subscribe {
             anyhow::bail!("folder already tracked — enable live syncing with `join --subscribe <folder>`");
         }
-        return handle_join_existing(ctx, &command.ticket, &filters).await;
+        return handle_join_existing(ctx, &ticket, &filters).await;
     }
 
     std::fs::create_dir_all(&effective_path)
@@ -3278,7 +3282,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let message = client
             .join(
-                command.ticket.clone(),
+                ticket.clone(),
                 effective_path.clone(),
                 SyncMode::from_str(&command.mode)?,
                 filters.clone(),
@@ -3295,11 +3299,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     let node = open_node(data_dir).await?;
     let manager = FolderManager::new(&node);
     let folder = manager
-        .join_with_options(
-            command.ticket,
-            SyncMode::from_str(&command.mode)?,
-            command.metadata_only,
-        )
+        .join_with_options(ticket, SyncMode::from_str(&command.mode)?, command.metadata_only)
         .await?;
     if let Some(network_name) = command.network {
         add_folder_to_network(data_dir, &network_name, folder.namespace_id())?;
@@ -4025,6 +4025,7 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             }
         }
         PackageCommand::Info { ticket, hash, node_id } => {
+            let ticket = ticket.as_deref().map(cli::ticket::resolve_ticket).transpose()?;
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
                 let info = client.package_info(ticket, hash, node_id).await?;
                 return print_package_info_response(&info, output_json);
@@ -4032,6 +4033,7 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             handle_package_info(ctx, ticket, hash, node_id).await?;
         }
         PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
+            let ticket = cli::ticket::resolve_ticket(&ticket)?;
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
                 let result = client.package_install(ticket).await?;
                 print_package_install_response(result, output_json);
@@ -5178,6 +5180,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Join { ticket } => {
+            let ticket = cli::ticket::resolve_ticket(&ticket)?;
             let parsed = ticket.parse()?;
             let id = manager.join(parsed)?;
             if output_json {

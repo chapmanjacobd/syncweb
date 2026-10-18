@@ -1,7 +1,10 @@
 use anyhow::{Context, ensure};
 use iroh::{EndpointAddr, SecretKey};
 use iroh_blobs::{BlobFormat, Hash, ticket::BlobTicket};
-use std::process::Command;
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 fn workspace_version() -> anyhow::Result<String> {
     let cargo: toml::Value = toml::from_str(include_str!("../../Cargo.toml")).context("parse workspace Cargo.toml")?;
@@ -1833,6 +1836,76 @@ fn network_join_invalid_ticket_fails() -> anyhow::Result<()> {
         .context("join with invalid ticket")?;
 
     ensure!(!output.status.success(), "joining with invalid ticket should fail");
+    Ok(())
+}
+
+#[test]
+fn network_join_reads_ticket_from_stdin() -> anyhow::Result<()> {
+    let owner_directory = cli_test_dir("net-stdin-owner");
+    let owner_data_dir = owner_directory.to_str().context("UTF-8 owner path")?;
+    let joiner_directory = cli_test_dir("net-stdin-joiner");
+    let joiner_data_dir = joiner_directory.to_str().context("UTF-8 joiner path")?;
+
+    let create = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--no-daemon",
+            "--data-dir",
+            owner_data_dir,
+            "network",
+            "create",
+            "stdin-net",
+        ])
+        .output()
+        .context("create network")?;
+    ensure!(
+        create.status.success(),
+        "network create should succeed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+
+    let invite = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args([
+            "--no-daemon",
+            "--data-dir",
+            owner_data_dir,
+            "network",
+            "invite",
+            "stdin-net",
+        ])
+        .output()
+        .context("invite to network")?;
+    ensure!(
+        invite.status.success(),
+        "network invite should succeed: {}",
+        String::from_utf8_lossy(&invite.stderr)
+    );
+    let ticket = String::from_utf8(invite.stdout).context("UTF-8 ticket")?;
+
+    let mut join = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--no-daemon", "--data-dir", joiner_data_dir, "network", "join", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("start network join")?;
+    join.stdin
+        .take()
+        .context("open network join stdin")?
+        .write_all(ticket.as_bytes())
+        .context("write ticket to stdin")?;
+    let output = join.wait_with_output().context("wait for network join")?;
+    std::fs::remove_dir_all(&owner_directory).context("cleanup owner")?;
+    std::fs::remove_dir_all(&joiner_directory).context("cleanup joiner")?;
+
+    ensure!(
+        output.status.success(),
+        "network join should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        !String::from_utf8_lossy(&output.stderr).contains(ticket.trim()),
+        "stdin ticket should not be echoed in errors"
+    );
     Ok(())
 }
 

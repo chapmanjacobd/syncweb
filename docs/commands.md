@@ -29,6 +29,19 @@ trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 (always pinned, never persisted). `folders join` accepts either the `syncweb://...` URL or a bare
 ticket.
 
+For secure automation, every command that accepts a ticket accepts `-` in the ticket
+position to read the complete ticket from stdin. The ticket is therefore not present in
+the process command line (`/proc/*/cmdline`). For example:
+
+```bash
+printf '%s' "$TICKET" | syncweb folders join - /path/to/folder
+printf '%s' "$TICKET" | syncweb package install -
+printf '%s' "$NETWORK_INVITE" | syncweb network join -
+```
+
+The same convention applies to blob provider tickets passed to `share provider add`,
+`download --from`, and `verify --from`.
+
 ## Common package publish/install flow
 
 Use the package commands when content should have a versioned manifest and an

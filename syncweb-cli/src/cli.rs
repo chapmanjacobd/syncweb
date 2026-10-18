@@ -3,3 +3,4 @@ pub mod commands;
 pub mod filter;
 pub mod indexing;
 pub mod output;
+pub mod ticket;

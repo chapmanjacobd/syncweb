@@ -29,7 +29,16 @@ fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
 }
 
 fn daemon_start_bg(data_dir_arg: &str) -> anyhow::Result<std::process::Output> {
-    syncweb(&["--data-dir", data_dir_arg, "start", "--bg", "--no-relay", "--no-mdns"])
+    syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "start",
+        "--bg",
+        "--max-threads",
+        "1",
+        "--no-relay",
+        "--no-mdns",
+    ])
 }
 
 fn wait_for_daemon_ready(data_dir_arg: &str) -> anyhow::Result<()> {

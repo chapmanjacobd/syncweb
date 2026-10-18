@@ -132,8 +132,9 @@ impl BeaconAddressLookup {
     ///
     /// The receiver socket is bound to the effective port on all interfaces
     /// (or on the configured interface when one is given) and the sender
-    /// broadcasts to loopback, `255.255.255.255`, and the directed broadcast
-    /// of every up, non-loopback IPv4 interface (or only the configured one).
+    /// broadcasts to `255.255.255.255` and the directed broadcast of every
+    /// up, non-loopback IPv4 interface (or only the configured one). Loopback
+    /// is used as a fallback when no broadcast-capable interface is available.
     ///
     /// # Errors
     ///
@@ -265,12 +266,18 @@ fn beacon_socket(bind_addr: SocketAddr, reuse: bool) -> crate::error::Result<std
 }
 
 /// The addresses every beacon is broadcast to: the limited broadcast plus the
-/// directed broadcast of every relevant IPv4 interface.
+/// directed broadcast of every relevant IPv4 interface. Loopback is included
+/// only when interface discovery has no usable result. On Unix, loopback
+/// unicast is not safe with several `SO_REUSEPORT` receivers because each
+/// datagram can be delivered to just one receiver.
 fn broadcast_targets(interface: Option<&str>, port: u16) -> Vec<SocketAddr> {
+    let interfaces = ipv4_interfaces(interface);
     let mut targets = Vec::with_capacity(8);
-    targets.push(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
+    if interfaces.is_empty() {
+        targets.push(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
+    }
     targets.push(SocketAddr::new(Ipv4Addr::BROADCAST.into(), port));
-    for iface in ipv4_interfaces(interface) {
+    for iface in interfaces {
         let target = SocketAddr::new(iface.broadcast.into(), port);
         if !targets.contains(&target) {
             targets.push(target);
@@ -525,6 +532,22 @@ mod tests {
         let offset = u16::from_be_bytes([scope[0], scope[1]]) % BEACON_PORT_SPREAD;
         assert_eq!(port, DEFAULT_BEACON_PORT.saturating_add(offset));
         assert_eq!(beacon_port(DEFAULT_BEACON_PORT, None), DEFAULT_BEACON_PORT);
+    }
+
+    #[test]
+    fn broadcast_targets_fall_back_to_loopback_without_interface() {
+        let targets = broadcast_targets(Some("__missing_interface__"), 21_004);
+        assert!(targets.contains(&SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 21_004)));
+        assert!(targets.contains(&SocketAddr::new(Ipv4Addr::BROADCAST.into(), 21_004)));
+    }
+
+    #[test]
+    fn broadcast_targets_avoid_loopback_when_interface_exists() {
+        let Some(interface) = ipv4_interfaces(None).first().map(|value| value.name.clone()) else {
+            return;
+        };
+        let targets = broadcast_targets(Some(&interface), 21_005);
+        assert!(!targets.contains(&SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 21_005)));
     }
 
     #[tokio::test]

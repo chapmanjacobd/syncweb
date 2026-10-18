@@ -1107,7 +1107,18 @@ impl Daemon {
             .map_err(|error| SyncwebError::operation("daemon watcher mutex is poisoned", error))?;
         for (namespace, path) in to_add {
             if let std::collections::hash_map::Entry::Vacant(slot) = watchers.entry(namespace) {
-                slot.insert(FsWatcher::new(&path)?);
+                match FsWatcher::new(&path) {
+                    Ok(watcher) => {
+                        slot.insert(watcher);
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            path = %path.display(),
+                            "failed to create filesystem watcher; will retry"
+                        );
+                    }
+                }
             }
         }
         Ok(())

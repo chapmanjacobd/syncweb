@@ -363,7 +363,16 @@ async fn test_two_nodes_sync_files() -> anyhow::Result<()> {
     .context("entry should exist on B")?;
     anyhow::ensure!(entry.content_hash() == hash);
 
-    let blob_bytes = node_b.blob_store().get(hash).await?;
+    let blob_bytes = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            if node_b.blob_store().has(hash).await? {
+                return anyhow::Ok(node_b.blob_store().get(hash).await?);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await
+    .context("timed out waiting for blob content")??;
     anyhow::ensure!(blob_bytes.as_ref() == b"hello from A");
 
     node_a.stop().await?;

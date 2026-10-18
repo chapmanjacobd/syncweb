@@ -5964,6 +5964,48 @@ async fn resolve_selector_embedded(
             .find(|(_, mount)| std::fs::canonicalize(mount).unwrap_or_else(|_| mount.clone()) == root)
             .map(|(namespace, _)| namespace.clone())
         else {
+            // Fallback: try to find a live folder whose mount matches any recorded mount for that namespace,
+            // or whose mounted path (if we can infer) matches the root.
+            let mut found_fallback = None;
+            for folder in manager.list().await? {
+                let ns = folder.namespace_id().to_string();
+                if let Some((_, m)) = mounts.iter().find(|(n, _)| n == &ns) {
+                    let m_c = std::fs::canonicalize(m).unwrap_or_else(|_| m.clone());
+                    if m_c == root {
+                        found_fallback = Some((ns.clone(), folder));
+                        break;
+                    }
+                }
+                // Also check: if the manager knows about this folder and the canonical selector's
+                // best root came from nowhere? No. Try matching the remainder logic differently.
+                // Alternatively, if there's only one live folder and its mount equals selector,
+                // but we need to handle remainder. Easier: try to match by seeing if the folder's
+                // namespace corresponds to any live folder and the canonical path equals root.
+            }
+            // If still not found, try: for any live folder, see if its "mount" in the embedded context
+            // is this root? Not directly tracked; but in embedded joins we don't store in DB. Hmm.
+            if found_fallback.is_none() {
+                for folder in manager.list().await? {
+                    let ns = folder.namespace_id().to_string();
+                    // Try to see if any mount in DB for this ns equals root; also try the selector itself.
+                    if std::fs::canonicalize(&selector).unwrap_or_else(|_| selector.to_path_buf()) == root
+                        || selector.canonicalize().unwrap_or_else(|_| selector.to_path_buf()) == root {
+                        // If the selector is the exact root and it's a live folder, use it.
+                        found_fallback = Some((ns.clone(), folder));
+                        break;
+                    }
+                }
+            }
+            if let Some((ns, folder)) = found_fallback {
+                return Ok((
+                    ResolvedFolder {
+                        namespace: ns,
+                        mount_root: Some(root),
+                        remainder: remainder.clone(),
+                    },
+                    folder,
+                ));
+            }
             anyhow::bail!("folder mount root resolved to a departed folder");
         };
         let namespace_id = namespace

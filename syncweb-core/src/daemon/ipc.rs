@@ -11,7 +11,10 @@ use std::{
 
 use n0_future::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, broadcast, mpsc};
+use tokio::{
+    sync::{RwLock, broadcast, mpsc},
+    task::JoinSet,
+};
 
 use crate::{
     bandwidth_stats::{FileStatsCollector, FileStatsReport},
@@ -1091,18 +1094,26 @@ impl IpcServer {
     ///
     /// # Errors
     ///
-    /// Returns an error when the socket cannot be bound, accepted, or written.
+    /// Returns an error when the socket cannot be bound or accepted. Individual
+    /// connection errors are logged and do not stop the server.
     pub async fn serve(&self) -> Result<()> {
         #[cfg(unix)]
         {
             let listener = self.listener.bind()?;
             let mut shutdown = self.daemon_handle.shutdown_sender.subscribe();
+            let server = self.clone();
+            let mut connections = JoinSet::new();
             let result = loop {
                 tokio::select! {
                     shutdown_result = shutdown.recv() => {
                         match shutdown_result {
                             Ok(()) | Err(broadcast::error::RecvError::Closed) => break Ok(()),
                             Err(broadcast::error::RecvError::Lagged(_)) => {}
+                        }
+                    }
+                    joined = connections.join_next(), if !connections.is_empty() => {
+                        if let Some(Err(error)) = joined {
+                            tracing::error!(%error, "daemon IPC connection task failed");
                         }
                     }
                     accepted = listener.accept() => {
@@ -1112,13 +1123,20 @@ impl IpcServer {
                                 error,
                             )
                         })?;
-                        if let Err(error) = Box::pin(self.handle_connection(stream)).await {
-                            tracing::error!(%error, "daemon IPC connection failed");
-                            return Err(error);
-                        }
+                        let connection_server = server.clone();
+                        connections.spawn(async move {
+                            if let Err(error) = connection_server.handle_connection(stream).await {
+                                tracing::error!(%error, "daemon IPC connection failed");
+                            }
+                        });
                     }
                 }
             };
+            while let Some(joined) = connections.join_next().await {
+                if let Err(error) = joined {
+                    tracing::error!(%error, "daemon IPC connection task failed");
+                }
+            }
             if let Err(error) = std::fs::remove_file(self.listener.socket_path())
                 && self.listener.socket_path().exists()
             {

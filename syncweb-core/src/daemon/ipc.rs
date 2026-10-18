@@ -42,6 +42,7 @@ use super::{
 
 use std::time::Duration;
 
+#[cfg(unix)]
 const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
@@ -56,6 +57,7 @@ pub trait IpcTransport: Send + Sync {
     async fn recv_response(&mut self) -> Result<IpcResponse>;
 }
 
+#[cfg(unix)]
 fn encode_ipc_request(request: &IpcRequest) -> Result<Vec<u8>> {
     let mut message = serde_json::to_vec(request)
         .map_err(|error| SyncwebError::operation("failed to serialize IPC request", error))?;
@@ -63,6 +65,7 @@ fn encode_ipc_request(request: &IpcRequest) -> Result<Vec<u8>> {
     Ok(message)
 }
 
+#[cfg(unix)]
 fn encode_ipc_response(response: &IpcResponse) -> Result<Vec<u8>> {
     let mut message = serde_json::to_vec(response)
         .map_err(|error| SyncwebError::operation("failed to serialize IPC response", error))?;
@@ -70,6 +73,7 @@ fn encode_ipc_response(response: &IpcResponse) -> Result<Vec<u8>> {
     Ok(message)
 }
 
+#[cfg(unix)]
 fn decode_ipc_response(bytes: &[u8]) -> Result<IpcResponse> {
     if bytes.is_empty() {
         return Err(SyncwebError::operation(

@@ -246,6 +246,12 @@ fn beacon_socket(bind_addr: SocketAddr, reuse: bool) -> crate::error::Result<std
     socket
         .set_reuse_address(reuse)
         .map_err(|error| SyncwebError::operation("failed to configure beacon socket reuse", error))?;
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    if reuse {
+        socket
+            .set_reuse_port(true)
+            .map_err(|error| SyncwebError::operation("failed to configure beacon port reuse", error))?;
+    }
     socket
         .set_broadcast(true)
         .map_err(|error| SyncwebError::operation("failed to enable beacon broadcast", error))?;
@@ -342,6 +348,7 @@ fn ipv4_interfaces_raw() -> Vec<InterfaceInfo> {
 }
 
 /// Tests whether an interface flag constant is set.
+#[cfg(unix)]
 fn flag_is_set(flags: u32, flag: i32) -> bool {
     flags & u32::try_from(flag).unwrap_or(0) != 0
 }

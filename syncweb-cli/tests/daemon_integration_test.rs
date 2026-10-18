@@ -2471,12 +2471,14 @@ fn test_websocket_bridge_round_trip() -> anyhow::Result<()> {
     wait_for_daemon_ready(arg)?;
 
     let mut stream = (0..60)
-        .find_map(|_| match TcpStream::connect("127.0.0.1:9192") {
-            Ok(stream) => Some(stream),
-            Err(_) => {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                None
-            }
+        .find_map(|_| {
+            TcpStream::connect("127.0.0.1:9192").map_or_else(
+                |_| {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    None
+                },
+                Some,
+            )
         })
         .context("connect ws bridge")?;
     stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;

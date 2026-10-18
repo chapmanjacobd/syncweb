@@ -40,8 +40,14 @@ make test-network
 
 - Text `.diff` conflict output and a dedicated conflict-resolution CLI are not
   implemented; current conflict handling uses deterministic conflict copies.
+  Remaining work is tracked in [plans/conflict-resolution.md](../plans/conflict-resolution.md).
 - The daemon is still manually managed: `status` reports health and progress,
-  but it does not auto-start or supervise the daemon.
+  but it does not auto-start or supervise the daemon. Follow-up work is
+  tracked in [plans/ux-and-operations.md](../plans/ux-and-operations.md).
+- Communal LAN swarming, including provider inventories, multi-source
+  transfers, replication policy, and large-LAN validation, is planned rather
+  than a current product guarantee. See
+  [plans/communal-swarming.md](../plans/communal-swarming.md).
 - Design documents may describe future commands, but generated help, manpages,
   and supported command guides must be generated from the authoritative
   `syncweb-cli/src/cli/commands.rs` surface and must not present future names

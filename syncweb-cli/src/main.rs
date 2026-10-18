@@ -795,9 +795,9 @@ fn print_status_context(data_dir: &std::path::Path) -> Result<()> {
             .unwrap_or("-"),
     );
 
-    let networks = network_health_summary_json(data_dir)?;
+    let network_summary = network_health_summary_json(data_dir)?;
     println!("networks:");
-    let Some(networks) = networks.as_array() else {
+    let Some(networks) = network_summary.as_array() else {
         println!("  (unavailable)");
         return Ok(());
     };

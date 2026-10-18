@@ -148,6 +148,9 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 ## Plans
 
-*Iterated below in the planning section of this document — each plan is
-validated against the actual implementation before being written, and each
-action item names files/commands to touch, before/after behavior, and tests.*
+Actionable follow-up work is tracked in
+[`../plans/ux-and-operations.md`](../plans/ux-and-operations.md). The
+communal-LAN transport and scale work is tracked in
+[`../plans/communal-swarming.md`](../plans/communal-swarming.md). This document
+remains the source for user stories, friction points, and product language;
+plans are the source for implementation tasks and completion criteria.

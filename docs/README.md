@@ -11,11 +11,15 @@ Focused documentation for the syncweb design and implementation.
 | [relay.md](relay.md) | Syncthing relay piggyback, transport fallback |
 | [filter-logging-schedule.md](filter-logging-schedule.md) | Filter engine, schedules, bandwidth accounting |
 | [commands.md](commands.md) | find, stat, sort, create/config command designs |
-| [module-structure.md](module-structure.md) | Module tree, parallel scanning/import/export |
 | [packages.md](packages.md) | Living folders, collection/package manifests, lifecycle |
-| [phases.md](phases.md) | Implementation phases (1-7) |
 | [testing.md](testing.md) | Testing strategy, performance targets, risks |
 | [status.md](status.md) | Current implemented-vs-planned product contract |
 | [api-reference.md](api-reference.md) | Iroh 1.0.2 API reference + implementation patterns |
 | [archive_format.md](archive_format.md) | Archive format design |
 | [indexing.md](indexing.md) | Opt-in indexing service |
+| [../plans/README.md](../plans/README.md) | Actionable implementation plans |
+
+The former `phases.md` and `conflict-resolution-plan.md` documents are now
+tracked in `plans/roadmap.md` and `plans/conflict-resolution.md`. Design and
+user-story documents may describe future behavior, but executable support is
+defined by [status.md](status.md).

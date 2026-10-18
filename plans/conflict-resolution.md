@@ -38,7 +38,7 @@ winner (`bob text version`) at `note.txt` and kept the loser as
 `note.txt.conflict.4a313a7e`. Distinct new files converge and materialize on
 both sides.
 
-The intended UX is sketched in `docs/offline-conflict.md`; this implementation
+The intended UX is sketched in `../docs/offline-conflict.md`; this implementation
 covers the "full file saved" fallback (Option B) and leaves the text `.diff`
 optimization (Option C) and `syncweb conflicts` for a follow-up.
 
@@ -83,7 +83,7 @@ smaller than the losing file, write `<stem>.diff` instead of a full conflict
 copy. Otherwise fall back to a full conflict copy.
 
 - Pros: excellent for text (code, docs, markdown); low disk overhead; matches
-  `docs/offline-conflict.md`.
+  `../docs/offline-conflict.md`.
 - Cons: needs a diff implementation/limit; binary files still whole-file;
   still materialize-time only.
 
@@ -138,7 +138,7 @@ Ship Option C in two phases, deferring D and F:
      `doc.get_many(Query::all().key_exact(key))` (the collapsing
      `single_latest_per_key()` view stays for normal reads).
    - Add a `Conflict`/`ConflictResolution` type (as sketched in
-     `docs/offline-conflict.md`): winner = max `timestamp()`, tie broken by
+     `../docs/offline-conflict.md`): winner = max `timestamp()`, tie broken by
      `author()`; loser written as `.conflict.<short-hash>` or, when both decode
      as text and the diff is smaller, `<stem>.diff`.
    - Apply this in `materialize_selected_content` and the daemon
@@ -177,7 +177,7 @@ re-import guard exists.
   in-memory hash set already used to skip already-processed entries.
 - CLI: `conflicts` subcommand + JSON envelope; folder status field
   `conflicts: N`.
-- Naming rules follow `docs/offline-conflict.md`: `<stem>.diff` when the diff
+- Naming rules follow `../docs/offline-conflict.md`: `<stem>.diff` when the diff
   is smaller than the winner, otherwise
   `<stem>.conflict.<short-hash>.<ext>`; the winner always keeps the original
   path.

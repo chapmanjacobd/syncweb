@@ -1,4 +1,9 @@
-# Feature Areas
+# Implementation roadmap
+
+This is the feature-area roadmap migrated from `docs/phases.md`. It records
+the broad product decomposition; current support is authoritative in
+`docs/status.md`, and new actionable work belongs in the focused plans listed
+in `plans/README.md`.
 
 ### Foundation
 IrohNode with basic identity, storage, and logging:

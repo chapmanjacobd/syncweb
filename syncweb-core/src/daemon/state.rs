@@ -422,20 +422,43 @@ impl Drop for PidLock {
 #[must_use]
 pub fn daemon_socket_path(data_dir: &Path) -> PathBuf {
     if let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty()) {
-        let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
-        let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
+        let stable_data_dir = stable_data_dir_path(data_dir);
+        let digest = blake3::hash(stable_data_dir.to_string_lossy().as_bytes());
         let suffix: String = digest.to_hex().chars().take(16).collect();
         return PathBuf::from(runtime_dir).join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"));
     }
     let socket = data_dir.join(SOCKET_FILE_NAME);
     #[cfg(target_os = "macos")]
     if socket.as_os_str().len() >= 100 {
-        let canonical_data_dir = fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
-        let digest = blake3::hash(canonical_data_dir.to_string_lossy().as_bytes());
+        let stable_data_dir = stable_data_dir_path(data_dir);
+        let digest = blake3::hash(stable_data_dir.to_string_lossy().as_bytes());
         let suffix: String = digest.to_hex().chars().take(16).collect();
         return std::env::temp_dir().join(format!("{RUNTIME_SOCKET_FILE_PREFIX}{suffix}.sock"));
     }
     socket
+}
+
+/// Canonicalize a data directory without changing its identity while it is
+/// being created by a concurrently starting daemon.
+fn stable_data_dir_path(data_dir: &Path) -> PathBuf {
+    let mut missing_components = Vec::new();
+    let mut existing = data_dir;
+    while !existing.exists() {
+        let Some(name) = existing.file_name() else {
+            break;
+        };
+        missing_components.push(name.to_owned());
+        existing = existing
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+    }
+
+    let mut stable = fs::canonicalize(existing).unwrap_or_else(|_| existing.to_path_buf());
+    for component in missing_components.iter().rev() {
+        stable.push(component);
+    }
+    stable
 }
 
 /// Check whether a process ID is currently present on the local system.
@@ -690,6 +713,18 @@ mod tests {
         let path = daemon_socket_path(&dir);
         assert!(path.file_name().unwrap().to_string_lossy().ends_with(".sock"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stable_data_dir_path_is_unchanged_while_directory_is_created() {
+        let root = test_dir();
+        std::fs::create_dir_all(&root).unwrap();
+        let nested = root.join("nested");
+        let before = stable_data_dir_path(&nested);
+        std::fs::create_dir_all(&nested).unwrap();
+        let after = stable_data_dir_path(&nested);
+        assert_eq!(before, after);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -1,0 +1,6 @@
+[test-groups]
+daemon-integration = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "binary(daemon_integration_test)"
+test-group = "daemon-integration"

@@ -38,7 +38,6 @@ fn daemon_start_bg(data_dir_arg: &str) -> anyhow::Result<std::process::Output> {
         "1",
         "--no-relay",
         "--no-mdns",
-        "--no-beacon",
     ])
 }
 

@@ -1630,16 +1630,12 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__package__subcmd__install)
-            opts="-h --path --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --path)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -1740,16 +1736,12 @@ _syncweb() {
             return 0
             ;;
         syncweb__subcmd__package__subcmd__upgrade)
-            opts="-h --path --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
+            opts="-h --verbose --json --yes --embedded --no-daemon --no-color --data-dir --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --path)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --data-dir)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

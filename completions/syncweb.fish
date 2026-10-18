@@ -642,7 +642,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l path -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -650,7 +649,6 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from upgrade" -l path -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from upgrade" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from upgrade" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from upgrade" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

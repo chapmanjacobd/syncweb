@@ -539,13 +539,13 @@ impl PackageState {
 CLI:
 
 ```bash
-# Install a package from a ticket
+# Install a package from a ticket, into an explicit root
 syncweb package install syncweb://package/<node-id>?v=1.2.0 /path/to/install
 # Fetches blobs, verifies manifest, stages files, atomic symlink swap
 # Output:
 # Fetching 47 files (2.3 GiB)...
 # Verifying manifest hash... OK
-# Installing to /path/to/install/1.2.0/
+# Installing to /path/to/install/<collection-id>/1.2.0/
 # Linking current → 1.2.0
 # Done -- climate-hourly 1.2.0 installed
 

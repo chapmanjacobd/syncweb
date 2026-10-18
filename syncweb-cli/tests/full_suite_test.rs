@@ -1234,3 +1234,75 @@ fn syncweb_core_dependency_version_matches_workspace() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// `package install <ticket> <path>` must install under the given path instead
+/// of silently ignoring it, both through the daemon and without one.
+#[test]
+fn package_install_honors_explicit_path() -> anyhow::Result<()> {
+    let data_dir = test_dir("package-explicit-path");
+    let folder_dir = test_dir("package-explicit-folder");
+    let package_dir = test_dir("package-explicit-src");
+    let install_root = test_dir("package-explicit-root");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(package_dir.join("lib.txt"), b"lib content")?;
+    let package_path = package_dir.to_str().context("UTF-8 package path")?;
+    let install_path = install_root.to_str().context("UTF-8 install root")?;
+
+    let created = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "--no-daemon",
+            "folders",
+            "create",
+            folder_dir.to_str().context("UTF-8 folder path")?,
+        ],
+    )?;
+    assert_success(&created, "folders create")?;
+    let created_json: serde_json::Value = serde_json::from_slice(&created.stdout)?;
+    let namespace = created_json
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .context("create output missing namespace")?;
+
+    let init = run_with_data(&data_dir, &["package", "add", "--name", "example", package_path])?;
+    assert_success(&init, "package add")?;
+    let ticket = publish_manifest_ticket(&data_dir, namespace, package_path, "1")?;
+
+    // Through the daemon (the default route when one is running)
+    let install = run_with_data(&data_dir, &["--json", "package", "install", &ticket, install_path])?;
+    assert_success(&install, "package install with path")?;
+    let install_json: serde_json::Value = serde_json::from_slice(&install.stdout)?;
+    let collection = install_json
+        .get("collection")
+        .and_then(serde_json::Value::as_str)
+        .context("install output missing collection")?;
+    let collection_dir = install_root.join(collection);
+    ensure!(
+        collection_dir.join("1.0.0").is_dir(),
+        "version directory should live under the explicit path: {collection_dir:?}"
+    );
+    ensure!(
+        std::fs::read_link(collection_dir.join("current"))? == std::path::Path::new("1.0.0"),
+        "current link should live under the explicit path"
+    );
+    ensure!(
+        !data_dir.join("packages").join(collection).exists(),
+        "the default package root should be untouched"
+    );
+
+    // Verification resolves through the recorded path, not the manager root
+    let verify = run_with_data(&data_dir, &["--json", "package", "verify", collection])?;
+    assert_success(&verify, "package verify")?;
+    let verify_json: serde_json::Value = serde_json::from_slice(&verify.stdout)?;
+    ensure!(
+        verify_json.get("status") == Some(&serde_json::Value::from("verified")),
+        "{verify_json}"
+    );
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(folder_dir)?;
+    fs::remove_dir_all(package_dir)?;
+    fs::remove_dir_all(install_root)?;
+    Ok(())
+}

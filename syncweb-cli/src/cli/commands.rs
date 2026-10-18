@@ -927,13 +927,19 @@ pub enum PackageCommand {
     #[command(about = "Verify, stage, and atomically install a collection version")]
     Install {
         ticket: String,
-        #[arg(long)]
+        #[arg(
+            value_name = "PATH",
+            help = "Install root for the collection version (default: the data directory's packages directory)"
+        )]
         path: Option<PathBuf>,
     },
     #[command(about = "Install a newer collection manifest version via ticket")]
     Upgrade {
         ticket: String,
-        #[arg(long)]
+        #[arg(
+            value_name = "PATH",
+            help = "Install root for the collection version (default: the data directory's packages directory)"
+        )]
         path: Option<PathBuf>,
     },
     #[command(about = "Remove a non-current installed collection version")]

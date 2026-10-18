@@ -111,6 +111,66 @@ async fn test_package_lifecycle() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Installing into an explicit path keeps the versioned layout and `current`
+/// link under that path, and the collection stays manageable through the
+/// shared database from any manager root.
+#[test]
+fn test_install_into_explicit_root() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-package-test")?;
+    let collection_id = uuid::Uuid::new_v4();
+    let node_db = NodeDatabase::open(directory.path().join("node.db"))?;
+    let default_root = directory.path().join("packages");
+    let install_root = directory.path().join("explicit-root");
+    let packages = PackageManager::new(default_root.clone(), node_db);
+
+    let v1_content: &[u8] = b"content-v1";
+    let v1_files = &[("data/file.txt", v1_content)];
+    let v1 = make_manifest(collection_id, "1.0.0", v1_files)?;
+    let source_v1 = write_source_files(directory.path(), v1_files)?;
+    packages.with_root(&install_root).install(&v1, &source_v1)?;
+
+    // Content, symlink, and state all point at the explicit root
+    let collection_dir = install_root.join(collection_id.to_string());
+    anyhow::ensure!(std::fs::read(collection_dir.join("1.0.0/data/file.txt"))? == v1_content);
+    anyhow::ensure!(std::fs::read_link(collection_dir.join("current"))? == Path::new("1.0.0"));
+    anyhow::ensure!(!default_root.join(collection_id.to_string()).exists());
+    let state = packages.state()?;
+    let installed = state.current(collection_id).context("collection should be recorded")?;
+    anyhow::ensure!(installed.versions.get("1.0.0") == Some(&collection_dir.join("1.0.0")));
+
+    // A second version in the same explicit root, then switch from a manager
+    // rooted elsewhere: the recorded path decides where `current` is updated
+    let v2_content: &[u8] = b"content-v2";
+    let v2_files = &[("data/file.txt", v2_content)];
+    let v2 = make_manifest(collection_id, "2.0.0", v2_files)?;
+    let source_v2 = write_source_files(directory.path(), v2_files)?;
+    packages.with_root(&install_root).install(&v2, &source_v2)?;
+    anyhow::ensure!(std::fs::read_link(collection_dir.join("current"))? == Path::new("2.0.0"));
+
+    packages.switch(collection_id, "1.0.0")?;
+    anyhow::ensure!(std::fs::read_link(collection_dir.join("current"))? == Path::new("1.0.0"));
+    anyhow::ensure!(std::fs::read(collection_dir.join("current/data/file.txt"))? == v1_content);
+
+    // Verify and remove resolve against the recorded path too
+    packages.verify(&v1)?;
+    packages.switch(collection_id, "2.0.0")?;
+    packages.remove(collection_id, "1.0.0")?;
+    anyhow::ensure!(!collection_dir.join("1.0.0").exists());
+    anyhow::ensure!(std::fs::read(collection_dir.join("current/data/file.txt"))? == v2_content);
+
+    // The same version cannot be installed twice into different roots
+    let other_root = directory.path().join("other-root");
+    let duplicate = packages.with_root(&other_root).install(&v2, &source_v2);
+    let error = duplicate.expect_err("duplicate install should fail");
+    anyhow::ensure!(
+        format!("{error}").contains("already installed"),
+        "unexpected error: {error}"
+    );
+    anyhow::ensure!(!other_root.join(collection_id.to_string()).exists());
+
+    Ok(())
+}
+
 /// 5.3 Integration Test: Install v1, install v2, switch between
 #[test]
 fn test_multi_version_coexistence() -> anyhow::Result<()> {

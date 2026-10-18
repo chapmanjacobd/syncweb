@@ -33,6 +33,17 @@ impl PackageManager {
         &self.root
     }
 
+    /// Return a manager that installs into `root` while sharing this manager's
+    /// database, so versions installed outside the data directory stay visible
+    /// to `list`, `switch`, `verify`, and `remove`.
+    #[must_use]
+    pub fn with_root(&self, root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            db: self.db.clone(),
+        }
+    }
+
     /// # Errors
     ///
     /// Returns an error if state cannot be read or decoded.
@@ -68,6 +79,22 @@ impl PackageManager {
     pub fn install(&self, manifest: &CollectionManifest, source: impl AsRef<Path>) -> Result<()> {
         manifest.validate()?;
         verify_directory(manifest, source.as_ref())?;
+        // A version is recorded once per collection. Without this check a
+        // second install of the same version into a different root would leave
+        // an untracked copy behind, because the database insert is idempotent
+        // and keeps the path recorded by the first install.
+        let state = self.state()?;
+        if let Some(existing) = state
+            .installed
+            .get(&manifest.collection_id)
+            .and_then(|installed| installed.versions.get(&manifest.version))
+        {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "collection version {} is already installed at {}",
+                manifest.version,
+                existing.display()
+            )));
+        }
         let manifest_hash = manifest.blob_id()?;
         let collection_dir = self.root.join(manifest.collection_id.to_string());
         fs::create_dir_all(&collection_dir)
@@ -84,7 +111,7 @@ impl PackageManager {
         copy_manifest_entries(manifest, source.as_ref(), &staging)?;
         fs::rename(&staging, &version_dir)
             .map_err(|error| SyncwebError::operation("failed to finalize staged package", error))?;
-        self.set_current(manifest.collection_id, &manifest.version)?;
+        set_current(&collection_dir, &manifest.version)?;
         self.db
             .install_collection(manifest.collection_id, &manifest_hash, &manifest.version, &version_dir)
     }
@@ -156,17 +183,22 @@ impl PackageManager {
     /// Returns an error if the requested version is not installed or the active link cannot be switched.
     pub fn switch(&self, collection_id: Uuid, requested_version: impl AsRef<str>) -> Result<()> {
         let version = requested_version.as_ref();
-        let mut state = self.state()?;
+        let state = self.state()?;
         let installed = state
             .installed
-            .get_mut(&collection_id)
+            .get(&collection_id)
             .ok_or_else(|| SyncwebError::FolderNotFound(collection_id.to_string()))?;
-        if !installed.versions.contains_key(version) {
-            return Err(SyncwebError::InvalidConfig(format!(
-                "collection version {version} is not installed"
-            )));
-        }
-        self.set_current(collection_id, version)?;
+        let version_dir = installed
+            .versions
+            .get(version)
+            .ok_or_else(|| SyncwebError::InvalidConfig(format!("collection version {version} is not installed")))?;
+        // The recorded version path is authoritative: the version may live
+        // outside this manager's root when it was installed with an explicit
+        // path.
+        let collection_dir = version_dir.parent().ok_or_else(|| {
+            SyncwebError::InvalidConfig("installed collection version has no parent directory".to_owned())
+        })?;
+        set_current(collection_dir, version)?;
         self.db.switch_collection_version(collection_id, version)
     }
 
@@ -208,15 +240,14 @@ impl PackageManager {
         })?;
         verify_directory(manifest, path)
     }
+}
 
-    fn set_current(&self, collection_id: Uuid, version: &str) -> Result<()> {
-        let collection_dir = self.root.join(collection_id.to_string());
-        let current = collection_dir.join("current");
-        let temporary = collection_dir.join(format!(".current-{}", Uuid::new_v4()));
-        create_current_link(version, &temporary)?;
-        fs::rename(&temporary, &current)
-            .map_err(|error| SyncwebError::operation("failed to atomically switch collection version", error))
-    }
+fn set_current(collection_dir: &Path, version: &str) -> Result<()> {
+    let current = collection_dir.join("current");
+    let temporary = collection_dir.join(format!(".current-{}", Uuid::new_v4()));
+    create_current_link(version, &temporary)?;
+    fs::rename(&temporary, &current)
+        .map_err(|error| SyncwebError::operation("failed to atomically switch collection version", error))
 }
 
 fn verify_directory(manifest: &CollectionManifest, root: &Path) -> Result<()> {

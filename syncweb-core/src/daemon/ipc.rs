@@ -376,6 +376,8 @@ pub enum IpcCommand {
     },
     PackageInstall {
         ticket: String,
+        #[serde(default)]
+        path: Option<PathBuf>,
     },
     IndexingEnable {
         namespace: String,
@@ -3336,8 +3338,8 @@ impl IpcServer {
         if let IpcCommand::PackageInfo { ticket, hash, node_id } = cmd {
             return self.handle_package_info(ticket, hash, node_id).await;
         }
-        if let IpcCommand::PackageInstall { ticket } = cmd {
-            return self.handle_package_install(ticket).await;
+        if let IpcCommand::PackageInstall { ticket, path } = cmd {
+            return self.handle_package_install(ticket, path).await;
         }
         IpcResponse::Error {
             message: format!("unhandled package command: {cmd:?}"),
@@ -3371,7 +3373,7 @@ impl IpcServer {
         )))
     }
 
-    async fn handle_package_install(&self, ticket: String) -> IpcResponse {
+    async fn handle_package_install(&self, ticket: String, path: Option<PathBuf>) -> IpcResponse {
         let context = match &self.archive_context {
             Some(ctx) => ctx.clone(),
             None => {
@@ -3394,7 +3396,8 @@ impl IpcServer {
             }
         };
         let data_dir = self.daemon_handle.state.read().await.data_dir.clone();
-        let packages = crate::folder::PackageManager::new(data_dir.join("packages"), node_db);
+        let root = path.unwrap_or_else(|| data_dir.join("packages"));
+        let packages = crate::folder::PackageManager::new(root, node_db);
         match packages
             .install_from_ticket(&blob_ticket, context.node.endpoint(), context.node.blob_store())
             .await
@@ -4523,9 +4526,9 @@ impl IpcClient {
     /// # Errors
     ///
     /// Returns an error if the daemon request fails or returns an unexpected response.
-    pub async fn package_install(&self, ticket: String) -> Result<(String, String)> {
+    pub async fn package_install(&self, ticket: String, path: Option<PathBuf>) -> Result<(String, String)> {
         let response = self
-            .request(IpcCommand::PackageInstall { ticket }, "package install")
+            .request(IpcCommand::PackageInstall { ticket, path }, "package install")
             .await?;
         if let IpcResponse::PackageInstall { collection_id, version } = response {
             Ok((collection_id, version))

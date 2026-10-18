@@ -195,7 +195,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':ticket -- Iroh document ticket for a new folder, or a folder selector for an already-tracked folder:_default' \
+':ticket -- Iroh document ticket for a new folder, or a folder selector for an already-tracked folder; use '\''-'\'' to read it from stdin:_default' \
 '::path:_files' \
 && ret=0
 ;;
@@ -947,7 +947,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (install)
 _arguments "${_arguments_options[@]}" : \
-'--path=[]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -958,11 +957,11 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
+'::path -- Install root for the collection version (default\: the data directory'\''s packages directory):_files' \
 && ret=0
 ;;
 (upgrade)
 _arguments "${_arguments_options[@]}" : \
-'--path=[]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -973,6 +972,7 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':ticket:_default' \
+'::path -- Install root for the collection version (default\: the data directory'\''s packages directory):_files' \
 && ret=0
 ;;
 (remove)

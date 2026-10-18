@@ -59,7 +59,7 @@ syncweb package publish --namespace <namespace> ./dataset
 
 # Inspect or install the published version elsewhere.
 syncweb package info <manifest-ticket>
-syncweb package install <manifest-ticket>
+syncweb package install <manifest-ticket> [install-root]
 
 # Publish a later version, then update an existing installation.
 syncweb package bump ./dataset --version 1.1.0 --changelog "New observations"
@@ -68,7 +68,8 @@ syncweb package upgrade <new-manifest-ticket>
 ```
 
 Use `package export` and `package import` for a compressed offline archive.
-Installations are stored under the local data directory's package store.
+Installations default to the local data directory's package store, or to an
+explicit install root when one is passed to `package install`/`package upgrade`.
 `--json` is available for automation on each step; package list-shaped results
 are wrapped under named keys rather than emitted as bare arrays.
 

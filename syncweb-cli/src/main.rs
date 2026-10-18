@@ -113,6 +113,8 @@ fn format_bytes(bytes: u64) -> String {
 
 /// How long a spawned daemon gets to bind its IPC socket before `--bg` fails.
 const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(30);
+const DAEMON_AUTO_START_ATTEMPTS: usize = 3;
+const DAEMON_AUTO_START_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -632,9 +634,10 @@ async fn daemon_client_or_start(
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(data_dir);
     let lock = PidLock::new(data_dir);
-    let mut daemon_child = if lock.try_acquire()? {
+    if lock.try_acquire()? {
         lock.release()?;
-        Some(spawn_daemon_process(
+        spawn_daemon_and_wait(
+            data_dir,
             base,
             &StartArgs {
                 bg: true,
@@ -651,17 +654,40 @@ async fn daemon_client_or_start(
                 media_listen: None,
             },
             network,
-        )?)
-    } else {
-        None
-    };
+        )
+        .await?;
+    }
     let pb = ProgressBar::new_spinner();
     pb.set_style(ProgressStyle::default_spinner().template("{spinner} {msg}")?);
     pb.set_message("waiting for daemon to start...");
-    let started = wait_for_daemon_ready(data_dir, daemon_child.as_mut(), DAEMON_START_TIMEOUT, Some(&pb)).await;
+    let started = wait_for_daemon_ready(data_dir, None, DAEMON_START_TIMEOUT, Some(&pb)).await;
     pb.finish_and_clear();
     started?;
     Ok(syncweb_core::daemon::daemon_client(data_dir)?)
+}
+
+async fn spawn_daemon_and_wait(
+    data_dir: &Path,
+    spawn_data_dir: &Path,
+    args: &StartArgs,
+    network: Option<&str>,
+) -> Result<()> {
+    let mut last_error = None;
+    for attempt in 0..DAEMON_AUTO_START_ATTEMPTS {
+        let mut child = spawn_daemon_process(spawn_data_dir, args, network)?;
+        match wait_for_daemon_ready(data_dir, Some(&mut child), DAEMON_START_TIMEOUT, None).await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                let exited = child.try_wait()?.is_some();
+                if !exited || attempt + 1 == DAEMON_AUTO_START_ATTEMPTS {
+                    return Err(error);
+                }
+                last_error = Some(error);
+                tokio::time::sleep(DAEMON_AUTO_START_RETRY_DELAY).await;
+            }
+        }
+    }
+    Err(last_error.expect("daemon startup attempts should record an error"))
 }
 
 /// Wait until the daemon for `data_dir` answers on its IPC socket.
@@ -4034,12 +4060,15 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
         }
         PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
             let ticket = cli::ticket::resolve_ticket(&ticket)?;
+            // Resolve to an absolute path so the daemon (whose working
+            // directory differs from the CLI's) installs where the caller asked.
+            let install_root = path.map(|path| canonical_path(&path));
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let result = client.package_install(ticket).await?;
+                let result = client.package_install(ticket, install_root).await?;
                 print_package_install_response(result, output_json);
                 return Ok(());
             }
-            handle_package_install(ctx, &packages, ticket, path).await?;
+            handle_package_install(ctx, &packages, ticket, install_root).await?;
         }
         PackageCommand::Remove {
             collection: collection_id,
@@ -4158,8 +4187,11 @@ async fn handle_package_install(
     let output_json = ctx.output_json;
     let node = open_node(data_dir).await?;
     let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
-    let _install_path = path.unwrap_or_else(|| data_dir.join("packages"));
-    let collection_manifest = packages
+    // An explicit path installs the versioned content (and its `current` link)
+    // outside the data directory, where the caller asked for it. The package
+    // database is shared, so the collection stays manageable from any root.
+    let target = path.map_or_else(|| packages.clone(), |root| packages.with_root(root));
+    let collection_manifest = target
         .install_from_ticket(&blob_ticket, node.endpoint(), node.blob_store())
         .await?;
     node.stop().await?;

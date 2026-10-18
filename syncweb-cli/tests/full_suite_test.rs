@@ -564,6 +564,7 @@ fn package_bump() -> anyhow::Result<()> {
     );
     let parent = manifest.parent.context("bumped manifest should record a parent")?;
     ensure!(!parent.to_string().is_empty(), "parent hash should be present");
+    drop(db);
 
     let bump_json = run_with_data(
         &data_dir,
@@ -590,7 +591,7 @@ fn logical_paths_of(data_dir: &std::path::Path, root: &str) -> anyhow::Result<Ve
     Ok(manifest
         .entries
         .iter()
-        .map(|entry| entry.logical_path.to_string_lossy().into_owned())
+        .map(|entry| entry.logical_path.to_string_lossy().replace('\\', "/"))
         .collect())
 }
 

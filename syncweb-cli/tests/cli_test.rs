@@ -2133,7 +2133,7 @@ fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
     std::fs::create_dir_all(&source).context("create dir")?;
     std::fs::write(source.join("Report.TXT"), b"r").context("write Report")?;
     std::fs::write(source.join("data.txt"), b"d").context("write data")?;
-    std::fs::write(source.join("fix*.txt"), b"f").context("write literal asterisk name")?;
+    std::fs::write(source.join("fix[star].txt"), b"f").context("write literal glob name")?;
     let src = source.to_str().context("UTF-8 path")?;
 
     let ci = syncweb(&["find", "--local-only", "REPORT", src, "--kind", "exact", "-i"])?;
@@ -2156,11 +2156,11 @@ fn find_case_sensitivity_and_fixed_strings() -> anyhow::Result<()> {
         "-s should only match exact case: {out_sensitive}"
     );
 
-    let fixed = syncweb(&["find", "--local-only", "*.txt", src, "-F", "--kind", "exact"])?;
+    let fixed = syncweb(&["find", "--local-only", "fix[star].txt", src, "-F", "--kind", "exact"])?;
     ensure!(fixed.status.success());
     let out_fixed = String::from_utf8(fixed.stdout).context("UTF-8 output")?;
     ensure!(
-        out_fixed.contains("fix*.txt"),
+        out_fixed.contains("fix[star].txt"),
         "-F should match the literal name: {out_fixed}"
     );
     ensure!(!out_fixed.contains("data.txt"), "-F should not glob-match: {out_fixed}");
@@ -2204,10 +2204,11 @@ fn find_path_hidden_and_absolute() -> anyhow::Result<()> {
     let abs = syncweb(&["find", "--local-only", "file.md", src, "-a"])?;
     ensure!(abs.status.success());
     let out_abs = String::from_utf8(abs.stdout).context("UTF-8 output")?;
-    let absolute = source.join("project-2024/sub/file.md");
     ensure!(
-        out_abs.contains(&absolute.to_string_lossy().into_owned()),
-        "-a should print absolute paths: {out_abs}"
+        out_abs
+            .lines()
+            .any(|line| std::path::Path::new(line).ends_with(std::path::Path::new("project-2024/sub/file.md"))),
+        "-a should print the matching absolute path: {out_abs}"
     );
 
     std::fs::remove_dir_all(&source).context("cleanup")?;

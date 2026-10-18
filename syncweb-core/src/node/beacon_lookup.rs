@@ -132,8 +132,8 @@ impl BeaconAddressLookup {
     ///
     /// The receiver socket is bound to the effective port on all interfaces
     /// (or on the configured interface when one is given) and the sender
-    /// broadcasts to `255.255.255.255` plus the directed broadcast of every
-    /// up, non-loopback IPv4 interface (or only the configured one).
+    /// broadcasts to loopback, `255.255.255.255`, and the directed broadcast
+    /// of every up, non-loopback IPv4 interface (or only the configured one).
     ///
     /// # Errors
     ///
@@ -268,6 +268,7 @@ fn beacon_socket(bind_addr: SocketAddr, reuse: bool) -> crate::error::Result<std
 /// directed broadcast of every relevant IPv4 interface.
 fn broadcast_targets(interface: Option<&str>, port: u16) -> Vec<SocketAddr> {
     let mut targets = Vec::with_capacity(8);
+    targets.push(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
     targets.push(SocketAddr::new(Ipv4Addr::BROADCAST.into(), port));
     for iface in ipv4_interfaces(interface) {
         let target = SocketAddr::new(iface.broadcast.into(), port);

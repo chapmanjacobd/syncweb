@@ -5792,7 +5792,7 @@ async fn enumerate_folder_entries(
             (entry.size, None)
         };
         rows.push(LocalEntry {
-            path: entry.path,
+            path: normalize_logical_path(&entry.path),
             hash: entry.hash,
             size,
             local,
@@ -5803,9 +5803,9 @@ async fn enumerate_folder_entries(
     Ok(rows)
 }
 
-fn entry_row_to_local(row: EntryRow) -> LocalEntry {
+fn entry_row_to_local(row: &EntryRow) -> LocalEntry {
     LocalEntry {
-        path: row.path,
+        path: normalize_logical_path(&row.path),
         hash: row.hash,
         size: row.size,
         local: row.local,
@@ -5824,7 +5824,7 @@ async fn fetch_listing_rows(mode: ListingMode, resolved: &ResolvedFolder, enrich
     match mode {
         ListingMode::Daemon { client } => {
             let rows = client.list_entries(resolved.namespace.clone(), enrich).await?;
-            Ok(rows.into_iter().map(entry_row_to_local).collect())
+            Ok(rows.iter().map(entry_row_to_local).collect())
         }
         ListingMode::Embedded(listing) => {
             let rows = enumerate_folder_entries(&listing.folder, resolved.mount_root.as_deref(), enrich).await?;
@@ -5845,7 +5845,7 @@ async fn attach_peer_counts(client: Option<&IpcClient>, namespace: &str, rows: &
     let counts: std::collections::HashMap<String, usize> = report
         .per_blob
         .into_iter()
-        .map(|blob| (blob.path, blob.peer_count))
+        .map(|blob| (normalize_logical_path(&blob.path), blob.peer_count))
         .collect();
     for row in rows.iter_mut() {
         row.peers = counts.get(&row.path).copied();
@@ -5862,6 +5862,14 @@ fn canonical_path(path: &Path) -> PathBuf {
             cwd.join(path)
         }
     })
+}
+
+fn normalize_logical_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+fn logical_path_string(path: &Path) -> String {
+    normalize_logical_path(&path.to_string_lossy())
 }
 
 /// Registered mount paths for live folders only (stale rows never resolve).
@@ -6184,12 +6192,12 @@ fn handle_ls_disk(path: &Path, threads: usize, output_json: bool) -> Result<()> 
     if output_json {
         let paths = entries
             .iter()
-            .map(|entry| entry.relative_path.display().to_string())
+            .map(|entry| logical_path_string(&entry.relative_path))
             .collect::<Vec<_>>();
         println!("{}", json_list("paths", paths)?);
     } else {
         for entry in entries {
-            println!("{}", entry.relative_path.display());
+            println!("{}", logical_path_string(&entry.relative_path));
         }
     }
     Ok(())
@@ -6382,7 +6390,7 @@ fn handle_find_disk(command: &crate::cli::commands::FindArgs, output_json: bool)
                 if command.absolute_path {
                     entry.path.display().to_string()
                 } else {
-                    entry.relative_path.display().to_string()
+                    logical_path_string(&entry.relative_path)
                 }
             })
             .collect::<Vec<_>>();
@@ -6392,7 +6400,7 @@ fn handle_find_disk(command: &crate::cli::commands::FindArgs, output_json: bool)
             if command.absolute_path {
                 println!("{}", entry.path.display());
             } else {
-                println!("{}", entry.relative_path.display());
+                println!("{}", logical_path_string(&entry.relative_path));
             }
         }
     }

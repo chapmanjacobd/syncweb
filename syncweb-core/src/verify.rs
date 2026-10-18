@@ -75,7 +75,7 @@ impl VerifyFilter {
         }
         if let Some(ref path) = self.path {
             let entry_path = String::from_utf8_lossy(entry_key);
-            if entry_path != path.to_string_lossy() {
+            if entry_path != crate::fs::logical_path(path) {
                 return false;
             }
         }

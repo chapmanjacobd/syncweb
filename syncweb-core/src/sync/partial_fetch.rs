@@ -370,10 +370,12 @@ mod absolute_base_tests {
 
     #[test]
     fn absolute_paths_are_returned_unchanged() {
-        assert_eq!(
-            absolute_base(Path::new("/srv/folder")).unwrap(),
+        let base = if cfg!(windows) {
+            std::env::current_dir().unwrap().join("srv/folder")
+        } else {
             PathBuf::from("/srv/folder")
-        );
+        };
+        assert_eq!(absolute_base(&base).unwrap(), base);
     }
 
     #[test]

@@ -348,7 +348,7 @@ impl SnapshotStore {
         let expected = snapshot
             .entries
             .iter()
-            .map(|entry| entry.path.as_os_str().as_encoded_bytes().to_vec())
+            .map(|entry| crate::fs::logical_path(&entry.path).into_bytes())
             .collect::<BTreeSet<_>>();
         for entry in docs.list_latest(folder.doc()).await? {
             if !entry.key().starts_with(b"sys/") && !expected.contains(entry.key()) {
@@ -357,7 +357,7 @@ impl SnapshotStore {
         }
         for entry in &snapshot.entries {
             folder
-                .set_blob_ref(entry.path.as_os_str().as_encoded_bytes(), entry.hash, entry.size)
+                .set_blob_ref(crate::fs::logical_path(&entry.path).as_bytes(), entry.hash, entry.size)
                 .await?;
         }
         Ok(())

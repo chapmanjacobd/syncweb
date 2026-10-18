@@ -1241,10 +1241,8 @@ impl Daemon {
             return Ok(());
         }
         let result = if removed || !path.exists() {
-            folder
-                .delete_entry(relative.as_os_str().as_encoded_bytes())
-                .await
-                .map(|()| 1_u64)
+            let logical_path = crate::fs::logical_path(relative);
+            folder.delete_entry(logical_path.as_bytes()).await.map(|()| 1_u64)
         } else if path.is_file() {
             let importer = Importer::new(
                 self.node.blob_store().clone(),

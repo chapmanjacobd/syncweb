@@ -50,6 +50,17 @@ fn wait_for_daemon_ready(data_dir_arg: &str) -> anyhow::Result<()> {
     anyhow::bail!("timed out waiting for daemon to become ready. last stderr: {last_diagnostic}");
 }
 
+fn wait_for_daemon_stopped(data_dir_arg: &str) -> anyhow::Result<()> {
+    for _ in 0..40 {
+        let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
+        if !status.status.success() || stdout_contains(&status, "daemon not running") {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    anyhow::bail!("timed out waiting for daemon to stop");
+}
+
 #[test]
 fn test_help_mentions_daemon_commands() -> anyhow::Result<()> {
     let output = syncweb(&["--help"])?;
@@ -3266,10 +3277,19 @@ fn test_offline_conflict_materializes_conflict_copy() -> anyhow::Result<()> {
 
     // Stop both daemons, then diverge offline.
     let stop_a = syncweb(&["--data-dir", alice_data_arg, "stop", "--yes", "--force"])?;
-    ensure!(stop_a.status.success());
+    ensure!(
+        stop_a.status.success(),
+        "alice daemon stop failed: {}",
+        stdout_str(&stop_a)
+    );
     let stop_b = syncweb(&["--data-dir", bob_data_arg, "stop", "--yes", "--force"])?;
-    ensure!(stop_b.status.success());
-    std::thread::sleep(std::time::Duration::from_secs_f64(0.7));
+    ensure!(
+        stop_b.status.success(),
+        "bob daemon stop failed: {}",
+        stdout_str(&stop_b)
+    );
+    wait_for_daemon_stopped(alice_data_arg)?;
+    wait_for_daemon_stopped(bob_data_arg)?;
 
     std::fs::write(alice_folder.join("note.txt"), b"alice text version")?;
     std::fs::write(alice_folder.join("alice-only.txt"), b"alice")?;
@@ -3297,10 +3317,18 @@ fn test_offline_conflict_materializes_conflict_copy() -> anyhow::Result<()> {
 
     // Restart both daemons and sync.
     let start_a = daemon_start_bg(alice_data_arg)?;
-    ensure!(start_a.status.success());
+    ensure!(
+        start_a.status.success(),
+        "alice daemon restart failed: {}",
+        stdout_str(&start_a)
+    );
     wait_for_daemon_ready(alice_data_arg)?;
     let start_b = daemon_start_bg(bob_data_arg)?;
-    ensure!(start_b.status.success());
+    ensure!(
+        start_b.status.success(),
+        "bob daemon restart failed: {}",
+        stdout_str(&start_b)
+    );
     wait_for_daemon_ready(bob_data_arg)?;
 
     let sync_a = syncweb(&["--data-dir", alice_data_arg, "sync"])?;

@@ -103,7 +103,8 @@ impl Importer {
         if !metadata_matches_entry(&after, &entry) || hash != Hash::from_bytes(*entry.hash.as_bytes()) {
             return Err(file_changed_error(&entry.path));
         }
-        let key = entry.relative_path.as_os_str().as_encoded_bytes();
+        let logical_path = crate::fs::logical_path(&entry.relative_path);
+        let key = logical_path.as_bytes();
         // Guard against the watcher re-stamping content that materialization
         // (or a previous remote sync) already recorded for this key. iroh-docs
         // stamps a fresh timestamp on every `set`, so re-importing an identical

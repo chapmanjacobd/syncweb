@@ -311,6 +311,7 @@ mod tests {
 #[derive(Debug, Parser)]
 #[command(
     name = "syncweb",
+    bin_name = "syncweb",
     about = "Delay-tolerant web surfing",
     disable_help_subcommand = true
 )]

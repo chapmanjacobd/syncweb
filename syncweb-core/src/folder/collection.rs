@@ -44,11 +44,30 @@ pub struct PackageMetadata {
 #[non_exhaustive]
 pub struct CollectionEntry {
     pub content_id: Hash,
+    #[serde(
+        serialize_with = "serialize_logical_path",
+        deserialize_with = "deserialize_logical_path"
+    )]
     pub logical_path: PathBuf,
     pub size: u64,
     pub media_type: Option<String>,
     pub role: String,
     pub relationships: Vec<String>,
+}
+
+fn serialize_logical_path<S>(path: &Path, serializer: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&path.to_string_lossy().replace('\\', "/"))
+}
+
+fn deserialize_logical_path<'de, D>(deserializer: D) -> std::result::Result<PathBuf, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let path = String::deserialize(deserializer)?;
+    Ok(PathBuf::from(path.replace('\\', "/")))
 }
 
 impl CollectionEntry {

@@ -26,12 +26,12 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node.provider_peer_snapshot(&hash)?;
+        let known_peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
             entry.content_len(),
-            peers.map(|peers| peers.len()),
+            known_peers.map(|peers| peers.len()),
             local,
         ));
     }
@@ -44,7 +44,7 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
             .then(left.path.cmp(&right.path))
             .then(left.hash.cmp(&right.hash))
     });
-    let peers = node
+    let discovered_peers = node
         .topic_tracker()
         .find_peers(folder.namespace_id())
         .await
@@ -54,7 +54,8 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         if candidate.local {
             continue;
         }
-        for peer in &peers {
+        let scheduled = node.schedule_provider_peers(&candidate.hash, &discovered_peers)?;
+        for peer in &scheduled {
             if node.force_fetch_from_peer(peer, candidate.hash).await.is_ok() {
                 bytes = bytes.saturating_add(candidate.size);
                 break;
@@ -85,12 +86,12 @@ pub async fn materialize_selected_content(
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node.provider_peer_snapshot(&hash)?;
+        let known_peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
             entry.content_len(),
-            peers.map(|peers| peers.len()),
+            known_peers.map(|peers| peers.len()),
             local,
         ));
     }

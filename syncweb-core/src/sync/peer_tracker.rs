@@ -91,6 +91,16 @@ struct Availability {
 
 type NegativeKey = (Hash, PublicKey);
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ProviderScore {
+    known: bool,
+    confidence: u8,
+    source_priority: u8,
+    completed: u64,
+    failed: u64,
+    throughput: u64,
+}
+
 /// Bounded cache mapping blob hashes to the peers observed serving them.
 ///
 /// `len()` returns the number of unique blob hashes tracked, not the total
@@ -344,6 +354,33 @@ impl PeerTracker {
             .collect()
     }
 
+    /// Rank discovered providers for a blob.
+    ///
+    /// Fresh observations are preferred over unknown peers. Within the
+    /// observed set, higher-confidence and stronger-source observations win,
+    /// followed by completed-transfer history and throughput. Failed peers
+    /// remain eligible after the retry cooldown but are placed last so a
+    /// temporary failure does not permanently exclude them.
+    pub fn rank_peers(&mut self, blob_hash: &Hash, peers: &[PublicKey]) -> Vec<PublicKey> {
+        self.purge_negative();
+        let mut ranked = peers.to_vec();
+        ranked.sort_by(|left, right| {
+            let left_score = self.provider_score(blob_hash, left);
+            let right_score = self.provider_score(blob_hash, right);
+            right_score
+                .known
+                .cmp(&left_score.known)
+                .then(right_score.confidence.cmp(&left_score.confidence))
+                .then(right_score.source_priority.cmp(&left_score.source_priority))
+                .then(left_score.failed.cmp(&right_score.failed))
+                .then(right_score.completed.cmp(&left_score.completed))
+                .then(right_score.throughput.cmp(&left_score.throughput))
+                .then(left.as_bytes().cmp(right.as_bytes()))
+        });
+        ranked.dedup();
+        ranked
+    }
+
     /// Remove one peer's positive observation for a single blob immediately.
     ///
     /// Unlike [`record_failure`](Self::record_failure), this does not retain
@@ -417,6 +454,26 @@ impl PeerTracker {
         self.negative
             .get(&(*blob_hash, *node_id))
             .is_some_and(|failed_at| failed_at.elapsed() <= self.negative_expiry)
+    }
+
+    fn provider_score(&self, blob_hash: &Hash, node_id: &PublicKey) -> ProviderScore {
+        let observation = self.entries.get(blob_hash).and_then(|entry| {
+            (entry.last_seen.elapsed() <= self.expiry)
+                .then(|| entry.peers.get(node_id))
+                .flatten()
+                .copied()
+        });
+        let transfer = self.transfer_stats.get(node_id).map(|record| record.stats);
+        ProviderScore {
+            known: observation.is_some(),
+            confidence: observation.map_or(0, |record| record.metadata.confidence),
+            source_priority: observation.map_or(0, |record| record.metadata.source.priority()),
+            completed: transfer.map_or(0, |stats| stats.completed),
+            failed: transfer.map_or(0, |stats| stats.failed),
+            throughput: transfer
+                .and_then(PeerTransferStats::throughput_bytes_per_second)
+                .unwrap_or(0),
+        }
     }
 
     fn purge_negative(&mut self) {
@@ -707,5 +764,38 @@ impl EfficientPeerCache {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iroh::SecretKey;
+
+    fn hash(value: u8) -> Hash {
+        Hash::from_bytes([value; 32])
+    }
+
+    fn peer(value: u8) -> PublicKey {
+        SecretKey::from_bytes(&[value; 32]).public()
+    }
+
+    #[test]
+    fn ranks_fresh_successful_providers_before_unknown_peers() {
+        let blob = hash(1);
+        let successful = peer(1);
+        let failed = peer(2);
+        let unknown = peer(3);
+        let mut tracker = PeerTracker::with_expiry(8, EvictionStrategy::Lru, Duration::from_mins(1));
+
+        tracker.record_observation(blob, successful, ObservationSource::Transfer, 100);
+        tracker.record_transfer(successful, true, 1_000, Duration::from_secs(1));
+        tracker.record_observation(blob, failed, ObservationSource::Lease, 75);
+        tracker.record_transfer(failed, false, 0, Duration::ZERO);
+
+        assert_eq!(
+            tracker.rank_peers(&blob, &[unknown, failed, successful]),
+            vec![successful, failed, unknown]
+        );
     }
 }

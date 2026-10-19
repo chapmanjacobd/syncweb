@@ -4,7 +4,7 @@ use iroh_blobs::BlobsProtocol;
 use iroh_blobs::{Hash, api::blobs::BlobStatus, ticket::BlobTicket};
 use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -395,6 +395,32 @@ impl IrohNode {
     /// Returns an error when the provider registry mutex is poisoned.
     pub fn provider_peer_snapshot(&self, hash: &Hash) -> Result<Option<Vec<iroh::PublicKey>>> {
         Ok(self.provider_registry_guard()?.peer_snapshot(hash))
+    }
+
+    /// Schedule discovered provider addresses using fresh registry observations
+    /// and bounded transfer history.
+    ///
+    /// Unknown peers remain eligible as a compatibility path for whole-blob
+    /// providers that have not advertised a lease or served this node before.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider registry mutex is poisoned.
+    pub fn schedule_provider_peers(
+        &self,
+        hash: &Hash,
+        peers: &[iroh::EndpointAddr],
+    ) -> Result<Vec<iroh::EndpointAddr>> {
+        let mut addresses = HashMap::with_capacity(peers.len());
+        let ids = peers
+            .iter()
+            .map(|peer| {
+                addresses.insert(peer.id, peer.clone());
+                peer.id
+            })
+            .collect::<Vec<_>>();
+        let ranked = self.provider_registry_guard()?.rank_peers(hash, &ids);
+        Ok(ranked.into_iter().filter_map(|peer| addresses.remove(&peer)).collect())
     }
 
     /// Validate and register a signed provider lease for the local scope.

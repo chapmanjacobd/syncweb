@@ -2419,7 +2419,14 @@ async fn try_repair(
 
         // Try namespace peers
         let mut any_error = None;
-        for peer in &namespace_peers {
+        let scheduled_peers = match node.schedule_provider_peers(&hash, &namespace_peers) {
+            Ok(peers) => peers,
+            Err(error) => {
+                tracing::warn!(%error, "provider scheduler unavailable; using discovery order");
+                namespace_peers.clone()
+            }
+        };
+        for peer in &scheduled_peers {
             match node.force_fetch_from_peer(peer, hash).await {
                 Ok(()) => {
                     repaired = true;

@@ -2659,7 +2659,7 @@ impl IpcServer {
                 continue;
             };
             let hash = entry.content_hash();
-            let provider_peers = match context.node.provider_peer_snapshot(&hash) {
+            let provider_observations = match context.node.provider_peer_snapshot(&hash) {
                 Ok(provider_peers) => provider_peers,
                 Err(error) => {
                     return IpcResponse::Error {
@@ -2667,8 +2667,8 @@ impl IpcServer {
                     };
                 }
             };
-            let peer_count_known = provider_peers.is_some();
-            let provider_peers = provider_peers.unwrap_or_default();
+            let peer_count_known = provider_observations.is_some();
+            let provider_peers = provider_observations.unwrap_or_default();
             let peer_count = provider_peers.len();
             let peer_ids = provider_peers
                 .iter()
@@ -2772,7 +2772,7 @@ impl IpcServer {
             })
             .collect();
 
-        let namespace_peers = context
+        let discovered_peers = context
             .node
             .topic_tracker()
             .find_peers(namespace_id)
@@ -2789,12 +2789,19 @@ impl IpcServer {
                 .filter(|(ticket_hash, _)| *ticket_hash == hash)
                 .map(|(_, ticket)| ticket.clone())
                 .collect();
+            let scheduled_peers = match context.node.schedule_provider_peers(&hash, &discovered_peers) {
+                Ok(peers) => peers,
+                Err(error) => {
+                    tracing::warn!(%error, "provider scheduler unavailable; using discovery order");
+                    discovered_peers.clone()
+                }
+            };
             let repaired = crate::node::blob_store::try_fetch_first_working(&candidate_tickets, |ticket| {
                 context.node.force_fetch(ticket)
             })
             .await
             .is_ok()
-                || crate::node::blob_store::try_fetch_first_working(&namespace_peers, |peer| async {
+                || crate::node::blob_store::try_fetch_first_working(&scheduled_peers, |peer| async {
                     context.node.force_fetch_from_peer(peer, hash).await
                 })
                 .await

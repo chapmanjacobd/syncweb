@@ -60,7 +60,6 @@ coordination and policy layers; it does not replace those primitives.
 Introduce a compact, expiring availability model that can be learned from
 successful transfers, explicit announcements, and offline imports.
 
-- [ ] Wire successful and failed blob/segment requests into the registry.
 Likely code: `syncweb-core/src/sync/peer_tracker.rs`,
 `syncweb-core/src/sync/partial_fetch.rs`,
 `syncweb-core/src/daemon/ipc.rs`, `syncweb-core/src/node/discovery.rs`,
@@ -76,8 +75,6 @@ integrity and bounded resource use.
 
 - [ ] Add a transfer abstraction for independently verifiable blob segments or
   ranges. Select a representation compatible with Iroh blobs and CAR blocks.
-- [ ] Build a scheduler that selects providers using locality, freshness,
-  observed success, load, contribution policy, and rarest-first availability.
 - [ ] Support bounded parallel requests, cancellation, backoff, duplicate
   suppression, and repair of failed segments.
 - [ ] Keep whole-blob fetching as a compatibility path for small objects and

@@ -305,6 +305,23 @@ async fn test_metadata_only_join_keeps_blobs_remote_then_fetches() -> anyhow::Re
         "successful fetch should record the serving peer"
     );
 
+    let missing_hash = iroh_blobs::Hash::from_bytes([99; 32]);
+    let failed_fetch = tokio::time::timeout(
+        Duration::from_secs(5),
+        node_b.force_fetch_from_peer(&iroh::EndpointAddr::new(node_a.endpoint().id()), missing_hash),
+    )
+    .await;
+    anyhow::ensure!(failed_fetch.is_ok(), "failed provider request should finish promptly");
+    anyhow::ensure!(failed_fetch.expect("timeout already checked").is_err());
+    let transfer_stats = node_b
+        .provider_registry()
+        .lock()
+        .expect("provider registry mutex should not be poisoned")
+        .transfer_stats(&node_a.endpoint().id())
+        .context("provider transfer history should be retained")?;
+    anyhow::ensure!(transfer_stats.completed >= 1);
+    anyhow::ensure!(transfer_stats.failed >= 1);
+
     // A second pass has nothing left to fetch.
     let again = fetch_selected_content(&node_b, &folder_b, &FetchStrategy::All).await?;
     anyhow::ensure!(again == 0, "a second fetch should be a no-op");

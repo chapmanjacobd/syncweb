@@ -795,12 +795,13 @@ impl Daemon {
     /// Fetch queued blobs while the download budget allows.
     async fn drain_transfer_queue(&self) {
         while let Some(item) = self.transfer_queue.pop_fitting(&self.transfer_budget) {
-            let peers = self
+            let discovered = self
                 .node
                 .topic_tracker()
                 .find_peers(item.namespace)
                 .await
                 .unwrap_or_default();
+            let peers = self.schedule_transfer_peers(item.hash, &discovered);
             let mut fetched = false;
             for peer in peers {
                 if self.node.force_fetch_from_peer(&peer, item.hash).await.is_ok() {
@@ -838,6 +839,20 @@ impl Daemon {
                 // No peer served it yet; keep it queued for a later cycle.
                 self.transfer_queue.enqueue(item);
                 break;
+            }
+        }
+    }
+
+    fn schedule_transfer_peers(
+        &self,
+        hash: iroh_blobs::Hash,
+        discovered: &[iroh::EndpointAddr],
+    ) -> Vec<iroh::EndpointAddr> {
+        match self.node.schedule_provider_peers(&hash, discovered) {
+            Ok(peers) => peers,
+            Err(error) => {
+                tracing::warn!(%error, "provider scheduler unavailable; using discovery order");
+                discovered.to_vec()
             }
         }
     }

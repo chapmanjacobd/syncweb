@@ -274,7 +274,7 @@ Full data package lifecycle:
 
 ```bash
 # 1. Initialize one or more paths as a versioned package (scans in one shot)
-syncweb package init --name climate-hourly ./climate
+syncweb package add --name climate-hourly --version 1.0.0 ./climate
 # Paths are rebased against their common root; siblings at the root that are
 # not among the inputs are excluded. A single input defaults to its parent
 # directory as the root. An explicit `--root` overrides auto-detection.

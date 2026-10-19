@@ -59,7 +59,6 @@ friction; this file turns their improvement notes into implementable tasks.
   behavior changes.
 - [ ] Add links from design docs to the applicable plan instead of presenting
   future structures as implemented APIs.
-- [ ] Add CI checks for broken internal Markdown links and stale command names.
 - [ ] Convert performance targets in `docs/testing.md` into reproducible
   fixtures before making them release gates.
 

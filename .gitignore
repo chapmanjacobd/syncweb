@@ -24,3 +24,4 @@ rustc-ice-*.txt
 #.idea/
 /.syncweb
 /syncweb-cli/.syncweb
+/__pycache__

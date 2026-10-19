@@ -64,6 +64,9 @@ manpage: build
 readme:
 	cd syncweb-core && cargo doc2readme
 
+docs-check:
+	python3 scripts/check_docs.py
+
 install-completions:
 	install -d $(DESTDIR)/usr/share/bash-completion/completions
 	install -m 644 completions/syncweb.bash $(DESTDIR)/usr/share/bash-completion/completions/syncweb

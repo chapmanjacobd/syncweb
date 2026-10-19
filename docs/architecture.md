@@ -1,5 +1,9 @@
 # Architecture
 
+The structures below are design references, not a promise that every
+illustrated API is available. Check [status.md](status.md) for supported
+behavior.
+
 ## Networks (Multi-Folder Groups)
 
 A Network is a named group of folders + devices. An explicit, shareable

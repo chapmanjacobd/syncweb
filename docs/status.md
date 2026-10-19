@@ -12,9 +12,9 @@ planned must not be presented as a default guarantee.
 | Folder synchronization | Two-node folder creation, joining, listing, bidirectional sync, send-only/receive-only modes, and persistence across node restarts. |
 | Networks | Network creation, invitations, joining, membership persistence, folder membership, owner checks, kick/leave behavior, and signed membership documents. |
 | Connectivity | Iroh relay-backed local scenarios, blob transfer, daemon-to-daemon sync, and the Syncthing relay protocol through an in-process mock relay. |
-| Daemon and CLI | Daemon start/stop/reload, IPC routing, watched-folder sync, subscriptions, transfer operations, and command-level workflow coverage. |
-| Command guidance | `create`, `join`, `share`, and `package install` end with one shared `next steps:` block that states how content is fetched (lazy, metadata-only, or eagerly downloaded) and what to do next; `--json` carries the same list additively in a `next_steps` field. |
-| Health and status | `status` combines daemon, folder, device, network, and durable-transfer state. `status --json` keeps those sections in one stable object, including when the daemon is stopped. `network peers` and `stats seeding` report bounded, expiring per-blob provider observations and distinguish unknown counts. |
+| Daemon and CLI | Daemon start/stop/reload, IPC routing, watched-folder sync, subscriptions, transfer operations, command-level workflow coverage, and documented foreground supervision through systemd and launchd. Startup and control failures identify stale or live lock owners, crashed daemons, and possible IPC version mismatches with recovery guidance. |
+| Command guidance | `create`, `join`, `share`, `package install`, and named-network invitation/join commands end with one shared `next steps:` block that states how content is fetched (lazy, metadata-only, or eagerly downloaded), how network membership relates to folders and packages, and what to do next; `--json` carries the same list additively in a `next_steps` field. |
+| Health and status | `status` combines daemon, folder, device, network, and durable-transfer state. `status --json` keeps those sections in one stable object, including when the daemon is stopped. `network peers` and `stats seeding` report bounded, expiring per-blob provider observations, including scope-validated signed lease observations, and distinguish unknown counts. |
 | Content operations | Lazy fetching, metadata-only joins, and `download --dry-run`/`--preview` for inspecting remote entries before fetching; partial-fetch policy tests, archive/package lifecycle tests, indexing, search, filtering, sorting, statistics, snapshots, and integrity verification. |
 | Backup and restore | `backup` captures configuration, identity, databases, and a manifest; `--include-blobs` opts into copying the local blob store. `restore` verifies a backup into a new data directory, requires explicit `--yes` confirmation for identity material, and leaves incomplete or incompatible backups untouched. The existing `db backup` form remains supported. |
 | JSON automation | Global `--json` is supported by the command handlers; list results use named object envelopes, and `stats network --follow` emits documented NDJSON records. |
@@ -41,13 +41,13 @@ make test-network
 
 ## Planned or explicitly incomplete
 
-- The daemon is still manually managed: `status` reports health and progress,
-  but it does not auto-start or supervise the daemon. Follow-up work is
-  tracked in [plans/ux-and-operations.md](../plans/ux-and-operations.md).
+- The CLI does not install or auto-configure a service manager. Foreground
+  supervision through systemd and launchd is documented in
+  [operations.md](operations.md); `start --bg` remains a convenience mode
+  without automatic restart.
 - Communal LAN swarming, including provider inventories, multi-source
   transfers, replication policy, and large-LAN validation, is planned rather
-  than a current product guarantee. See
-  [plans/communal-swarming.md](../plans/communal-swarming.md).
+  than a current product guarantee.
 - Design documents may describe future commands, but generated help, manpages,
   and supported command guides must be generated from the authoritative
   `syncweb-cli/src/cli/commands.rs` surface and must not present future names

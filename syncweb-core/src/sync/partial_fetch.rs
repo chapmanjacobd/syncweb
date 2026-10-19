@@ -26,11 +26,7 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node
-            .provider_registry()
-            .lock()
-            .expect("provider registry mutex should not be poisoned")
-            .peer_snapshot(&hash);
+        let peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
@@ -89,11 +85,7 @@ pub async fn materialize_selected_content(
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node
-            .provider_registry()
-            .lock()
-            .expect("provider registry mutex should not be poisoned")
-            .peer_snapshot(&hash);
+        let peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
@@ -337,11 +329,16 @@ pub struct HealthReport {
     pub well_seeded: usize,
     pub under_seeded: usize,
     pub unseeded: usize,
+    /// Blobs whose fresh provider count is unavailable.
+    pub unknown: usize,
     pub least_seeded: Vec<BlobHealth>,
 }
 
 impl HealthReport {
     /// Build a report using `well_seeded_threshold` as the minimum healthy peer count.
+    ///
+    /// Unknown provider counts are tracked separately rather than treated as
+    /// unseeded content.
     #[must_use]
     pub fn from_candidates(candidates: &[FetchCandidate], well_seeded_threshold: usize) -> Self {
         let mut least_seeded = candidates
@@ -359,14 +356,28 @@ impl HealthReport {
         let total = candidates.len();
         let well_seeded = candidates
             .iter()
-            .filter(|candidate| candidate.peer_count >= well_seeded_threshold)
+            .filter(|candidate| candidate.peer_count_known && candidate.peer_count >= well_seeded_threshold)
             .count();
-        let unseeded = candidates.iter().filter(|candidate| candidate.peer_count == 0).count();
+        let unseeded = candidates
+            .iter()
+            .filter(|candidate| candidate.peer_count_known && candidate.peer_count == 0)
+            .count();
+        let unknown = candidates
+            .iter()
+            .filter(|candidate| !candidate.peer_count_known)
+            .count();
+        let under_seeded = candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.peer_count_known && candidate.peer_count > 0 && candidate.peer_count < well_seeded_threshold
+            })
+            .count();
         Self {
             total,
             well_seeded,
-            under_seeded: total.saturating_sub(well_seeded).saturating_sub(unseeded),
+            under_seeded,
             unseeded,
+            unknown,
             least_seeded,
         }
     }

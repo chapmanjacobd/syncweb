@@ -1,7 +1,7 @@
 # syncweb UX User Stories
 
 Working document: personas, user stories, friction points, and UX improvement
-plans for syncweb. Grounded in the actual CLI surface
+themes for syncweb. Grounded in the actual CLI surface
 (`syncweb-cli/src/cli/commands.rs`), the grouped help, and the multi-device
 configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 `config-server.toml`).
@@ -145,11 +145,5 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 ---
 
-## Plans
-
-Actionable follow-up work is tracked in
-[`../plans/ux-and-operations.md`](../plans/ux-and-operations.md). The
-communal-LAN transport and scale work is tracked in
-[`../plans/communal-swarming.md`](../plans/communal-swarming.md). This document
-remains the source for user stories, friction points, and product language;
-plans are the source for implementation tasks and completion criteria.
+This document remains the source for user stories, friction points, and product
+language. Current executable support is defined by [status.md](status.md).

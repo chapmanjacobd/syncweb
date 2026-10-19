@@ -1,10 +1,12 @@
 use anyhow::{Context, ensure};
+use ed25519_dalek::SigningKey;
 use std::time::{Duration, SystemTime};
 
 use iroh::SecretKey;
 use iroh_blobs::Hash;
 use n0_future::StreamExt;
 use syncweb_core::{
+    ProviderContent, ProviderLease, ProviderLeaseOptions,
     filter::FilterEntry,
     folder::{FolderManager, SyncMode},
     node::{
@@ -12,8 +14,8 @@ use syncweb_core::{
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
     },
     sync::{
-        AreaFilter, AreaOfInterest, DeletedTracker, EfficientPeerCache, EvictionStrategy, PeerTracker, SubscribeParams,
-        SyncEngine, SyncEvent, TransferStats,
+        AreaFilter, AreaOfInterest, DeletedTracker, EfficientPeerCache, EvictionStrategy, ObservationSource,
+        PeerTracker, SubscribeParams, SyncEngine, SyncEvent, TransferStats,
     },
 };
 
@@ -40,6 +42,92 @@ fn peer_tracker_enforces_lru_and_fifo_limits() -> anyhow::Result<()> {
     fifo.record_peer(blob(3), first_peer);
     ensure!(!fifo.contains(&blob(1), &first_peer));
     anyhow::ensure!(fifo.len() == 2);
+    Ok(())
+}
+
+#[test]
+fn peer_tracker_retains_observation_metadata_and_bounds_peers() -> anyhow::Result<()> {
+    let first_peer = SecretKey::generate().public();
+    let second_peer = SecretKey::generate().public();
+    let third_peer = SecretKey::generate().public();
+    let mut tracker = PeerTracker::with_limits(10, 2, EvictionStrategy::Lru, Duration::from_mins(1), Duration::ZERO);
+
+    tracker.record_observation(blob(1), first_peer, ObservationSource::Lease, 70);
+    tracker.record_observation(blob(1), second_peer, ObservationSource::Lease, 75);
+    tracker.record_peer(blob(1), first_peer);
+    tracker.record_observation(blob(1), third_peer, ObservationSource::Lease, 75);
+
+    let observations = tracker.observations(&blob(1));
+    ensure!(observations.len() == 2);
+    let first = observations
+        .iter()
+        .find(|(peer, _)| *peer == first_peer)
+        .map(|(_, observation)| *observation)
+        .context("transfer observation should remain in the bounded registry")?;
+    ensure!(first.source == ObservationSource::Transfer);
+    ensure!(first.confidence == 100);
+    ensure!(!tracker.contains(&blob(1), &second_peer));
+    Ok(())
+}
+
+#[test]
+fn peer_tracker_records_bounded_transfer_telemetry() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut tracker = PeerTracker::new(1, EvictionStrategy::Lru);
+
+    tracker.record_transfer(peer, true, 1_000, Duration::from_secs(2));
+    tracker.record_transfer(peer, false, 0, Duration::from_secs(1));
+    let stats = tracker
+        .transfer_stats(&peer)
+        .context("transfer stats should be retained")?;
+    ensure!(stats.completed == 1);
+    ensure!(stats.failed == 1);
+    ensure!(stats.bytes == 1_000);
+    ensure!(stats.throughput_bytes_per_second() == Some(500));
+
+    for _ in 0..4 {
+        let other = SecretKey::generate().public();
+        tracker.record_transfer(other, true, 1, Duration::from_secs(1));
+    }
+    ensure!(tracker.transfer_stats(&peer).is_none());
+    Ok(())
+}
+
+#[test]
+fn provider_lease_is_scope_validated_before_registry_ingest() -> anyhow::Result<()> {
+    let signing_key = SigningKey::from_bytes(&[41; 32]);
+    let provider = signing_key.verifying_key().to_bytes();
+    let provider = iroh::PublicKey::from_bytes(&provider)?;
+    let folder = iroh_docs::NamespaceId::from([9; 32]);
+    let mut lease = ProviderLease::new(
+        provider,
+        ProviderLeaseOptions::new(
+            Some("lan-a".to_owned()),
+            folder,
+            None,
+            vec![ProviderContent::blob(blob(7))],
+            Default::default(),
+            10,
+            20,
+        ),
+    );
+    lease.sign(&signing_key)?;
+
+    let mut tracker = PeerTracker::new(10, EvictionStrategy::Lru);
+    ensure!(tracker.record_lease(&lease, 15, Some("lan-a"), &folder.to_string())? == 1);
+    ensure!(tracker.peer_count(&blob(7)) == 1);
+    ensure!(
+        tracker
+            .observations(&blob(7))
+            .iter()
+            .any(|(_, observation)| observation.source == ObservationSource::Lease)
+    );
+
+    ensure!(
+        tracker
+            .record_lease(&lease, 15, Some("other-lan"), &folder.to_string())
+            .is_err()
+    );
     Ok(())
 }
 
@@ -586,6 +674,24 @@ fn test_efficient_cache_retain_active_evicts_and_reclaims_index() -> anyhow::Res
         "re-added peer should work after reclamation"
     );
     anyhow::ensure!(cache.total_peers() == 1);
+    Ok(())
+}
+
+#[test]
+fn test_efficient_cache_reclaims_empty_presence_vectors() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut cache = EfficientPeerCache::new();
+
+    cache.add_presence(blob(1), peer)?;
+    cache.remove_presence(&blob(1), &peer);
+    let after_first = cache.memory_usage();
+
+    cache.add_presence(blob(2), peer)?;
+    cache.remove_presence(&blob(2), &peer);
+    anyhow::ensure!(
+        cache.memory_usage() == after_first,
+        "removing the last peer should reclaim the blob presence vector"
+    );
     Ok(())
 }
 

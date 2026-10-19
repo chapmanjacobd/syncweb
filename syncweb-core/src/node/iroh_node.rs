@@ -1,16 +1,17 @@
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh_blobs::BlobsProtocol;
-use iroh_blobs::{Hash, ticket::BlobTicket};
+use iroh_blobs::{Hash, api::blobs::BlobStatus, ticket::BlobTicket};
 use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayManager;
+use crate::provider_lease::ProviderLease;
 use crate::sync::{EvictionStrategy, PeerTracker};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
@@ -387,10 +388,70 @@ impl IrohNode {
         &self.provider_registry
     }
 
+    /// Return fresh provider observations for a blob.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider registry mutex is poisoned.
+    pub fn provider_peer_snapshot(&self, hash: &Hash) -> Result<Option<Vec<iroh::PublicKey>>> {
+        Ok(self.provider_registry_guard()?.peer_snapshot(hash))
+    }
+
+    /// Validate and register a signed provider lease for the local scope.
+    ///
+    /// The lease only creates advisory provider observations. Content remains
+    /// unavailable until a later fetch verifies the blob bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the lease signature, scope, expiry, or content
+    /// identifiers are invalid, or when the registry mutex is poisoned.
+    pub fn accept_provider_lease(
+        &self,
+        lease: &ProviderLease,
+        now: u64,
+        community: Option<&str>,
+        folder: &str,
+    ) -> Result<usize> {
+        self.provider_registry_guard()?
+            .record_lease(lease, now, community, folder)
+    }
+
     fn provider_registry_guard(&self) -> Result<std::sync::MutexGuard<'_, PeerTracker>> {
         self.provider_registry
             .lock()
             .map_err(|error| SyncwebError::operation("provider registry mutex is poisoned", error))
+    }
+
+    async fn record_fetch_observation(
+        &self,
+        hash: Hash,
+        peer: iroh::PublicKey,
+        success: bool,
+        started: Instant,
+    ) -> Result<()> {
+        let bytes = if success {
+            match self.blob_store.stat(hash).await? {
+                BlobStatus::Complete { size } => size,
+                BlobStatus::Partial { size } => size.unwrap_or_default(),
+                BlobStatus::NotFound => {
+                    return Err(SyncwebError::InvalidConfig(
+                        "blob fetch succeeded but the blob is not present locally".to_owned(),
+                    ));
+                }
+            }
+        } else {
+            0
+        };
+        let mut registry = self.provider_registry_guard()?;
+        registry.record_transfer(peer, success, bytes, started.elapsed());
+        if success {
+            registry.record_peer(hash, peer);
+        } else {
+            registry.record_failure(hash, peer);
+        }
+        drop(registry);
+        Ok(())
     }
 
     /// Fetch a blob from a discovered peer and update provider observations.
@@ -409,14 +470,20 @@ impl IrohNode {
                 "recent request failure is in the retry cooldown",
             ));
         }
+        let started = Instant::now();
         let result = self.blob_store.force_fetch_from_peer(&self.endpoint, peer, hash).await;
-        let mut registry = self.provider_registry_guard()?;
-        if result.is_ok() {
-            registry.record_peer(hash, peer.id);
-        } else {
-            registry.record_failure(hash, peer.id);
+        let observation_result = self
+            .record_fetch_observation(hash, peer.id, result.is_ok(), started)
+            .await;
+        match (result, observation_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(fetch), Ok(())) => Err(fetch),
+            (Ok(()), Err(observation_error)) => Err(observation_error),
+            (Err(fetch), Err(observation_error)) => Err(SyncwebError::operation(
+                "blob fetch and provider observation failed",
+                format!("{fetch}; {observation_error}"),
+            )),
         }
-        result
     }
 
     /// Fetch a blob through a provider ticket and update provider observations.
@@ -434,17 +501,26 @@ impl IrohNode {
                 "recent request failure is in the retry cooldown",
             ));
         }
+        let started = Instant::now();
         let result = self.blob_store.force_fetch(&self.endpoint, ticket).await;
-        let mut registry = self.provider_registry_guard()?;
-        if result.is_ok() {
-            registry.record_peer(hash, peer);
-        } else {
-            registry.record_failure(hash, peer);
+        let observation_result = self.record_fetch_observation(hash, peer, result.is_ok(), started).await;
+        match (result, observation_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(fetch), Ok(())) => Err(fetch),
+            (Ok(()), Err(observation_error)) => Err(observation_error),
+            (Err(fetch), Err(observation_error)) => Err(SyncwebError::operation(
+                "blob fetch and provider observation failed",
+                format!("{fetch}; {observation_error}"),
+            )),
         }
-        result
     }
 
     /// Fetch a blob through the first working provider ticket and pin it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no ticket can fetch the blob, provider observation
+    /// recording fails, or pinning the fetched blob fails.
     pub async fn fetch_blob_and_pin(&self, content_hash: Hash, tickets: &[BlobTicket]) -> Result<()> {
         if !self.blob_store.has(content_hash).await? {
             let candidates: Vec<BlobTicket> = tickets
@@ -474,14 +550,18 @@ impl IrohNode {
                 "recent request failure is in the retry cooldown",
             ));
         }
+        let started = Instant::now();
         let result = self.blob_store.fetch(&self.endpoint, ticket).await;
-        let mut registry = self.provider_registry_guard()?;
-        if result.is_ok() {
-            registry.record_peer(hash, peer);
-        } else {
-            registry.record_failure(hash, peer);
+        let observation_result = self.record_fetch_observation(hash, peer, result.is_ok(), started).await;
+        match (result, observation_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(fetch), Ok(())) => Err(fetch),
+            (Ok(()), Err(observation_error)) => Err(observation_error),
+            (Err(fetch), Err(observation_error)) => Err(SyncwebError::operation(
+                "blob fetch and provider observation failed",
+                format!("{fetch}; {observation_error}"),
+            )),
         }
-        result
     }
 
     #[must_use]

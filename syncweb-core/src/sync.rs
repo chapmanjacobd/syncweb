@@ -26,7 +26,10 @@ pub use partial_fetch::{
     BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, fetch_selected_content,
     materialize_selected_content, strategy_selects_only_local,
 };
-pub use peer_tracker::{EfficientPeerCache, EvictionStrategy, PeerTracker};
+pub use peer_tracker::{
+    DEFAULT_MAX_PEERS_PER_BLOB, EfficientPeerCache, EvictionStrategy, ObservationSource, PeerTracker,
+    PeerTransferStats, ProviderObservation,
+};
 pub use session::SessionMode;
 pub use sessions::{ActiveSession, cancel_session, is_active};
 pub use subscribe::{AreaFilter, AreaOfInterest, SubscribeParams};

@@ -100,10 +100,8 @@ held by other devices; if the identity is not restored, the new identity must
 join the network again. Provider observations are runtime cache state, so
 restoring `node.db`, `stats.db`, or `--include-blobs` content does not restore
 peer-availability observations or provider leases; those observations are
-rebuilt by subsequent discovery and transfers. Ad-hoc communal admission is
-not a current backup concern: communal identity, admission, and enrollment are
-planned separately in
-[the communal swarming plan](../plans/communal-swarming.md).
+rebuilt by subsequent discovery and transfers. Ad-hoc communal admission,
+identity, and enrollment are not part of the current backup metadata.
 
 ## `find` Command Design
 
@@ -759,6 +757,10 @@ syncweb start --no-beacon                  # Disable the UDP beacon local discov
 syncweb start --beacon-port 15200          # Override the beacon base port
 syncweb start --discovery-interface eth0   # Bind the beacon to one interface
 ```
+
+For foreground operation under systemd or launchd, see
+[Daemon operations](operations.md). `syncweb start --bg` is a detached
+convenience mode and does not provide restart supervision.
 
 ---
 

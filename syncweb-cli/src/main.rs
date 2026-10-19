@@ -5,6 +5,7 @@ use comfy_table::Table;
 
 use std::{
     collections::BTreeMap,
+    fmt::Display,
     path::{Path, PathBuf},
     process::{Child, Command as ProcessCommand, Stdio},
     str::FromStr,
@@ -26,8 +27,8 @@ use cli::{
     filter::{ContentFilter, ContentFilterArgs},
     output::{
         AccessRow, JoinFetch, confirm_destructive, create_next_steps, init_tracing_with_log_file, join_next_steps,
-        json_list, package_install_next_steps, print_next_steps, print_version, render_access_json,
-        render_access_table, share_next_steps, with_next_steps,
+        json_list, network_invite_next_steps, network_join_next_steps, package_install_next_steps, print_next_steps,
+        print_version, render_access_json, render_access_table, share_next_steps, with_next_steps,
     },
 };
 use indicatif::{ProgressBar, ProgressStyle};
@@ -38,7 +39,7 @@ use syncweb_core::{
     allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
     bandwidth_stats::BandwidthStats,
     cancel_session,
-    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile},
+    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile, daemon_socket_path, pid_is_alive},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
@@ -566,8 +567,7 @@ async fn handle_shutdown(ctx: &CliContext<'_>, args: ShutdownArgs) -> Result<()>
         println!("aborted");
         return Ok(());
     }
-    let client =
-        syncweb_core::daemon::daemon_client(data_dir)?.ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
+    let client = required_daemon_client(data_dir, "stop")?;
     let message = client.shutdown(args.force).await?;
     print_daemon_ok(&message, output_json);
     Ok(())
@@ -681,6 +681,51 @@ async fn daemon_client_or_start(
     Ok(syncweb_core::daemon::daemon_client(data_dir)?)
 }
 
+/// Return a daemon client or explain how to recover from a stale/unresponsive
+/// daemon owner instead of reducing every IPC failure to "not running".
+fn required_daemon_client(data_dir: &Path, operation: &str) -> Result<IpcClient> {
+    let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? else {
+        let lock = PidLock::new(data_dir);
+        if lock.try_acquire()? {
+            lock.release()?;
+            anyhow::bail!("{ERR_DAEMON_NOT_RUNNING}");
+        }
+        let probe = IpcClient::new(data_dir).status_sync();
+        let cause = match probe {
+            Ok(syncweb_core::daemon::DaemonStatus::Starting | syncweb_core::daemon::DaemonStatus::Running) => {
+                return Ok(IpcClient::new(data_dir));
+            }
+            Ok(status) => format!("daemon reported status {status:?} while handling {operation}"),
+            Err(error) => format!("daemon did not answer the {operation} request: {error}"),
+        };
+        return Err(daemon_recovery_error(data_dir, cause));
+    };
+    Ok(client)
+}
+
+/// Build an actionable diagnostic for a lock owner that cannot be reached over
+/// IPC. The same message covers a crashed process, stale PID, and mismatched
+/// CLI/daemon protocol so operators have a safe recovery path.
+fn daemon_recovery_error(data_dir: &Path, cause: impl Display) -> anyhow::Error {
+    let lock = PidLock::new(data_dir);
+    let owner = match lock.owner_pid() {
+        Ok(Some(pid)) if pid_is_alive(pid) => format!("lock owner PID {pid} is still alive"),
+        Ok(Some(pid)) => format!("stale lock owner PID {pid} is not running"),
+        Ok(None) => "the daemon lock has no recorded PID".to_owned(),
+        Err(error) => format!("the daemon PID could not be read: {error}"),
+    };
+    let socket = daemon_socket_path(data_dir);
+    anyhow::anyhow!(
+        "{cause}; {owner}, but IPC socket {} is not responding. \
+         Recovery: check whether the recorded PID is stale, verify no daemon still \
+         owns the data directory, stop a crashed process if necessary, then run \
+         `syncweb start` in the foreground. \
+         If the CLI and daemon came from different versions, this may be an IPC \
+         version mismatch; restart both with the same syncweb version.",
+        socket.display()
+    )
+}
+
 async fn spawn_daemon_and_wait(
     data_dir: &Path,
     spawn_data_dir: &Path,
@@ -726,13 +771,19 @@ async fn wait_for_daemon_ready(
         if let Some(proc) = child.as_mut()
             && let Some(status) = proc.try_wait()?
         {
-            anyhow::bail!(
-                "daemon exited before becoming ready (status: {status}); \
-                 rerun without --bg to see the startup error, or pass --log-file"
-            );
+            return Err(daemon_recovery_error(
+                data_dir,
+                format!(
+                    "daemon exited before becoming ready (status: {status}); \
+                     rerun without --bg to see the startup error, or pass --log-file"
+                ),
+            ));
         }
         if Instant::now() >= deadline {
-            anyhow::bail!("timed out after {timeout:?} waiting for the daemon to become ready");
+            return Err(daemon_recovery_error(
+                data_dir,
+                format!("timed out after {timeout:?} waiting for the daemon to become ready"),
+            ));
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
         if let Some(progress) = spinner {
@@ -980,16 +1031,14 @@ fn network_health_summary_json(data_dir: &std::path::Path) -> Result<serde_json:
 
 #[async_recursion]
 async fn handle_reload(ctx: &CliContext<'_>) -> Result<()> {
-    let client = syncweb_core::daemon::daemon_client(ctx.data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
+    let client = required_daemon_client(ctx.data_dir, "reload")?;
     let message = client.reload_config().await?;
     print_daemon_ok(&message, ctx.output_json);
     Ok(())
 }
 
 async fn handle_daemon_sync(ctx: &CliContext<'_>, namespace: Option<String>) -> Result<()> {
-    let client = syncweb_core::daemon::daemon_client(ctx.data_dir)?
-        .ok_or_else(|| anyhow::anyhow!("{ERR_DAEMON_NOT_RUNNING}"))?;
+    let client = required_daemon_client(ctx.data_dir, "sync")?;
     let message = client.trigger_sync(namespace).await?;
     print_daemon_ok(&message, ctx.output_json);
     Ok(())
@@ -2720,11 +2769,7 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node
-            .provider_registry()
-            .lock()
-            .expect("provider registry mutex should not be poisoned")
-            .peer_snapshot(&hash);
+        let peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
@@ -2751,6 +2796,7 @@ fn render_seeding(folder: &str, health: &syncweb_core::sync::HealthReport, outpu
                 "well_seeded": health.well_seeded,
                 "under_seeded": health.under_seeded,
                 "unseeded": health.unseeded,
+                "unknown": health.unknown,
                 "least_seeded": health
                     .least_seeded
                     .iter()
@@ -2772,6 +2818,7 @@ fn render_seeding(folder: &str, health: &syncweb_core::sync::HealthReport, outpu
         println!("well_seeded:    {}", health.well_seeded);
         println!("under_seeded:   {}", health.under_seeded);
         println!("unseeded:       {}", health.unseeded);
+        println!("unknown:        {}", health.unknown);
         if !health.least_seeded.is_empty() {
             println!();
             let mut table = Table::new();
@@ -5557,6 +5604,29 @@ fn print_network_created(name: &str, id: &str, output_json: bool) {
     }
 }
 
+fn print_network_invite(name: &str, ticket: &str, output_json: bool) {
+    let steps = network_invite_next_steps(name);
+    if output_json {
+        println!("{}", with_next_steps(serde_json::json!({"ticket": ticket}), &steps));
+    } else {
+        println!("{ticket}");
+        print_next_steps(&steps);
+    }
+}
+
+fn print_network_joined(id: &str, output_json: bool) {
+    let steps = network_join_next_steps();
+    if output_json {
+        println!(
+            "{}",
+            with_next_steps(serde_json::json!({"status": "joined", "id": id}), &steps)
+        );
+    } else {
+        println!("joined: {id}");
+        print_next_steps(&steps);
+    }
+}
+
 #[async_recursion]
 async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -5595,11 +5665,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             let ticket = cli::ticket::resolve_ticket(&ticket)?;
             let parsed = ticket.parse()?;
             let id = manager.join(parsed)?;
-            if output_json {
-                println!("{}", serde_json::json!({"status": "joined", "id": id.to_string()}));
-            } else {
-                println!("joined: {id}");
-            }
+            print_network_joined(&id.to_string(), output_json);
         }
         NetworkCommand::Leave { name } => {
             if !confirm_destructive("leave this network", ctx.yes, ctx.no_color)? {
@@ -5621,7 +5687,7 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 && let Some(client) = syncweb_core::daemon::daemon_client(data_dir)?
             {
                 let message = client.network_invite(id.to_string(), node_id).await?;
-                print_daemon_ok(&message, output_json);
+                print_network_invite(&name, &message, output_json);
                 return Ok(());
             }
             let ticket = if let Some(node_id) = device {
@@ -5636,9 +5702,9 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 tracing::warn!(%error, "failed to refresh network membership doc");
             }
             if output_json {
-                println!("{}", serde_json::json!({"ticket": ticket.to_string()}));
+                print_network_invite(&name, &ticket.to_string(), true);
             } else {
-                println!("{ticket}");
+                print_network_invite(&name, &ticket.to_string(), false);
             }
         }
         NetworkCommand::Kick { name, device } => {

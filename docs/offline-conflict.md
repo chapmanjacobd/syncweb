@@ -1,5 +1,8 @@
 # Offline-First Queue and Conflict Resolution
 
+This design document retains the UX sketches and protocol rationale. Supported
+behavior is listed in [status.md](status.md).
+
 ## Offline-First Queue and Conflict Resolution UX
 
 ### Offline Editing Workflow

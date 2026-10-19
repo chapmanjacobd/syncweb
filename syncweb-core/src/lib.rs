@@ -36,6 +36,7 @@ pub mod net;
 pub mod node;
 pub mod parsing;
 pub mod pins;
+pub mod provider_inventory;
 pub mod provider_lease;
 pub mod schedule;
 pub mod search;
@@ -56,6 +57,7 @@ pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImport
 pub use folder::archive_verify::{
     DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
 };
+pub use provider_inventory::{InventoryRange, PROVIDER_INVENTORY_VERSION, ProviderInventory};
 pub use provider_lease::{
     PROVIDER_LEASE_VERSION, ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
 };

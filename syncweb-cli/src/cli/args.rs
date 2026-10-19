@@ -266,6 +266,7 @@ mod tests {
             "sync",
             "devices",
             "folders",
+            "conflicts",
             "ls",
             "stat",
             "find",

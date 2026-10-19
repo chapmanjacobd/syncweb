@@ -1,10 +1,65 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     time::{Duration, Instant},
 };
 
 use iroh::PublicKey;
 use iroh_blobs::Hash;
+
+use crate::{error::Result, provider_lease::ProviderLease};
+
+/// The source of a provider availability observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ObservationSource {
+    Transfer,
+    Lease,
+    OfflineImport,
+}
+
+impl ObservationSource {
+    const fn priority(self) -> u8 {
+        match self {
+            Self::Transfer => 3,
+            Self::OfflineImport => 2,
+            Self::Lease => 1,
+        }
+    }
+}
+
+/// Metadata retained for a fresh provider observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct ProviderObservation {
+    pub source: ObservationSource,
+    /// Confidence is an application-defined score from 0 through 100.
+    pub confidence: u8,
+}
+
+/// Bounded transfer history for one provider.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct PeerTransferStats {
+    pub completed: u64,
+    pub failed: u64,
+    pub bytes: u64,
+    pub completed_duration: Duration,
+}
+
+impl PeerTransferStats {
+    /// Return the average completed-transfer throughput in bytes per second.
+    #[must_use]
+    pub fn throughput_bytes_per_second(self) -> Option<u64> {
+        let nanos = self.completed_duration.as_nanos();
+        if self.completed == 0 || self.bytes == 0 || nanos == 0 {
+            return None;
+        }
+        let bytes_per_second = u128::from(self.bytes)
+            .saturating_mul(1_000_000_000)
+            .checked_div(nanos)?;
+        u64::try_from(bytes_per_second).ok()
+    }
+}
 
 /// Policy used when the peer availability cache reaches its size limit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,9 +69,21 @@ pub enum EvictionStrategy {
     Fifo,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ObservationRecord {
+    metadata: ProviderObservation,
+    observed_at: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TransferRecord {
+    stats: PeerTransferStats,
+    last_updated: u64,
+}
+
 #[derive(Clone, Debug)]
 struct Availability {
-    peers: HashSet<PublicKey>,
+    peers: HashMap<PublicKey, ObservationRecord>,
     inserted_at: u64,
     accessed_at: u64,
     last_seen: Instant,
@@ -32,13 +99,18 @@ type NegativeKey = (Hash, PublicKey);
 pub struct PeerTracker {
     entries: HashMap<Hash, Availability>,
     negative: HashMap<NegativeKey, Instant>,
+    transfer_stats: HashMap<PublicKey, TransferRecord>,
     max_cache_size: usize,
+    max_peers_per_blob: usize,
     negative_cache_size: usize,
     strategy: EvictionStrategy,
     expiry: Duration,
     negative_expiry: Duration,
     clock: u64,
 }
+
+/// Default maximum number of provider observations retained for one blob.
+pub const DEFAULT_MAX_PEERS_PER_BLOB: usize = 1024;
 
 impl PeerTracker {
     #[must_use]
@@ -60,10 +132,30 @@ impl PeerTracker {
         expiry: Duration,
         negative_expiry: Duration,
     ) -> Self {
+        Self::with_limits(
+            max_cache_size,
+            DEFAULT_MAX_PEERS_PER_BLOB,
+            strategy,
+            expiry,
+            negative_expiry,
+        )
+    }
+
+    /// Create a tracker with explicit blob and per-blob peer limits.
+    #[must_use]
+    pub fn with_limits(
+        max_cache_size: usize,
+        max_peers_per_blob: usize,
+        strategy: EvictionStrategy,
+        expiry: Duration,
+        negative_expiry: Duration,
+    ) -> Self {
         Self {
             entries: HashMap::new(),
             negative: HashMap::new(),
+            transfer_stats: HashMap::new(),
             max_cache_size,
+            max_peers_per_blob: max_peers_per_blob.max(1),
             negative_cache_size: max_cache_size.saturating_mul(4).max(1),
             strategy,
             expiry,
@@ -73,20 +165,116 @@ impl PeerTracker {
     }
 
     pub fn record_peer(&mut self, blob_hash: Hash, node_id: PublicKey) {
+        self.record_observation(blob_hash, node_id, ObservationSource::Transfer, 100);
+    }
+
+    /// Record one completed or failed transfer while retaining a bounded
+    /// per-peer history for scheduling and observability.
+    pub fn record_transfer(&mut self, node_id: PublicKey, success: bool, bytes: u64, elapsed: Duration) {
+        self.clock = self.clock.saturating_add(1);
+        let entry = self.transfer_stats.entry(node_id).or_insert(TransferRecord {
+            stats: PeerTransferStats {
+                completed: 0,
+                failed: 0,
+                bytes: 0,
+                completed_duration: Duration::ZERO,
+            },
+            last_updated: self.clock,
+        });
+        if success {
+            entry.stats.completed = entry.stats.completed.saturating_add(1);
+            entry.stats.bytes = entry.stats.bytes.saturating_add(bytes);
+            entry.stats.completed_duration = entry.stats.completed_duration.saturating_add(elapsed);
+        } else {
+            entry.stats.failed = entry.stats.failed.saturating_add(1);
+        }
+        entry.last_updated = self.clock;
+        while self.transfer_stats.len() > self.max_cache_size.saturating_mul(4).max(1) {
+            let oldest = self
+                .transfer_stats
+                .iter()
+                .min_by_key(|(_, record)| record.last_updated)
+                .map(|(peer, _)| *peer);
+            if let Some(peer) = oldest {
+                self.transfer_stats.remove(&peer);
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Return a provider's bounded transfer history, if it is still retained.
+    #[must_use]
+    pub fn transfer_stats(&self, node_id: &PublicKey) -> Option<PeerTransferStats> {
+        self.transfer_stats.get(node_id).map(|record| record.stats)
+    }
+
+    /// Record a provider observation with its source and confidence.
+    ///
+    /// Stronger observations never get replaced by weaker lease or import
+    /// metadata, while a newer observation can increase confidence.
+    pub fn record_observation(
+        &mut self,
+        blob_hash: Hash,
+        node_id: PublicKey,
+        source: ObservationSource,
+        confidence: u8,
+    ) {
         self.purge_negative();
         self.negative.remove(&(blob_hash, node_id));
         self.clock = self.clock.saturating_add(1);
         let now = Instant::now();
+        let observed_at = self.clock;
         let entry = self.entries.entry(blob_hash).or_insert_with(|| Availability {
-            peers: HashSet::new(),
-            inserted_at: self.clock,
-            accessed_at: self.clock,
+            peers: HashMap::new(),
+            inserted_at: observed_at,
+            accessed_at: observed_at,
             last_seen: now,
         });
-        entry.peers.insert(node_id);
-        entry.accessed_at = self.clock;
+        let metadata = ProviderObservation {
+            source,
+            confidence: confidence.min(100),
+        };
+        entry
+            .peers
+            .entry(node_id)
+            .and_modify(|record| {
+                if source.priority() >= record.metadata.source.priority() {
+                    record.metadata.source = source;
+                }
+                record.metadata.confidence = record.metadata.confidence.max(metadata.confidence);
+                record.observed_at = observed_at;
+            })
+            .or_insert(ObservationRecord { metadata, observed_at });
+        entry.accessed_at = observed_at;
         entry.last_seen = now;
+        self.evict_peers_to_limit(&blob_hash);
         self.evict_to_limit();
+    }
+
+    /// Accept a signed lease after enforcing its local scope and expiry.
+    ///
+    /// Returns the number of unique content identifiers added to the
+    /// registry. A rejected lease does not modify the registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the lease is expired, malformed, incorrectly
+    /// signed, or outside the supplied community and folder scope.
+    pub fn record_lease(
+        &mut self,
+        lease: &ProviderLease,
+        now: u64,
+        community: Option<&str>,
+        folder: &str,
+    ) -> Result<usize> {
+        lease.validate(now, community, folder)?;
+        let provider = lease.provider_id()?;
+        let hashes = lease.content_hashes()?;
+        for hash in &hashes {
+            self.record_observation(*hash, provider, ObservationSource::Lease, 75);
+        }
+        Ok(hashes.len())
     }
 
     #[must_use]
@@ -105,12 +293,12 @@ impl PeerTracker {
             entry
                 .peers
                 .iter()
-                .filter(|peer| {
+                .filter(|(peer, _)| {
                     negative
                         .get(&(*blob_hash, **peer))
                         .is_none_or(|failed_at| failed_at.elapsed() > negative_expiry)
                 })
-                .copied()
+                .map(|(peer, _)| *peer)
                 .collect()
         })
     }
@@ -122,7 +310,7 @@ impl PeerTracker {
                 entry
                     .peers
                     .iter()
-                    .filter(|peer| !self.is_negative(blob_hash, peer))
+                    .filter(|(peer, _)| !self.is_negative(blob_hash, peer))
                     .count()
             } else {
                 0
@@ -139,6 +327,23 @@ impl PeerTracker {
         Some(self.get_peers(blob_hash))
     }
 
+    /// Return fresh provider metadata for a blob, excluding failed peers.
+    pub fn observations(&mut self, blob_hash: &Hash) -> Vec<(PublicKey, ProviderObservation)> {
+        self.purge_negative();
+        let Some(entry) = self.entries.get(blob_hash) else {
+            return Vec::new();
+        };
+        if entry.last_seen.elapsed() > self.expiry {
+            return Vec::new();
+        }
+        entry
+            .peers
+            .iter()
+            .filter(|(peer, _)| !self.is_negative(blob_hash, peer))
+            .map(|(peer, record)| (*peer, record.metadata))
+            .collect()
+    }
+
     /// Remove one peer's positive observation for a single blob immediately.
     ///
     /// Unlike [`record_failure`](Self::record_failure), this does not retain
@@ -147,7 +352,7 @@ impl PeerTracker {
         let Some(entry) = self.entries.get_mut(blob_hash) else {
             return false;
         };
-        let removed = entry.peers.remove(node_id);
+        let removed = entry.peers.remove(node_id).is_some();
         if entry.peers.is_empty() {
             self.entries.remove(blob_hash);
         }
@@ -172,7 +377,7 @@ impl PeerTracker {
     pub fn contains(&self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
         self.entries
             .get(blob_hash)
-            .is_some_and(|entry| entry.peers.contains(node_id) && !self.is_negative(blob_hash, node_id))
+            .is_some_and(|entry| entry.peers.contains_key(node_id) && !self.is_negative(blob_hash, node_id))
     }
 
     /// Remove a peer from all cached blob availability records.
@@ -252,6 +457,27 @@ impl PeerTracker {
             }
         }
     }
+
+    fn evict_peers_to_limit(&mut self, blob_hash: &Hash) {
+        let Some(entry) = self.entries.get_mut(blob_hash) else {
+            return;
+        };
+        while entry.peers.len() > self.max_peers_per_blob {
+            let oldest = entry
+                .peers
+                .iter()
+                .min_by_key(|(_, record)| record.observed_at)
+                .map(|(peer, _)| *peer);
+            if let Some(peer) = oldest {
+                entry.peers.remove(&peer);
+            } else {
+                break;
+            }
+        }
+        if entry.peers.is_empty() {
+            self.entries.remove(blob_hash);
+        }
+    }
 }
 
 /// Compact peer presence cache using stable integer indices.
@@ -316,6 +542,7 @@ impl EfficientPeerCache {
         });
         if indices.is_empty() {
             self.hash_to_indices.remove(hash);
+            self.presence.remove(hash);
         }
         if removed {
             let index_usize = usize::from(*index);
@@ -413,11 +640,10 @@ impl EfficientPeerCache {
     /// Like [`retain_active`](Self::retain_active) but with an explicit
     /// observation time for deterministic testing.
     fn retain_active_at(&mut self, ttl: Duration, now: Instant) -> usize {
-        let cutoff = now.checked_sub(ttl).unwrap_or(now);
         let stale: Vec<PublicKey> = self
             .last_seen
             .iter()
-            .filter(|(_, last_seen)| **last_seen < cutoff)
+            .filter(|(_, last_seen)| now.saturating_duration_since(**last_seen) > ttl)
             .map(|(peer, _)| *peer)
             .collect();
         let count = stale.len();

@@ -14,12 +14,10 @@ Focused documentation for the syncweb design and implementation.
 | [packages.md](packages.md) | Living folders, collection/package manifests, lifecycle |
 | [testing.md](testing.md) | Testing strategy, performance targets, risks |
 | [status.md](status.md) | Current implemented-vs-planned product contract |
+| [operations.md](operations.md) | Foreground daemon operation and service-manager supervision |
 | [api-reference.md](api-reference.md) | Iroh 1.0.2 API reference + implementation patterns |
 | [archive_format.md](archive_format.md) | Archive format design |
 | [indexing.md](indexing.md) | Opt-in indexing service |
-| [../plans/README.md](../plans/README.md) | Actionable implementation plans |
 
-The former `phases.md` and `conflict-resolution-plan.md` documents are now
-tracked in `plans/roadmap.md` and `plans/conflict-resolution.md`. Design and
-user-story documents may describe future behavior, but executable support is
-defined by [status.md](status.md).
+Design and user-story documents may describe future behavior, but executable
+support is defined by [status.md](status.md).

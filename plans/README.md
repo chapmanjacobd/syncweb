@@ -16,7 +16,7 @@ change.
 | [communal-swarming.md](communal-swarming.md) | Provider inventories, multi-source transfer, replication, LAN scaling, communal admission, and offline enrollment | Proposed |
 | [conflict-resolution.md](conflict-resolution.md) | Remaining conflict materialization and conflict-resolution CLI work | Partially implemented |
 | [ux-and-operations.md](ux-and-operations.md) | First-run, daemon supervision, backup/restore, command UX, and documentation drift | Proposed |
-| [roadmap.md](roadmap.md) | The historical feature-area roadmap migrated from `docs/phases.md` | Mixed: mostly implemented |
+| [roadmap.md](roadmap.md) | The historical feature-area roadmap migrated from `docs/phases.md` | Complete; details archived |
 
 ## Source-document migration
 
@@ -24,4 +24,3 @@ change.
 are implementation plans rather than stable reference documentation. The
 user stories, status contract, and design references remain in `docs/`; their
 actionable follow-up work links back to the plans above.
-

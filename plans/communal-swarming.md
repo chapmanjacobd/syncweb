@@ -60,14 +60,7 @@ coordination and policy layers; it does not replace those primitives.
 Introduce a compact, expiring availability model that can be learned from
 successful transfers, explicit announcements, and offline imports.
 
-- [ ] Define compact inventory encodings for manifests, ranges, and large
-  collections. Prefer summaries or set reconciliation over one message per
-  blob.
-- [ ] Add a local provider registry with freshness, confidence, source, and
-  failure state. Bound memory and peer cardinality.
 - [ ] Wire successful and failed blob/segment requests into the registry.
-- [ ] Add authenticated publication and validation rules for leases; reject
-  leases outside the local community or folder scope.
 Likely code: `syncweb-core/src/sync/peer_tracker.rs`,
 `syncweb-core/src/sync/partial_fetch.rs`,
 `syncweb-core/src/daemon/ipc.rs`, `syncweb-core/src/node/discovery.rs`,
@@ -89,8 +82,6 @@ integrity and bounded resource use.
   suppression, and repair of failed segments.
 - [ ] Keep whole-blob fetching as a compatibility path for small objects and
   peers that do not advertise segment support.
-- [ ] Record per-peer throughput, failure, and completion observations without
-  turning them into an unbounded reputation database.
 - [ ] Integrate the scheduler with `force_fetch_from_peer`,
   `fetch_selected_content`, queued daemon transfers, package installs, and
   snapshot restore.
@@ -220,12 +211,8 @@ Make communal participation understandable and controllable.
   scheduler activity, local/relay path, and last inventory update.
 - [ ] Provide machine-readable events and metrics for discovery, leases,
   segment transfers, repairs, and rejected requests.
-- [ ] Add daemon supervision or a documented service-manager integration so
-  long-lived seeding is reliable.
 - [ ] Add safe defaults for laptops, phones, shared workstations, and dedicated
   cache peers.
-- [ ] Keep generated help and status output aligned with executable commands;
-  future plan names must not be presented as available commands.
 
 Likely code: daemon lifecycle, IPC, `syncweb-cli/src/cli/commands.rs`,
 config, status rendering, and logging/metrics.

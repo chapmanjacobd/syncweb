@@ -61,7 +61,7 @@ and provider selection.
 leases. It applies minimum-sample scoring, time decay, failure weighting, and
 exponential temporary-ban backoff. It is fed by direct fetch observations
 (`record_failure_at`/`record_success`) and manual `ProviderTrustRecord` vouch /
-distrust opinions; there is no gossip trust stream (culled in plan 017).
+distrust opinions; there is no gossip trust stream.
 `ProviderTrustSignal` carries a domain-separated reporter signature for local
 reputation ingestion.
 
@@ -124,8 +124,7 @@ local policy.
 
 Moderation decisions filter display of records in trust and metadata search;
 they do not block blob transfer. Moderation remains a local policy layer over
-immutable content — plan 017 documented this rather than enforcing it at
-fetch/serve time.
+immutable content rather than enforcing it at fetch/serve time.
 
 ### 6. Trust, Governance, and Moderation
 Content hashes prove integrity, but they do not prove accuracy, authorship, legality, or quality. Public and community catalogs require mechanisms for spam, abuse, takedown, and conflicting claims without relying on a single global authority.

@@ -1,5 +1,8 @@
 # Overview
 
+This document describes the architecture and selected design decisions.
+Current support is defined by [status.md](status.md).
+
 ## Executive Summary
 
 syncweb (Rust + Iroh 1.0+) provides delay-tolerant P2P file synchronization.
@@ -249,7 +252,7 @@ Decision: Filter-based fetch with peer count and file count constraints
 - Use `--min-count` / `--max-count` to limit how many blobs are fetched
 - `FetchFilter` unifies paths, sizes, peer counts, and file counts in one struct
 - `syncweb download --max-peers 2 audio/` fetches blobs with ≤2 seeders
-- `syncweb stats seeding` shows seeding status per blob (well/under/unseeded)
+- `syncweb stats seeding` shows seeding status per blob (well/under/unseeded/unknown)
 - Each node independently decides what to seed (no central coordination)
 - Improves resilience: rare content becomes more available over time
 
@@ -291,4 +294,3 @@ Decision: One daemon process per network, each with its own data directory, iden
 - PrivateLink capability tokens provide application-level access control for individual manifests (expiry + revocation).
 
 A modified client cannot download blobs from networks it is not a member of (rejected at connection level), use expired/revoked PrivateLinks, or forge network membership (requires member's Ed25519 key). A modified client can still exfiltrate blobs it is authorized to access, or use a stolen member key. See `docs/security-model.md` for full threat model.
-

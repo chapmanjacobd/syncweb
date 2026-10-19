@@ -183,6 +183,27 @@ pub fn join_next_steps(subscribe: bool, fetch: JoinFetch) -> Vec<String> {
     steps
 }
 
+/// Shared next steps after creating a named-network invitation.
+pub fn network_invite_next_steps(name: &str) -> Vec<String> {
+    vec![
+        format!(
+            "this invitation grants membership in the named network `{name}`; it is not a folder ticket, package ticket, or offline community enrollment"
+        ),
+        "send the ticket to the recipient; they join with `syncweb network join <ticket>`".to_owned(),
+        "share folders separately with `syncweb share <path>`; install packages with `syncweb package install <ticket>`"
+            .to_owned(),
+    ]
+}
+
+/// Shared next steps after joining a named network.
+pub fn network_join_next_steps() -> Vec<String> {
+    vec![
+        "network membership is the peer-access boundary; it does not create or join a folder".to_owned(),
+        "join folders with `syncweb folders join <folder-ticket>` or install packages with `syncweb package install <ticket>`"
+            .to_owned(),
+    ]
+}
+
 /// Shared next steps after `share`.
 pub fn share_next_steps(write: bool, pinned: bool) -> Vec<String> {
     let mut steps = Vec::new();
@@ -468,6 +489,26 @@ mod tests {
         assert!(
             steps.iter().any(|step| step.contains("package verify")),
             "install should point at verify: {steps:?}"
+        );
+    }
+
+    #[test]
+    fn network_next_steps_distinguish_membership_from_content() {
+        let invite = network_invite_next_steps("team");
+        assert!(
+            invite
+                .iter()
+                .any(|step| step.contains("not a folder ticket, package ticket")),
+            "network invite should explain ticket scope: {invite:?}"
+        );
+        assert!(
+            invite.iter().any(|step| step.contains("network join <ticket>")),
+            "network invite should explain how to provision the recipient: {invite:?}"
+        );
+        let join = network_join_next_steps();
+        assert!(
+            join.iter().any(|step| step.contains("folders join")),
+            "network join should point at folder provisioning: {join:?}"
         );
     }
 }

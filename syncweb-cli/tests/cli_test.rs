@@ -1765,7 +1765,6 @@ fn network_invite_outputs_ticket() -> anyhow::Result<()> {
         .args(["--data-dir", data_dir, "network", "invite", "invite-net"])
         .output()
         .context("invite to network")?;
-    std::fs::remove_dir_all(&directory).context("cleanup")?;
 
     ensure!(
         invite.status.success(),
@@ -1777,6 +1776,27 @@ fn network_invite_outputs_ticket() -> anyhow::Result<()> {
         stdout.contains("syncweb://network/"),
         "should output a ticket URL: {stdout}"
     );
+    ensure!(
+        stdout.contains("network join <ticket>"),
+        "should explain how to use the invitation: {stdout}"
+    );
+    ensure!(
+        stdout.contains("not a folder ticket, package ticket"),
+        "should explain the invitation scope: {stdout}"
+    );
+
+    let json_invite = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir, "--json", "network", "invite", "invite-net"])
+        .output()
+        .context("invite to network as JSON")?;
+    ensure!(json_invite.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&json_invite.stdout).context("parse network invite JSON")?;
+    ensure!(
+        json.get("ticket").is_some() && json.get("next_steps").is_some(),
+        "JSON invitation should include ticket and next_steps: {json}"
+    );
+
+    std::fs::remove_dir_all(&directory).context("cleanup")?;
     Ok(())
 }
 

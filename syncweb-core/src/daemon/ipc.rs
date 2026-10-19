@@ -2568,9 +2568,9 @@ impl IpcServer {
     }
 
     /// Read-only aggregation of which peers joined a folder and which of its
-    /// blobs each peer can serve. No new state: the peer set is drawn from the
-    /// network manager's membership records and the per-blob counts from the
-    /// (currently empty) `EnrichSort` peer map.
+    /// blobs each peer can serve. The peer set is drawn from the network
+    /// manager's membership records and per-blob counts from fresh provider
+    /// observations.
     async fn handle_peer_availability(&self, folder_selection: String) -> IpcResponse {
         let Some(context) = self.archive_context.clone() else {
             return IpcResponse::Error {
@@ -2659,12 +2659,14 @@ impl IpcServer {
                 continue;
             };
             let hash = entry.content_hash();
-            let provider_peers = context
-                .node
-                .provider_registry()
-                .lock()
-                .expect("provider registry mutex should not be poisoned")
-                .peer_snapshot(&hash);
+            let provider_peers = match context.node.provider_peer_snapshot(&hash) {
+                Ok(provider_peers) => provider_peers,
+                Err(error) => {
+                    return IpcResponse::Error {
+                        message: format!("failed to read provider availability: {error}"),
+                    };
+                }
+            };
             let peer_count_known = provider_peers.is_some();
             let provider_peers = provider_peers.unwrap_or_default();
             let peer_count = provider_peers.len();

@@ -236,14 +236,16 @@ impl TransferBudget {
 
     /// Record transferred bytes observed at `now`.
     pub fn record_at(&self, direction: Direction, bytes: u64, now: Instant) {
-        let cutoff = now.checked_sub(WINDOW_MONTH).unwrap_or(now);
         let mut samples = self.samples.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         samples.push_back(Sample {
             at: now,
             direction,
             bytes,
         });
-        while samples.front().is_some_and(|sample| sample.at < cutoff) {
+        while samples
+            .front()
+            .is_some_and(|sample| now.saturating_duration_since(sample.at) > WINDOW_MONTH)
+        {
             samples.pop_front();
         }
         drop(samples);
@@ -430,6 +432,16 @@ mod tests {
         let earlier = now.checked_sub(Duration::from_secs(4_000)).expect("underflow");
         budget.record_at(Direction::Download, 1_000, earlier);
         assert_eq!(budget.available_at(Direction::Download, now), 1_000);
+    }
+
+    #[test]
+    fn monthly_quota_keeps_recent_samples_on_fresh_processes() {
+        let budget = TransferBudget::new(limits((None, None, Some(1_000)), (None, None, None)));
+        let now = Instant::now();
+        let earlier = now.checked_sub(Duration::from_secs(1)).expect("underflow");
+        budget.record_at(Direction::Download, 400, earlier);
+        budget.record_at(Direction::Download, 300, now);
+        assert_eq!(budget.available_at(Direction::Download, now), 300);
     }
 
     #[test]

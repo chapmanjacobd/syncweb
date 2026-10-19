@@ -4,6 +4,8 @@
 //! folder in which a provider is valid, but callers must still fetch and
 //! verify the referenced content before treating it as available.
 
+use std::collections::HashSet;
+
 use ed25519_dalek::SigningKey;
 use iroh::PublicKey;
 use iroh_blobs::Hash;
@@ -61,6 +63,30 @@ pub struct ProviderLeaseOptions {
     pub capabilities: ProviderCapabilities,
     pub observed_at: u64,
     pub expires_at: u64,
+}
+
+impl ProviderLeaseOptions {
+    /// Create lease fields before signing them with [`ProviderLease::sign`].
+    #[must_use]
+    pub const fn new(
+        community: Option<String>,
+        folder: NamespaceId,
+        content_root: Option<Hash>,
+        contents: Vec<ProviderContent>,
+        capabilities: ProviderCapabilities,
+        observed_at: u64,
+        expires_at: u64,
+    ) -> Self {
+        Self {
+            community,
+            folder,
+            content_root,
+            contents,
+            capabilities,
+            observed_at,
+            expires_at,
+        }
+    }
 }
 
 /// A signed, bounded advertisement of provider availability.
@@ -134,6 +160,51 @@ impl ProviderLease {
         verify_hex(&self.provider, &signed, &self.signature)
     }
 
+    /// Decode the provider identity after validating its wire representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider field is not a 32-byte public key.
+    pub fn provider_id(&self) -> Result<PublicKey> {
+        let encoded = hex::decode(&self.provider)
+            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid provider node ID: {error}")))?;
+        let key_bytes: [u8; 32] = encoded.try_into().map_err(|bytes: Vec<u8>| {
+            SyncwebError::InvalidIdentity(format!("provider node ID must contain 32 bytes, got {}", bytes.len()))
+        })?;
+        PublicKey::from_bytes(&key_bytes)
+            .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid provider node ID: {error}")))
+    }
+
+    /// Decode the unique blob identifiers advertised by this lease.
+    ///
+    /// The optional content root is included because it is itself a
+    /// content-addressed availability observation. Segment entries contribute
+    /// their containing blob hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an advertised hash is malformed.
+    pub fn content_hashes(&self) -> Result<Vec<Hash>> {
+        let mut seen = HashSet::new();
+        let mut hashes = Vec::new();
+        if let Some(root) = &self.content_root {
+            let hash = parse_hash(root, "content root")?;
+            if seen.insert(hash) {
+                hashes.push(hash);
+            }
+        }
+        for content in &self.contents {
+            let value = match content {
+                ProviderContent::Blob { hash } | ProviderContent::Segment { hash, .. } => hash,
+            };
+            let hash = parse_hash(value, "provider content")?;
+            if seen.insert(hash) {
+                hashes.push(hash);
+            }
+        }
+        Ok(hashes)
+    }
+
     /// Verify authenticity, structure, freshness, and local scope.
     ///
     /// `community` and `folder` are the local scope. Exact matching is
@@ -166,10 +237,15 @@ impl ProviderLease {
                 "provider lease expiry must be after observation".to_owned(),
             ));
         }
+        if self.observed_at > now {
+            return Err(SyncwebError::InvalidConfig(
+                "provider lease observation is in the future".to_owned(),
+            ));
+        }
         if now >= self.expires_at {
             return Err(SyncwebError::InvalidConfig("provider lease has expired".to_owned()));
         }
-        validate_public_key(&self.provider)?;
+        self.provider_id()?;
         if self.folder.is_empty() {
             return Err(SyncwebError::InvalidConfig(
                 "provider lease folder cannot be empty".to_owned(),
@@ -222,16 +298,13 @@ fn validate_hash(value: &str, kind: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_public_key(value: &str) -> Result<()> {
-    let bytes = hex::decode(value)
-        .map_err(|error| SyncwebError::InvalidIdentity(format!("invalid provider node ID: {error}")))?;
-    if bytes.len() != 32 {
-        return Err(SyncwebError::InvalidIdentity(format!(
-            "provider node ID must contain 32 bytes, got {}",
-            bytes.len()
-        )));
-    }
-    Ok(())
+fn parse_hash(value: &str, kind: &str) -> Result<Hash> {
+    let encoded =
+        hex::decode(value).map_err(|error| SyncwebError::InvalidConfig(format!("invalid {kind} hash: {error}")))?;
+    let hash_bytes: [u8; 32] = encoded.try_into().map_err(|bytes: Vec<u8>| {
+        SyncwebError::InvalidConfig(format!("{kind} hash must contain 32 bytes, got {}", bytes.len()))
+    })?;
+    Ok(Hash::from_bytes(hash_bytes))
 }
 
 #[cfg(test)]
@@ -308,6 +381,14 @@ mod tests {
 
         lease.contents = Vec::new();
         lease.content_root = None;
+        lease.sign(&key(1)).expect("resign lease");
+        assert!(lease.validate(150, Some("community-a"), &folder().to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_future_dated_observation() {
+        let mut lease = signed_lease();
+        lease.observed_at = 151;
         lease.sign(&key(1)).expect("resign lease");
         assert!(lease.validate(150, Some("community-a"), &folder().to_string()).is_err());
     }

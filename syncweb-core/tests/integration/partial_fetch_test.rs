@@ -71,12 +71,29 @@ fn health_report_groups_seed_counts() {
     assert_eq!(report.well_seeded, 1);
     assert_eq!(report.under_seeded, 1);
     assert_eq!(report.unseeded, 1);
+    assert_eq!(report.unknown, 0);
     assert!(
         report
             .least_seeded
             .first()
             .is_some_and(|item| item.path.as_path() == Path::new("a"))
     );
+}
+
+#[test]
+fn health_report_keeps_unknown_counts_separate() {
+    let candidates = vec![
+        FetchCandidate::with_peer_state("unknown", Hash::new(b"unknown"), 1, None, false),
+        candidate("unseeded", 0, 1),
+        candidate("under", 2, 1),
+        candidate("well", 4, 1),
+    ];
+    let report = HealthReport::from_candidates(&candidates, 4);
+    assert_eq!(report.total, 4);
+    assert_eq!(report.well_seeded, 1);
+    assert_eq!(report.under_seeded, 1);
+    assert_eq!(report.unseeded, 1);
+    assert_eq!(report.unknown, 1);
 }
 
 #[tokio::test]

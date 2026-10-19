@@ -1185,6 +1185,174 @@ fn test_start_with_log_file_writes_log() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_watched_folder_survives_daemon_restart() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("watch-restart")?;
+    let folder = cli_test_dir("watch-restart-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let folder_arg = folder.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "create",
+        "--no-share",
+        folder_arg,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "folder create failed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let watch = syncweb(&["--data-dir", data_dir_arg, "watch", folder_arg])?;
+    ensure!(
+        watch.status.success(),
+        "watch setup failed: {}",
+        String::from_utf8_lossy(&watch.stderr)
+    );
+
+    std::fs::write(folder.join("before-restart.txt"), b"before")?;
+    let mut imported_before_restart = false;
+    for _ in 0..120 {
+        let listing = syncweb(&["--data-dir", data_dir_arg, "ls", folder_arg])?;
+        if listing.status.success() && stdout_contains(&listing, "before-restart.txt") {
+            imported_before_restart = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    ensure!(
+        imported_before_restart,
+        "the daemon watcher should import a file before restart"
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success(), "daemon shutdown should succeed");
+    wait_for_daemon_stopped(data_dir_arg)?;
+
+    let restart = daemon_start_bg(data_dir_arg)?;
+    ensure!(restart.status.success(), "daemon restart should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+    std::fs::write(folder.join("after-restart.txt"), b"after")?;
+
+    let mut imported_after_restart = false;
+    for _ in 0..120 {
+        let listing = syncweb(&["--data-dir", data_dir_arg, "ls", folder_arg])?;
+        if listing.status.success() && stdout_contains(&listing, "after-restart.txt") {
+            imported_after_restart = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    ensure!(
+        imported_after_restart,
+        "the daemon watcher should resume importing files after restart"
+    );
+
+    let final_shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(final_shutdown.status.success());
+    wait_for_daemon_stopped(data_dir_arg)?;
+    let _ = std::fs::remove_dir_all(&data_dir);
+    let _ = std::fs::remove_dir_all(&folder);
+    Ok(())
+}
+
+#[test]
+fn test_seeding_status_survives_daemon_restart() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("seeding-restart")?;
+    let folder = cli_test_dir("seeding-restart-folder")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let folder_arg = folder.to_str().context("UTF-8 path")?;
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let create = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "folders",
+        "create",
+        "--no-share",
+        folder_arg,
+    ])?;
+    ensure!(
+        create.status.success(),
+        "folder create failed: {}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let watch = syncweb(&["--data-dir", data_dir_arg, "watch", folder_arg])?;
+    ensure!(
+        watch.status.success(),
+        "watch setup failed: {}",
+        String::from_utf8_lossy(&watch.stderr)
+    );
+    std::fs::write(folder.join("seeded.txt"), b"seed me")?;
+
+    let mut seeded_before_restart = false;
+    for _ in 0..120 {
+        let stats = syncweb(&[
+            "--data-dir",
+            data_dir_arg,
+            "--json",
+            "stats",
+            "seeding",
+            "--folder",
+            folder_arg,
+        ])?;
+        if stats.status.success()
+            && serde_json::from_slice::<serde_json::Value>(&stats.stdout)
+                .ok()
+                .and_then(|value| value.get("total").and_then(serde_json::Value::as_u64))
+                == Some(1)
+        {
+            seeded_before_restart = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    ensure!(seeded_before_restart, "seeding status should include the watched file");
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success(), "daemon shutdown should succeed");
+    wait_for_daemon_stopped(data_dir_arg)?;
+    let restart = daemon_start_bg(data_dir_arg)?;
+    ensure!(restart.status.success(), "daemon restart should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let stats = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "--json",
+        "stats",
+        "seeding",
+        "--folder",
+        folder_arg,
+    ])?;
+    ensure!(
+        stats.status.success(),
+        "seeding status after restart failed: {}",
+        String::from_utf8_lossy(&stats.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&stats.stdout).context("parse seeding status")?;
+    ensure!(
+        value.get("total").and_then(serde_json::Value::as_u64) == Some(1),
+        "seeding status should survive restart: {value}"
+    );
+
+    let final_shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(final_shutdown.status.success());
+    wait_for_daemon_stopped(data_dir_arg)?;
+    let _ = std::fs::remove_dir_all(&data_dir);
+    let _ = std::fs::remove_dir_all(&folder);
+    Ok(())
+}
+
+#[test]
 fn test_start_bg_reports_a_daemon_that_cannot_start() -> anyhow::Result<()> {
     // A broken `filters.toml` kills the daemon during startup. `--bg` sends the
     // child's stderr to /dev/null, so the CLI has to notice the early exit
@@ -1215,6 +1383,38 @@ fn test_start_bg_reports_a_daemon_that_cannot_start() -> anyhow::Result<()> {
         String::from_utf8_lossy(&status.stdout)
     );
 
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+fn test_start_bg_reports_recovery_guidance_for_unresponsive_owner() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("bg-stale-owner")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let store_dir = data_dir.join("default");
+    std::fs::create_dir_all(&store_dir)?;
+    let lock = syncweb_core::daemon::PidLock::new(&store_dir);
+    ensure!(lock.try_acquire()?, "test should hold the daemon lock");
+
+    let start = syncweb(&["--data-dir", data_dir_arg, "start", "--bg", "--no-relay"])?;
+    let stderr = String::from_utf8_lossy(&start.stderr);
+    ensure!(
+        !start.status.success(),
+        "start should fail while another owner holds the lock"
+    );
+    ensure!(
+        stderr.contains("Recovery:"),
+        "error should include recovery guidance: {stderr}"
+    );
+    ensure!(
+        stderr.contains("stale"),
+        "error should mention stale PID recovery: {stderr}"
+    );
+    ensure!(
+        stderr.contains("IPC version mismatch"),
+        "error should mention protocol mismatch recovery: {stderr}"
+    );
+    drop(lock);
     let _ = std::fs::remove_dir_all(&data_dir);
     Ok(())
 }

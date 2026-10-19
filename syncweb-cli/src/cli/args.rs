@@ -59,6 +59,7 @@ help_categories! {
     ];
     "Folders" => [
         Command::Folders { .. } => "folders",
+        Command::Conflicts { .. } => "conflicts",
     ];
     "Files" => [
         Command::Ls(_) => "ls",

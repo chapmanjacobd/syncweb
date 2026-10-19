@@ -16,13 +16,14 @@
 //! never resolve a conflict by writing locally.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     str,
 };
 
 use iroh_blobs::Hash;
 use iroh_docs::Entry;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Result, SyncwebError},
@@ -57,6 +58,26 @@ pub struct MaterializeOutcome {
     pub written: Vec<PathBuf>,
 }
 
+/// One author-specific variant of a conflicting document entry.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct ConflictVariant {
+    pub hash: Hash,
+    pub size: u64,
+    pub timestamp: u64,
+    pub author: String,
+    pub winner: bool,
+    pub local: bool,
+}
+
+/// All divergent variants for one logical folder path.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct ConflictReport {
+    pub path: String,
+    pub variants: Vec<ConflictVariant>,
+}
+
 /// Select the winner among variants of a single key.
 ///
 /// LWW by record timestamp; ties are broken deterministically by author bytes
@@ -81,6 +102,60 @@ pub fn group_by_key(entries: Vec<Entry>) -> BTreeMap<Vec<u8>, Vec<Entry>> {
         grouped.entry(entry.key().to_vec()).or_default().push(entry);
     }
     grouped
+}
+
+/// List divergent content variants, including whether each blob is local.
+///
+/// Entries with multiple authors but identical content are not conflicts: the
+/// materialized bytes are already identical and no user-visible resolution is
+/// needed.
+///
+/// # Errors
+///
+/// Returns an error if local blob availability cannot be queried.
+pub async fn list_conflicts(node: &IrohNode, entries: Vec<Entry>) -> Result<Vec<ConflictReport>> {
+    let mut reports = Vec::new();
+    for (key, variants) in group_by_key(entries) {
+        let Some(winner) = select_winner(&variants) else {
+            continue;
+        };
+        let hashes: BTreeSet<_> = variants.iter().map(Entry::content_hash).collect();
+        if hashes.len() < 2 {
+            continue;
+        }
+        let winner_hash = winner.content_hash();
+        let winner_timestamp = winner.timestamp();
+        let winner_author = winner.author();
+        let mut report_variants = Vec::with_capacity(variants.len());
+        for variant in variants {
+            let hash = variant.content_hash();
+            let local = hash != Hash::EMPTY && node.blob_store().has(hash).await?;
+            report_variants.push(ConflictVariant {
+                hash,
+                size: variant.content_len(),
+                timestamp: variant.timestamp(),
+                author: variant.author().to_string(),
+                winner: hash == winner_hash
+                    && variant.timestamp() == winner_timestamp
+                    && variant.author() == winner_author,
+                local,
+            });
+        }
+        report_variants.sort_by(|left, right| {
+            right
+                .winner
+                .cmp(&left.winner)
+                .then_with(|| right.timestamp.cmp(&left.timestamp))
+                .then_with(|| right.author.cmp(&left.author))
+                .then_with(|| left.hash.to_string().cmp(&right.hash.to_string()))
+        });
+        reports.push(ConflictReport {
+            path: String::from_utf8_lossy(&key).into_owned(),
+            variants: report_variants,
+        });
+    }
+    reports.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(reports)
 }
 
 /// Path for a losing variant: `<path>.conflict.<short-hash>`.

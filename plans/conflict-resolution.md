@@ -1,11 +1,11 @@
 # Conflict Resolution Plan
 
 Status: partially implemented (2026-10-18). Option B/C Phase 1 (LWW +
-conflict copies and bounded text diffs at materialize time) plus a guarded
-version of Option D (daemon auto-materialization) are now in place; the
-`syncweb conflicts` CLI is not. This document surveys the design space,
-compares the options, and records the recommended phased approach and what
-shipped.
+conflict copies and bounded text diffs at materialize time), conflict
+inspection via `syncweb conflicts list|show`, plus a guarded version of Option
+D (daemon auto-materialization) are now in place. This document surveys the
+design space, compares the options, and records the recommended phased
+approach and what shipped.
 
 ## 1. Problem
 
@@ -40,7 +40,7 @@ both sides.
 
 The intended UX is sketched in `../docs/offline-conflict.md`; this implementation
 covers bounded text `.diff` output (Option C), the "full file saved" fallback
-(Option B), and leaves `syncweb conflicts` for a follow-up.
+(Option B), and read-only conflict inspection.
 
 ## 2. Requirements and constraints
 
@@ -142,8 +142,6 @@ Ship Option C in two phases, deferring D and F:
      `author()`; loser written as `.conflict.<short-hash>`.
    - Apply this in `materialize_selected_content` and the daemon
      `materialize_folder` paths, then in `download`.
-   - Add `syncweb conflicts` (list/show) so conflicts are visible without
-     waiting for materialization.
    - Do not auto-write in `receiveonly` folders; surface conflicts in the
      folder status/errors instead.
 2. Phase 2 — daemon reconciliation (Option D), guarded.
@@ -174,8 +172,6 @@ re-import guard exists.
   - `syncweb-cli/src/main.rs` (`download_one`)
 - Watcher guard: `syncweb-core/src/daemon/daemon.rs:1018-1030`, reusing the
   in-memory hash set already used to skip already-processed entries.
-- CLI: `conflicts` subcommand + JSON envelope; folder status field
-  `conflicts: N`.
 - Naming rules follow `../docs/offline-conflict.md`: `<stem>.diff` when the
   bounded text diff is smaller than the winner, otherwise
   `<stem>.conflict.<short-hash>.<ext>`; the winner always keeps the original

@@ -21,6 +21,11 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<FoldersCommand>,
     },
+    #[command(about = "Inspect divergent document variants")]
+    Conflicts {
+        #[command(subcommand)]
+        command: ConflictCommand,
+    },
     #[command(about = "List files in a local folder")]
     Ls(LocalPathArgs),
     #[command(about = "Show detailed metadata for a local file")]
@@ -121,6 +126,29 @@ pub enum FoldersCommand {
     Leave(LeaveArgs),
     #[command(about = "Import local files into a synchronized folder")]
     Import(ImportArgs),
+}
+
+/// Sub-operations for the `conflicts` verb.
+#[derive(Debug, Subcommand)]
+pub enum ConflictCommand {
+    #[command(about = "List all divergent paths in a synchronized folder")]
+    List(ConflictListArgs),
+    #[command(about = "Show every variant for one conflicting path")]
+    Show(ConflictShowArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ConflictListArgs {
+    #[arg(default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ConflictShowArgs {
+    #[arg(help = "Logical path within the synchronized folder")]
+    pub path: String,
+    #[arg(short, long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
 }
 
 /// Sub-operations for the `share` verb. Bare `share <path>` prints a ticket.

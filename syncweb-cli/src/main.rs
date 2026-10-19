@@ -16,11 +16,11 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        AccessArgs, Command, ConfigCommand, FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand,
-        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
-        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
-        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
-        TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FoldersCommand,
+        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, ScheduleCommand, SearchArgs, SearchKind, ShareArgs,
+        ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand,
+        StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
+        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -60,7 +60,9 @@ use syncweb_core::{
         node_db::{NewTransferJob, NodeDatabase, StorageRootRecord},
         stats_db::StatsDatabase,
     },
-    sync::{AreaFilter, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent},
+    sync::{
+        AreaFilter, ConflictReport, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent, list_conflicts,
+    },
     verify::IntegrityChecker,
 };
 
@@ -220,6 +222,7 @@ async fn execute_cli(cli: Cli) -> Result<()> {
             }
         }
         Command::Folders { command } => handle_folders(&ctx, command).await?,
+        Command::Conflicts { command } => handle_conflicts(&ctx, command).await?,
         Command::Status => handle_status(&ctx).await?,
         Command::Devices => handle_devices(&ctx).await?,
         Command::Ls(command) => handle_ls(&ctx, command).await?,
@@ -5699,6 +5702,85 @@ async fn handle_folders_list(ctx: &CliContext<'_>) -> Result<()> {
     Ok(())
 }
 
+async fn load_conflicts(ctx: &CliContext<'_>, selector: &str) -> Result<Vec<ConflictReport>> {
+    if let Some(client) = syncweb_core::daemon::daemon_client(ctx.data_dir)? {
+        return Ok(client.list_conflicts(selector.to_owned()).await?);
+    }
+    let node = open_node(ctx.data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.resolve(Path::new(selector)).await?;
+    let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
+    let conflicts = list_conflicts(&node, entries).await;
+    node.stop().await?;
+    Ok(conflicts?)
+}
+
+fn render_conflict_list(reports: &[ConflictReport]) -> String {
+    let mut table = Table::new();
+    table.set_header(["Path", "Variants", "Winner", "Local"]);
+    for report in reports {
+        let winner = report
+            .variants
+            .iter()
+            .find(|variant| variant.winner)
+            .map_or_else(|| "-".to_owned(), |variant| variant.hash.to_string());
+        let local = format!(
+            "{} / {}",
+            report.variants.iter().filter(|variant| variant.local).count(),
+            report.variants.len()
+        );
+        table.add_row([report.path.clone(), report.variants.len().to_string(), winner, local]);
+    }
+    table.to_string()
+}
+
+fn render_conflict_detail(report: &ConflictReport) -> String {
+    let mut table = Table::new();
+    table.set_header(["Variant", "Hash", "Size", "Timestamp", "Author", "Local"]);
+    for variant in &report.variants {
+        table.add_row([
+            if variant.winner {
+                "winner".to_owned()
+            } else {
+                "loser".to_owned()
+            },
+            variant.hash.to_string(),
+            variant.size.to_string(),
+            variant.timestamp.to_string(),
+            variant.author.clone(),
+            if variant.local { "yes" } else { "no" }.to_owned(),
+        ]);
+    }
+    format!("Conflict: {}\n{}", report.path, table)
+}
+
+async fn handle_conflicts(ctx: &CliContext<'_>, command: ConflictCommand) -> Result<()> {
+    let (folder, path) = match command {
+        ConflictCommand::List(ConflictListArgs { folder }) => (folder, None),
+        ConflictCommand::Show(ConflictShowArgs { path, folder }) => (folder, Some(path)),
+    };
+    let reports = load_conflicts(ctx, &folder).await?;
+    if let Some(path) = path {
+        let path = normalize_logical_path(&path);
+        let report = reports
+            .iter()
+            .find(|report| report.path == path)
+            .ok_or_else(|| anyhow::anyhow!("no conflict found for '{path}'"))?;
+        if ctx.output_json {
+            println!("{}", json_list("conflicts", std::slice::from_ref(report))?);
+        } else {
+            println!("{}", render_conflict_detail(report));
+        }
+    } else if ctx.output_json {
+        println!("{}", json_list("conflicts", &reports)?);
+    } else if reports.is_empty() {
+        println!("No conflicts found.");
+    } else {
+        println!("{}", render_conflict_list(&reports));
+    }
+    Ok(())
+}
+
 async fn handle_devices(ctx: &CliContext<'_>) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -5989,7 +6071,8 @@ async fn resolve_selector_embedded(
                     let ns = folder.namespace_id().to_string();
                     // Try to see if any mount in DB for this ns equals root; also try the selector itself.
                     if std::fs::canonicalize(&selector).unwrap_or_else(|_| selector.to_path_buf()) == root
-                        || selector.canonicalize().unwrap_or_else(|_| selector.to_path_buf()) == root {
+                        || selector.canonicalize().unwrap_or_else(|_| selector.to_path_buf()) == root
+                    {
                         // If the selector is the exact root and it's a live folder, use it.
                         found_fallback = Some((ns.clone(), folder));
                         break;

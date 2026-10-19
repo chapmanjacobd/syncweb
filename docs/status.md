@@ -19,6 +19,7 @@ planned must not be presented as a default guarantee.
 | Package distribution | The common flow is `package add`/`bump` -> `package publish` -> `package info` or `package install` -> `package upgrade`; archive export/import remains available for offline transfer. |
 | Shared filters | `ls`, `find`, `sort`, `download`, and `verify` share the `--ext`, `--size`, `--depth`, `--type`, `--modified-*`, and `--remote-only` vocabulary, with compatibility aliases for older spellings. |
 | Conflict safety | Last-writer-wins materialization keeps compact text diffs when beneficial and full conflict copies otherwise; the CRDT remains the source of truth. |
+| Conflict inspection | `conflicts list` and `conflicts show` expose divergent variants, deterministic winners, timestamps, authors, hashes, sizes, and local availability in table or JSON output. |
 
 The named network gate is deliberately narrower than the full suite:
 
@@ -38,8 +39,6 @@ make test-network
 
 ## Planned or explicitly incomplete
 
-- A dedicated conflict-resolution CLI is not implemented; remaining work is
-  tracked in [plans/conflict-resolution.md](../plans/conflict-resolution.md).
 - The daemon is still manually managed: `status` reports health and progress,
   but it does not auto-start or supervise the daemon. Follow-up work is
   tracked in [plans/ux-and-operations.md](../plans/ux-and-operations.md).

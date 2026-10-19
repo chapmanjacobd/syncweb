@@ -115,14 +115,13 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 - As an operator, I want to back up and restore the sync store, so
   that a disk failure doesn't cost me re-imports.
-- Today: `db backup/check/vacuum` exists but is tucked away, and the blob
-  store + doc DB + config live in separate places (data_dir, `~/.config/syncweb`).
-  No single "export everything" story.
-- Friction: users can't easily tell which directories constitute "syncweb
-  state."
-- Improvement: a `syncweb backup` that captures config + DBs + manifest
-  (blobs can be excluded by flag), and a first-run wizard that detects a fresh
-  `data_dir` and asks whether to restore.
+- Today: `syncweb backup` captures config, identity, databases, and a manifest
+  in one directory; `--include-blobs` includes the local blob store, while
+  `db check/vacuum` remains available for database maintenance.
+- Friction: users still lack a verified restore flow and can't easily tell how
+  restored identity material affects network membership.
+- Improvement: a first-run wizard that detects a fresh `data_dir`, verifies a
+  backup, and asks whether to restore it.
 
 ---
 

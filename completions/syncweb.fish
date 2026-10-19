@@ -588,7 +588,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "switch" -d 'Switch the active installed collection version'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l version -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l name -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l root -d 'Override the common root for logical path rebasing' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l root -d 'Override the common root for logical path rebasing; a file is its own root' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -608,7 +608,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l namespace -d 'Folder namespace, managed folder path, or omitted to default to the only managed folder' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l sequence -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l bootstrap -r
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l root -d 'Override the common root for logical path rebasing' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l root -d 'Override the common root for logical path rebasing; a file is its own root' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

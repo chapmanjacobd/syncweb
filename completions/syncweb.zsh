@@ -851,7 +851,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '--name=[]:NAME:_default' \
-'--root=[Override the common root for logical path rebasing]:PATH:_files' \
+'--root=[Override the common root for logical path rebasing; a file is its own root]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -885,7 +885,7 @@ _arguments "${_arguments_options[@]}" : \
 '--namespace=[Folder namespace, managed folder path, or omitted to default to the only managed folder]:NAMESPACE:_default' \
 '--sequence=[]:SEQUENCE:_default' \
 '*--bootstrap=[]:NODE_ID:_default' \
-'--root=[Override the common root for logical path rebasing]:PATH:_files' \
+'--root=[Override the common root for logical path rebasing; a file is its own root]:PATH:_files' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \

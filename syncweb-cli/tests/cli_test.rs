@@ -82,6 +82,8 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
         "snapshot",
         "indexing",
         "stats",
+        "backup",
+        "restore",
         "db",
         "config",
         "version",

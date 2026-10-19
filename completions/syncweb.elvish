@@ -730,7 +730,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
         &'syncweb;package;add'= {
             cand --version 'version'
             cand --name 'name'
-            cand --root 'Override the common root for logical path rebasing'
+            cand --root 'Override the common root for logical path rebasing; a file is its own root'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -758,7 +758,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --namespace 'Folder namespace, managed folder path, or omitted to default to the only managed folder'
             cand --sequence 'sequence'
             cand --bootstrap 'bootstrap'
-            cand --root 'Override the common root for logical path rebasing'
+            cand --root 'Override the common root for logical path rebasing; a file is its own root'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

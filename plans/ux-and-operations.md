@@ -32,13 +32,8 @@ friction; this file turns their improvement notes into implementable tasks.
 
 ## Backup and restore
 
-- [ ] Add `syncweb backup` for configuration, identity metadata, databases,
-  manifests, and optionally blobs.
-- [ ] Add a first-run restore flow with verification and an explicit warning
-  when identity material is included.
 - [ ] Document how restoring a backup affects network membership, provider
   leases, and community admission.
-- [ ] Test interrupted backup/restore and incompatible schema versions.
 
 ## Command-surface and safety
 

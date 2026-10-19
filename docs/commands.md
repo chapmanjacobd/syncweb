@@ -73,6 +73,26 @@ explicit install root when one is passed to `package install`/`package upgrade`.
 `--json` is available for automation on each step; package list-shaped results
 are wrapped under named keys rather than emitted as bare arrays.
 
+## Backup and first-run restore
+
+Create a self-contained backup of the local configuration, identity, databases,
+and manifest. Add `--include-blobs` when the local blob store should be copied:
+
+```bash
+syncweb backup --output ./backups
+syncweb backup --include-blobs --output ./backups
+```
+
+Restore a backup into a new or empty `--data-dir`. The manifest is checked before
+copying, unsafe paths and symlinks are rejected, and the copy is staged before
+it is installed. Backups containing `identity.key` require explicit `--yes`
+because they replace the current device identity and therefore its network
+credentials:
+
+```bash
+syncweb --data-dir ~/.syncweb-restored restore ./backups/syncweb-db-backup-<timestamp> --yes
+```
+
 ## `find` Command Design
 
 Full-text search across folder entries with regex, glob, or exact substring matching,

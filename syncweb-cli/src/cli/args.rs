@@ -91,6 +91,8 @@ help_categories! {
         Command::Stats { .. } => "stats",
     ];
     "Maintenance" => [
+        Command::Backup(_) => "backup",
+        Command::Restore(_) => "restore",
         Command::Db { .. } => "db",
     ];
     "Configuration" => [
@@ -281,6 +283,8 @@ mod tests {
             "snapshot",
             "indexing",
             "stats",
+            "backup",
+            "restore",
             "db",
             "config",
             "version",

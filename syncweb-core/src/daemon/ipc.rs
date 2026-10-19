@@ -3352,7 +3352,11 @@ impl IpcServer {
             }
         };
         for entry in &manifest.entries {
-            let file_path = path.join(&entry.logical_path);
+            let file_path = if path.is_file() {
+                path.clone()
+            } else {
+                path.join(&entry.logical_path)
+            };
             match context.node.blob_store().add_file(&file_path).await {
                 Ok(hash) => {
                     if hash != entry.content_id {

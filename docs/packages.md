@@ -276,8 +276,9 @@ Full data package lifecycle:
 # 1. Initialize one or more paths as a versioned package (scans in one shot)
 syncweb package add --name climate-hourly --version 1.0.0 ./climate
 # Paths are rebased against their common root; siblings at the root that are
-# not among the inputs are excluded. A single input defaults to its parent
-# directory as the root. An explicit `--root` overrides auto-detection.
+# not among the inputs are excluded. A single file is its own package root; a
+# single directory defaults to its parent directory. An explicit `--root`
+# overrides auto-detection.
 
 # 2. Re-scan paths and update the local manifest
 syncweb package add ./climate ./data/observations.csv

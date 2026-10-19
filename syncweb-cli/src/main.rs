@@ -17,10 +17,11 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FoldersCommand,
-        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, ScheduleCommand, SearchArgs, SearchKind, ShareArgs,
-        ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand,
-        StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
-        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, RestoreArgs, ScheduleCommand, SearchArgs, SearchKind,
+        ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs,
+        StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand,
+        TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs,
+        WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -251,6 +252,8 @@ async fn execute_cli(cli: Cli) -> Result<()> {
         | Command::Config { .. }
         | Command::Completions { .. }
         | Command::Manpages { .. }
+        | Command::Backup(_)
+        | Command::Restore(_)
         | Command::Db { .. }
         | Command::Help { .. } => anyhow::bail!("auxiliary command dispatch failed"),
     }
@@ -268,6 +271,8 @@ const fn is_auxiliary_command(command: &Command) -> bool {
             | Command::Config { .. }
             | Command::Completions { .. }
             | Command::Manpages { .. }
+            | Command::Backup(_)
+            | Command::Restore(_)
             | Command::Db { .. }
     )
 }
@@ -351,6 +356,12 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
     }
     if let Command::Db { command: db_cmd } = command {
         return handle_db(&ctx, db_cmd);
+    }
+    if let Command::Backup(args) = command {
+        return handle_db_backup(&ctx.data_dir, &args.output, args.include_blobs, ctx.output_json);
+    }
+    if let Command::Restore(args) = command {
+        return handle_backup_restore(&ctx, &args);
     }
     if let Command::Completions { shell } = command {
         clap_complete::generate(shell, &mut Cli::command(), "syncweb", &mut std::io::stdout());
@@ -3978,7 +3989,10 @@ async fn handle_collection_publish(
     let manifest = syncweb_core::folder::CollectionManifest::from_bytes(manifest_bytes)?;
     let node = open_node(data_dir).await?;
     for entry in &manifest.entries {
-        let hash = node.blob_store().add_file(root.join(&entry.logical_path)).await?;
+        let hash = node
+            .blob_store()
+            .add_file(package_entry_path(&root, &entry.logical_path))
+            .await?;
         if hash != entry.content_id {
             anyhow::bail!(
                 "collection content changed while publishing: {}",
@@ -5027,8 +5041,8 @@ fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<
                 println!("{table}");
             }
         }
-        cli::commands::DbCommand::Backup { output, include_blobs } => {
-            handle_db_backup(data_dir, &output, include_blobs, output_json)?;
+        cli::commands::DbCommand::Backup(args) => {
+            handle_db_backup(data_dir, &args.output, args.include_blobs, output_json)?;
         }
     }
     Ok(())
@@ -5040,43 +5054,65 @@ fn handle_db_backup(
     include_blobs: bool,
     output_json: bool,
 ) -> Result<()> {
-    let backup_dir = output.join(format!(
-        "syncweb-db-backup-{}",
-        syncweb_core::parsing::current_unix_secs()
-    ));
-    std::fs::create_dir_all(&backup_dir)?;
-    let mut copied: Vec<String> = Vec::new();
-    for name in ["node.db", "stats.db"] {
-        let source = data_dir.join(name);
-        if source.exists() {
-            std::fs::copy(&source, backup_dir.join(name))?;
-            copied.push(name.to_owned());
-        }
+    let timestamp = syncweb_core::parsing::current_unix_secs();
+    let backup_dir = output.join(format!("syncweb-db-backup-{timestamp}"));
+    let staging_dir = output.join(format!(".syncweb-db-backup-{timestamp}.tmp"));
+    std::fs::create_dir_all(output)?;
+    if backup_dir.exists() {
+        anyhow::bail!("backup destination already exists: {}", backup_dir.display());
     }
-    for name in ["config.toml", "filters.toml", "schedules.toml", "identity.key"] {
-        let source = data_dir.join(name);
-        if source.exists() {
-            std::fs::copy(&source, backup_dir.join(name))?;
-            copied.push(name.to_owned());
-        }
+    if staging_dir.exists() {
+        anyhow::bail!("backup staging path already exists: {}", staging_dir.display());
     }
-    if include_blobs {
-        // The blob store lives under the node's data subdirectory.
-        let blobs = data_dir.join("data").join("blobs");
-        if blobs.exists() {
-            copy_dir_contents(&blobs, &backup_dir.join("blobs"))?;
-            copied.push("blobs/".to_owned());
+    std::fs::create_dir(&staging_dir)?;
+
+    let copy_result = (|| -> Result<Vec<String>> {
+        let mut copied: Vec<String> = Vec::new();
+        for name in ["node.db", "stats.db"] {
+            let source = data_dir.join(name);
+            if source.exists() {
+                std::fs::copy(&source, staging_dir.join(name))?;
+                copied.push(name.to_owned());
+            }
         }
+        for name in ["config.toml", "filters.toml", "schedules.toml", "identity.key"] {
+            let source = data_dir.join(name);
+            if source.exists() {
+                std::fs::copy(&source, staging_dir.join(name))?;
+                copied.push(name.to_owned());
+            }
+        }
+        if include_blobs {
+            // The blob store lives under the node's data subdirectory.
+            let blobs = data_dir.join("data").join("blobs");
+            if blobs.exists() {
+                copy_dir_contents(&blobs, &staging_dir.join("blobs"))?;
+                copied.push("blobs/".to_owned());
+            }
+        }
+        let manifest = serde_json::json!({
+            "format_version": BACKUP_FORMAT_VERSION,
+            "created_at": timestamp,
+            "source": data_dir.to_string_lossy(),
+            "include_blobs": include_blobs,
+            "files": copied,
+        });
+        let manifest_path = staging_dir.join("manifest.json");
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
+        copied.push("manifest.json".to_owned());
+        Ok(copied)
+    })();
+    let copied = match copy_result {
+        Ok(copied) => copied,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging_dir);
+            return Err(error);
+        }
+    };
+    if let Err(error) = std::fs::rename(&staging_dir, &backup_dir) {
+        let _ = std::fs::remove_dir_all(&staging_dir);
+        return Err(error).with_context(|| format!("finalize backup at {}", backup_dir.display()));
     }
-    let manifest = serde_json::json!({
-        "created_at": syncweb_core::parsing::current_unix_secs(),
-        "source": data_dir.to_string_lossy(),
-        "include_blobs": include_blobs,
-        "files": copied,
-    });
-    let manifest_path = backup_dir.join("manifest.json");
-    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
-    copied.push("manifest.json".to_owned());
     if output_json {
         println!(
             "{}",
@@ -5090,6 +5126,170 @@ fn handle_db_backup(
         for name in &copied {
             println!("  - {name}");
         }
+    }
+    Ok(())
+}
+
+const BACKUP_FORMAT_VERSION: u64 = 1;
+
+#[derive(Debug, serde::Deserialize)]
+struct BackupManifest {
+    #[serde(default)]
+    format_version: Option<u64>,
+    files: Vec<String>,
+}
+
+fn handle_backup_restore(ctx: &CliContext<'_>, args: &RestoreArgs) -> Result<()> {
+    let backup = &args.backup;
+    let manifest_path = backup.join("manifest.json");
+    let manifest_bytes =
+        std::fs::read(&manifest_path).with_context(|| format!("read backup manifest {}", manifest_path.display()))?;
+    let manifest: BackupManifest = serde_json::from_slice(&manifest_bytes)
+        .with_context(|| format!("parse backup manifest {}", manifest_path.display()))?;
+    let format_version = manifest.format_version.unwrap_or(1);
+    if format_version != BACKUP_FORMAT_VERSION {
+        anyhow::bail!(
+            "unsupported backup format version {format_version}; this syncweb build supports {BACKUP_FORMAT_VERSION}"
+        );
+    }
+
+    let mut entries = Vec::with_capacity(manifest.files.len());
+    let mut restores_identity = false;
+    for raw_path in &manifest.files {
+        let relative = validate_restore_path(raw_path)?;
+        if relative == Path::new("manifest.json") {
+            anyhow::bail!("backup manifest must not restore manifest.json into the data directory");
+        }
+        let source = backup.join(&relative);
+        let metadata = std::fs::symlink_metadata(&source)
+            .with_context(|| format!("backup is incomplete; missing {}", relative.display()))?;
+        if metadata.file_type().is_symlink() {
+            anyhow::bail!("backup entry {} is a symlink", relative.display());
+        }
+        if !metadata.is_file() && !metadata.is_dir() {
+            anyhow::bail!("backup entry {} is not a regular file or directory", relative.display());
+        }
+        restores_identity |= relative == Path::new("identity.key");
+        entries.push(relative);
+    }
+
+    if restores_identity && !ctx.yes {
+        eprintln!(
+            "warning: this backup contains identity.key; restoring it changes this device's identity and network access"
+        );
+        anyhow::bail!("restore aborted; rerun with --yes to restore identity material");
+    }
+    if let Ok(metadata) = std::fs::symlink_metadata(ctx.data_dir) {
+        if metadata.file_type().is_symlink() {
+            anyhow::bail!("restore target {} is a symlink", ctx.data_dir.display());
+        }
+        if !metadata.is_dir() {
+            anyhow::bail!("restore target {} is not a directory", ctx.data_dir.display());
+        }
+        if std::fs::read_dir(ctx.data_dir)?.next().transpose()?.is_some() {
+            if syncweb_core::daemon::daemon_client(ctx.data_dir)?.is_some() {
+                anyhow::bail!("cannot restore while the daemon is running; stop it first");
+            }
+            anyhow::bail!(
+                "restore target {} is not empty; restore is limited to a new data directory",
+                ctx.data_dir.display()
+            );
+        }
+    }
+
+    let parent = ctx.data_dir.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let target_name = ctx
+        .data_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("data");
+    let staging = parent.join(format!(
+        ".{target_name}.restore-{}",
+        syncweb_core::parsing::current_unix_secs()
+    ));
+    if staging.exists() {
+        anyhow::bail!("restore staging path already exists: {}", staging.display());
+    }
+    std::fs::create_dir(&staging)?;
+
+    let copy_result = entries
+        .iter()
+        .try_for_each(|relative| copy_restore_entry(&backup.join(relative), &staging.join(relative)));
+    if let Err(error) = copy_result {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    if ctx.data_dir.exists() {
+        std::fs::remove_dir(ctx.data_dir)?;
+    }
+    if let Err(error) = std::fs::rename(&staging, ctx.data_dir) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error).with_context(|| format!("install restored data at {}", ctx.data_dir.display()));
+    }
+
+    if ctx.output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "restored",
+                "backup": backup,
+                "data_dir": ctx.data_dir,
+                "files": entries,
+                "identity_restored": restores_identity,
+            })
+        );
+    } else {
+        if restores_identity {
+            println!("Warning: restored identity.key; this device now uses the backed-up identity.");
+        }
+        println!(
+            "Restored {} file or directory entries to {}",
+            entries.len(),
+            ctx.data_dir.display()
+        );
+    }
+    Ok(())
+}
+
+fn validate_restore_path(raw_path: &str) -> Result<PathBuf> {
+    let path = Path::new(raw_path);
+    if raw_path.is_empty()
+        || path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::CurDir
+                    | std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        anyhow::bail!("invalid backup entry path: {raw_path:?}");
+    }
+    Ok(path.to_path_buf())
+}
+
+fn copy_restore_entry(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(source)?;
+    if metadata.file_type().is_symlink() {
+        anyhow::bail!("backup entry {} is a symlink", source.display());
+    }
+    if metadata.is_dir() {
+        std::fs::create_dir_all(destination)?;
+        for child in std::fs::read_dir(source)? {
+            let child = child?;
+            copy_restore_entry(&child.path(), &destination.join(child.file_name()))?;
+        }
+    } else if metadata.is_file() {
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(source, destination)?;
+    } else {
+        anyhow::bail!("backup entry {} is not a regular file or directory", source.display());
     }
     Ok(())
 }
@@ -5131,6 +5331,9 @@ fn resolve_package_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> Pa
         return root;
     }
     if paths.len() == 1 {
+        if paths[0].is_file() {
+            return paths[0].clone();
+        }
         let parent = paths
             .first()
             .and_then(|p| p.parent())
@@ -5139,6 +5342,14 @@ fn resolve_package_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> Pa
         return parent.to_path_buf();
     }
     longest_common_ancestor(paths)
+}
+
+fn package_entry_path(root: &Path, logical_path: &Path) -> PathBuf {
+    if root.is_file() {
+        root.to_path_buf()
+    } else {
+        root.join(logical_path)
+    }
 }
 
 fn longest_common_ancestor(paths: &[PathBuf]) -> PathBuf {
@@ -5159,9 +5370,19 @@ fn scan_collection_entries(
     root_override: Option<PathBuf>,
 ) -> Result<(PathBuf, Vec<CollectionEntry>)> {
     let root = resolve_package_root(paths, root_override);
+    if root.is_file() && paths.iter().any(|input| input != &root) {
+        anyhow::bail!("a file package root can contain only that file");
+    }
     let mut entries: Vec<CollectionEntry> = Vec::new();
     for input in paths {
-        let rel = input.strip_prefix(&root).unwrap_or(input.as_path()).to_path_buf();
+        let rel = if root.is_file() {
+            input
+                .file_name()
+                .map(PathBuf::from)
+                .context("single-file package root has no filename")?
+        } else {
+            input.strip_prefix(&root).unwrap_or(input.as_path()).to_path_buf()
+        };
         let is_file = input.is_file();
         let scanned = ParallelScanner::new(input, vec![], 0).scan()?;
         for entry in scanned {
@@ -7249,6 +7470,23 @@ mod tests {
     fn canonical_path_resolves_relative_to_cwd() {
         let absolute = canonical_path(Path::new("."));
         assert!(absolute.is_absolute());
+    }
+
+    #[test]
+    fn package_scan_accepts_a_single_file_as_root() -> anyhow::Result<()> {
+        let root = std::env::temp_dir().join(format!("syncweb-package-file-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root)?;
+        let file = root.join("content.zim");
+        std::fs::write(&file, b"content")?;
+
+        let (resolved_root, entries) = scan_collection_entries(std::slice::from_ref(&file), Some(file.clone()))?;
+
+        assert_eq!(resolved_root, file);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].logical_path, PathBuf::from("content.zim"));
+        assert_eq!(entries[0].size, 7);
+        std::fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     #[test]

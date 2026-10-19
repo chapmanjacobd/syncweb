@@ -1055,13 +1055,7 @@ fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
     let out = test_dir("db-backup-out");
     let backup = run_with_data(
         &data_dir,
-        &[
-            "--json",
-            "db",
-            "backup",
-            "--output",
-            out.to_str().context("UTF-8 path")?,
-        ],
+        &["--json", "backup", "--output", out.to_str().context("UTF-8 path")?],
     )?;
     assert_success(&backup, "db backup")?;
     let bv: serde_json::Value = serde_json::from_slice(&backup.stdout)?;
@@ -1083,6 +1077,25 @@ fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
         manifest.get("files").and_then(serde_json::Value::as_array).is_some(),
         "manifest should list captured files: {manifest}"
     );
+
+    let legacy_out = test_dir("db-backup-legacy-out");
+    let legacy = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "db",
+            "backup",
+            "--output",
+            legacy_out.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    assert_success(&legacy, "db backup compatibility")?;
+    let legacy_value: serde_json::Value = serde_json::from_slice(&legacy.stdout)?;
+    let legacy_path = legacy_value
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .context("legacy backup JSON should report the backup path")?;
+    ensure!(std::path::Path::new(legacy_path).join("manifest.json").exists());
 
     // --include-blobs copies the blob store when one exists.
     let blob_data = test_dir("db-backup-blobs");
@@ -1126,9 +1139,164 @@ fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
 
     fs::remove_dir_all(&data_dir)?;
     fs::remove_dir_all(&out)?;
+    fs::remove_dir_all(&legacy_out)?;
     fs::remove_dir_all(&blob_data)?;
     fs::remove_dir_all(&folder)?;
     fs::remove_dir_all(&blob_out)?;
+    Ok(())
+}
+
+#[test]
+fn interrupted_backup_does_not_publish_partial_output() -> anyhow::Result<()> {
+    let data_dir = test_dir("backup-interrupted-source");
+    let effective_data_dir = data_dir.join("default");
+    fs::create_dir_all(&effective_data_dir)?;
+    fs::write(effective_data_dir.join("node.db"), b"partial database")?;
+    fs::create_dir(effective_data_dir.join("config.toml"))?;
+
+    let output_dir = test_dir("backup-interrupted-output");
+    let result = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "backup",
+            "--output",
+            output_dir.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    ensure!(
+        !result.status.success(),
+        "backup with an unreadable source entry should fail"
+    );
+    if output_dir.exists() {
+        ensure!(
+            fs::read_dir(&output_dir)?.next().is_none(),
+            "failed backup should remove its staging directory"
+        );
+    }
+
+    fs::remove_dir_all(data_dir)?;
+    if output_dir.exists() {
+        fs::remove_dir_all(output_dir)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn backup_restore_requires_identity_confirmation_and_verifies_manifest() -> anyhow::Result<()> {
+    let data_dir = test_dir("restore-source");
+    let config = run_with_data(&data_dir, &["config", "set", "bep.enabled", "true"])?;
+    assert_success(&config, "config set")?;
+    let devices = run_with_data(&data_dir, &["devices"])?;
+    assert_success(&devices, "devices")?;
+
+    let backup_output = test_dir("restore-backup");
+    let backup = run_with_data(
+        &data_dir,
+        &[
+            "--json",
+            "backup",
+            "--output",
+            backup_output.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    assert_success(&backup, "backup")?;
+    let backup_value: serde_json::Value = serde_json::from_slice(&backup.stdout)?;
+    let backup_path = std::path::PathBuf::from(
+        backup_value
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .context("backup JSON should report the backup path")?,
+    );
+
+    let denied_target = test_dir("restore-denied");
+    let denied = run_with_data(
+        &denied_target,
+        &["restore", backup_path.to_str().context("UTF-8 path")?],
+    )?;
+    ensure!(!denied.status.success(), "restore without --yes should fail");
+    ensure!(
+        String::from_utf8_lossy(&denied.stderr).contains("identity.key"),
+        "restore should explain the identity warning: {}",
+        String::from_utf8_lossy(&denied.stderr)
+    );
+    ensure!(!denied_target.exists(), "denied restore should not create the target");
+
+    let restored_target = test_dir("restore-success");
+    fs::create_dir_all(restored_target.join("default"))?;
+    let restored = run_with_data(
+        &restored_target,
+        &[
+            "--json",
+            "--yes",
+            "restore",
+            backup_path.to_str().context("UTF-8 path")?,
+        ],
+    )?;
+    assert_success(&restored, "restore")?;
+    let restored_value: serde_json::Value = serde_json::from_slice(&restored.stdout)?;
+    ensure!(restored_value["status"] == "restored");
+    ensure!(restored_target.join("default").join("identity.key").exists());
+    let restored_check = run_with_data(&restored_target, &["--json", "db", "check"])?;
+    assert_success(&restored_check, "restored db check")?;
+
+    let manifest_path = backup_path.join("manifest.json");
+    let original_manifest = fs::read_to_string(&manifest_path)?;
+    let mut unsupported: serde_json::Value = serde_json::from_str(&original_manifest)?;
+    unsupported["format_version"] = serde_json::json!(999);
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&unsupported)?)?;
+    let unsupported_target = test_dir("restore-unsupported");
+    let unsupported_result = run_with_data(
+        &unsupported_target,
+        &["--yes", "restore", backup_path.to_str().context("UTF-8 path")?],
+    )?;
+    ensure!(!unsupported_result.status.success(), "unsupported schema should fail");
+    ensure!(
+        !unsupported_target.exists(),
+        "unsupported restore should not create the target"
+    );
+
+    let mut incomplete: serde_json::Value = serde_json::from_str(&original_manifest)?;
+    incomplete["files"]
+        .as_array_mut()
+        .context("backup manifest files")?
+        .push(serde_json::json!("interrupted.db"));
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&incomplete)?)?;
+    let incomplete_target = test_dir("restore-incomplete");
+    let incomplete_result = run_with_data(
+        &incomplete_target,
+        &["--yes", "restore", backup_path.to_str().context("UTF-8 path")?],
+    )?;
+    ensure!(!incomplete_result.status.success(), "incomplete backup should fail");
+    ensure!(
+        !incomplete_target.exists(),
+        "incomplete restore should not create the target"
+    );
+    if let Some(parent) = incomplete_target.parent() {
+        let target_name = incomplete_target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("incomplete restore target name")?;
+        ensure!(
+            fs::read_dir(parent)?.all(|entry| {
+                entry
+                    .ok()
+                    .and_then(|entry| entry.file_name().into_string().ok())
+                    .is_none_or(|name| !name.starts_with(&format!(".{target_name}.restore-")))
+            }),
+            "interrupted restore should remove its staging directory"
+        );
+    }
+
+    fs::remove_dir_all(data_dir)?;
+    fs::remove_dir_all(backup_output)?;
+    fs::remove_dir_all(restored_target)?;
+    if unsupported_target.exists() {
+        fs::remove_dir_all(unsupported_target)?;
+    }
+    if incomplete_target.exists() {
+        fs::remove_dir_all(incomplete_target)?;
+    }
     Ok(())
 }
 

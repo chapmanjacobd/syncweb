@@ -84,7 +84,11 @@ pub enum Command {
         #[command(subcommand)]
         command: StatsCommand,
     },
-    #[command(about = "Database maintenance: check, vacuum, stats, backup")]
+    #[command(about = "Back up databases, configuration, identity, and optionally blobs")]
+    Backup(BackupArgs),
+    #[command(about = "Restore a verified backup into a new data directory")]
+    Restore(RestoreArgs),
+    #[command(about = "Database maintenance: check, vacuum, and stats")]
     Db {
         #[command(subcommand)]
         command: DbCommand,
@@ -292,13 +296,22 @@ pub enum DbCommand {
     Vacuum,
     #[command(about = "Show database sizes and table statistics")]
     Stats,
-    #[command(about = "Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)")]
-    Backup {
-        #[arg(long, default_value = ".")]
-        output: PathBuf,
-        #[arg(long, help = "Also copy the blob store (can be very large); off by default")]
-        include_blobs: bool,
-    },
+    #[command(about = "Back up databases, configuration, identity, and optionally blobs")]
+    Backup(BackupArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct BackupArgs {
+    #[arg(long, default_value = ".")]
+    pub output: PathBuf,
+    #[arg(long, help = "Also copy the blob store (can be very large); off by default")]
+    pub include_blobs: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct RestoreArgs {
+    #[arg(value_name = "BACKUP", help = "Backup directory containing manifest.json")]
+    pub backup: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -895,7 +908,7 @@ pub enum PackageCommand {
         #[arg(
             long,
             value_name = "PATH",
-            help = "Override the common root for logical path rebasing"
+            help = "Override the common root for logical path rebasing; a file is its own root"
         )]
         root: Option<PathBuf>,
     },
@@ -924,7 +937,7 @@ pub enum PackageCommand {
         #[arg(
             long,
             value_name = "PATH",
-            help = "Override the common root for logical path rebasing"
+            help = "Override the common root for logical path rebasing; a file is its own root"
         )]
         root: Option<PathBuf>,
     },

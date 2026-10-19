@@ -42,14 +42,14 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 
 - As a new user, I want to stop sharing a folder so that I can be
   sure friends can't write to it.
-- Today: `create` defaults to a read-only ticket, but `--write` is one flag
-  away; there's `share --write`, `unshare`, `leave --delete-files`, plus
-  per-device revocation via networks — many overlapping controls with no guidance
-  on which one "closes the door."
+- Today: `folders create` defaults to a read-only ticket, but `--write` is
+  one flag away; `share --write`, `access --revoke`, and
+  `folders leave --delete-files` cover sharing, revocation, and local cleanup.
+  Network membership and folder access remain separate controls.
 - Friction: no visual warning when handing out a write ticket vs. read-only;
-  URL is unreadable so she can't tell which one she pasted. No clear "who
-  currently has access" view (`share --list` is partial; `networks` covers
-  members only).
+  URL is unreadable so she can't tell which one she pasted. The `access`
+  dashboard shows persisted shares and membership, but it does not yet provide
+  a single confirmation flow for closing every access path.
 - Improvement: make write tickets visually distinct (WRITE prefix / different
   color / a confirm prompt), and add a single `syncweb shares` view listing each
   folder's URL + capability + who joined.
@@ -59,8 +59,8 @@ configs in the repo (`config-laptop.toml`, `config-phone.toml`,
 - As a developer, I want to version and distribute a package, so that
   users can install and upgrade reliably.
 - Today: the surface for this is `package add/bump/publish/install/upgrade`,
-  `publish catalog`, `link create/resolve/revoke`, `provider add`, and
-  `share --blob` — ~13 commands across 4 subcommand trees for one job.
+  `indexing publish`, `link create/resolve/revoke`, `share provider add`, and
+  `share --blob` — several commands across four subcommand trees for one job.
 - Friction: several overlapping concepts (package manifest vs. link vs. blob
   ticket vs. catalog publish) with no docs-level guidance on which fits which
   job. `snapshot` and `package` both snapshot/restore content and overlap

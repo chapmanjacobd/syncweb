@@ -16,7 +16,9 @@ use crate::{
     folder::SyncwebFolder,
     fs::{ExportEntry, Exporter, ParallelScanner},
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
+    sync::{TransferRequest, fetch_blob_requests},
 };
+use tokio_util::sync::CancellationToken;
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -447,10 +449,29 @@ impl SnapshotStore {
             self.blobs.fetch(endpoint, ticket).await?;
         }
         let snapshot = self.load_manifest(ticket.hash()).await?;
-        for entry in &snapshot.entries {
-            if !self.blobs.has(entry.hash).await? {
-                let content_ticket = self.blobs.ticket_for_addr(ticket.addr().clone(), entry.hash);
-                self.blobs.fetch(endpoint, &content_ticket).await?;
+        let requests = {
+            let mut requests = Vec::new();
+            for entry in &snapshot.entries {
+                if !self.blobs.has(entry.hash).await? {
+                    requests.push(TransferRequest::new(
+                        entry.hash,
+                        entry.size,
+                        vec![ticket.addr().clone()],
+                    ));
+                }
+            }
+            requests
+        };
+        if !requests.is_empty() {
+            let report = fetch_blob_requests(&self.blobs, endpoint, requests, CancellationToken::new()).await?;
+            if report.failed > 0 || report.cancelled > 0 {
+                return Err(SyncwebError::operation(
+                    "snapshot content fetch failed",
+                    format!(
+                        "{} request(s) failed and {} request(s) cancelled",
+                        report.failed, report.cancelled
+                    ),
+                ));
             }
         }
         self.store(&snapshot).await?;

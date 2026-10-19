@@ -459,7 +459,11 @@ impl IrohNode {
         let bytes = if success {
             match self.blob_store.stat(hash).await? {
                 BlobStatus::Complete { size } => size,
-                BlobStatus::Partial { size } => size.unwrap_or_default(),
+                BlobStatus::Partial { .. } => {
+                    return Err(SyncwebError::InvalidConfig(
+                        "blob fetch succeeded but the blob is incomplete".to_owned(),
+                    ));
+                }
                 BlobStatus::NotFound => {
                     return Err(SyncwebError::InvalidConfig(
                         "blob fetch succeeded but the blob is not present locally".to_owned(),

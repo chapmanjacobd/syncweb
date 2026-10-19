@@ -73,18 +73,6 @@ input, provider-count reporting, and registry recovery after restart.
 Make one content request able to use multiple providers while retaining
 integrity and bounded resource use.
 
-- [ ] Add a transfer abstraction for independently verifiable blob segments or
-  ranges. Select a representation compatible with Iroh blobs and CAR blocks.
-- [ ] Support bounded parallel requests, cancellation, backoff, duplicate
-  suppression, and repair of failed segments.
-- [ ] Keep whole-blob fetching as a compatibility path for small objects and
-  peers that do not advertise segment support.
-- [ ] Integrate the scheduler with `force_fetch_from_peer`,
-  `fetch_selected_content`, queued daemon transfers, package installs, and
-  snapshot restore.
-- [ ] Ensure every assembled blob is hash-verified before publication or
-  materialization.
-
 Likely code: `syncweb-core/src/node/blob_store.rs`,
 `syncweb-core/src/daemon/daemon.rs`, transfer queue modules, package/archive
 fetch paths, and a new scheduler module.
@@ -223,11 +211,7 @@ Validate control-plane and data-plane behavior before claiming large-LAN
 support.
 
 - [ ] Add live multi-process tests for at least 10, 50, and 100 nodes.
-- [ ] Measure discovery convergence, inventory bytes, duplicate traffic,
-  transfer completion, repair convergence, memory, file descriptors, and CPU.
 - [ ] Test mixed versions and peers that only support whole-blob transfers.
-- [ ] Define release gates and fixture hardware for LAN throughput targets;
-  keep current `docs/testing.md` numbers as targets until reproducible.
 
 Likely code: integration test harnesses, simulator modules, fixtures, and
 `docs/testing.md`.

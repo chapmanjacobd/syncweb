@@ -129,12 +129,20 @@ pub struct SimulationReport {
     pub rounds: u64,
     /// Number of blocks known by at least one node.
     pub known_blocks: usize,
-    /// Number of successful content repairs.
+    /// Number of successful content repairs/transfers.
     pub repairs: u64,
+    /// Number of repair attempts made for missing replicas.
+    pub repair_attempts: u64,
     /// Number of dropped control or repair messages.
     pub dropped_messages: u64,
     /// Number of repair attempts rejected by a fault or unavailable provider.
     pub failed_repairs: u64,
+    /// Number of inventory advertisements sent to reachable peers.
+    pub inventory_messages: u64,
+    /// Approximate inventory bytes sent, counting one 32-byte hash per item.
+    pub inventory_bytes: u64,
+    /// Number of inventory advertisements repeating an existing observation.
+    pub duplicate_inventory_messages: u64,
     /// Whether every known block reached the configured replica target.
     pub converged: bool,
 }
@@ -147,8 +155,12 @@ pub struct SwarmSimulator {
     round: u64,
     random_state: u64,
     repairs: u64,
+    repair_attempts: u64,
     dropped_messages: u64,
     failed_repairs: u64,
+    inventory_messages: u64,
+    inventory_bytes: u64,
+    duplicate_inventory_messages: u64,
 }
 
 impl SwarmSimulator {
@@ -192,8 +204,12 @@ impl SwarmSimulator {
             round: 0,
             random_state,
             repairs: 0,
+            repair_attempts: 0,
             dropped_messages: 0,
             failed_repairs: 0,
+            inventory_messages: 0,
+            inventory_bytes: 0,
+            duplicate_inventory_messages: 0,
         })
     }
 
@@ -348,8 +364,12 @@ impl SwarmSimulator {
             rounds,
             known_blocks: self.known_blocks().len(),
             repairs: self.repairs,
+            repair_attempts: self.repair_attempts,
             dropped_messages: self.dropped_messages,
             failed_repairs: self.failed_repairs,
+            inventory_messages: self.inventory_messages,
+            inventory_bytes: self.inventory_bytes,
+            duplicate_inventory_messages: self.duplicate_inventory_messages,
             converged: self.is_converged(),
         }
     }
@@ -418,6 +438,15 @@ impl SwarmSimulator {
                     continue;
                 }
                 for hash in &hashes {
+                    self.inventory_messages = self.inventory_messages.saturating_add(1);
+                    self.inventory_bytes = self.inventory_bytes.saturating_add(32);
+                    if self
+                        .nodes
+                        .get(target)
+                        .is_some_and(|state| state.observations.contains_key(&(*source, *hash)))
+                    {
+                        self.duplicate_inventory_messages = self.duplicate_inventory_messages.saturating_add(1);
+                    }
                     if self.message_is_dropped() {
                         self.dropped_messages = self.dropped_messages.saturating_add(1);
                         continue;
@@ -470,6 +499,7 @@ impl SwarmSimulator {
                 {
                     continue;
                 }
+                self.repair_attempts = self.repair_attempts.saturating_add(1);
                 let has_provider = replicas.iter().copied().any(|source| {
                     self.can_exchange(source, target)
                         && self
@@ -712,6 +742,23 @@ mod tests {
                     .node_inventory(SimNodeId::new(1))
                     .expect("scale fixture node should exist"),
                 vec![hash(11)]
+            );
+            assert!(report.inventory_messages > 0);
+            assert!(report.inventory_bytes > 0);
+            assert!(report.repair_attempts > 0);
+            assert!(report.repairs > 0);
+            println!(
+                "scale nodes={node_count} rounds={} inventory_messages={} inventory_bytes={} \
+                 duplicate_inventory_messages={} repair_attempts={} completed_repairs={} \
+                 failed_repairs={} open_fds={:?}",
+                report.rounds,
+                report.inventory_messages,
+                report.inventory_bytes,
+                report.duplicate_inventory_messages,
+                report.repair_attempts,
+                report.repairs,
+                report.failed_repairs,
+                std::fs::read_dir("/proc/self/fd").ok().map(|entries| entries.count()),
             );
         }
     }

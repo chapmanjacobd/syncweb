@@ -15,17 +15,8 @@ friction; this file turns their improvement notes into implementable tasks.
 
 ## Command-surface and safety
 
-- [ ] Reconcile the many specialized commands with the documented core flows
-  (`setup`, `create`, `join`, `ls`, `find`, `download`, `share`, `publish`,
-  `install`, `status`, `config`, and `networks`) without breaking existing
-  scripts.
 - [ ] Keep global filters, progress, JSON envelopes, and error conventions
   consistent as communal-swarm commands are added.
-
-## Documentation and release discipline
-
-- [ ] Convert performance targets in `docs/testing.md` into reproducible
-  fixtures before making them release gates.
 
 ## Completion criteria
 

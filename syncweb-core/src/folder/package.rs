@@ -13,7 +13,9 @@ use crate::{
     error::{Result, SyncwebError},
     folder::{CollectionManifest, CollectionState},
     storage::node_db::NodeDatabase,
+    sync::{TransferRequest, fetch_blob_requests},
 };
+use tokio_util::sync::CancellationToken;
 
 /// Installs collection package versions into versioned directories.
 #[derive(Clone, Debug)]
@@ -150,13 +152,41 @@ impl PackageManager {
             )));
         }
 
+        let missing = {
+            let mut requests = Vec::new();
+            for entry in &manifest.entries {
+                if !blobs.has(entry.content_id).await? {
+                    requests.push(TransferRequest::new(
+                        entry.content_id,
+                        entry.size,
+                        vec![manifest_ticket.addr().clone()],
+                    ));
+                }
+            }
+            requests
+        };
+        if !missing.is_empty() {
+            let report = fetch_blob_requests(blobs, endpoint, missing, CancellationToken::new()).await?;
+            if report.failed > 0 || report.cancelled > 0 {
+                return Err(SyncwebError::operation(
+                    "package content fetch failed",
+                    format!(
+                        "{} request(s) failed and {} request(s) cancelled",
+                        report.failed, report.cancelled
+                    ),
+                ));
+            }
+        }
+
         let source = self.root.join(format!(".source-{}", Uuid::new_v4()));
         fs::create_dir_all(&source)
             .map_err(|error| SyncwebError::operation("failed to create package source directory", error))?;
         for entry in &manifest.entries {
             if !blobs.has(entry.content_id).await? {
-                let ticket = blobs.ticket_for_addr(manifest_ticket.addr().clone(), entry.content_id);
-                blobs.fetch(endpoint, &ticket).await?;
+                return Err(SyncwebError::InvalidConfig(format!(
+                    "package content was not fetched: {}",
+                    entry.logical_path.display()
+                )));
             }
             let bytes = blobs.get(entry.content_id).await?;
             let destination = source.join(&entry.logical_path);

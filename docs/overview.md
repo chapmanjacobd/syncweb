@@ -52,9 +52,10 @@ The architecture uses Iroh's BLAKE3-Bao verified blob sync (iroh-blobs), documen
 +------------------------------------------------------------------------------+
 |                              syncweb CLI                               |
 +------------------------------------------------------------------------------+
-|  Commands: create, join, ls, find, download, sort, stat,                 |
-|            devices, folders, watch, version, publish,                     |
-|            snapshot, config, network, stats                               |
+|  Commands: folders, conflicts, ls, stat, find, search, sort, download,     |
+|            verify, transfer, share, access, link, package, network,       |
+|            watch, snapshot, indexing, stats, backup, restore, db,         |
+|            start, stop, reload, sync, devices, config, version            |
 +------------------------------------------------------------------------------+
                                       |
                                       v
@@ -264,7 +265,7 @@ Decision: Per-device identity with folder-level capabilities
 - Revocation: Revoke a specific device without affecting others
 - Sync modes: Device A (SendReceive) + Device B (ReceiveOnly) + Phone (ReceiveOnly, limited)
 - Implementation: `CapabilityMap` tracks `NodeId -> Capability` per folder
-- UX: `syncweb devices` shows this device's Iroh and Syncthing identities; folder access is granted via `share` and revoked via `unshare`
+- UX: `syncweb devices` shows this device's Iroh and Syncthing identities; folder access is granted via `share` and revoked via `access --revoke`
 - Note: No concept of "user" in the protocol - just devices with capabilities
 ### 21. Living Folders
 

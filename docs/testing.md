@@ -19,6 +19,47 @@ Tests that require an external Syncthing relay are opt-in with
 `SYNCWEB_INTEROP=1`; they are not part of the default CI gate because they
 depend on third-party network availability.
 
+## Reproducible performance fixtures
+
+The performance numbers below remain targets, not release gates. The
+repository provides a repeatable fixture entry point so changes can be
+compared against the same workloads:
+
+```sh
+make perf-fixtures
+make perf-fixtures ARGS=bench
+```
+
+The default target runs the fixed-size 10,000-file scanner fixture, 10,000
+filter evaluations across 100 rules, 1,000 peer-cache lookups, and the
+deterministic 10/50/100/1000-node swarm fixture. `ARGS=bench` runs the
+Criterion archive, daemon, filter, search, sort, schedule, and stats
+workloads. Set `CARGO_TARGET_DIR` to an isolated directory when comparing
+clean builds or running multiple worktrees concurrently.
+
+The minimum reference fixture for future LAN gates is a Linux x86_64 host
+with 8 physical cores, 16 GiB RAM, NVMe storage, and a dedicated 1 GbE
+network. Live multi-process gates should record the same host profile and
+remain separate from the deterministic simulator until equivalent hardware is
+available. Record CPU, memory, storage, and network details with results;
+timings from different hardware are not release decisions.
+
+### LAN scale acceptance gates
+
+The deterministic control-plane gate runs one verified block through 10, 50,
+100, and 1,000 simulated nodes with a four-round budget. Each size must
+converge, report non-zero inventory traffic and repair attempts, and emit
+inventory bytes, duplicate advertisements, completed and failed repairs, and
+the process's observable file-descriptor count. `make perf-fixtures` also
+records user CPU, system CPU, and maximum resident memory through GNU
+`/usr/bin/time` when available.
+
+These simulator results are regression gates for control-plane policy, not a
+claim of live-LAN capacity. A future 10/50/100-node multi-process gate must
+use the reference host profile above and additionally record transfer
+completion, network traffic, open files, CPU, and memory before its results
+can become a release decision.
+
 ### Unit Tests
 - Identity management
 - DeviceId bidirectional conversion (Syncthing ↔ Iroh)
@@ -126,13 +167,13 @@ depend on third-party network availability.
 
 ## Success Criteria
 
-1. Functional parity: All syncweb-py commands work (create, join, ls, find, sort, stat, download, devices, folders, watch, start, shutdown, version)
+1. Functional parity: The documented core flows work (`folders create`, `folders join`, `ls`, `find`, `sort`, `stat`, `download`, `devices`, `folders`, `watch`, `start`, `stop`, `version`)
 2. Performance: Faster sync, lower resource usage than Syncthing
-3. Public folders: `share`/`join`/`download` work end-to-end
+3. Public folders: `share`/`folders join`/`download` work end-to-end
 4. Data versioning: Data package lifecycle works (init, add, bump, publish, search, install, upgrade, remove, verify)
 5. Networks: `network create/join/invite/kick` work across devices
 6. Syncthing relay: Two syncweb nodes can communicate via Syncthing relay when direct QUIC fails
-7. UX: Single binary, no daemon, config file optional
+7. UX: A single binary supports embedded operation and optional daemon supervision; configuration remains optional
 8. Reliability: No data loss, verified transfers, BLAKE3 integrity on all transfers
 9. Conflict resolution: Automatic LWW for text, keep-both for binary, older version renamed
 10. Parallel operations: 4-6x speedup for ls and import (default on)

@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use n0_future::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     allocation::{AllocationCandidate, StorageRoot, materialization_path},
@@ -12,7 +12,7 @@ use crate::{
     folder::FolderManager,
     node::iroh_node::IrohNode,
     storage::node_db::{NodeDatabase, TransferJobRecord},
-    sync::{FetchFilter, FetchStrategy, SyncEngine, SyncEvent},
+    sync::{FetchFilter, FetchStrategy, fetch_selected_content_with_cancel},
 };
 
 const TRANSFER_TIMEOUT: Duration = Duration::from_mins(5);
@@ -149,38 +149,21 @@ async fn process_transfer_job(node: &IrohNode, node_db: &NodeDatabase, job: Tran
     }
 }
 
-/// Fetch a single blob identified by a folder path via the sync engine.
+/// Fetch a single blob identified by a folder path via the bounded scheduler.
 async fn fetch_transfer_blob(node: &IrohNode, namespace_id: iroh_docs::NamespaceId, path: &str) -> Result<()> {
-    let sync = SyncEngine::new(
-        FolderManager::new(node),
-        node.blob_store().clone(),
-        node.docs_engine().clone(),
-        Some(node.topic_tracker().clone()),
-    );
+    let folder = FolderManager::new(node).get(namespace_id).await?;
     let filter = FetchFilter::new().with_paths(vec![PathBuf::from(path)]);
-    let mut intent = sync.fetch(namespace_id, FetchStrategy::filter(filter)).await?;
-    let body = async {
-        while let Some(event) = intent.next().await {
-            match event {
-                SyncEvent::Failed(message) => {
-                    return Err(SyncwebError::operation("transfer fetch failed", message));
-                }
-                SyncEvent::Finished => return Ok(()),
-                SyncEvent::Stats(_)
-                | SyncEvent::Started
-                | SyncEvent::Progress { .. }
-                | SyncEvent::Paused
-                | SyncEvent::Resumed
-                | SyncEvent::Cancelled => {}
-            }
-        }
-        Ok(())
-    };
-    match tokio::time::timeout(TRANSFER_TIMEOUT, body).await {
-        Ok(result) => result,
+    let strategy = FetchStrategy::filter(filter);
+    let cancellation = CancellationToken::new();
+    let fetch = fetch_selected_content_with_cancel(node, &folder, &strategy, cancellation.clone());
+    match tokio::time::timeout(TRANSFER_TIMEOUT, fetch).await {
+        Ok(result) => result.map(|_| ()),
         Err(_elapsed) => {
-            let _ = intent.cancel();
-            Ok(())
+            cancellation.cancel();
+            Err(SyncwebError::operation(
+                "transfer fetch timed out",
+                format!("content path exceeded {} seconds", TRANSFER_TIMEOUT.as_secs()),
+            ))
         }
     }
 }

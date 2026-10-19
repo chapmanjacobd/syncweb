@@ -1,4 +1,4 @@
-.PHONY: all fmt lint test test-network bench build clean check clippy install install-completions install-manpage manpage completions readme docs-check
+.PHONY: all fmt lint test test-network bench perf-fixtures build clean check clippy install install-completions install-manpage manpage completions readme docs-check
 .SILENT:
 
 all: flint test lint fmt build manpage completions readme
@@ -36,6 +36,9 @@ test0:
 
 bench:
 	cargo bench -q --all-features
+
+perf-fixtures:
+	bash scripts/performance-fixtures.sh $(ARGS)
 
 build:
 	cargo build -q --all-targets --all-features

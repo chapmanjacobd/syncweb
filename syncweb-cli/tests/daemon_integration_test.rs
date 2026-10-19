@@ -17,11 +17,31 @@ fn syncweb(args: &[&str]) -> anyhow::Result<std::process::Output> {
         .context("run syncweb")
 }
 
-/// Parse a folder URL out of a share command's human output. Write shares now
-/// carry a `WRITE ticket:` prefix (user story 2), so strip it when present.
 fn ticket_from_share_output(out: &str) -> String {
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("next steps:") || trimmed.starts_with("  -") {
+            continue;
+        }
+        let stripped = trimmed.strip_prefix("WRITE ticket: ").unwrap_or(trimmed);
+        if stripped.starts_with("syncweb://") {
+            return stripped.to_owned();
+        }
+    }
     let trimmed = out.trim();
     trimmed.strip_prefix("WRITE ticket: ").unwrap_or(trimmed).to_owned()
+}
+
+/// Extract the namespace printed by `create` (or similar), ignoring the
+/// optional "next steps:" block and any `syncweb://folder/` URL wrapper.
+fn namespace_from_output(out: &str) -> String {
+    let line = out
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with("next steps:") && !line.starts_with("  -"))
+        .unwrap_or_else(|| out.trim());
+    let line = line.strip_prefix("syncweb://folder/").unwrap_or(line);
+    line.split('?').next().unwrap_or(line).trim().to_owned()
 }
 
 fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
@@ -1393,13 +1413,8 @@ fn test_join_download_materializes_content() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .trim()
-        .strip_prefix("syncweb://folder/")
-        .and_then(|rest| rest.split('?').next())
-        .map(str::trim)
-        .context("create should output a namespace")?
-        .to_owned();
+    let namespace = namespace_from_output(&create_out);
+    ensure!(!namespace.is_empty(), "create should output a namespace");
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
@@ -1475,13 +1490,8 @@ fn test_join_default_does_not_subscribe_without_download() -> anyhow::Result<()>
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .trim()
-        .strip_prefix("syncweb://folder/")
-        .and_then(|rest| rest.split('?').next())
-        .map(str::trim)
-        .context("create should output a namespace")?
-        .to_owned();
+    let namespace = namespace_from_output(&create_out);
+    ensure!(!namespace.is_empty(), "create should output a namespace");
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout)
@@ -1570,10 +1580,7 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
-    let namespace = String::from_utf8(create.stdout)
-        .context("UTF-8 output")?
-        .trim()
-        .to_owned();
+    let namespace = namespace_from_output(&String::from_utf8(create.stdout).context("UTF-8 output")?);
     ensure!(!namespace.is_empty(), "create should print a namespace");
 
     std::fs::write(alice_folder.join("hello.txt"), b"hello world").context("write source file")?;
@@ -1588,10 +1595,11 @@ fn test_daemon_lists_remote_entries_before_download() -> anyhow::Result<()> {
 
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
     ensure!(share.status.success(), "share should succeed");
-    let ticket = String::from_utf8(share.stdout)
+    let share_out = String::from_utf8(share.stdout)
         .context("UTF-8 output")?
         .trim()
         .to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     let bob_start = daemon_start_bg(bob_data_arg)?;
@@ -1723,10 +1731,7 @@ fn test_download_dry_run_previews_without_downloading() -> anyhow::Result<()> {
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
-    let namespace = String::from_utf8(create.stdout)
-        .context("UTF-8 output")?
-        .trim()
-        .to_owned();
+    let namespace = namespace_from_output(&String::from_utf8(create.stdout).context("UTF-8 output")?);
 
     std::fs::write(alice_folder.join("movie.mp4"), vec![b'a'; 4096]).context("write movie")?;
     std::fs::write(alice_folder.join("notes.txt"), b"hello").context("write notes")?;
@@ -1741,10 +1746,11 @@ fn test_download_dry_run_previews_without_downloading() -> anyhow::Result<()> {
 
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
     ensure!(share.status.success(), "share should succeed");
-    let ticket = String::from_utf8(share.stdout)
+    let share_out = String::from_utf8(share.stdout)
         .context("UTF-8 output")?
         .trim()
         .to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     let bob_start = daemon_start_bg(bob_data_arg)?;
@@ -1924,10 +1930,7 @@ fn test_download_dry_run_reports_remote_entries_with_metadata_only() -> anyhow::
         alice_folder.to_str().context("UTF-8 path")?,
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
-    let namespace = String::from_utf8(create.stdout)
-        .context("UTF-8 output")?
-        .trim()
-        .to_owned();
+    let namespace = namespace_from_output(&String::from_utf8(create.stdout).context("UTF-8 output")?);
 
     std::fs::write(alice_folder.join("movie.mp4"), vec![b'a'; 4096]).context("write movie")?;
     std::fs::write(alice_folder.join("notes.txt"), b"hello").context("write notes")?;
@@ -1942,10 +1945,11 @@ fn test_download_dry_run_reports_remote_entries_with_metadata_only() -> anyhow::
 
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
     ensure!(share.status.success(), "share should succeed");
-    let ticket = String::from_utf8(share.stdout)
+    let share_out = String::from_utf8(share.stdout)
         .context("UTF-8 output")?
         .trim()
         .to_owned();
+    let ticket = ticket_from_share_output(&share_out);
     ensure!(ticket.starts_with("syncweb://"), "share should output a URL: {ticket}");
 
     let bob_start = daemon_start_bg(bob_data_arg)?;
@@ -2117,13 +2121,8 @@ fn test_create_import_via_daemon_one_shot() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create.stderr)
     );
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .trim()
-        .strip_prefix("syncweb://folder/")
-        .and_then(|rest| rest.split('?').next())
-        .map(str::trim)
-        .context("create should output a namespace")?
-        .to_owned();
+    let namespace = namespace_from_output(&create_out);
+    ensure!(!namespace.is_empty(), "create should output a namespace");
 
     let report = syncweb(&["--json", "--data-dir", data_dir_arg, "stats", "files", &namespace])?;
     ensure!(
@@ -2172,13 +2171,8 @@ fn test_join_download_via_daemon_materializes_content() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "alice create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .trim()
-        .strip_prefix("syncweb://folder/")
-        .and_then(|rest| rest.split('?').next())
-        .map(str::trim)
-        .context("create should output a namespace")?
-        .to_owned();
+    let namespace = namespace_from_output(&create_out);
+    ensure!(!namespace.is_empty(), "create should output a namespace");
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace, "--write"])?;
     ensure!(share.status.success(), "share should succeed");
     let share_out = String::from_utf8(share.stdout).context("UTF-8 output")?;
@@ -2251,13 +2245,8 @@ fn test_network_peers_returns_envelope_via_daemon() -> anyhow::Result<()> {
     ])?;
     ensure!(create.status.success(), "folders create should succeed");
     let create_out = String::from_utf8(create.stdout).context("UTF-8 output")?;
-    let namespace = create_out
-        .trim()
-        .strip_prefix("syncweb://folder/")
-        .and_then(|rest| rest.split('?').next())
-        .map(str::trim)
-        .context("create should output a namespace")?
-        .to_owned();
+    let namespace = namespace_from_output(&create_out);
+    ensure!(!namespace.is_empty(), "create should output a namespace");
 
     std::fs::write(folder.join("hello.txt"), b"hello world").context("write source file")?;
     let import = syncweb(&[
@@ -2750,10 +2739,7 @@ fn test_read_only_folder_does_not_record_watcher_errors() -> anyhow::Result<()> 
         "alice create: {}",
         String::from_utf8_lossy(&create.stderr)
     );
-    let namespace = String::from_utf8(create.stdout)
-        .context("UTF-8 output")?
-        .trim()
-        .to_owned();
+    let namespace = namespace_from_output(&String::from_utf8(create.stdout).context("UTF-8 output")?);
 
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
     ensure!(
@@ -2765,6 +2751,7 @@ fn test_read_only_folder_does_not_record_watcher_errors() -> anyhow::Result<()> 
         .context("UTF-8 output")?
         .trim()
         .to_owned();
+    let ticket = ticket_from_share_output(&ticket);
 
     let start_b = daemon_start_bg(bob_data_arg)?;
     ensure!(start_b.status.success(), "bob daemon should start");
@@ -2906,7 +2893,8 @@ fn test_subscribe_transfer_records_bandwidth_stats() -> anyhow::Result<()> {
 
     let share = syncweb(&["--data-dir", alice_data_arg, "share", &namespace])?;
     ensure!(share.status.success(), "share should succeed");
-    let ticket = stdout_str(&share).trim().to_owned();
+    let share_out = stdout_str(&share).trim().to_owned();
+    let ticket = ticket_from_share_output(&share_out);
 
     let bob_start = daemon_start_bg(bob_data_arg)?;
     ensure!(bob_start.status.success(), "bob daemon should start");
@@ -3121,7 +3109,7 @@ fn test_inactive_schedule_window_pauses_folder() -> anyhow::Result<()> {
         "create should succeed: {}",
         String::from_utf8_lossy(&create.stderr)
     );
-    let namespace = stdout_str(&create).trim().to_owned();
+    let namespace = namespace_from_output(&stdout_str(&create));
     ensure!(!namespace.is_empty(), "create should print a namespace");
 
     // Pick a one-hour window that starts two hours from the current UTC minute,

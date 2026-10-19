@@ -1,6 +1,7 @@
 mod basic_sync;
 mod indexing;
 mod lazy_listing;
+mod next_steps;
 mod transfer;
 
 use std::path::{Path, PathBuf};

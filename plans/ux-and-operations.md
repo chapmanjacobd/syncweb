@@ -12,8 +12,6 @@ friction; this file turns their improvement notes into implementable tasks.
 
 - [ ] Add a first-run wizard that detects a new `data_dir`, explains daemon
   ownership, and offers setup, join, or restore.
-- [ ] Make `create`, `join`, `share`, and `package install` show the same
-  concise next steps, including whether data is lazy or eagerly fetched.
 - [ ] Add clear network invitation provisioning and explain the distinction
   between an invitation, a folder, a package, and a community.
 

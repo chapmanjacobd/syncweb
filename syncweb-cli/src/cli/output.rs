@@ -94,6 +94,124 @@ pub fn confirm_destructive(operation: &str, assume_yes: bool, no_color: bool) ->
     Ok(interact)
 }
 
+/// Render the shared post-command guidance block.
+///
+/// `folders create`, `folders join`, `share`, and `package install` end with
+/// the same compact shape so the core setup flow reads identically everywhere.
+/// Each step states plainly whether content moved eagerly or stays lazy.
+pub fn print_next_steps(steps: &[String]) {
+    if steps.is_empty() {
+        return;
+    }
+    println!();
+    println!("next steps:");
+    for step in steps {
+        println!("  - {step}");
+    }
+}
+
+/// Attach the shared next-steps list to a `--json` object envelope.
+///
+/// The field is additive so existing script consumers keep working.
+#[must_use]
+pub fn with_next_steps(mut value: serde_json::Value, steps: &[String]) -> serde_json::Value {
+    if steps.is_empty() {
+        return value;
+    }
+    if let serde_json::Value::Object(map) = &mut value {
+        map.insert(
+            "next_steps".to_owned(),
+            serde_json::Value::Array(steps.iter().cloned().map(serde_json::Value::String).collect()),
+        );
+    }
+    value
+}
+
+/// How a `folders join` handled content, for the shared next-steps wording.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JoinFetch {
+    /// `--metadata-only`: entries tracked, no blob bytes fetched.
+    MetadataOnly,
+    /// `--download-existing`: bulk fetch ran; counts when known.
+    Eager(Option<(usize, u64)>),
+    /// Default: nothing fetched; content stays lazy until `download`.
+    Lazy,
+}
+
+/// Shared next steps after `folders create`.
+pub fn create_next_steps(shared: bool) -> Vec<String> {
+    let mut steps = Vec::new();
+    if shared {
+        steps.push("send the link above to a device you trust; there it runs `syncweb folders join <link>`".to_owned());
+    } else {
+        steps.push("no link yet: `syncweb share <path>` mints a join link for other devices".to_owned());
+    }
+    steps.push(
+        "content is local-first: files here are imported on this device now; peers fetch them on demand".to_owned(),
+    );
+    steps.push(
+        "keep a daemon running (`syncweb start`) so changes sync automatically; `syncweb status` shows health"
+            .to_owned(),
+    );
+    steps
+}
+
+/// Shared next steps after `folders join`, explaining the fetch model.
+pub fn join_next_steps(subscribe: bool, fetch: JoinFetch) -> Vec<String> {
+    let mut steps = Vec::new();
+    match fetch {
+        JoinFetch::MetadataOnly => steps.push(
+            "metadata-only join: no file content was fetched (lazy) — `syncweb download <path>` pulls files on demand"
+                .to_owned(),
+        ),
+        JoinFetch::Eager(Some((files, bytes))) => steps.push(format!(
+            "content was fetched eagerly: {files} files ({bytes} bytes); later changes follow live sync or `syncweb sync`"
+        )),
+        JoinFetch::Eager(None) => steps.push(
+            "content was fetched eagerly on join; later changes follow live sync or `syncweb sync`".to_owned(),
+        ),
+        JoinFetch::Lazy => steps.push(
+            "content stays lazy: nothing was downloaded — `syncweb download <path>` fetches files on demand"
+                .to_owned(),
+        ),
+    }
+    if subscribe {
+        steps.push("live sync is on: this folder stays up to date while a daemon runs".to_owned());
+    } else {
+        steps.push("live sync is off: `syncweb folders join <folder> --subscribe` enables it".to_owned());
+    }
+    steps
+}
+
+/// Shared next steps after `share`.
+pub fn share_next_steps(write: bool, pinned: bool) -> Vec<String> {
+    let mut steps = Vec::new();
+    if write {
+        steps.push("WRITE link: anyone holding it can change this folder — treat it like a password".to_owned());
+    } else {
+        steps.push("read-only link: receivers see changes but cannot edit this folder".to_owned());
+    }
+    if pinned {
+        steps.push("content is pinned here and seeded eagerly while the daemon runs".to_owned());
+    } else {
+        steps.push("content is not pinned: only files this device already has are served (lazy)".to_owned());
+    }
+    steps.push("revoke the link later with `syncweb access --revoke <folder>`".to_owned());
+    steps
+}
+
+/// Shared next steps after `package install`.
+pub fn package_install_next_steps(collection: &str, version: &str) -> Vec<String> {
+    vec![
+        format!(
+            "content is eager: {collection} {version} was fetched, verified, and materialized under the install root"
+        ),
+        format!("re-check integrity with `syncweb package verify {collection}`"),
+        "new versions install with `syncweb package upgrade <ticket>`; `syncweb package list` shows what is installed"
+            .to_owned(),
+    ]
+}
+
 /// Maximum number of share rows rendered per folder before the list is
 /// summarized with an "and N more" line. `access --full` lifts the cap.
 pub const ACCESS_SHARE_ROW_CAP: usize = 12;
@@ -250,5 +368,106 @@ mod tests {
         assert!(json.contains("\"devices\""), "json should carry devices: {json}");
         assert!(json.contains("ABCD-EFGH"), "json should carry the inbound peer: {json}");
         assert!(!json.contains("pinned"), "json must not guess pin status: {json}");
+    }
+
+    #[test]
+    fn next_steps_json_adds_additive_field() {
+        let value = with_next_steps(serde_json::json!({"status": "ok"}), &["step one".to_owned()]);
+        assert_eq!(value.get("status"), Some(&serde_json::Value::from("ok")));
+        let steps = value
+            .get("next_steps")
+            .and_then(serde_json::Value::as_array)
+            .expect("next_steps should be an array");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps.first(), Some(&serde_json::Value::from("step one")));
+    }
+
+    #[test]
+    fn next_steps_json_leaves_other_shapes_untouched() {
+        let value = with_next_steps(serde_json::json!([1, 2]), &["step".to_owned()]);
+        assert_eq!(value, serde_json::json!([1, 2]), "non-object envelopes stay unchanged");
+        let empty = with_next_steps(serde_json::json!({"status": "ok"}), &[]);
+        assert_eq!(empty.get("next_steps"), None, "no empty next_steps field");
+    }
+
+    #[test]
+    fn create_next_steps_distinguish_shared_and_unshared() {
+        let shared = create_next_steps(true);
+        assert!(
+            shared.iter().any(|step| step.contains("join <link>")),
+            "shared create should point at the join link: {shared:?}"
+        );
+        let unshared = create_next_steps(false);
+        assert!(
+            unshared.iter().any(|step| step.contains("syncweb share")),
+            "unshared create should point at share: {unshared:?}"
+        );
+        assert!(
+            shared.iter().any(|step| step.contains("on demand")),
+            "create should explain the fetch model: {shared:?}"
+        );
+    }
+
+    #[test]
+    fn join_next_steps_state_eager_vs_lazy() {
+        let lazy = join_next_steps(false, JoinFetch::Lazy);
+        assert!(
+            lazy.iter()
+                .any(|step| step.contains("lazy") && step.contains("syncweb download")),
+            "lazy join should explain on-demand fetch: {lazy:?}"
+        );
+        assert!(
+            lazy.iter().any(|step| step.contains("live sync is off")),
+            "bare join should point at --subscribe: {lazy:?}"
+        );
+        let eager = join_next_steps(true, JoinFetch::Eager(Some((3, 42))));
+        assert!(
+            eager
+                .iter()
+                .any(|step| step.contains("eagerly") && step.contains("3 files")),
+            "eager join should report what was fetched: {eager:?}"
+        );
+        assert!(
+            eager.iter().any(|step| step.contains("live sync is on")),
+            "--subscribe join should say live sync is on: {eager:?}"
+        );
+        let metadata = join_next_steps(false, JoinFetch::MetadataOnly);
+        assert!(
+            metadata.iter().any(|step| step.contains("metadata-only")),
+            "metadata-only join should say so: {metadata:?}"
+        );
+    }
+
+    #[test]
+    fn share_next_steps_flag_write_and_pin_state() {
+        let read_pinned = share_next_steps(false, true);
+        assert!(read_pinned.iter().any(|step| step.contains("read-only")));
+        assert!(
+            read_pinned
+                .iter()
+                .any(|step| step.contains("pinned") && step.contains("eager"))
+        );
+        let write_unpinned = share_next_steps(true, false);
+        assert!(write_unpinned.iter().any(|step| step.contains("WRITE")));
+        assert!(write_unpinned.iter().any(|step| step.contains("not pinned")));
+        assert!(
+            read_pinned.iter().any(|step| step.contains("access --revoke")),
+            "share should explain how to revoke: {read_pinned:?}"
+        );
+    }
+
+    #[test]
+    fn package_install_next_steps_state_eager_materialization() {
+        let steps = package_install_next_steps("abc", "1.0.0");
+        assert!(
+            steps
+                .iter()
+                .any(|step| step.contains("eager") && step.contains("1.0.0")),
+            "install should state eager materialization: {steps:?}"
+        );
+        assert!(
+            steps.iter().any(|step| step.contains("package verify")),
+            "install should point at verify: {steps:?}"
+        );
     }
 }

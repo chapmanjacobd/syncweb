@@ -25,8 +25,9 @@ use cli::{
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
-        AccessRow, confirm_destructive, init_tracing_with_log_file, json_list, print_version, render_access_json,
-        render_access_table,
+        AccessRow, JoinFetch, confirm_destructive, create_next_steps, init_tracing_with_log_file, join_next_steps,
+        json_list, package_install_next_steps, print_next_steps, print_version, render_access_json,
+        render_access_table, share_next_steps, with_next_steps,
     },
 };
 use indicatif::{ProgressBar, ProgressStyle};
@@ -3162,6 +3163,7 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
     let no_daemon = ctx.no_daemon;
     let do_share = !command.no_share;
     let write = command.write;
+    let next_steps = create_next_steps(do_share);
     std::fs::create_dir_all(&command.path)
         .with_context(|| format!("failed to create folder path {}", command.path.display()))?;
     // Resolve to an absolute path so the daemon's filesystem watcher (whose
@@ -3201,27 +3203,35 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
                 let ticket = url.split_once("?ticket=").map_or("", |(_, t)| t);
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "path": command.path,
-                        "namespace": namespace,
-                        "access": if write { "write" } else { "read" },
-                        "ticket": ticket,
-                        "url": url,
-                    }))?
+                    serde_json::to_string_pretty(&with_next_steps(
+                        serde_json::json!({
+                            "path": command.path,
+                            "namespace": namespace,
+                            "access": if write { "write" } else { "read" },
+                            "ticket": ticket,
+                            "url": url,
+                        }),
+                        &next_steps,
+                    ))?
                 );
             } else {
                 println!("{}", share_label(write, &url));
+                print_next_steps(&next_steps);
             }
         } else if output_json {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "path": command.path,
-                    "namespace": namespace,
-                }))?
+                serde_json::to_string_pretty(&with_next_steps(
+                    serde_json::json!({
+                        "path": command.path,
+                        "namespace": namespace,
+                    }),
+                    &next_steps,
+                ))?
             );
         } else {
             println!("{namespace}");
+            print_next_steps(&next_steps);
         }
         Some(namespace)
     } else {
@@ -3279,28 +3289,36 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
             if output_json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "path": command.path,
-                        "namespace": result.namespace.to_string(),
-                        "access": result.access(),
-                        "ticket": result.ticket.to_string(),
-                        "url": result.url,
-                        "pinned": result.pinned,
-                    }))?
+                    serde_json::to_string_pretty(&with_next_steps(
+                        serde_json::json!({
+                            "path": command.path,
+                            "namespace": result.namespace.to_string(),
+                            "access": result.access(),
+                            "ticket": result.ticket.to_string(),
+                            "url": result.url,
+                            "pinned": result.pinned,
+                        }),
+                        &next_steps,
+                    ))?
                 );
             } else {
                 println!("{}", share_label(write, &result.url));
+                print_next_steps(&next_steps);
             }
         } else if output_json {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "path": command.path,
-                    "namespace": namespace,
-                }))?
+                serde_json::to_string_pretty(&with_next_steps(
+                    serde_json::json!({
+                        "path": command.path,
+                        "namespace": namespace,
+                    }),
+                    &next_steps,
+                ))?
             );
         } else {
             println!("{namespace}");
+            print_next_steps(&next_steps);
         }
         node.stop().await?;
         Some(namespace)
@@ -3349,6 +3367,14 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     // Resolve to an absolute path so the daemon's filesystem watcher (whose
     // working directory differs from the CLI's) can locate the folder.
     effective_path = canonical_path(&effective_path);
+    let fetch = if command.metadata_only {
+        JoinFetch::MetadataOnly
+    } else if download_existing {
+        JoinFetch::Eager(None)
+    } else {
+        JoinFetch::Lazy
+    };
+    let next_steps = join_next_steps(subscribe, fetch);
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let message = client
             .join(
@@ -3363,7 +3389,15 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                     .with_metadata_only(command.metadata_only),
             )
             .await?;
-        print_daemon_ok(&message, output_json);
+        if output_json {
+            println!(
+                "{}",
+                with_next_steps(serde_json::json!({"status": "ok", "message": message}), &next_steps,)
+            );
+        } else {
+            println!("{message}");
+            print_next_steps(&next_steps);
+        }
         return Ok(());
     }
     let node = open_node(data_dir).await?;
@@ -3394,15 +3428,30 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     } else {
         (0, 0)
     };
+    // The embedded one-shot download knows its real counts; refresh the
+    // guidance so the eager step reports what actually arrived.
+    let next_steps = join_next_steps(
+        subscribe,
+        if command.metadata_only {
+            JoinFetch::MetadataOnly
+        } else if download_existing {
+            JoinFetch::Eager(Some((downloaded, downloaded_size)))
+        } else {
+            JoinFetch::Lazy
+        },
+    );
     if output_json {
         println!(
             "{}",
-            serde_json::json!({
-                "status": "joined",
-                "namespace": namespace,
-                "downloaded": downloaded,
-                "size": downloaded_size,
-            })
+            with_next_steps(
+                serde_json::json!({
+                    "status": "joined",
+                    "namespace": namespace,
+                    "downloaded": downloaded,
+                    "size": downloaded_size,
+                }),
+                &next_steps,
+            )
         );
     } else {
         let live = if subscribe { " — live sync on;" } else { "" };
@@ -3411,6 +3460,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         } else {
             println!("joined: {namespace}{live}");
         }
+        print_next_steps(&next_steps);
     }
     node.stop().await?;
     Ok(())
@@ -3535,6 +3585,9 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let no_daemon = ctx.no_daemon;
+    // Re-joining an already-tracked folder only toggles live sync; content
+    // still follows the lazy model unless a separate download is requested.
+    let next_steps = join_next_steps(true, JoinFetch::Lazy);
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let namespace = resolve_namespace_via_daemon(&client, selector).await?;
         let message = client
@@ -3543,10 +3596,14 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
         if output_json {
             println!(
                 "{}",
-                serde_json::json!({"status": "subscribed", "namespace": namespace})
+                with_next_steps(
+                    serde_json::json!({"status": "subscribed", "namespace": namespace}),
+                    &next_steps,
+                )
             );
         } else {
             println!("{message}");
+            print_next_steps(&next_steps);
         }
         return Ok(());
     }
@@ -3564,10 +3621,14 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     if output_json {
         println!(
             "{}",
-            serde_json::json!({"status": "subscribed", "namespace": namespace_str})
+            with_next_steps(
+                serde_json::json!({"status": "subscribed", "namespace": namespace_str}),
+                &next_steps,
+            )
         );
     } else {
         println!("subscribed: {namespace_str}");
+        print_next_steps(&next_steps);
     }
     node.stop().await?;
     Ok(())
@@ -3598,11 +3659,27 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
                     .with_addr_info(share_addr_info(args.id_only)),
             )
             .await?;
+        // Blob tickets are a low-level primitive; the guided steps describe
+        // folder shares, the flow this command exists for.
+        let next_steps = if args.blob.is_none() {
+            share_next_steps(args.write, !args.no_pin)
+        } else {
+            Vec::new()
+        };
         if args.write && !output_json {
             println!("{}", share_label(true, &message));
+            print_next_steps(&next_steps);
             return Ok(());
         }
-        print_daemon_ok(&message, output_json);
+        if output_json {
+            println!(
+                "{}",
+                with_next_steps(serde_json::json!({"status": "ok", "message": message}), &next_steps)
+            );
+        } else {
+            println!("{message}");
+            print_next_steps(&next_steps);
+        }
         return Ok(());
     }
     let node = open_node(data_dir).await?;
@@ -3633,19 +3710,24 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
         |ns, access, ticket| db.add_share(&ns.to_string(), access, &ticket.to_string()),
     )
     .await?;
+    let next_steps = share_next_steps(args.write, result.pinned > 0);
     if output_json {
         println!(
             "{}",
-            serde_json::json!({
-                "namespace": result.namespace.to_string(),
-                "access": result.access(),
-                "ticket": result.ticket.to_string(),
-                "url": result.url,
-                "pinned": result.pinned,
-            })
+            with_next_steps(
+                serde_json::json!({
+                    "namespace": result.namespace.to_string(),
+                    "access": result.access(),
+                    "ticket": result.ticket.to_string(),
+                    "url": result.url,
+                    "pinned": result.pinned,
+                }),
+                &next_steps,
+            )
         );
     } else {
         println!("{}", share_label(args.write, &result.url));
+        print_next_steps(&next_steps);
     }
     node.stop().await?;
     Ok(())
@@ -4278,20 +4360,28 @@ async fn handle_package_install(
         .install_from_ticket(&blob_ticket, node.endpoint(), node.blob_store())
         .await?;
     node.stop().await?;
+    let next_steps = package_install_next_steps(
+        &collection_manifest.collection_id.to_string(),
+        &collection_manifest.version.to_string(),
+    );
     if output_json {
         println!(
             "{}",
-            serde_json::json!({
-                "status": "installed",
-                "collection": collection_manifest.collection_id.to_string(),
-                "version": collection_manifest.version,
-            })
+            with_next_steps(
+                serde_json::json!({
+                    "status": "installed",
+                    "collection": collection_manifest.collection_id.to_string(),
+                    "version": collection_manifest.version,
+                }),
+                &next_steps,
+            )
         );
     } else {
         println!(
             "installed: {} {}",
             collection_manifest.collection_id, collection_manifest.version
         );
+        print_next_steps(&next_steps);
     }
     Ok(())
 }

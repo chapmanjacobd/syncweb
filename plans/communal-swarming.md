@@ -86,20 +86,8 @@ Tests: one blob from multiple providers, provider churn, duplicate and
 Turn “download” and “share” into explicit, observable policy rather than an
 accidental consequence of local storage.
 
-- [ ] Define desired replica targets by community, folder, collection, and
-  priority; support a minimum and optional maximum.
-- [ ] Implement a replication controller that selects eligible providers,
-  requests missing content, and re-evaluates after expiry, failure, or
-  membership changes.
-- [ ] Add provider leases or reservations with TTLs so a target is not counted
-  until the provider has confirmed a pin and capacity.
-- [ ] Add local pin classes (temporary download, shared, protected, cache) and
-  garbage-collection rules that respect them.
 - [ ] Add contribution budgets for storage, upload bandwidth, CPU, and battery.
   Sharing must be pausable and explain why a request was declined.
-- [ ] Define repair behavior after a node leaves, loses a disk, or becomes
-  unreachable; avoid synchronized repair storms with jitter and ownership
-  sampling.
 - [ ] Expose seeding health, desired/known/confirmed replicas, and repair
   activity in status and JSON output.
 
@@ -168,16 +156,12 @@ swarm, not only a one-time archive restore.
 
 - [ ] Add a CAR index containing roots, blocks, collection metadata, source
   community identity, and optional provider/capability hints.
-- [ ] On import, compute the local missing set, verify all blocks, and
-  atomically merge manifests with existing state.
 - [ ] Record imported blocks as local availability and publish leases only
   after the import is complete and policy permits seeding.
 - [ ] Add export modes for a collection, missing blocks, repair bundles, and a
   bounded contribution bundle.
 - [ ] Support resumable, inspectable imports and exports with clear duplicate
   and conflicting-root behavior.
-- [ ] Add CLI status for archive origin, verification, enrollment, and pending
-  publication.
 
 Likely code: `syncweb-core/src/archive`, package lifecycle modules,
 `docs/archive_format.md` implementation, daemon IPC, and archive CLI commands.
@@ -211,7 +195,6 @@ Validate control-plane and data-plane behavior before claiming large-LAN
 support.
 
 - [ ] Add live multi-process tests for at least 10, 50, and 100 nodes.
-- [ ] Test mixed versions and peers that only support whole-blob transfers.
 
 Likely code: integration test harnesses, simulator modules, fixtures, and
 `docs/testing.md`.

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayManager;
 use crate::provider_lease::ProviderLease;
-use crate::sync::{EvictionStrategy, PeerTracker};
+use crate::sync::{EvictionStrategy, ObservationSource, PeerTracker};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::blob_store::BlobStore;
@@ -441,6 +441,30 @@ impl IrohNode {
     ) -> Result<usize> {
         self.provider_registry_guard()?
             .record_lease(lease, now, community, folder)
+    }
+
+    /// Record content imported from an offline archive as locally available.
+    ///
+    /// The observation is advisory and expires like other provider
+    /// observations. Callers should invoke this only after their import and
+    /// publication policy has completed successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider registry mutex is poisoned.
+    pub fn record_offline_import<I>(&self, hashes: I) -> Result<usize>
+    where
+        I: IntoIterator<Item = Hash>,
+    {
+        let mut registry = self.provider_registry_guard()?;
+        let provider = self.endpoint.id();
+        let mut unique = HashSet::new();
+        for hash in hashes {
+            if unique.insert(hash) {
+                registry.record_observation(hash, provider, ObservationSource::OfflineImport, 100);
+            }
+        }
+        Ok(unique.len())
     }
 
     fn provider_registry_guard(&self) -> Result<std::sync::MutexGuard<'_, PeerTracker>> {

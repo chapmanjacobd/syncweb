@@ -79,7 +79,32 @@ pub struct DropImportResult {
     pub skipped_entry_count: usize,
     pub block_count: usize,
     pub imported_block_count: usize,
+    #[serde(default)]
+    pub local_missing_block_count: usize,
+    #[serde(default)]
+    pub local_reused_block_count: usize,
+    #[serde(default)]
+    pub local_availability_count: usize,
     pub namespace_id: Option<NamespaceId>,
+}
+
+impl DropImportResult {
+    /// Record the verified archive content as locally available.
+    ///
+    /// This is intentionally separate from archive ingestion so callers can
+    /// apply their seeding policy and only enroll content after publication
+    /// succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider registry cannot be updated.
+    pub fn record_local_availability(&mut self, node: &IrohNode) -> Result<usize> {
+        let hashes =
+            std::iter::once(self.manifest).chain(self.collection_manifest.entries.iter().map(|entry| entry.content_id));
+        let count = node.record_offline_import(hashes)?;
+        self.local_availability_count = count;
+        Ok(count)
+    }
 }
 
 /// Streams, verifies, and imports compressed CAR drop archives.
@@ -209,14 +234,22 @@ impl DropImporter {
 
     async fn ingest(&self, parsed: ParsedDrop, pool: Option<&ManagedPool>) -> Result<DropImportResult> {
         let manifest_hash = in_pool(pool, || Hash::new(&parsed.manifest_bytes));
-        let stored_manifest = self.blob_store.add_bytes(&parsed.manifest_bytes).await?;
-        if stored_manifest != manifest_hash {
-            return Err(SyncwebError::InvalidConfig(
-                "imported manifest hash does not match its content".to_owned(),
-            ));
+        if !self.blob_store.has(manifest_hash).await? {
+            let stored_manifest = self.blob_store.add_bytes(&parsed.manifest_bytes).await?;
+            if stored_manifest != manifest_hash {
+                return Err(SyncwebError::InvalidConfig(
+                    "imported manifest hash does not match its content".to_owned(),
+                ));
+            }
         }
 
+        let mut local_missing_block_count = 0_usize;
+        let mut local_reused_block_count = 0_usize;
         for block in &parsed.blocks {
+            if self.blob_store.has(block.hash).await? {
+                local_reused_block_count = local_reused_block_count.saturating_add(1);
+                continue;
+            }
             let stored = self.blob_store.add_file(&block.path).await?;
             if stored != block.hash {
                 return Err(SyncwebError::InvalidConfig(format!(
@@ -224,6 +257,7 @@ impl DropImporter {
                     block.hash, stored
                 )));
             }
+            local_missing_block_count = local_missing_block_count.saturating_add(1);
         }
 
         let collection_id = parsed.manifest.collection_id;
@@ -244,6 +278,9 @@ impl DropImporter {
             skipped_entry_count,
             block_count,
             imported_block_count,
+            local_missing_block_count,
+            local_reused_block_count,
+            local_availability_count: 0,
             namespace_id: None,
         })
     }
@@ -276,6 +313,7 @@ pub async fn import_archive(
         .publish(&result.collection_manifest, 1)
         .await?;
     result.namespace_id = Some(folder.namespace_id());
+    result.record_local_availability(node)?;
     Ok(result)
 }
 

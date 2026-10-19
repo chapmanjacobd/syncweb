@@ -39,6 +39,7 @@ pub mod parsing;
 pub mod pins;
 pub mod provider_inventory;
 pub mod provider_lease;
+pub mod replication;
 pub mod schedule;
 pub mod search;
 pub mod signature;
@@ -59,8 +60,13 @@ pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImport
 pub use folder::archive_verify::{
     DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
 };
+pub use pins::{PinClass, PinPolicy, PinRecord, classified_pin_name};
 pub use provider_inventory::{InventoryRange, PROVIDER_INVENTORY_VERSION, ProviderInventory};
 pub use provider_lease::{
     PROVIDER_LEASE_VERSION, ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
+};
+pub use replication::{
+    ProviderReservation, ProviderState, RepairPolicy, ReplicaContent, ReplicaScope, ReplicaStatus, ReplicaTarget,
+    ReplicationController, ReplicationPlan, ReplicationRequest,
 };
 pub use sync::{ActiveSession, cancel_session, is_active};

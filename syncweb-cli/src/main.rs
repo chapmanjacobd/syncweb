@@ -4579,18 +4579,29 @@ async fn handle_package_archive_import(
                 "{}",
                 serde_json::json!({
                     "status": "imported",
+                    "archive": archive,
+                    "verification": "verified",
                     "collection": result.collection_id.to_string(),
                     "version": result.version,
                     "manifest": result.manifest.to_string(),
                     "entries": result.imported_entry_count,
                     "skipped_entries": result.skipped_entry_count,
+                    "new_blocks": result.local_missing_block_count,
+                    "reused_blocks": result.local_reused_block_count,
+                    "local_availability": result.local_availability_count,
+                    "provider_lease": "pending",
                     "namespace": result.namespace_id.map(|id| id.to_string()),
                 })
             );
         } else {
             println!(
-                "imported: {} {} ({} entries)",
-                result.collection_id, result.version, result.imported_entry_count
+                "imported: {} {} ({} entries; {} new, {} reused blocks; {} locally available)",
+                result.collection_id,
+                result.version,
+                result.imported_entry_count,
+                result.local_missing_block_count,
+                result.local_reused_block_count,
+                result.local_availability_count,
             );
         }
         return Ok(());
@@ -4603,7 +4614,7 @@ async fn handle_package_archive_import(
 
     let node = open_node(data_dir).await?;
     let importer = DropImporter::new(node.blob_store().clone());
-    let result = importer.import_archive(&archive, options, None).await?;
+    let mut result = importer.import_archive(&archive, options, None).await?;
     let collection = result.collection_id;
     let version = result.version.clone();
     if packages
@@ -4643,6 +4654,7 @@ async fn handle_package_archive_import(
         .publish(&result.collection_manifest, 1)
         .await?;
     let namespace = folder.namespace_id();
+    result.record_local_availability(&node)?;
     node.stop().await?;
 
     if output_json {
@@ -4650,18 +4662,27 @@ async fn handle_package_archive_import(
             "{}",
             serde_json::json!({
                 "status": "imported",
+                "archive": archive,
+                "verification": "verified",
                 "collection": collection.to_string(),
                 "version": version,
                 "manifest": result.manifest.to_string(),
                 "entries": result.imported_entry_count,
                 "skipped_entries": result.skipped_entry_count,
+                "new_blocks": result.local_missing_block_count,
+                "reused_blocks": result.local_reused_block_count,
+                "local_availability": result.local_availability_count,
+                "provider_lease": "pending",
                 "namespace": namespace,
             })
         );
     } else {
         println!(
-            "imported: {collection} {version} ({} entries)",
-            result.imported_entry_count
+            "imported: {collection} {version} ({} entries; {} new, {} reused blocks; {} locally available)",
+            result.imported_entry_count,
+            result.local_missing_block_count,
+            result.local_reused_block_count,
+            result.local_availability_count,
         );
     }
     Ok(())

@@ -1,5 +1,7 @@
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
+use syncweb_core::sync::{TransferRequest, fetch_blob_requests};
+use tokio_util::sync::CancellationToken;
 
 use crate::test_utils::TestDirectory;
 
@@ -90,6 +92,41 @@ async fn test_content_pinning() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn test_classified_pin_gc_preserves_shared_content() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-services-test")?;
+    let node = test_node(&directory, "node", None).await?;
+    let temporary_hash = node.blob_store().add_bytes(b"temporary").await?;
+    let shared_hash = node.blob_store().add_bytes(b"shared").await?;
+
+    let temporary_name = node
+        .blob_store()
+        .pin_class(syncweb_core::PinClass::Temporary, "download", temporary_hash, Some(10))
+        .await?;
+    let shared_name = node
+        .blob_store()
+        .pin_class(syncweb_core::PinClass::Shared, "folder", shared_hash, None)
+        .await?;
+
+    let removed = node
+        .blob_store()
+        .gc_expired_pins(syncweb_core::PinPolicy::default(), 10)
+        .await?;
+    anyhow::ensure!(removed.iter().any(|pin| pin.name == temporary_name));
+    anyhow::ensure!(!node.blob_store().is_pinned(&temporary_name, temporary_hash).await?);
+    anyhow::ensure!(node.blob_store().is_pinned(&shared_name, shared_hash).await?);
+
+    let classified = node.blob_store().list_classified_pins().await?;
+    anyhow::ensure!(
+        classified
+            .iter()
+            .any(|pin| pin.hash == shared_hash && pin.class == syncweb_core::PinClass::Shared)
+    );
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_add_file() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;
@@ -130,6 +167,42 @@ async fn test_two_nodes_sync_blob() -> anyhow::Result<()> {
 
     second.blob_store().fetch(second.endpoint(), &ticket).await?;
     anyhow::ensure!(second.blob_store().get(hash).await? == b"shared blob".as_slice());
+
+    first.stop().await?;
+    second.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_segment_request_falls_back_to_whole_blob_peer() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-whole-blob-compat-test")?;
+    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let first = test_node(&directory, "first", Some(relay_map.clone())).await?;
+    let second = test_node(&directory, "second", Some(relay_map)).await?;
+    let payload = b"whole blob compatibility";
+    let hash = first.blob_store().add_bytes(payload).await?;
+
+    let request = TransferRequest::for_segment(hash, payload.len() as u64, 6, 4, vec![first.endpoint().addr()])?;
+    let report = fetch_blob_requests(
+        second.blob_store(),
+        second.endpoint(),
+        vec![request],
+        CancellationToken::new(),
+    )
+    .await?;
+
+    anyhow::ensure!(
+        report.completed == 1,
+        "whole-blob peer should satisfy the segment-shaped request"
+    );
+    anyhow::ensure!(
+        report.bytes == 4,
+        "scheduler report should retain the requested segment size"
+    );
+    anyhow::ensure!(
+        second.blob_store().get(hash).await? == payload.as_slice(),
+        "compatibility fallback must verify and store the complete blob"
+    );
 
     first.stop().await?;
     second.stop().await?;

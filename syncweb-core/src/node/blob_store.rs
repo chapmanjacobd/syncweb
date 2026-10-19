@@ -259,6 +259,66 @@ impl BlobStore {
         Ok(pins)
     }
 
+    /// Pin content with an explicit retention class and optional expiry.
+    ///
+    /// The returned name is stable and can be used to remove the pin later.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag cannot be written.
+    pub async fn pin_class(
+        &self,
+        class: crate::pins::PinClass,
+        scope: impl AsRef<str>,
+        hash: Hash,
+        expires_at: Option<u64>,
+    ) -> Result<String> {
+        let name = crate::pins::classified_pin_name(class, scope, hash, expires_at);
+        self.pin(&name, hash).await?;
+        Ok(name)
+    }
+
+    /// List pins belonging to one of the local retention classes.
+    ///
+    /// Unknown legacy tags are ignored so a cleanup pass can never remove an
+    /// unrelated application tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store cannot be queried.
+    pub async fn list_classified_pins(&self) -> Result<Vec<crate::pins::PinRecord>> {
+        Ok(self
+            .list_pins("")
+            .await?
+            .into_iter()
+            .filter_map(|(name, hash)| crate::pins::PinRecord::from_tag(name, hash))
+            .collect())
+    }
+
+    /// Remove expired temporary/cache pins and leave shared/protected pins
+    /// untouched. Unpinned blobs become eligible for the blob store's normal
+    /// garbage collector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pins cannot be listed or removed.
+    pub async fn gc_expired_pins(
+        &self,
+        policy: crate::pins::PinPolicy,
+        now: u64,
+    ) -> Result<Vec<crate::pins::PinRecord>> {
+        let pins = self.list_classified_pins().await?;
+        let expired = policy
+            .gc_candidates(&pins, now)
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        for pin in &expired {
+            self.unpin(&pin.name).await?;
+        }
+        Ok(expired)
+    }
+
     /// # Errors
     ///
     /// Returns an error if the blob cannot be fetched from the remote endpoint.

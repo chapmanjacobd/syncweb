@@ -1965,6 +1965,7 @@ impl IpcServer {
             .publish(&result.collection_manifest, 1)
             .await?;
         result.namespace_id = Some(folder.namespace_id());
+        result.record_local_availability(&context.node)?;
         Ok(result)
     }
 

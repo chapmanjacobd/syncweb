@@ -53,11 +53,25 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
         .import_archive(&archive, DropImportOptions::default(), None)
         .await?;
     ensure!(result.collection_manifest == manifest);
+    ensure!(result.local_missing_block_count == 1);
+    ensure!(result.local_reused_block_count == 0);
     ensure!(destination.blob_store().has(hash).await?);
 
     let target = directory.path().join("materialized");
     importer.materialize(&result, &target).await?;
     ensure!(fs::read(target.join("nested/file.txt"))? == content);
+
+    let mut repeated = importer
+        .import_archive(&archive, DropImportOptions::default(), None)
+        .await?;
+    ensure!(repeated.local_missing_block_count == 0);
+    ensure!(repeated.local_reused_block_count == 1);
+    ensure!(repeated.record_local_availability(&destination)? == 2);
+    ensure!(
+        destination
+            .provider_peer_snapshot(&hash)?
+            .is_some_and(|peers| peers.contains(&destination.endpoint().id()))
+    );
 
     source.stop().await?;
     destination.stop().await?;

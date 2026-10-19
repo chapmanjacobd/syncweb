@@ -71,6 +71,9 @@ impl PeerTracker {
     pub fn get_peers(&mut self, blob_hash: &Hash) -> Vec<PublicKey> {
         self.clock = self.clock.saturating_add(1);
         self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
+            if entry.last_seen.elapsed() > self.expiry {
+                return Vec::new();
+            }
             if self.strategy == EvictionStrategy::Lru {
                 entry.accessed_at = self.clock;
             }
@@ -80,7 +83,34 @@ impl PeerTracker {
 
     #[must_use]
     pub fn peer_count(&self, blob_hash: &Hash) -> usize {
-        self.entries.get(blob_hash).map_or(0, |entry| entry.peers.len())
+        self.entries.get(blob_hash).map_or(0, |entry| {
+            if entry.last_seen.elapsed() <= self.expiry {
+                entry.peers.len()
+            } else {
+                0
+            }
+        })
+    }
+
+    /// Return the currently fresh peers serving a blob, or `None` when the
+    /// registry has no fresh observation for the blob.
+    pub fn peer_snapshot(&mut self, blob_hash: &Hash) -> Option<Vec<PublicKey>> {
+        if !self.entries.contains_key(blob_hash) || !self.is_fresh(blob_hash) {
+            return None;
+        }
+        Some(self.get_peers(blob_hash))
+    }
+
+    /// Remove one peer's observation for a single blob after a failed fetch.
+    pub fn remove_blob_peer(&mut self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
+        let Some(entry) = self.entries.get_mut(blob_hash) else {
+            return false;
+        };
+        let removed = entry.peers.remove(node_id);
+        if entry.peers.is_empty() {
+            self.entries.remove(blob_hash);
+        }
+        removed
     }
 
     #[must_use]

@@ -1,15 +1,17 @@
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh_blobs::BlobsProtocol;
+use iroh_blobs::{Hash, ticket::BlobTicket};
 use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayManager;
+use crate::sync::{EvictionStrategy, PeerTracker};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::blob_store::BlobStore;
@@ -159,6 +161,9 @@ pub struct IrohNode {
     blob_store: BlobStore,
     docs_engine: DocsEngine,
     topic_tracker: TopicTracker,
+    /// Bounded, expiring observations of which peers successfully served
+    /// individual blobs.
+    provider_registry: Mutex<PeerTracker>,
     /// The Syncthing (BEP) relay manager, when `bep.enabled` is set. Keeps the
     /// registration loops and the custom transport's backend alive.
     relay: Option<RelayManager>,
@@ -329,6 +334,7 @@ impl IrohNode {
             blob_store,
             docs_engine,
             topic_tracker,
+            provider_registry: Mutex::new(PeerTracker::new(16_384, EvictionStrategy::Lru)),
             relay,
         })
     }
@@ -373,6 +379,79 @@ impl IrohNode {
     #[must_use]
     pub const fn topic_tracker(&self) -> &TopicTracker {
         &self.topic_tracker
+    }
+
+    /// Return the local provider observation registry.
+    #[must_use]
+    pub const fn provider_registry(&self) -> &Mutex<PeerTracker> {
+        &self.provider_registry
+    }
+
+    /// Fetch a blob from a discovered peer and update provider observations.
+    ///
+    /// Failed requests remove the peer's observation for this blob so stale
+    /// providers do not continue to influence selection.
+    pub async fn force_fetch_from_peer(&self, peer: &iroh::EndpointAddr, hash: Hash) -> Result<()> {
+        let result = self.blob_store.force_fetch_from_peer(&self.endpoint, peer, hash).await;
+        let mut registry = self
+            .provider_registry
+            .lock()
+            .expect("provider registry mutex should not be poisoned");
+        if result.is_ok() {
+            registry.record_peer(hash, peer.id);
+        } else {
+            registry.remove_blob_peer(&hash, &peer.id);
+        }
+        result
+    }
+
+    /// Fetch a blob through a provider ticket and update provider observations.
+    pub async fn force_fetch(&self, ticket: &BlobTicket) -> Result<()> {
+        let hash = ticket.hash();
+        let peer = ticket.addr().id;
+        let result = self.blob_store.force_fetch(&self.endpoint, ticket).await;
+        let mut registry = self
+            .provider_registry
+            .lock()
+            .expect("provider registry mutex should not be poisoned");
+        if result.is_ok() {
+            registry.record_peer(hash, peer);
+        } else {
+            registry.remove_blob_peer(&hash, &peer);
+        }
+        result
+    }
+
+    /// Fetch a blob through the first working provider ticket and pin it.
+    pub async fn fetch_blob_and_pin(&self, content_hash: Hash, tickets: &[BlobTicket]) -> Result<()> {
+        if !self.blob_store.has(content_hash).await? {
+            let candidates: Vec<BlobTicket> = tickets
+                .iter()
+                .filter(|ticket| ticket.hash() == content_hash)
+                .cloned()
+                .collect();
+            crate::node::blob_store::try_fetch_first_working(&candidates, |ticket| self.force_fetch(ticket)).await?;
+        }
+        let pin_name = crate::pins::download_pin(content_hash);
+        self.blob_store.pin(&pin_name, content_hash).await?;
+        Ok(())
+    }
+
+    /// Fetch a blob through a provider ticket and update provider observations.
+    pub async fn fetch_blob(&self, ticket: &BlobTicket) -> Result<()> {
+        let hash = ticket.hash();
+        let peer = ticket.addr().id;
+        let result = self.blob_store.fetch(&self.endpoint, ticket).await;
+        let mut registry = self
+            .provider_registry
+            .lock()
+            .expect("provider registry mutex should not be poisoned");
+        if result.is_ok() {
+            registry.record_peer(hash, peer);
+        } else {
+            registry.remove_blob_peer(&hash, &peer);
+        }
+        result
     }
 
     #[must_use]

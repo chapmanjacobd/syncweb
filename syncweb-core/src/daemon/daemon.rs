@@ -803,13 +803,7 @@ impl Daemon {
                 .unwrap_or_default();
             let mut fetched = false;
             for peer in peers {
-                if self
-                    .node
-                    .blob_store()
-                    .force_fetch_from_peer(self.node.endpoint(), &peer, item.hash)
-                    .await
-                    .is_ok()
-                {
+                if self.node.force_fetch_from_peer(&peer, item.hash).await.is_ok() {
                     fetched = true;
                     break;
                 }

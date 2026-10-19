@@ -572,6 +572,9 @@ pub struct BlobPeerAvailability {
     /// Number of peers observed serving the blob (point-in-time snapshot).
     #[serde(default)]
     pub peer_count: usize,
+    /// Whether `peer_count` comes from a fresh provider observation.
+    #[serde(default)]
+    pub peer_count_known: bool,
     /// Device IDs of the peers serving this blob.
     #[serde(default)]
     pub peers: Vec<String>,
@@ -1902,11 +1905,7 @@ impl IpcServer {
                     .map_err(|error| SyncwebError::operation("invalid blob ticket", error))
             })
             .collect::<Result<Vec<_>>>()?;
-        context
-            .node
-            .blob_store()
-            .fetch_and_pin(context.node.endpoint(), content_id, &ticket_list)
-            .await?;
+        context.node.fetch_blob_and_pin(content_id, &ticket_list).await?;
         if let Some(path) = export_path {
             if let Some(parent) = path.parent() {
                 tokio::fs::create_dir_all(parent).await?;
@@ -2618,8 +2617,6 @@ impl IpcServer {
             }
         }
 
-        // Per-blob counts reuse the empty `EnrichSort` map path: a blob's peers
-        // are not tracked per-blob yet, so `peer_count` is a point-in-time 0.
         let Ok(entries) = context.node.docs_engine().list_latest(folder.doc()).await else {
             return IpcResponse::PeerAvailability(Box::new(PeerAvailabilityReport {
                 folder: namespace_str,
@@ -2636,7 +2633,19 @@ impl IpcServer {
                 continue;
             };
             let hash = entry.content_hash();
-            let peer_count = 0;
+            let provider_peers = context
+                .node
+                .provider_registry()
+                .lock()
+                .expect("provider registry mutex should not be poisoned")
+                .peer_snapshot(&hash);
+            let peer_count_known = provider_peers.is_some();
+            let provider_peers = provider_peers.unwrap_or_default();
+            let peer_count = provider_peers.len();
+            let peer_ids = provider_peers
+                .iter()
+                .map(|peer| crate::node::identity::DeviceId::from_node_id(*peer).to_syncthing())
+                .collect();
             let pct_seeded = if peers.is_empty() {
                 0.0
             } else {
@@ -2648,7 +2657,8 @@ impl IpcServer {
                 path,
                 hash: hash.to_string(),
                 peer_count,
-                peers: Vec::new(),
+                peer_count_known,
+                peers: peer_ids,
                 pct_seeded,
             });
         }
@@ -2752,16 +2762,12 @@ impl IpcServer {
                 .map(|(_, ticket)| ticket.clone())
                 .collect();
             let repaired = crate::node::blob_store::try_fetch_first_working(&candidate_tickets, |ticket| {
-                context.node.blob_store().force_fetch(context.node.endpoint(), ticket)
+                context.node.force_fetch(ticket)
             })
             .await
             .is_ok()
                 || crate::node::blob_store::try_fetch_first_working(&namespace_peers, |peer| async {
-                    context
-                        .node
-                        .blob_store()
-                        .force_fetch_from_peer(context.node.endpoint(), peer, hash)
-                        .await
+                    context.node.force_fetch_from_peer(peer, hash).await
                 })
                 .await
                 .is_ok();
@@ -3476,11 +3482,7 @@ impl IpcServer {
                 .parse::<iroh_blobs::ticket::BlobTicket>()
                 .map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
             if !context.node.blob_store().has(blob_ticket.hash()).await? {
-                context
-                    .node
-                    .blob_store()
-                    .fetch(context.node.endpoint(), &blob_ticket)
-                    .await?;
+                context.node.fetch_blob(&blob_ticket).await?;
             }
             let manifest = CollectionManifest::from_bytes(context.node.blob_store().get(blob_ticket.hash()).await?)?;
             if manifest.blob_id()? != blob_ticket.hash() {
@@ -3499,11 +3501,7 @@ impl IpcServer {
                 .map_err(|error| SyncwebError::InvalidTicket(error.to_string()))?;
             let blob_ticket = crate::node::blob_store::raw_blob_ticket(iroh::EndpointAddr::new(peer_id), blob_hash);
             if !context.node.blob_store().has(blob_hash).await? {
-                context
-                    .node
-                    .blob_store()
-                    .fetch(context.node.endpoint(), &blob_ticket)
-                    .await?;
+                context.node.fetch_blob(&blob_ticket).await?;
             }
             return CollectionManifest::from_bytes(context.node.blob_store().get(blob_hash).await?);
         }

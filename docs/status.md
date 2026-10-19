@@ -13,7 +13,7 @@ planned must not be presented as a default guarantee.
 | Networks | Network creation, invitations, joining, membership persistence, folder membership, owner checks, kick/leave behavior, and signed membership documents. |
 | Connectivity | Iroh relay-backed local scenarios, blob transfer, daemon-to-daemon sync, and the Syncthing relay protocol through an in-process mock relay. |
 | Daemon and CLI | Daemon start/stop/reload, IPC routing, watched-folder sync, subscriptions, transfer operations, and command-level workflow coverage. |
-| Health and status | `status` combines daemon, folder, device, network, and durable-transfer state. `status --json` keeps those sections in one stable object, including when the daemon is stopped. |
+| Health and status | `status` combines daemon, folder, device, network, and durable-transfer state. `status --json` keeps those sections in one stable object, including when the daemon is stopped. `network peers` and `stats seeding` report bounded, expiring per-blob provider observations and distinguish unknown counts. |
 | Content operations | Lazy fetching, partial-fetch policy tests, archive/package lifecycle tests, indexing, search, filtering, sorting, statistics, snapshots, and integrity verification. |
 | JSON automation | Global `--json` is supported by the command handlers; list results use named object envelopes, and `stats network --follow` emits documented NDJSON records. |
 | Package distribution | The common flow is `package add`/`bump` -> `package publish` -> `package info` or `package install` -> `package upgrade`; archive export/import remains available for offline transfer. |

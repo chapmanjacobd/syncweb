@@ -30,6 +30,7 @@ mod blob_store_test;
 mod collection_publish_test;
 mod collection_test;
 mod config_test;
+mod conflict_test;
 mod daemon_archive_test;
 mod daemon_integration_test;
 mod docs_engine_test;

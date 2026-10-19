@@ -71,9 +71,6 @@ successful transfers, explicit announcements, and offline imports.
 - [ ] Wire successful and failed blob/segment requests into the registry.
 - [ ] Add authenticated publication and validation rules for leases; reject
   leases outside the local community or folder scope.
-- [ ] Replace hard-coded zero peer counts in partial-fetch and IPC availability
-  reporting with registry-backed estimates, including an explicit unknown
-  state.
 - [ ] Define expiry, negative-cache, and partition behavior so stale data does
   not cause repeated connection storms.
 

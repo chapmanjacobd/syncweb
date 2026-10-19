@@ -387,8 +387,7 @@ pub async fn fetch_and_pin_blob(
     content_hash: Hash,
     tickets: &[BlobTicket],
 ) -> Result<()> {
-    node.blob_store()
-        .fetch_and_pin(node.endpoint(), content_hash, tickets)
+    node.fetch_blob_and_pin(content_hash, tickets)
         .await
         .map_err(anyhow::Error::from)
 }

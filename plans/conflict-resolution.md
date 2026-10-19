@@ -183,7 +183,6 @@ re-import guard exists.
 - Integration: two nodes edit the same text file offline, re-import and sync,
   then materialize; assert winner at the original path and either `.diff` or
   `.conflict.<hash>` exists.
-- Integration: binary divergence writes a full conflict copy.
 - Integration (Phase 2): conflict is materialized automatically on
   `InsertRemote`, and the watcher does not re-stamp it as a new local edit
   (no error/retry loop, stable hashes after a settle period).

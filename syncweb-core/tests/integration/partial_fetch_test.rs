@@ -277,6 +277,16 @@ async fn test_metadata_only_join_keeps_blobs_remote_then_fetches() -> anyhow::Re
         node_b.blob_store().get(original_hash).await? == b"content_a".as_slice(),
         "fetched content should match"
     );
+    let observed_peers = node_b
+        .provider_registry()
+        .lock()
+        .expect("provider registry mutex should not be poisoned")
+        .peer_snapshot(&original_hash)
+        .context("successful fetch should create a provider observation")?;
+    anyhow::ensure!(
+        observed_peers.contains(&node_a.endpoint().id()),
+        "successful fetch should record the serving peer"
+    );
 
     // A second pass has nothing left to fetch.
     let again = fetch_selected_content(&node_b, &folder_b, &FetchStrategy::All).await?;

@@ -1497,7 +1497,7 @@ async fn preview_download(ctx: &CliContext<'_>, command: &crate::cli::commands::
     }
     let candidates: Vec<FetchCandidate> = rows
         .iter()
-        .map(|row| FetchCandidate::new(&row.path, row.hash, row.size, row.peers.unwrap_or(0), false))
+        .map(|row| FetchCandidate::with_peer_state(&row.path, row.hash, row.size, row.peers, false))
         .collect();
     let strategy = if command.min_peers.is_some()
         || command.max_peers.is_some()
@@ -2337,7 +2337,7 @@ async fn try_repair(
             if *ticket_hash != hash {
                 continue;
             }
-            match node.blob_store().force_fetch(node.endpoint(), ticket).await {
+            match node.force_fetch(ticket).await {
                 Ok(()) => {
                     repaired = true;
                     break;
@@ -2360,11 +2360,7 @@ async fn try_repair(
         // Try namespace peers
         let mut any_error = None;
         for peer in &namespace_peers {
-            match node
-                .blob_store()
-                .force_fetch_from_peer(node.endpoint(), peer, hash)
-                .await
-            {
+            match node.force_fetch_from_peer(peer, hash).await {
                 Ok(()) => {
                     repaired = true;
                     break;
@@ -2689,7 +2685,13 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
             let Ok(hash) = blob.hash.parse::<iroh_blobs::Hash>() else {
                 continue;
             };
-            candidates.push(FetchCandidate::new(&blob.path, hash, 0, blob.peer_count, false));
+            candidates.push(FetchCandidate::with_peer_state(
+                &blob.path,
+                hash,
+                0,
+                blob.peer_count_known.then_some(blob.peer_count),
+                false,
+            ));
         }
         let health = syncweb_core::sync::HealthReport::from_candidates(&candidates, 1);
         render_seeding(&report.folder, &health, output_json);
@@ -2706,7 +2708,18 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+        let peers = node
+            .provider_registry()
+            .lock()
+            .expect("provider registry mutex should not be poisoned")
+            .peer_snapshot(&hash);
+        candidates.push(FetchCandidate::with_peer_state(
+            path,
+            hash,
+            entry.content_len(),
+            peers.map(|peers| peers.len()),
+            local,
+        ));
     }
     let peers_per_hash: std::collections::HashMap<iroh_blobs::Hash, usize> = std::collections::HashMap::new();
     let health = syncweb_core::sync::HealthReport::from_candidates_with_peers_per_hash(&candidates, &peers_per_hash, 1);
@@ -2726,6 +2739,19 @@ fn render_seeding(folder: &str, health: &syncweb_core::sync::HealthReport, outpu
                 "well_seeded": health.well_seeded,
                 "under_seeded": health.under_seeded,
                 "unseeded": health.unseeded,
+                "least_seeded": health
+                    .least_seeded
+                    .iter()
+                    .take(20)
+                    .map(|blob| {
+                        serde_json::json!({
+                            "path": blob.path.display().to_string(),
+                            "hash": blob.hash.to_string(),
+                            "peer_count": blob.peer_count,
+                            "peer_count_known": blob.peer_count_known,
+                        })
+                    })
+                    .collect::<Vec<_>>(),
             })
         );
     } else {
@@ -2742,7 +2768,11 @@ fn render_seeding(folder: &str, health: &syncweb_core::sync::HealthReport, outpu
                 table.add_row([
                     blob.path.display().to_string(),
                     blob.hash.to_string(),
-                    blob.peer_count.to_string(),
+                    if blob.peer_count_known {
+                        blob.peer_count.to_string()
+                    } else {
+                        "?".to_owned()
+                    },
                 ]);
             }
             println!("{table}");
@@ -4141,7 +4171,7 @@ async fn handle_package_info(
     let collection_manifest = if let Some(ticket_text) = ticket_value {
         let blob_ticket = ticket_text.parse::<iroh_blobs::ticket::BlobTicket>()?;
         if !node.blob_store().has(blob_ticket.hash()).await? {
-            node.blob_store().fetch(node.endpoint(), &blob_ticket).await?;
+            node.fetch_blob(&blob_ticket).await?;
         }
         let manifest = CollectionManifest::from_bytes(node.blob_store().get(blob_ticket.hash()).await?)?;
         if manifest.blob_id()? != blob_ticket.hash() {
@@ -4154,7 +4184,7 @@ async fn handle_package_info(
         let peer_id = node_id_str.parse::<iroh::PublicKey>()?;
         let ticket = syncweb_core::node::blob_store::raw_blob_ticket(iroh::EndpointAddr::new(peer_id), blob_hash);
         if !node.blob_store().has(blob_hash).await? {
-            node.blob_store().fetch(node.endpoint(), &ticket).await?;
+            node.fetch_blob(&ticket).await?;
         }
         CollectionManifest::from_bytes(node.blob_store().get(blob_hash).await?)?
     } else {
@@ -5959,13 +5989,18 @@ async fn attach_peer_counts(client: Option<&IpcClient>, namespace: &str, rows: &
         return Ok(());
     };
     let report = daemon.peer_availability(namespace.to_string()).await?;
-    let counts: std::collections::HashMap<String, usize> = report
+    let counts: std::collections::HashMap<String, Option<usize>> = report
         .per_blob
         .into_iter()
-        .map(|blob| (normalize_logical_path(&blob.path), blob.peer_count))
+        .map(|blob| {
+            (
+                normalize_logical_path(&blob.path),
+                blob.peer_count_known.then_some(blob.peer_count),
+            )
+        })
         .collect();
     for row in rows.iter_mut() {
-        row.peers = counts.get(&row.path).copied();
+        row.peers = counts.get(&row.path).copied().flatten();
     }
     Ok(())
 }

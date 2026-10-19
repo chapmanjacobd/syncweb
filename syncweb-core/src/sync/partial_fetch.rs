@@ -25,7 +25,18 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+        let peers = node
+            .provider_registry()
+            .lock()
+            .expect("provider registry mutex should not be poisoned")
+            .peer_snapshot(&hash);
+        candidates.push(FetchCandidate::with_peer_state(
+            path,
+            hash,
+            entry.content_len(),
+            peers.map(|peers| peers.len()),
+            local,
+        ));
     }
     let mut selected = strategy.select(&candidates);
     // Complete short blobs first so a large transfer does not delay the first
@@ -47,12 +58,7 @@ pub async fn fetch_selected_content(node: &IrohNode, folder: &SyncwebFolder, str
             continue;
         }
         for peer in &peers {
-            if node
-                .blob_store()
-                .force_fetch_from_peer(node.endpoint(), peer, candidate.hash)
-                .await
-                .is_ok()
-            {
+            if node.force_fetch_from_peer(peer, candidate.hash).await.is_ok() {
                 bytes = bytes.saturating_add(candidate.size);
                 break;
             }
@@ -82,7 +88,18 @@ pub async fn materialize_selected_content(
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        candidates.push(FetchCandidate::new(path, hash, entry.content_len(), 0, local));
+        let peers = node
+            .provider_registry()
+            .lock()
+            .expect("provider registry mutex should not be poisoned")
+            .peer_snapshot(&hash);
+        candidates.push(FetchCandidate::with_peer_state(
+            path,
+            hash,
+            entry.content_len(),
+            peers.map(|peers| peers.len()),
+            local,
+        ));
     }
     let selected = strategy.select(&candidates);
     let root = absolute_base(mount_root)?;
@@ -145,17 +162,31 @@ pub struct FetchCandidate {
     pub hash: Hash,
     pub size: u64,
     pub peer_count: usize,
+    /// Whether `peer_count` comes from a fresh provider observation.
+    pub peer_count_known: bool,
     pub local: bool,
 }
 
 impl FetchCandidate {
     #[must_use]
     pub fn new(path: impl Into<PathBuf>, hash: Hash, size: u64, peer_count: usize, local: bool) -> Self {
+        Self::with_peer_state(path, hash, size, Some(peer_count), local)
+    }
+
+    #[must_use]
+    pub fn with_peer_state(
+        path: impl Into<PathBuf>,
+        hash: Hash,
+        size: u64,
+        peer_count: Option<usize>,
+        local: bool,
+    ) -> Self {
         Self {
             path: path.into(),
             hash,
             size,
-            peer_count,
+            peer_count: peer_count.unwrap_or(0),
+            peer_count_known: peer_count.is_some(),
             local,
         }
     }
@@ -261,8 +292,12 @@ impl FetchFilter {
                 .any(|path| candidate.path == *path || candidate.path.starts_with(path))
         }) && self.min_size.is_none_or(|size| candidate.size >= size)
             && self.max_size.is_none_or(|size| candidate.size <= size)
-            && self.min_peers.is_none_or(|peers| candidate.peer_count >= peers)
-            && self.max_peers.is_none_or(|peers| candidate.peer_count <= peers)
+            && self
+                .min_peers
+                .is_none_or(|peers| candidate.peer_count_known && candidate.peer_count >= peers)
+            && self
+                .max_peers
+                .is_none_or(|peers| !candidate.peer_count_known || candidate.peer_count <= peers)
     }
 }
 
@@ -298,6 +333,7 @@ pub struct BlobHealth {
     pub hash: Hash,
     pub size: u64,
     pub peer_count: usize,
+    pub peer_count_known: bool,
     pub local: bool,
 }
 
@@ -323,6 +359,7 @@ impl HealthReport {
                 hash: candidate.hash,
                 size: candidate.size,
                 peer_count: candidate.peer_count,
+                peer_count_known: candidate.peer_count_known,
                 local: candidate.local,
             })
             .collect::<Vec<_>>();
@@ -356,8 +393,14 @@ impl HealthReport {
         let enriched: Vec<FetchCandidate> = candidates
             .iter()
             .map(|c| {
-                let peers = peers_per_hash.get(&c.hash).copied().unwrap_or(c.peer_count);
-                FetchCandidate::new(&c.path, c.hash, c.size, peers, c.local)
+                let peers = peers_per_hash.get(&c.hash).copied();
+                FetchCandidate::with_peer_state(
+                    &c.path,
+                    c.hash,
+                    c.size,
+                    peers.or_else(|| c.peer_count_known.then_some(c.peer_count)),
+                    c.local,
+                )
             })
             .collect();
         Self::from_candidates(&enriched, well_seeded_threshold)

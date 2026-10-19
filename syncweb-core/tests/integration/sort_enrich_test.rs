@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Result, ensure};
+use iroh::SecretKey;
 use syncweb_core::{
     daemon::{DaemonHandle, DaemonState, DaemonStatus, IpcCommand, IpcRequest, IpcResponse, IpcServer, ManagedPool},
     folder::{FolderManager, SyncMode},
@@ -137,6 +138,18 @@ async fn daemon_peer_availability_returns_report_shape() -> Result<()> {
 
     folder.set_blob("a.txt", b"content_a").await?;
     folder.set_blob("b.txt", b"content_b").await?;
+    let a_hash = folder
+        .content_entries()
+        .await?
+        .into_iter()
+        .find(|entry| entry.key() == b"a.txt")
+        .map(|entry| entry.content_hash())
+        .expect("a.txt should be present");
+    let observed_peer = SecretKey::generate().public();
+    node.provider_registry()
+        .lock()
+        .expect("provider registry mutex should not be poisoned")
+        .record_peer(a_hash, observed_peer);
 
     let handle = DaemonHandle::new(DaemonState::new(
         std::process::id(),
@@ -184,7 +197,20 @@ async fn daemon_peer_availability_returns_report_shape() -> Result<()> {
         "per_blob should list both blobs: {paths:?}"
     );
     for blob in &report.per_blob {
-        ensure!(blob.peer_count == 0, "peer count should be 0: {blob:?}");
+        if blob.path == "a.txt" {
+            ensure!(blob.peer_count == 1, "recorded peer should be reported: {blob:?}");
+            ensure!(blob.peer_count_known, "recorded peer count should be known: {blob:?}");
+            ensure!(blob.peers.len() == 1, "recorded peer ID should be reported: {blob:?}");
+        } else {
+            ensure!(
+                !blob.peer_count_known,
+                "unobserved peer count should be unknown: {blob:?}"
+            );
+            ensure!(
+                blob.peer_count == 0,
+                "unknown peer count should use zero for compatibility: {blob:?}"
+            );
+        }
         ensure!(blob.pct_seeded >= 0.0, "pct_seeded should be >= 0: {blob:?}");
     }
 

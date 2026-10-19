@@ -18,7 +18,7 @@ planned must not be presented as a default guarantee.
 | JSON automation | Global `--json` is supported by the command handlers; list results use named object envelopes, and `stats network --follow` emits documented NDJSON records. |
 | Package distribution | The common flow is `package add`/`bump` -> `package publish` -> `package info` or `package install` -> `package upgrade`; archive export/import remains available for offline transfer. |
 | Shared filters | `ls`, `find`, `sort`, `download`, and `verify` share the `--ext`, `--size`, `--depth`, `--type`, `--modified-*`, and `--remote-only` vocabulary, with compatibility aliases for older spellings. |
-| Conflict safety | Last-writer-wins materialization keeps losing variants as conflict copies; the CRDT remains the source of truth. |
+| Conflict safety | Last-writer-wins materialization keeps compact text diffs when beneficial and full conflict copies otherwise; the CRDT remains the source of truth. |
 
 The named network gate is deliberately narrower than the full suite:
 
@@ -38,9 +38,8 @@ make test-network
 
 ## Planned or explicitly incomplete
 
-- Text `.diff` conflict output and a dedicated conflict-resolution CLI are not
-  implemented; current conflict handling uses deterministic conflict copies.
-  Remaining work is tracked in [plans/conflict-resolution.md](../plans/conflict-resolution.md).
+- A dedicated conflict-resolution CLI is not implemented; remaining work is
+  tracked in [plans/conflict-resolution.md](../plans/conflict-resolution.md).
 - The daemon is still manually managed: `status` reports health and progress,
   but it does not auto-start or supervise the daemon. Follow-up work is
   tracked in [plans/ux-and-operations.md](../plans/ux-and-operations.md).

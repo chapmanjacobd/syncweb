@@ -1,11 +1,11 @@
 # Conflict Resolution Plan
 
-Status: partially implemented (2026-10-06). Option B/C Phase 1 (LWW +
-conflict copies at materialize time) plus a guarded version of Option D
-(daemon auto-materialization) are now in place; the text `.diff`
-optimization of Option C and the `syncweb conflicts` CLI are not. This
-document surveys the design space, compares the options, and records the
-recommended phased approach and what shipped.
+Status: partially implemented (2026-10-18). Option B/C Phase 1 (LWW +
+conflict copies and bounded text diffs at materialize time) plus a guarded
+version of Option D (daemon auto-materialization) are now in place; the
+`syncweb conflicts` CLI is not. This document surveys the design space,
+compares the options, and records the recommended phased approach and what
+shipped.
 
 ## 1. Problem
 
@@ -39,8 +39,8 @@ winner (`bob text version`) at `note.txt` and kept the loser as
 both sides.
 
 The intended UX is sketched in `../docs/offline-conflict.md`; this implementation
-covers the "full file saved" fallback (Option B) and leaves the text `.diff`
-optimization (Option C) and `syncweb conflicts` for a follow-up.
+covers bounded text `.diff` output (Option C), the "full file saved" fallback
+(Option B), and leaves `syncweb conflicts` for a follow-up.
 
 ## 2. Requirements and constraints
 
@@ -78,8 +78,8 @@ the canonical path, and write each loser as
 
 ### Option C — LWW + diff-or-copy (the documented design)
 
-Same as B, but if both variants decode as UTF-8 text and the unified diff is
-smaller than the losing file, write `<stem>.diff` instead of a full conflict
+Same as B, but if both variants decode as bounded UTF-8 text and the unified
+diff is smaller than the winner, write `<stem>.diff` instead of a full conflict
 copy. Otherwise fall back to a full conflict copy.
 
 - Pros: excellent for text (code, docs, markdown); low disk overhead; matches
@@ -139,8 +139,7 @@ Ship Option C in two phases, deferring D and F:
      `single_latest_per_key()` view stays for normal reads).
    - Add a `Conflict`/`ConflictResolution` type (as sketched in
      `../docs/offline-conflict.md`): winner = max `timestamp()`, tie broken by
-     `author()`; loser written as `.conflict.<short-hash>` or, when both decode
-     as text and the diff is smaller, `<stem>.diff`.
+     `author()`; loser written as `.conflict.<short-hash>`.
    - Apply this in `materialize_selected_content` and the daemon
      `materialize_folder` paths, then in `download`.
    - Add `syncweb conflicts` (list/show) so conflicts are visible without
@@ -177,15 +176,14 @@ re-import guard exists.
   in-memory hash set already used to skip already-processed entries.
 - CLI: `conflicts` subcommand + JSON envelope; folder status field
   `conflicts: N`.
-- Naming rules follow `../docs/offline-conflict.md`: `<stem>.diff` when the diff
-  is smaller than the winner, otherwise
+- Naming rules follow `../docs/offline-conflict.md`: `<stem>.diff` when the
+  bounded text diff is smaller than the winner, otherwise
   `<stem>.conflict.<short-hash>.<ext>`; the winner always keeps the original
   path.
 
 ## 7. Test plan
 
 - Unit: variant grouping / winner selection (timestamp, tie-break by author).
-- Unit: diff-vs-copy decision for text and binary inputs.
 - Integration: two nodes edit the same text file offline, re-import and sync,
   then materialize; assert winner at the original path and either `.diff` or
   `.conflict.<hash>` exists.
@@ -201,6 +199,5 @@ re-import guard exists.
   arbitrary; consider a stable hash tie-break).
 - Whether to keep conflict copies indefinitely or garbage-collect them once the
   user acknowledges (ties into `conflicts resolve`).
-- Size limits for the text diff (avoid loading two 100 MB "text" files).
 - Interaction with `--metadata-only` folders (no local bytes → keep conflicts
   doc-level only).

@@ -14,7 +14,9 @@ pub mod sessions;
 pub mod subscribe;
 
 pub use actor::{Actor, ActorHandle, ActorPanic};
-pub use conflict::{MaterializeOutcome, MaterializeSummary, conflict_path, materialize_folder_content, select_winner};
+pub use conflict::{
+    MaterializeOutcome, MaterializeSummary, conflict_path, diff_path, materialize_folder_content, select_winner,
+};
 pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};
 pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};

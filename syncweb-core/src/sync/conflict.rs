@@ -8,8 +8,9 @@
 //! - The winner (greatest `timestamp()`, ties broken deterministically by
 //!   author) always keeps the original path — matching the `single_latest_per_key`
 //!   collapsed view used everywhere else.
-//! - Each loser is written as `<path>.conflict.<short-hash>`, so no version is
-//!   ever lost on disk.
+//! - A single text loser gets a compact `<path>.diff` when that diff is smaller
+//!   than the winner; otherwise each loser is written as
+//!   `<path>.conflict.<short-hash>`, so no version is ever lost on disk.
 //!
 //! `receiveonly` folders materialize only the winner; a read-only replica must
 //! never resolve a conflict by writing locally.
@@ -17,6 +18,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    str,
 };
 
 use iroh_blobs::Hash;
@@ -28,13 +30,17 @@ use crate::{
     node::iroh_node::IrohNode,
 };
 
+const MAX_TEXT_DIFF_BYTES: usize = 1_048_576;
+const MAX_TEXT_DIFF_LINES: usize = 2_048;
+const DIFF_CONTEXT_LINES: usize = 3;
+
 /// Outcome of one materialization pass over a folder.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct MaterializeSummary {
     /// Distinct keys whose winner was written to the mount root.
     pub materialized: usize,
-    /// Loser variants written as `<path>.conflict.<short-hash>`.
+    /// Loser variants written as a diff or `<path>.conflict.<short-hash>`.
     pub conflicts: usize,
     /// Keys whose winner blob is not local yet (skipped, retried later).
     pub pending: usize,
@@ -47,7 +53,7 @@ pub struct MaterializeSummary {
 pub struct MaterializeOutcome {
     /// Aggregate counters from the pass.
     pub summary: MaterializeSummary,
-    /// Absolute paths that were written (both winners and conflict copies).
+    /// Absolute paths that were written (both winners and conflict artifacts).
     pub written: Vec<PathBuf>,
 }
 
@@ -84,6 +90,12 @@ pub fn conflict_path(path: &Path, hash: Hash) -> PathBuf {
     PathBuf::from(format!("{}.conflict.{short}", path.to_string_lossy()))
 }
 
+/// Path for a compact text diff: `<path>.diff`.
+#[must_use]
+pub fn diff_path(path: &Path) -> PathBuf {
+    PathBuf::from(format!("{}.diff", path.to_string_lossy()))
+}
+
 /// Export one blob to `destination` when the blob is local and the file is not
 /// already up to date. Returns whether a file was written.
 async fn export_if_different(node: &IrohNode, hash: Hash, expected_size: u64, destination: &Path) -> Result<bool> {
@@ -108,12 +120,246 @@ async fn export_if_different(node: &IrohNode, hash: Hash, expected_size: u64, de
     Ok(true)
 }
 
+async fn write_if_different(contents: &[u8], destination: &Path) -> Result<bool> {
+    match tokio::fs::read(destination).await {
+        Ok(existing) if existing == contents => return Ok(false),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(SyncwebError::operation("failed to read existing conflict diff", error));
+        }
+    }
+    if let Some(parent) = destination.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to create conflict diff directory", error))?;
+    }
+    tokio::fs::write(destination, contents)
+        .await
+        .map_err(|error| SyncwebError::operation("failed to materialize conflict diff", error))?;
+    Ok(true)
+}
+
+#[derive(Clone, Copy)]
+enum DiffLine<'a> {
+    Equal(&'a str),
+    Delete(&'a str),
+    Insert(&'a str),
+}
+
+fn line_diff<'a>(left: &[&'a str], right: &[&'a str]) -> Option<Vec<DiffLine<'a>>> {
+    let width = right.len().checked_add(1)?;
+    let height = left.len().checked_add(1)?;
+    let cell_count = width.checked_mul(height)?;
+    let mut lcs = vec![0_usize; cell_count];
+    for left_index in (0..left.len()).rev() {
+        for right_index in (0..right.len()).rev() {
+            let current = left_index.saturating_mul(width).saturating_add(right_index);
+            let next_left = left_index
+                .saturating_add(1)
+                .saturating_mul(width)
+                .saturating_add(right_index);
+            let next_right = left_index
+                .saturating_mul(width)
+                .saturating_add(right_index.saturating_add(1));
+            let diagonal = left_index
+                .saturating_add(1)
+                .saturating_mul(width)
+                .saturating_add(right_index.saturating_add(1));
+            let left_line = left.get(left_index)?;
+            let right_line = right.get(right_index)?;
+            let value = if left_line == right_line {
+                lcs.get(diagonal)?.saturating_add(1)
+            } else {
+                (*lcs.get(next_left)?).max(*lcs.get(next_right)?)
+            };
+            *lcs.get_mut(current)? = value;
+        }
+    }
+
+    let mut result = Vec::with_capacity(left.len().saturating_add(right.len()));
+    let (mut left_index, mut right_index) = (0_usize, 0_usize);
+    while left_index < left.len() && right_index < right.len() {
+        let left_line = left.get(left_index)?;
+        let right_line = right.get(right_index)?;
+        if left_line == right_line {
+            result.push(DiffLine::Equal(left_line));
+            left_index = left_index.saturating_add(1);
+            right_index = right_index.saturating_add(1);
+        } else {
+            let next_left = left_index
+                .saturating_add(1)
+                .saturating_mul(width)
+                .saturating_add(right_index);
+            let next_right = left_index
+                .saturating_mul(width)
+                .saturating_add(right_index.saturating_add(1));
+            if lcs.get(next_left)? >= lcs.get(next_right)? {
+                result.push(DiffLine::Delete(left_line));
+                left_index = left_index.saturating_add(1);
+            } else {
+                result.push(DiffLine::Insert(right_line));
+                right_index = right_index.saturating_add(1);
+            }
+        }
+    }
+    while left_index < left.len() {
+        result.push(DiffLine::Delete(left.get(left_index)?));
+        left_index = left_index.saturating_add(1);
+    }
+    while right_index < right.len() {
+        result.push(DiffLine::Insert(right.get(right_index)?));
+        right_index = right_index.saturating_add(1);
+    }
+    Some(result)
+}
+
+fn append_diff_line(output: &mut String, prefix: char, line: &str) {
+    output.push(prefix);
+    output.push_str(line);
+    if !line.ends_with('\n') {
+        output.push('\n');
+    }
+}
+
+fn build_text_diff(winner_bytes: &[u8], loser_bytes: &[u8]) -> Option<Vec<u8>> {
+    if winner_bytes.len() > MAX_TEXT_DIFF_BYTES || loser_bytes.len() > MAX_TEXT_DIFF_BYTES {
+        return None;
+    }
+    let winner_text = str::from_utf8(winner_bytes).ok()?;
+    let loser_text = str::from_utf8(loser_bytes).ok()?;
+    let winner_lines: Vec<_> = winner_text.split_inclusive('\n').collect();
+    let loser_lines: Vec<_> = loser_text.split_inclusive('\n').collect();
+    if winner_lines.len() > MAX_TEXT_DIFF_LINES || loser_lines.len() > MAX_TEXT_DIFF_LINES {
+        return None;
+    }
+    let operations = line_diff(&winner_lines, &loser_lines)?;
+    let first_change = operations.iter().position(|line| !matches!(line, DiffLine::Equal(_)))?;
+    let last_change = operations
+        .iter()
+        .rposition(|line| !matches!(line, DiffLine::Equal(_)))?;
+    let start = first_change.saturating_sub(DIFF_CONTEXT_LINES);
+    let end = last_change
+        .saturating_add(DIFF_CONTEXT_LINES.saturating_add(1))
+        .min(operations.len());
+    let before = operations.get(..start)?;
+    let hunk = operations.get(start..end)?;
+
+    let mut old_before = 0_usize;
+    let mut new_before = 0_usize;
+    for operation in before {
+        match operation {
+            DiffLine::Equal(_) => {
+                old_before = old_before.saturating_add(1);
+                new_before = new_before.saturating_add(1);
+            }
+            DiffLine::Delete(_) => old_before = old_before.saturating_add(1),
+            DiffLine::Insert(_) => new_before = new_before.saturating_add(1),
+        }
+    }
+    let (mut old_count, mut new_count) = (0_usize, 0_usize);
+    for operation in hunk {
+        match operation {
+            DiffLine::Equal(_) => {
+                old_count = old_count.saturating_add(1);
+                new_count = new_count.saturating_add(1);
+            }
+            DiffLine::Delete(_) => old_count = old_count.saturating_add(1),
+            DiffLine::Insert(_) => new_count = new_count.saturating_add(1),
+        }
+    }
+
+    let mut output = format!(
+        "--- winner\n+++ loser\n@@ -{},{} +{},{} @@\n",
+        old_before.saturating_add(1),
+        old_count,
+        new_before.saturating_add(1),
+        new_count
+    );
+    for operation in hunk {
+        match operation {
+            DiffLine::Equal(line) => append_diff_line(&mut output, ' ', line),
+            DiffLine::Delete(line) => append_diff_line(&mut output, '-', line),
+            DiffLine::Insert(line) => append_diff_line(&mut output, '+', line),
+        }
+    }
+    let output_bytes = output.into_bytes();
+    (output_bytes.len() < winner_bytes.len()).then_some(output_bytes)
+}
+
+async fn try_materialize_text_diff(
+    node: &IrohNode,
+    winner_hash: Hash,
+    loser_hash: Hash,
+    path: &Path,
+) -> Result<Option<bool>> {
+    if !node.blob_store().has(winner_hash).await? || !node.blob_store().has(loser_hash).await? {
+        return Ok(None);
+    }
+    let winner = node.blob_store().get(winner_hash).await?;
+    let loser = node.blob_store().get(loser_hash).await?;
+    let Some(diff) = build_text_diff(&winner, &loser) else {
+        return Ok(None);
+    };
+    Ok(Some(write_if_different(&diff, &diff_path(path)).await?))
+}
+
+async fn materialize_conflicts(
+    node: &IrohNode,
+    namespace: iroh_docs::NamespaceId,
+    winner_hash: Hash,
+    variants: &[Entry],
+    path: &Path,
+    mount_root: &Path,
+) -> Vec<PathBuf> {
+    let mut written = Vec::new();
+    let losers: Vec<_> = variants
+        .iter()
+        .filter(|variant| variant.content_hash() != winner_hash && variant.content_hash() != Hash::EMPTY)
+        .collect();
+    if let [loser] = losers.as_slice() {
+        let diff_destination = mount_root.join(diff_path(path));
+        let winner_destination = mount_root.join(path);
+        match try_materialize_text_diff(node, winner_hash, loser.content_hash(), &winner_destination).await {
+            Ok(Some(true)) => {
+                written.push(diff_destination);
+                return written;
+            }
+            Ok(Some(false)) => return written,
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    %namespace,
+                    path = %diff_destination.display(),
+                    %error,
+                    "failed to materialize conflict diff; falling back to full copy"
+                );
+            }
+        }
+    }
+    for loser in losers {
+        let loser_path = mount_root.join(conflict_path(path, loser.content_hash()));
+        match export_if_different(node, loser.content_hash(), loser.content_len(), &loser_path).await {
+            Ok(true) => {
+                written.push(loser_path);
+            }
+            Ok(false) => {}
+            Err(error) => {
+                tracing::warn!(%namespace, path = %loser_path.display(), %error, "failed to materialize conflict copy");
+            }
+        }
+    }
+    written
+}
+
 /// Materialize every entry of `folder` under `mount_root`, resolving conflicts.
 ///
-/// The winner of each key keeps its original path; losing variants are written
-/// as `<path>.conflict.<short-hash>`. A `receiveonly` folder materializes only
-/// the winner (it must never resolve a conflict by writing locally). Blobs that
-/// are not yet local are skipped and reported as `pending`.
+/// The winner of each key keeps its original path. A single text loser is
+/// written as `<path>.diff` when the compact diff is smaller than the winner;
+/// otherwise losing variants are written as `<path>.conflict.<short-hash>`.
+/// A `receiveonly` folder materializes only the winner (it must never resolve a
+/// conflict by writing locally). Blobs that are not yet local are skipped and
+/// reported as `pending`.
 ///
 /// # Errors
 ///
@@ -140,7 +386,7 @@ pub async fn materialize_folder_content(
         match export_if_different(node, winner_hash, winner_size, &destination).await {
             Ok(true) => {
                 summary.materialized = summary.materialized.saturating_add(1);
-                written.push(destination);
+                written.push(destination.clone());
             }
             Ok(false) if !node.blob_store().has(winner_hash).await? => {
                 summary.pending = summary.pending.saturating_add(1);
@@ -153,22 +399,9 @@ pub async fn materialize_folder_content(
         if !folder.is_writable() {
             continue;
         }
-        for loser in variants
-            .iter()
-            .filter(|variant| variant.content_hash() != winner_hash && variant.content_hash() != Hash::EMPTY)
-        {
-            let loser_path = mount_root.join(conflict_path(&path, loser.content_hash()));
-            match export_if_different(node, loser.content_hash(), loser.content_len(), &loser_path).await {
-                Ok(true) => {
-                    summary.conflicts = summary.conflicts.saturating_add(1);
-                    written.push(loser_path);
-                }
-                Ok(false) => {}
-                Err(error) => {
-                    tracing::warn!(%namespace, path = %loser_path.display(), %error, "failed to materialize conflict copy");
-                }
-            }
-        }
+        let conflict_paths = materialize_conflicts(node, namespace, winner_hash, &variants, &path, mount_root).await;
+        summary.conflicts = summary.conflicts.saturating_add(conflict_paths.len());
+        written.extend(conflict_paths);
     }
     Ok(MaterializeOutcome { summary, written })
 }
@@ -241,6 +474,30 @@ mod tests {
         let text = path.to_string_lossy();
         assert!(text.starts_with("report.md.conflict."));
         assert_eq!(text.len(), "report.md.conflict.".len() + 8);
+    }
+
+    #[test]
+    fn text_diff_is_used_when_smaller_than_winner() {
+        let winner = format!("{}old value\n{}", "unchanged\n".repeat(20), "unchanged\n".repeat(20));
+        let loser = format!("{}new value\n{}", "unchanged\n".repeat(20), "unchanged\n".repeat(20));
+        let diff = build_text_diff(winner.as_bytes(), loser.as_bytes()).expect("text diff should be selected");
+        let text = String::from_utf8(diff).expect("diff should be UTF-8");
+        assert!(text.contains("@@"));
+        assert!(text.contains("-old value"));
+        assert!(text.contains("+new value"));
+        assert!(text.len() < winner.len());
+    }
+
+    #[test]
+    fn binary_and_large_content_fall_back_to_full_copy() {
+        assert!(build_text_diff(b"\0binary", b"\0changed").is_none());
+        let large = vec![b'a'; MAX_TEXT_DIFF_BYTES.saturating_add(1)];
+        assert!(build_text_diff(&large, b"small").is_none());
+    }
+
+    #[test]
+    fn diff_path_is_suffixed_after_the_original_name() {
+        assert_eq!(diff_path(Path::new("report.md")), PathBuf::from("report.md.diff"));
     }
 
     #[test]

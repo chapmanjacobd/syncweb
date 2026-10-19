@@ -175,17 +175,7 @@ re-import guard exists.
   `<stem>.conflict.<short-hash>.<ext>`; the winner always keeps the original
   path.
 
-## 7. Test plan
-
-- Unit: variant grouping / winner selection (timestamp, tie-break by author).
-- Integration: two nodes edit the same text file offline, re-import and sync,
-  then materialize; assert winner at the original path and either `.diff` or
-  `.conflict.<hash>` exists.
-- Integration (Phase 2): conflict is materialized automatically on
-  `InsertRemote`, and the watcher does not re-stamp it as a new local edit
-  (no error/retry loop, stable hashes after a settle period).
-
-## 8. Open questions
+## 7. Open questions
 
 - Which default when timestamps are equal (author ordering is deterministic but
   arbitrary; consider a stable hash tie-break).

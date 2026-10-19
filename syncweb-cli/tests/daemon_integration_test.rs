@@ -149,6 +149,82 @@ fn test_daemon_start_and_stop() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_transfer_queue_survives_daemon_restart() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("transfer-queue-restart")?;
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let namespace = iroh_docs::NamespaceId::from(&[3_u8; 32]).to_string();
+    let hash = iroh_blobs::Hash::from_bytes([4_u8; 32]).to_string();
+
+    let start = daemon_start_bg(data_dir_arg)?;
+    ensure!(start.status.success(), "daemon start should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let enqueue = syncweb(&[
+        "--data-dir",
+        data_dir_arg,
+        "transfer",
+        "enqueue",
+        "--namespace",
+        &namespace,
+        "--path",
+        "queued/clip.mp4",
+        "--hash",
+        &hash,
+        "--size",
+        "1048576",
+    ])?;
+    ensure!(
+        enqueue.status.success(),
+        "transfer enqueue failed: {}",
+        String::from_utf8_lossy(&enqueue.stderr)
+    );
+    ensure!(
+        stdout_contains(&enqueue, "queued transfer job"),
+        "enqueue should report the durable job"
+    );
+
+    let shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(shutdown.status.success(), "daemon shutdown should succeed");
+    wait_for_daemon_stopped(data_dir_arg)?;
+
+    let restart = daemon_start_bg(data_dir_arg)?;
+    ensure!(restart.status.success(), "daemon restart should succeed");
+    wait_for_daemon_ready(data_dir_arg)?;
+
+    let info = syncweb(&["--data-dir", data_dir_arg, "--json", "transfer", "info"])?;
+    ensure!(
+        info.status.success(),
+        "transfer info after restart failed: {}",
+        String::from_utf8_lossy(&info.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&info.stdout).context("transfer info JSON")?;
+    let jobs = value
+        .get("jobs")
+        .and_then(serde_json::Value::as_array)
+        .context("transfer info should contain jobs")?;
+    ensure!(jobs.len() == 1, "one queued job should survive restart: {value}");
+    let job = jobs.first().context("transfer info jobs is empty")?;
+    ensure!(
+        job.get("namespace") == Some(&serde_json::Value::from(namespace.as_str())),
+        "namespace should survive restart: {job}"
+    );
+    ensure!(
+        job.get("state") == Some(&serde_json::Value::from("queued")),
+        "queued state should survive restart: {job}"
+    );
+    ensure!(
+        job.get("size") == Some(&serde_json::Value::from(1_048_576_u64)),
+        "size should survive restart: {job}"
+    );
+
+    let final_shutdown = syncweb(&["--data-dir", data_dir_arg, "stop", "--yes", "--force"])?;
+    ensure!(final_shutdown.status.success(), "final daemon shutdown should succeed");
+    wait_for_daemon_stopped(data_dir_arg)?;
+    let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
 fn test_create_routes_through_daemon() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("daemon-create")?;
     let dir = cli_test_dir("daemon-create-folder")?;

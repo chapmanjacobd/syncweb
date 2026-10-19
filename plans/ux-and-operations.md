@@ -27,8 +27,8 @@ friction; this file turns their improvement notes into implementable tasks.
   require it, without silently starting a daemon for read-only commands.
 - [ ] Show stale PID, crashed daemon, IPC version mismatch, and recovery
   guidance as actionable errors.
-- [ ] Add restart and shutdown recovery tests for watched folders, queued
-  transfers, and long-lived seeding.
+- [ ] Add restart and shutdown recovery tests for watched folders and
+  long-lived seeding.
 
 ## Command-surface and safety
 

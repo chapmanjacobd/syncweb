@@ -181,7 +181,13 @@ async fn export_if_different(node: &IrohNode, hash: Hash, expected_size: u64, de
         && metadata.is_file()
         && metadata.len() == expected_size
     {
-        return Ok(false);
+        let existing = tokio::fs::read(destination)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to read existing folder materialization", error))?;
+        let existing_hash = Hash::from_bytes(*blake3::hash(&existing).as_bytes());
+        if existing_hash == hash {
+            return Ok(false);
+        }
     }
     if let Some(parent) = destination.parent() {
         tokio::fs::create_dir_all(parent)

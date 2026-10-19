@@ -5,8 +5,8 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 use anyhow::{Context, Result, ensure};
 use syncweb_core::{
     daemon::{
-        Daemon, DaemonConfig, DaemonState, DaemonStatus, DaemonStatusReport, IpcClient, IpcCommand, IpcRequest,
-        IpcResponse, PidLock, StateFile, daemon_socket_path,
+        Daemon, DaemonConfig, DaemonState, DaemonStatus, DaemonStatusReport, EntryRow, IpcClient, IpcCommand,
+        IpcRequest, IpcResponse, PidLock, StateFile, daemon_socket_path,
     },
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExporter, FolderManager, SyncMode,
@@ -85,6 +85,31 @@ where
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     anyhow::bail!("daemon status report did not reach the expected state")
+}
+
+async fn wait_for_local_entry(
+    client: &IpcClient,
+    namespace: &str,
+    path: &str,
+    excluded_hashes: &[iroh_blobs::Hash],
+) -> Result<EntryRow> {
+    for _ in 0..120 {
+        let response = client
+            .send(IpcRequest::new(IpcCommand::ListEntries {
+                folder: namespace.to_owned(),
+                enrich: false,
+            }))
+            .await?;
+        if let IpcResponse::Entries(entries) = response
+            && let Some(entry) = entries.into_iter().find(|entry| {
+                entry.path == path && entry.local && excluded_hashes.iter().all(|hash| entry.hash != *hash)
+            })
+        {
+            return Ok(entry);
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    anyhow::bail!("daemon did not observe local entry {path} in {namespace}")
 }
 
 #[tokio::test]
@@ -959,6 +984,187 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
         ensure!(synced, "B should sync A's content via relay");
+
+        daemons.stop().await?;
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()> {
+    Box::pin(async move {
+        let dir_a = TestDirectory::new("conflict-daemon-a")?;
+        let dir_b = TestDirectory::new("conflict-daemon-b")?;
+        let daemons = Box::pin(start_two_daemons(&dir_a, &dir_b)).await?;
+
+        let folder_path = dir_a.path().join("shared");
+        let create = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::CreateFolder {
+                path: folder_path.clone(),
+                mode: "sendreceive".to_owned(),
+                indexing: false,
+            }))
+            .await?;
+        let IpcResponse::Ok { message } = &create else {
+            anyhow::bail!("unexpected create-folder response: {create:?}");
+        };
+        let namespace = parse_namespace(message)?;
+        let ticket = share_ticket(&daemons.client_a, &namespace).await?;
+        let joined_path = dir_b.path().join("joined");
+        let join = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::Join {
+                ticket,
+                path: joined_path.clone(),
+                mode: SyncMode::SendReceive,
+                subscribe: true,
+                filters: SubscribeFilters::default(),
+                download: true,
+                indexing: false,
+                metadata_only: false,
+            }))
+            .await?;
+        ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");
+        let folders = daemons.client_b.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        let IpcResponse::FolderList(folders) = folders else {
+            anyhow::bail!("unexpected folder list response: {folders:?}");
+        };
+        let joined_status = folders
+            .iter()
+            .find(|folder| folder.namespace == namespace)
+            .context("joined folder missing from daemon registry")?;
+        ensure!(
+            joined_status.mode == "sendreceive",
+            "joined folder is not writable: {joined_status:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(1_000)).await;
+
+        let subscribe = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::SetSubscribe {
+                namespace: namespace.clone(),
+                enabled: true,
+                filters: None,
+            }))
+            .await?;
+        ensure!(
+            matches!(subscribe, IpcResponse::Ok { .. }),
+            "failed to start daemon A subscription: {subscribe:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(1_000)).await;
+
+        let note_path_b = joined_path.join("note.bin");
+        fs::write(&note_path_b, b"from B\0")?;
+        let import = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::ImportFiles {
+                namespace: Some(namespace.clone()),
+                path: note_path_b.clone(),
+            }))
+            .await?;
+        ensure!(
+            matches!(import, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
+            "B import failed: {import:?}"
+        );
+        let b_entry = wait_for_local_entry(&daemons.client_b, &namespace, "note.bin", &[]).await?;
+
+        let note_path_a = folder_path.join("note.bin");
+        fs::write(&note_path_a, b"from A\0")?;
+        let import = daemons
+            .client_a
+            .send(IpcRequest::new(IpcCommand::ImportFiles {
+                namespace: Some(namespace.clone()),
+                path: note_path_a.clone(),
+            }))
+            .await?;
+        ensure!(
+            matches!(import, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
+            "A import failed: {import:?}"
+        );
+        let a_entry = wait_for_local_entry(&daemons.client_a, &namespace, "note.bin", &[]).await?;
+        ensure!(
+            a_entry.hash != b_entry.hash,
+            "A import did not record a distinct local edit"
+        );
+        let sync = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::TriggerSync {
+                namespace: Some(namespace.clone()),
+            }))
+            .await?;
+        ensure!(matches!(sync, IpcResponse::Ok { .. }), "conflict sync failed: {sync:?}");
+
+        let selector = joined_path.to_string_lossy().into_owned();
+        let mut before = None;
+        for _ in 0..120 {
+            let response = daemons
+                .client_b
+                .send(IpcRequest::new(IpcCommand::ListConflicts {
+                    folder: selector.clone(),
+                }))
+                .await?;
+            if let IpcResponse::Conflicts(conflicts) = response
+                && conflicts.iter().any(|report| {
+                    report.path == "note.bin"
+                        && report.variants.len() == 2
+                        && report.variants.iter().all(|variant| variant.local)
+                })
+            {
+                before = Some(conflicts);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        let before = before.context("daemon did not observe the remote conflict")?;
+        let before_note = before
+            .iter()
+            .find(|report| report.path == "note.bin")
+            .context("conflict report did not include note.bin")?;
+
+        let has_conflict_copy = || {
+            fs::read_dir(&joined_path).is_ok_and(|entries| {
+                entries
+                    .flatten()
+                    .any(|entry| entry.file_name().to_string_lossy().contains(".conflict."))
+            })
+        };
+        for _ in 0..120 {
+            if has_conflict_copy() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        ensure!(
+            has_conflict_copy(),
+            "daemon did not materialize a conflict copy; entries={:?}",
+            fs::read_dir(&joined_path)
+                .ok()
+                .into_iter()
+                .flatten()
+                .filter_map(std::result::Result::ok)
+                .map(|entry| entry.file_name())
+                .collect::<Vec<_>>()
+        );
+
+        tokio::time::sleep(Duration::from_millis(1_500)).await;
+        let after = match daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::ListConflicts { folder: selector }))
+            .await?
+        {
+            IpcResponse::Conflicts(conflicts) => conflicts,
+            response => anyhow::bail!("unexpected conflict response: {response:?}"),
+        };
+        let after_note = after
+            .iter()
+            .find(|report| report.path == "note.bin")
+            .context("conflict report disappeared after materialization")?;
+        ensure!(
+            before_note == after_note,
+            "materializing the conflict changed the document variants: before={before_note:?}, after={after_note:?}"
+        );
 
         daemons.stop().await?;
         Ok(())

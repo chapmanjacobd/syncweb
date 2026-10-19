@@ -3388,6 +3388,9 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     node_db.upsert_folder_mount(&namespace, &effective_path)?;
     let (downloaded, downloaded_size) = if download_existing {
         download_joined_folder(&node, manager.clone(), &folder, &filters, &effective_path).await?
+    } else if command.metadata_only {
+        sync_joined_folder_metadata(&node, manager.clone(), &folder, &filters).await?;
+        (0, 0)
     } else {
         (0, 0)
     };
@@ -3410,6 +3413,39 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         }
     }
     node.stop().await?;
+    Ok(())
+}
+
+async fn sync_joined_folder_metadata(
+    node: &IrohNode,
+    manager: FolderManager,
+    folder: &syncweb_core::folder::SyncwebFolder,
+    filters: &SubscribeFilters,
+) -> Result<()> {
+    const SYNC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+    let sync = SyncEngine::from_node(node, manager);
+    let strategy =
+        FetchStrategy::Filter(FetchFilter::new().with_paths(filters.sync_prefix.clone().into_iter().collect()));
+    let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+    let result = tokio::time::timeout(SYNC_TIMEOUT, async {
+        while let Some(event) = intent.next().await {
+            match event {
+                SyncEvent::Failed(message) => anyhow::bail!("metadata synchronization failed: {message}"),
+                SyncEvent::Finished => break,
+                SyncEvent::Started
+                | SyncEvent::Progress { .. }
+                | SyncEvent::Stats(_)
+                | SyncEvent::Paused
+                | SyncEvent::Resumed
+                | SyncEvent::Cancelled
+                | _ => {}
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    })
+    .await;
+    let _ = intent.cancel();
+    result.map_err(|_| anyhow::anyhow!("metadata synchronization timed out"))??;
     Ok(())
 }
 

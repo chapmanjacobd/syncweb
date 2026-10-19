@@ -36,6 +36,7 @@ pub mod net;
 pub mod node;
 pub mod parsing;
 pub mod pins;
+pub mod provider_lease;
 pub mod schedule;
 pub mod search;
 pub mod signature;
@@ -54,5 +55,8 @@ pub use folder::archive_import;
 pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImporter, import_archive};
 pub use folder::archive_verify::{
     DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
+};
+pub use provider_lease::{
+    PROVIDER_LEASE_VERSION, ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
 };
 pub use sync::{ActiveSession, cancel_session, is_active};

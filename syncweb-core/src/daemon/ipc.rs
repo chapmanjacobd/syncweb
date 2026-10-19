@@ -2133,6 +2133,11 @@ impl IpcServer {
                 Ok(count) => count,
                 Err(error) => return response_from_error(error),
             }
+        } else if options.metadata_only {
+            if let Err(error) = self.sync_folder_metadata(context, manager, folder, filters).await {
+                return response_from_error(error);
+            }
+            0
         } else {
             0
         };
@@ -2190,6 +2195,27 @@ impl IpcServer {
         )
         .await?;
         Ok(outcome.summary.materialized.saturating_add(outcome.summary.conflicts))
+    }
+
+    async fn sync_folder_metadata(
+        &self,
+        context: &ArchiveContext,
+        manager: &FolderManager,
+        folder: &crate::folder::SyncwebFolder,
+        filters: &SubscribeFilters,
+    ) -> Result<()> {
+        let sync = SyncEngine::new(
+            manager.clone(),
+            context.node.blob_store().clone(),
+            context.node.docs_engine().clone(),
+            Some(context.node.topic_tracker().clone()),
+        );
+        let strategy =
+            FetchStrategy::Filter(FetchFilter::new().with_paths(filters.sync_prefix.clone().into_iter().collect()));
+        let mut intent = sync.fetch(folder.namespace_id(), strategy).await?;
+        self.run_download_loop_with_timeout(&mut intent, DOWNLOAD_TIMEOUT)
+            .await?;
+        Ok(())
     }
 
     async fn handle_set_subscribe(

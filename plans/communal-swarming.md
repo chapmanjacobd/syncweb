@@ -60,9 +60,6 @@ coordination and policy layers; it does not replace those primitives.
 Introduce a compact, expiring availability model that can be learned from
 successful transfers, explicit announcements, and offline imports.
 
-- [ ] Define a versioned `ProviderLease` containing community/folder scope,
-  provider node ID, content root or blob/segment identifiers, capabilities,
-  observed timestamp, expiry, and a signature.
 - [ ] Define compact inventory encodings for manifests, ranges, and large
   collections. Prefer summaries or set reconciliation over one message per
   blob.

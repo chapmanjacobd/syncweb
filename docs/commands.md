@@ -93,6 +93,18 @@ credentials:
 syncweb --data-dir ~/.syncweb-restored restore ./backups/syncweb-db-backup-<timestamp> --yes
 ```
 
+Restoring a network-scoped data directory restores its recorded network and
+folder membership from `node.db`, along with the backed-up identity and
+configuration. It does not re-issue invitations or change membership records
+held by other devices; if the identity is not restored, the new identity must
+join the network again. Provider observations are runtime cache state, so
+restoring `node.db`, `stats.db`, or `--include-blobs` content does not restore
+peer-availability observations or provider leases; those observations are
+rebuilt by subsequent discovery and transfers. Ad-hoc communal admission is
+not a current backup concern: communal identity, admission, and enrollment are
+planned separately in
+[the communal swarming plan](../plans/communal-swarming.md).
+
 ## `find` Command Design
 
 Full-text search across folder entries with regex, glob, or exact substring matching,

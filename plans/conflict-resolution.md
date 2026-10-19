@@ -140,8 +140,6 @@ Ship Option C in two phases, deferring D and F:
    - Add a `Conflict`/`ConflictResolution` type (as sketched in
      `../docs/offline-conflict.md`): winner = max `timestamp()`, tie broken by
      `author()`; loser written as `.conflict.<short-hash>`.
-   - Apply this in `materialize_selected_content` and the daemon
-     `materialize_folder` paths, then in `download`.
    - Do not auto-write in `receiveonly` folders; surface conflicts in the
      folder status/errors instead.
 2. Phase 2 — daemon reconciliation (Option D), guarded.
@@ -186,7 +184,6 @@ re-import guard exists.
 - Integration (Phase 2): conflict is materialized automatically on
   `InsertRemote`, and the watcher does not re-stamp it as a new local edit
   (no error/retry loop, stable hashes after a settle period).
-- `receiveonly` folder: conflict is reported but nothing is written.
 
 ## 8. Open questions
 

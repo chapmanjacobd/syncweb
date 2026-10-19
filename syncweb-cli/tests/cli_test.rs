@@ -2847,6 +2847,45 @@ fn manpages_generate_markdown() -> anyhow::Result<()> {
 }
 
 #[test]
+fn manpages_match_visible_help_commands() -> anyhow::Result<()> {
+    let help = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .arg("--help")
+        .output()
+        .context("run syncweb help")?;
+    ensure!(help.status.success(), "help should succeed");
+    let help_stdout = String::from_utf8(help.stdout).context("UTF-8 help output")?;
+    let expected: std::collections::BTreeSet<_> = grouped_help_names(&help_stdout)
+        .into_iter()
+        .filter(|name| !matches!(name.as_str(), "help" | "completions" | "manpages"))
+        .map(|name| format!("syncweb-{name}.1"))
+        .chain(std::iter::once("syncweb.1".to_owned()))
+        .collect();
+
+    let directory = cli_test_dir("manpages-match-help");
+    let output = syncweb(&["manpages", directory.to_str().context("UTF-8 path")?])?;
+    ensure!(
+        output.status.success(),
+        "manpages should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let actual: std::collections::BTreeSet<_> = std::fs::read_dir(&directory)
+        .context("read generated manpages")?
+        .map(|entry| {
+            entry
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .context("read generated manpage entry")
+        })
+        .collect::<anyhow::Result<_>>()?;
+    std::fs::remove_dir_all(&directory).context("cleanup")?;
+
+    ensure!(
+        actual == expected,
+        "generated manpages must match visible help commands: expected {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn manpages_default_directory() -> anyhow::Result<()> {
     let cwd = cli_test_dir("manpages-default");
     std::fs::create_dir_all(&cwd).context("create cwd")?;

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use iroh_blobs::Hash;
@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::folder::SyncwebFolder;
 use crate::node::iroh_node::IrohNode;
+use crate::sync::conflict::materialize_folder_content_for_folder;
 
 /// Fetch the blobs selected by `strategy` directly from the folder's namespace
 /// peers.
@@ -102,19 +103,10 @@ pub async fn materialize_selected_content(
         ));
     }
     let selected = strategy.select(&candidates);
+    let selected_paths: BTreeSet<_> = selected.into_iter().map(|candidate| candidate.path).collect();
     let root = absolute_base(mount_root)?;
-    let mut count = 0_usize;
-    for candidate in selected {
-        let dest = root.join(&candidate.path);
-        if let Some(parent) = dest.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|error| crate::error::SyncwebError::operation("failed to create download directory", error))?;
-        }
-        node.blob_store().export_to_path(candidate.hash, &dest).await?;
-        count = count.saturating_add(1);
-    }
-    Ok(count)
+    let outcome = materialize_folder_content_for_folder(node, folder, &root, Some(&selected_paths)).await?;
+    Ok(outcome.summary.materialized.saturating_add(outcome.summary.conflicts))
 }
 
 /// Resolve `base` to an absolute path without touching the filesystem.

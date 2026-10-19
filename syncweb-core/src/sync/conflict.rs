@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Result, SyncwebError},
-    folder::FolderManager,
+    folder::{FolderManager, SyncwebFolder},
     node::iroh_node::IrohNode,
 };
 
@@ -446,12 +446,30 @@ pub async fn materialize_folder_content(
     mount_root: &Path,
 ) -> Result<MaterializeOutcome> {
     let folder = manager.get(namespace).await?;
+    materialize_folder_content_for_folder(node, &folder, mount_root, None).await
+}
+
+/// Materialize selected entries of an already-open folder, resolving conflicts
+/// for each selected path.
+///
+/// `selected_paths` is `None` for the complete folder or contains the
+/// folder-relative paths selected by a filtered download.
+pub(crate) async fn materialize_folder_content_for_folder(
+    node: &IrohNode,
+    folder: &SyncwebFolder,
+    mount_root: &Path,
+    selected_paths: Option<&BTreeSet<PathBuf>>,
+) -> Result<MaterializeOutcome> {
+    let namespace = folder.namespace_id();
     let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
     let grouped = group_by_key(entries);
     let mut summary = MaterializeSummary::default();
     let mut written = Vec::new();
     for (key, variants) in grouped {
         let path = PathBuf::from(String::from_utf8_lossy(&key).into_owned());
+        if selected_paths.is_some_and(|paths| !paths.contains(&path)) {
+            continue;
+        }
         let Some(winner) = select_winner(&variants) else {
             continue;
         };
@@ -471,7 +489,7 @@ pub async fn materialize_folder_content(
                 tracing::warn!(%namespace, path = %path.display(), %error, "failed to materialize winner");
             }
         }
-        if !folder.is_writable() {
+        if !folder.mode().can_write_locally() || !folder.is_writable() {
             continue;
         }
         let conflict_paths = materialize_conflicts(node, namespace, winner_hash, &variants, &path, mount_root).await;

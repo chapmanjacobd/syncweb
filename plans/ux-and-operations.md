@@ -30,11 +30,6 @@ friction; this file turns their improvement notes into implementable tasks.
 - [ ] Add restart and shutdown recovery tests for watched folders, queued
   transfers, and long-lived seeding.
 
-## Backup and restore
-
-- [ ] Document how restoring a backup affects network membership, provider
-  leases, and community admission.
-
 ## Command-surface and safety
 
 - [ ] Reconcile the many specialized commands with the documented core flows
@@ -45,8 +40,6 @@ friction; this file turns their improvement notes into implementable tasks.
   revoke, and unpin prominent confirmation and undo guidance.
 - [ ] Keep global filters, progress, JSON envelopes, and error conventions
   consistent as communal-swarm commands are added.
-- [ ] Generate command guides and manpages from
-  `syncweb-cli/src/cli/commands.rs`; label design-only commands as planned.
 
 ## Documentation and release discipline
 

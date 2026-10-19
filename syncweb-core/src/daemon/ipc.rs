@@ -2173,23 +2173,23 @@ impl IpcServer {
             .map(AreaFilter::Prefix)
             .or_else(|| filters.glob.clone().map(AreaFilter::Glob))
             .unwrap_or(AreaFilter::All);
-        let entries = folder.list_entries().await?;
-        let mut count = 0_usize;
-        for entry in entries {
-            let rel = Path::new(&entry.path);
-            if !area.matches_path(rel) {
-                continue;
-            }
-            let dest = destination.join(rel);
-            if let Some(parent) = dest.parent()
-                && let Err(error) = tokio::fs::create_dir_all(parent).await
-            {
-                return Err(SyncwebError::operation("failed to create download directory", error));
-            }
-            context.node.blob_store().export_to_path(entry.hash, &dest).await?;
-            count = count.saturating_add(1);
-        }
-        Ok(count)
+        let selected_paths: std::collections::BTreeSet<_> = folder
+            .list_entries()
+            .await?
+            .into_iter()
+            .filter_map(|entry| {
+                let path = Path::new(&entry.path);
+                area.matches_path(path).then(|| path.to_path_buf())
+            })
+            .collect();
+        let outcome = crate::sync::conflict::materialize_folder_content_for_folder(
+            &context.node,
+            folder,
+            destination,
+            Some(&selected_paths),
+        )
+        .await?;
+        Ok(outcome.summary.materialized.saturating_add(outcome.summary.conflicts))
     }
 
     async fn handle_set_subscribe(

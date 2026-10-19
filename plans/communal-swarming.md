@@ -71,9 +71,6 @@ successful transfers, explicit announcements, and offline imports.
 - [ ] Wire successful and failed blob/segment requests into the registry.
 - [ ] Add authenticated publication and validation rules for leases; reject
   leases outside the local community or folder scope.
-- [ ] Define expiry, negative-cache, and partition behavior so stale data does
-  not cause repeated connection storms.
-
 Likely code: `syncweb-core/src/sync/peer_tracker.rs`,
 `syncweb-core/src/sync/partial_fetch.rs`,
 `syncweb-core/src/daemon/ipc.rs`, `syncweb-core/src/node/discovery.rs`,

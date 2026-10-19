@@ -22,6 +22,8 @@ struct Availability {
     last_seen: Instant,
 }
 
+type NegativeKey = (Hash, PublicKey);
+
 /// Bounded cache mapping blob hashes to the peers observed serving them.
 ///
 /// `len()` returns the number of unique blob hashes tracked, not the total
@@ -29,9 +31,12 @@ struct Availability {
 #[derive(Clone, Debug)]
 pub struct PeerTracker {
     entries: HashMap<Hash, Availability>,
+    negative: HashMap<NegativeKey, Instant>,
     max_cache_size: usize,
+    negative_cache_size: usize,
     strategy: EvictionStrategy,
     expiry: Duration,
+    negative_expiry: Duration,
     clock: u64,
 }
 
@@ -43,16 +48,33 @@ impl PeerTracker {
 
     #[must_use]
     pub fn with_expiry(max_cache_size: usize, strategy: EvictionStrategy, expiry: Duration) -> Self {
+        Self::with_expiries(max_cache_size, strategy, expiry, expiry)
+    }
+
+    /// Create a tracker with separate positive-observation and failure
+    /// cooldown expiry windows.
+    #[must_use]
+    pub fn with_expiries(
+        max_cache_size: usize,
+        strategy: EvictionStrategy,
+        expiry: Duration,
+        negative_expiry: Duration,
+    ) -> Self {
         Self {
             entries: HashMap::new(),
+            negative: HashMap::new(),
             max_cache_size,
+            negative_cache_size: max_cache_size.saturating_mul(4).max(1),
             strategy,
             expiry,
+            negative_expiry,
             clock: 0,
         }
     }
 
     pub fn record_peer(&mut self, blob_hash: Hash, node_id: PublicKey) {
+        self.purge_negative();
+        self.negative.remove(&(blob_hash, node_id));
         self.clock = self.clock.saturating_add(1);
         let now = Instant::now();
         let entry = self.entries.entry(blob_hash).or_insert_with(|| Availability {
@@ -69,7 +91,10 @@ impl PeerTracker {
 
     #[must_use]
     pub fn get_peers(&mut self, blob_hash: &Hash) -> Vec<PublicKey> {
+        self.purge_negative();
         self.clock = self.clock.saturating_add(1);
+        let negative = &self.negative;
+        let negative_expiry = self.negative_expiry;
         self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
             if entry.last_seen.elapsed() > self.expiry {
                 return Vec::new();
@@ -77,7 +102,16 @@ impl PeerTracker {
             if self.strategy == EvictionStrategy::Lru {
                 entry.accessed_at = self.clock;
             }
-            entry.peers.iter().copied().collect()
+            entry
+                .peers
+                .iter()
+                .filter(|peer| {
+                    negative
+                        .get(&(*blob_hash, **peer))
+                        .is_none_or(|failed_at| failed_at.elapsed() > negative_expiry)
+                })
+                .copied()
+                .collect()
         })
     }
 
@@ -85,7 +119,11 @@ impl PeerTracker {
     pub fn peer_count(&self, blob_hash: &Hash) -> usize {
         self.entries.get(blob_hash).map_or(0, |entry| {
             if entry.last_seen.elapsed() <= self.expiry {
-                entry.peers.len()
+                entry
+                    .peers
+                    .iter()
+                    .filter(|peer| !self.is_negative(blob_hash, peer))
+                    .count()
             } else {
                 0
             }
@@ -101,7 +139,10 @@ impl PeerTracker {
         Some(self.get_peers(blob_hash))
     }
 
-    /// Remove one peer's observation for a single blob after a failed fetch.
+    /// Remove one peer's positive observation for a single blob immediately.
+    ///
+    /// Unlike [`record_failure`](Self::record_failure), this does not retain
+    /// a retry cooldown.
     pub fn remove_blob_peer(&mut self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
         let Some(entry) = self.entries.get_mut(blob_hash) else {
             return false;
@@ -113,11 +154,25 @@ impl PeerTracker {
         removed
     }
 
+    /// Record a failed request and suppress retries for the configured
+    /// negative-cache cooldown. A later successful observation clears it.
+    pub fn record_failure(&mut self, blob_hash: Hash, node_id: PublicKey) {
+        self.purge_negative();
+        self.negative.insert((blob_hash, node_id), Instant::now());
+        self.evict_negative_to_limit();
+    }
+
+    /// Return whether a request to this peer should be attempted now.
+    #[must_use]
+    pub fn should_try_peer(&self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
+        !self.is_negative(blob_hash, node_id)
+    }
+
     #[must_use]
     pub fn contains(&self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
         self.entries
             .get(blob_hash)
-            .is_some_and(|entry| entry.peers.contains(node_id))
+            .is_some_and(|entry| entry.peers.contains(node_id) && !self.is_negative(blob_hash, node_id))
     }
 
     /// Remove a peer from all cached blob availability records.
@@ -149,7 +204,35 @@ impl PeerTracker {
         let now = Instant::now();
         self.entries
             .retain(|_, entry| now.saturating_duration_since(entry.last_seen) <= self.expiry);
+        self.purge_negative();
         self.evict_to_limit();
+    }
+
+    fn is_negative(&self, blob_hash: &Hash, node_id: &PublicKey) -> bool {
+        self.negative
+            .get(&(*blob_hash, *node_id))
+            .is_some_and(|failed_at| failed_at.elapsed() <= self.negative_expiry)
+    }
+
+    fn purge_negative(&mut self) {
+        let expiry = self.negative_expiry;
+        self.negative.retain(|_, failed_at| failed_at.elapsed() <= expiry);
+        self.evict_negative_to_limit();
+    }
+
+    fn evict_negative_to_limit(&mut self) {
+        while self.negative.len() > self.negative_cache_size {
+            let oldest = self
+                .negative
+                .iter()
+                .min_by_key(|(_, failed_at)| *failed_at)
+                .map(|(key, _)| *key);
+            if let Some(key) = oldest {
+                self.negative.remove(&key);
+            } else {
+                break;
+            }
+        }
     }
 
     fn evict_to_limit(&mut self) {

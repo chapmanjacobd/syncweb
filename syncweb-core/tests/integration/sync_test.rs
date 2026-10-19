@@ -357,6 +357,42 @@ fn test_peer_tracker_expiry_removes_stale_entries() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_peer_tracker_negative_cache_suppresses_failures_until_success() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut tracker = PeerTracker::with_expiries(
+        10,
+        EvictionStrategy::Lru,
+        Duration::from_mins(1),
+        Duration::from_mins(1),
+    );
+
+    tracker.record_peer(blob(1), peer);
+    tracker.record_failure(blob(1), peer);
+    ensure!(!tracker.should_try_peer(&blob(1), &peer));
+    ensure!(!tracker.contains(&blob(1), &peer));
+    ensure!(tracker.get_peers(&blob(1)).is_empty());
+
+    tracker.record_peer(blob(1), peer);
+    ensure!(tracker.should_try_peer(&blob(1), &peer));
+    ensure!(tracker.contains(&blob(1), &peer));
+    ensure!(tracker.get_peers(&blob(1)).contains(&peer));
+    Ok(())
+}
+
+#[test]
+fn test_peer_tracker_negative_cache_expiry_allows_retry() -> anyhow::Result<()> {
+    let peer = SecretKey::generate().public();
+    let mut tracker = PeerTracker::with_expiries(10, EvictionStrategy::Lru, Duration::from_mins(1), Duration::ZERO);
+
+    tracker.record_failure(blob(1), peer);
+    ensure!(
+        tracker.should_try_peer(&blob(1), &peer),
+        "an expired negative observation must not block a retry"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_peer_tracker_on_peer_disconnected() -> anyhow::Result<()> {
     let a = SecretKey::generate().public();
     let b = SecretKey::generate().public();

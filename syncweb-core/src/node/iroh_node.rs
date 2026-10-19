@@ -387,37 +387,59 @@ impl IrohNode {
         &self.provider_registry
     }
 
+    fn provider_registry_guard(&self) -> Result<std::sync::MutexGuard<'_, PeerTracker>> {
+        self.provider_registry
+            .lock()
+            .map_err(|error| SyncwebError::operation("provider registry mutex is poisoned", error))
+    }
+
     /// Fetch a blob from a discovered peer and update provider observations.
     ///
-    /// Failed requests remove the peer's observation for this blob so stale
-    /// providers do not continue to influence selection.
+    /// Failed requests enter a short negative-cache cooldown so stale
+    /// providers do not cause repeated connection storms.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is in its retry cooldown, the
+    /// provider registry is poisoned, or the blob fetch fails.
     pub async fn force_fetch_from_peer(&self, peer: &iroh::EndpointAddr, hash: Hash) -> Result<()> {
+        if !self.provider_registry_guard()?.should_try_peer(&hash, &peer.id) {
+            return Err(SyncwebError::operation(
+                "provider temporarily unavailable",
+                "recent request failure is in the retry cooldown",
+            ));
+        }
         let result = self.blob_store.force_fetch_from_peer(&self.endpoint, peer, hash).await;
-        let mut registry = self
-            .provider_registry
-            .lock()
-            .expect("provider registry mutex should not be poisoned");
+        let mut registry = self.provider_registry_guard()?;
         if result.is_ok() {
             registry.record_peer(hash, peer.id);
         } else {
-            registry.remove_blob_peer(&hash, &peer.id);
+            registry.record_failure(hash, peer.id);
         }
         result
     }
 
     /// Fetch a blob through a provider ticket and update provider observations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is in its retry cooldown, the
+    /// provider registry is poisoned, or the blob fetch fails.
     pub async fn force_fetch(&self, ticket: &BlobTicket) -> Result<()> {
         let hash = ticket.hash();
         let peer = ticket.addr().id;
+        if !self.provider_registry_guard()?.should_try_peer(&hash, &peer) {
+            return Err(SyncwebError::operation(
+                "provider temporarily unavailable",
+                "recent request failure is in the retry cooldown",
+            ));
+        }
         let result = self.blob_store.force_fetch(&self.endpoint, ticket).await;
-        let mut registry = self
-            .provider_registry
-            .lock()
-            .expect("provider registry mutex should not be poisoned");
+        let mut registry = self.provider_registry_guard()?;
         if result.is_ok() {
             registry.record_peer(hash, peer);
         } else {
-            registry.remove_blob_peer(&hash, &peer);
+            registry.record_failure(hash, peer);
         }
         result
     }
@@ -438,18 +460,26 @@ impl IrohNode {
     }
 
     /// Fetch a blob through a provider ticket and update provider observations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is in its retry cooldown, the
+    /// provider registry is poisoned, or the blob fetch fails.
     pub async fn fetch_blob(&self, ticket: &BlobTicket) -> Result<()> {
         let hash = ticket.hash();
         let peer = ticket.addr().id;
+        if !self.provider_registry_guard()?.should_try_peer(&hash, &peer) {
+            return Err(SyncwebError::operation(
+                "provider temporarily unavailable",
+                "recent request failure is in the retry cooldown",
+            ));
+        }
         let result = self.blob_store.fetch(&self.endpoint, ticket).await;
-        let mut registry = self
-            .provider_registry
-            .lock()
-            .expect("provider registry mutex should not be poisoned");
+        let mut registry = self.provider_registry_guard()?;
         if result.is_ok() {
             registry.record_peer(hash, peer);
         } else {
-            registry.remove_blob_peer(&hash, &peer);
+            registry.record_failure(hash, peer);
         }
         result
     }

@@ -19,6 +19,10 @@ graceful shutdown; add `--force` only when the daemon cannot finish normally.
 The daemon also handles `SIGINT` and `SIGTERM` on Unix and shuts down its
 watchers, sync intents, and IPC server before releasing the data directory.
 
+Client commands reuse an already-running daemon and start one automatically
+when needed. Use `--no-daemon` to force embedded operation. Read-only status
+checks never start a daemon.
+
 ## Supported supervision
 
 syncweb documents two native service-manager integrations:

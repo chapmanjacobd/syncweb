@@ -643,7 +643,6 @@ async fn daemon_client_or_start(
     if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
         return Ok(Some(client));
     }
-
     let base = data_dir
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -2973,7 +2972,7 @@ async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     if !no_daemon {
         let client = daemon_client_or_start(data_dir, no_daemon, ctx.network)
             .await?
-            .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or pass --no-daemon"))?;
+            .ok_or_else(|| anyhow::anyhow!("daemon not available; start with `syncweb start` or use --no-daemon"))?;
 
         let resolved = resolve_selector_via_daemon(&client, &command.path).await?;
         let watch_path = resolved.mount_root.clone().unwrap_or_else(|| command.path.clone());

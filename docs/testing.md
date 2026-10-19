@@ -54,6 +54,7 @@ depend on third-party network availability.
 - Large peer network: test EfficientPeerCache with 1000+ peers
 - Networks: two-node network create, invite, join, folder sync
 - Networks: three-node network with mixed roles
+- Swarm scale fixture: deterministic replication at 10, 50, 100, and 1000 simulated nodes
 - Find: regex, glob, exact search across folder boundaries
 - Sort: niche, frecency, peers with various filter combinations
 - Stat: detailed output, local/global diffs, availability display

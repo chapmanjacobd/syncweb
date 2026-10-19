@@ -13,11 +13,6 @@ friction; this file turns their improvement notes into implementable tasks.
 - [ ] Add a first-run wizard that detects a new `data_dir`, explains daemon
   ownership, and offers setup, join, or restore.
 
-## Daemon supervision and recovery
-
-- [ ] Add an opt-in CLI path to start or connect to the daemon when commands
-  require it, without silently starting a daemon for read-only commands.
-
 ## Command-surface and safety
 
 - [ ] Reconcile the many specialized commands with the documented core flows

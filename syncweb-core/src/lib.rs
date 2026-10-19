@@ -20,6 +20,7 @@
 //! - `node`: Iroh node integration and identity management.
 //! - `search`: Find engine for querying synchronized assets.
 //! - `sync`: The core synchronization engine and session management.
+//! - `swarm_simulator`: Deterministic inventory, repair, and fault simulation.
 //!
 pub mod allocation;
 pub mod bandwidth_stats;
@@ -45,6 +46,7 @@ pub mod snapshot;
 pub mod sort;
 pub mod stat;
 pub mod storage;
+pub mod swarm_simulator;
 pub mod sync;
 pub mod transfer_limits;
 pub mod uri;

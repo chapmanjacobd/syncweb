@@ -225,17 +225,12 @@ budget enforcement, and end-to-end status transitions.
 Validate control-plane and data-plane behavior before claiming large-LAN
 support.
 
-- [ ] Build a deterministic simulator for node churn, inventory propagation,
-  provider failure, partitions, CAR imports, and repair decisions.
-- [ ] Add live multi-process tests for at least 10, 50, and 100 nodes; keep
-  1000-node tests simulator-based unless dedicated infrastructure exists.
+- [ ] Add live multi-process tests for at least 10, 50, and 100 nodes.
 - [ ] Measure discovery convergence, inventory bytes, duplicate traffic,
   transfer completion, repair convergence, memory, file descriptors, and CPU.
 - [ ] Test mixed versions and peers that only support whole-blob transfers.
 - [ ] Define release gates and fixture hardware for LAN throughput targets;
   keep current `docs/testing.md` numbers as targets until reproducible.
-- [ ] Add fault injection for packet loss, relay-only peers, stale leases,
-  clock skew, disk exhaustion, and abrupt shutdown.
 
 Likely code: integration test harnesses, simulator modules, fixtures, and
 `docs/testing.md`.

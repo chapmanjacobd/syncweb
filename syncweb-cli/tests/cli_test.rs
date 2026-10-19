@@ -934,7 +934,7 @@ fn test_download_selective() -> anyhow::Result<()> {
 
 #[test]
 #[cfg(unix)]
-fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
+fn daemon_starts_automatically_when_not_running() -> anyhow::Result<()> {
     let data_dir = cli_test_dir("download-auto-daemon");
     let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
     let download = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -944,11 +944,11 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
     let status = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--data-dir", data_dir_arg, "status"])
         .output()
-        .context("query auto-started daemon")?;
+        .context("query automatically started daemon")?;
     let stop = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--data-dir", data_dir_arg, "stop", "--yes", "--force"])
         .output()
-        .context("stop auto-started daemon")?;
+        .context("stop automatically started daemon")?;
     for _ in 0..50 {
         let poll = Command::new(env!("CARGO_BIN_EXE_syncweb"))
             .args(["--data-dir", data_dir_arg, "status"])
@@ -958,7 +958,7 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    std::fs::remove_dir_all(&data_dir).context("cleanup auto-started daemon")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup automatically started daemon")?;
 
     ensure!(!download.status.success());
     let download_stderr = String::from_utf8(download.stderr).context("download UTF-8 error")?;
@@ -973,6 +973,29 @@ fn download_auto_starts_daemon_when_not_running() -> anyhow::Result<()> {
             .contains("daemon: running")
     );
     ensure!(stop.status.success());
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn daemon_is_not_started_with_no_daemon() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("download-no-auto-daemon");
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let download = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "--no-daemon", "download", "not-a-namespace"])
+        .output()
+        .context("run embedded download")?;
+    let status = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+        .args(["--data-dir", data_dir_arg, "status"])
+        .output()
+        .context("query daemon after embedded command")?;
+    std::fs::remove_dir_all(&data_dir).context("cleanup embedded daemon test")?;
+
+    ensure!(!download.status.success());
+    ensure!(status.status.success());
+    let status_stdout = String::from_utf8(status.stdout).context("status UTF-8 error")?;
+    ensure!(status_stdout.contains("daemon not running"));
+    ensure!(!status_stdout.contains("daemon: running"));
     Ok(())
 }
 
@@ -1521,7 +1544,7 @@ fn shutdown_aborts_without_yes_on_non_tty() -> anyhow::Result<()> {
     let _start = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["--data-dir", data_dir_arg, "download", "not-a-namespace"])
         .output()
-        .context("auto-start daemon")?;
+        .context("start daemon automatically")?;
     let mut running = false;
     for _ in 0..50 {
         let poll = Command::new(env!("CARGO_BIN_EXE_syncweb"))

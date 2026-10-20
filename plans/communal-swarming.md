@@ -43,8 +43,7 @@ coordination and policy layers; it does not replace those primitives.
   capability summaries.
 - Named networks provide membership and connection allowlists, but not an
   explicit ad-hoc community identity, role, moderation, or contribution model.
-- There is no topology hierarchy, local tracker/cache-peer role, or live
-  multi-process gate for very large LANs.
+- There is no live multi-process gate for very large LANs.
 - There are no realistic 100- or 1000-node live swarm gates.
 
 ## Workstreams
@@ -89,12 +88,6 @@ simultaneous repair, protected pins, and deterministic status output.
 ### 4. LAN topology, local trackers, and discovery scaling
 
 Keep discovery useful when broadcast domains and peer counts are large.
-
-- [ ] Define an optional local rendezvous/cache-peer role that aggregates
-  inventory summaries and helps peers bootstrap without becoming a required
-  single point of failure.
-- [ ] Specify partition merge and duplicate-community behavior, including
-  backoff when two large LAN segments reconnect.
 
 Likely code: `syncweb-core/src/node/beacon_lookup.rs`,
 `syncweb-core/src/node/discovery.rs`, `syncweb-core/src/node/iroh_node.rs`,

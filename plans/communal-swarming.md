@@ -48,20 +48,7 @@ coordination and policy layers; it does not replace those primitives.
 
 ## Workstreams
 
-### 1. Provider inventory and signed availability leases
-
-Introduce a compact, expiring availability model that can be learned from
-successful transfers, explicit announcements, and offline imports.
-
-Likely code: `syncweb-core/src/sync/peer_tracker.rs`,
-`syncweb-core/src/sync/partial_fetch.rs`,
-`syncweb-core/src/daemon/ipc.rs`, `syncweb-core/src/node/discovery.rs`,
-`syncweb-core/src/node/beacon_lookup.rs`, and new provider-registry modules.
-
-Tests: signed lease validation, expiry and eviction, malformed inventory
-input, provider-count reporting, and registry recovery after restart.
-
-### 2. Multi-source and chunk-level transfer scheduling
+### 1. Multi-source and chunk-level transfer scheduling
 
 Make one content request able to use multiple providers while retaining
 integrity and bounded resource use.
@@ -74,7 +61,7 @@ Tests: one blob from multiple providers, provider churn, duplicate and
   corrupt segments, bandwidth/concurrency limits, cancellation, relay fallback,
   and compatibility with whole-blob peers.
 
-### 3. Replication, pinning, and seeding policy
+### 2. Replication, pinning, and seeding policy
 
 Turn “download” and “share” into explicit, observable policy rather than an
 accidental consequence of local storage.
@@ -85,7 +72,7 @@ daemon scheduling, config models, and `syncweb-cli/src/cli/commands.rs`.
 Tests: target convergence, churn, quota enforcement, node departure,
 simultaneous repair, protected pins, and deterministic status output.
 
-### 4. LAN topology, local trackers, and discovery scaling
+### 3. LAN topology, local trackers, and discovery scaling
 
 Keep discovery useful when broadcast domains and peer counts are large.
 
@@ -97,32 +84,24 @@ Tests: packet/message budgets, peer-sampling convergence, isolated
   partitions, local tracker loss, interface selection, and mixed LAN/relay
   paths.
 
-### 5. Ad-hoc communal membership and trust
+### 4. Ad-hoc communal membership and trust
 
 Provide a first-class community boundary for temporary, shared collections
 without weakening named-network access controls.
 
-- [ ] Add admission and revocation behavior for communities that have no
-  always-online owner.
 - [ ] Define how signed manifests, provider leases, and content tickets bind
   to a community without requiring a central service.
-- [ ] Add moderation hooks: denylisted nodes, rate limits, maximum object size,
-  and operator-visible audit events.
 Likely code: network membership models, ticket/invitation handling,
 connection allowlists, discovery topic scoping, and CLI network commands.
 
 Tests: invitation join, capability denial, expiry/revocation, conflicting
   community IDs, malicious announcements, and restart persistence.
 
-### 6. CAR/USB inventory reconciliation and enrollment
+### 5. CAR/USB inventory reconciliation and enrollment
 
 Make offline exchange a first-class way to add content and providers to a
 swarm, not only a one-time archive restore.
 
-- [ ] Add a CAR index containing roots, blocks, collection metadata, source
-  community identity, and optional provider/capability hints.
-- [ ] Add export modes for a collection, missing blocks, repair bundles, and a
-  bounded contribution bundle.
 - [ ] Support resumable, inspectable imports and exports with clear duplicate
   and conflicting-root behavior.
 
@@ -133,26 +112,22 @@ Tests: interrupted import/export, duplicate blocks, unknown community,
 partial bundle, conflicting manifest, corrupt CAR, and automatic provider
 publication.
 
-### 7. CLI, daemon operations, and observability
+### 6. CLI, daemon operations, and observability
 
 Make communal participation understandable and controllable.
 
 - [ ] Add explicit commands or options for community create/join, pin,
   unpin, seed, pause contribution, and set resource budgets.
-- [ ] Provide machine-readable events and metrics for discovery, leases,
-  segment transfers, repairs, and rejected requests.
 Likely code: daemon lifecycle, IPC, `syncweb-cli/src/cli/commands.rs`,
 config, status rendering, and logging/metrics.
 
 Tests: JSON schema stability, command permission checks, daemon restart,
 budget enforcement, and end-to-end status transitions.
 
-### 8. Scale simulation and LAN acceptance gates
+### 7. Scale simulation and LAN acceptance gates
 
 Validate control-plane and data-plane behavior before claiming large-LAN
 support.
-
-- [ ] Add live multi-process tests for at least 10, 50, and 100 nodes.
 
 Likely code: integration test harnesses, simulator modules, fixtures, and
 `docs/testing.md`.

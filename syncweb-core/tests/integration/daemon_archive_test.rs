@@ -78,6 +78,11 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
             namespace: folder.namespace_id().to_string(),
             version: None,
             output: archive.clone(),
+            filter: None,
+            mode: None,
+            block_hashes: Vec::new(),
+            max_bytes: None,
+            source_community: None,
         }))
         .await;
     ensure!(matches!(export_response, IpcResponse::ExportComplete(_)));
@@ -89,10 +94,30 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
             version: None,
             output: collection_archive.clone(),
             filter: None,
+            mode: None,
+            block_hashes: Vec::new(),
+            max_bytes: None,
+            source_community: None,
         }))
         .await;
     ensure!(matches!(collection_export_response, IpcResponse::ExportComplete(_)));
     ensure!(collection_archive.is_file());
+
+    let repair_archive = directory.path().join("repair-export.car.zst");
+    let repair_export_response = server
+        .handle_request(IpcRequest::new(IpcCommand::ExportCollectionArchive {
+            collection: manifest.collection_id.to_string(),
+            version: None,
+            output: repair_archive.clone(),
+            filter: None,
+            mode: Some("repair-bundle".to_owned()),
+            block_hashes: vec![content_hash.to_string()],
+            max_bytes: None,
+            source_community: Some("test-community".to_owned()),
+        }))
+        .await;
+    ensure!(matches!(repair_export_response, IpcResponse::ExportComplete(_)));
+    ensure!(repair_archive.is_file());
 
     let target = directory.path().join("imported");
     let import_response = server

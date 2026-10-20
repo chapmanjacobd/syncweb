@@ -61,9 +61,10 @@ pub use folder::archive_verify::{
     DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
 };
 pub use net::{
-    COMMUNITY_INVITATION_VERSION, CachePeerConfig, CommunityCapabilities, CommunityCapability, CommunityId,
-    CommunityIdentity, CommunityInvitation, CommunityMergeDecision, InventorySummary, PartitionMergePolicy,
-    RendezvousCache, community_merge_decision,
+    COMMUNITY_INVITATION_VERSION, COMMUNITY_REVOCATION_VERSION, CachePeerConfig, CommunityAdmissionPolicy,
+    CommunityAuditEvent, CommunityCapabilities, CommunityCapability, CommunityId, CommunityIdentity,
+    CommunityInvitation, CommunityMergeDecision, CommunityModerationPolicy, CommunityRateLimit, CommunityRevocation,
+    InventorySummary, PartitionMergePolicy, RendezvousCache, community_merge_decision,
 };
 pub use pins::{PinClass, PinPolicy, PinRecord, classified_pin_name};
 pub use provider_inventory::{InventoryRange, PROVIDER_INVENTORY_VERSION, ProviderInventory};

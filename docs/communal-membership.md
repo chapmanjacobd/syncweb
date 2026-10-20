@@ -34,6 +34,13 @@ online after an invitation has been distributed; a later signed revocation
 record can be propagated through the community's normal document or CAR
 exchange path.
 
+`CommunityAdmissionPolicy` implements that ownerless flow. Each node chooses
+the issuer keys it trusts, validates invitations against the stable community
+identity, and accepts signed `CommunityRevocation` records from those issuers.
+Revocations can target a device for all of its invitations or a single
+invitation nonce, so admission continues to work during an offline partition
+without silently treating a display name as authority.
+
 ## Independent capabilities
 
 The invitation does not use one overloaded "member" permission. Each of these
@@ -50,3 +57,12 @@ The core API includes `read_only()` and `all()` presets, but callers should
 construct the smallest capability set needed for each invitation. A read-only
 invitation therefore cannot be promoted into a writer by merely discovering a
 peer or receiving a provider lease.
+
+## Moderation hooks
+
+`CommunityModerationPolicy` provides local enforcement hooks for communal
+transfers. Operators can denylist node identities, cap individual object
+sizes, and apply per-node byte budgets over a fixed time window. Accepted and
+rejected decisions are retained as a bounded `CommunityAuditEvent` stream for
+operator-visible status and audit output; the policy never makes a remote
+denylist authoritative for another node.

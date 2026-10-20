@@ -949,6 +949,14 @@ pub enum PackageCommand {
         version: Option<String>,
         #[arg(long, value_name = "EXPRESSION")]
         filter: Vec<String>,
+        #[arg(long, value_enum, default_value_t = PackageExportMode::Collection)]
+        mode: PackageExportMode,
+        #[arg(long = "block-hash", value_name = "HASH")]
+        block_hashes: Vec<String>,
+        #[arg(long, value_name = "BYTES")]
+        max_bytes: Option<u64>,
+        #[arg(long, value_name = "COMMUNITY")]
+        source_community: Option<String>,
     },
     #[command(about = "Import and install a compressed CAR archive file")]
     Import {
@@ -999,6 +1007,14 @@ pub enum PackageCommand {
     Versions { collection: String },
     #[command(about = "Switch the active installed collection version")]
     Switch { collection: String, version: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PackageExportMode {
+    Collection,
+    MissingBlocks,
+    RepairBundle,
+    Contribution,
 }
 
 #[derive(Debug, Subcommand)]

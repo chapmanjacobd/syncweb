@@ -1,4 +1,5 @@
 pub mod community;
+pub mod community_policy;
 pub mod membership;
 pub mod membership_doc;
 pub mod neighbor_map;
@@ -12,6 +13,10 @@ pub use crate::node::identity::DeviceId;
 pub use community::{
     COMMUNITY_INVITATION_VERSION, CommunityCapabilities, CommunityCapability, CommunityId, CommunityIdentity,
     CommunityInvitation,
+};
+pub use community_policy::{
+    COMMUNITY_REVOCATION_VERSION, CommunityAdmissionPolicy, CommunityAuditEvent, CommunityModerationPolicy,
+    CommunityRateLimit, CommunityRevocation,
 };
 pub use network::{Network, NetworkId, NetworkOptions, NetworkTicket};
 pub use network_log::NetworkLogger;

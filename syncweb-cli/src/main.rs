@@ -18,11 +18,11 @@ use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
         AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FoldersCommand,
-        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, RestoreArgs, ScheduleCommand, SearchArgs, SearchKind,
-        ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs,
-        StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand,
-        TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs,
-        WatchArgs,
+        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, PackageExportMode, RestoreArgs, ScheduleCommand,
+        SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
+        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
+        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
+        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -42,8 +42,9 @@ use syncweb_core::{
     daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile, daemon_socket_path, pid_is_alive},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
-        CollectionEntry, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImporter, FolderLike, FolderManager, PackageManager, SyncMode, SyncwebFolder,
+        CollectionEntry, CollectionManifest, CollectionStore, DropExportMode, DropExportOptions, DropExportResult,
+        DropExporter, DropImportOptions, DropImporter, FolderLike, FolderManager, PackageManager, SyncMode,
+        SyncwebFolder,
     },
     fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner, Scanner},
     init::open_node,
@@ -4258,11 +4259,40 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             bootstrap,
             root,
         } => handle_package_publish(ctx, &node_db, paths, namespace, sequence, bootstrap, root).await?,
-        PackageCommand::Export { paths, version, filter } => {
+        PackageCommand::Export {
+            paths,
+            version,
+            filter,
+            mode,
+            block_hashes,
+            max_bytes,
+            source_community,
+        } => {
             if let Some(collection_id) = collection_export_id(&paths)? {
-                handle_package_collection_export(ctx, collection_id, paths, version, filter).await?;
+                handle_package_collection_export(
+                    ctx,
+                    collection_id,
+                    paths,
+                    version,
+                    filter,
+                    mode,
+                    block_hashes,
+                    max_bytes,
+                    source_community,
+                )
+                .await?;
             } else {
-                handle_package_archive_export(ctx, paths, version, filter).await?;
+                handle_package_archive_export(
+                    ctx,
+                    paths,
+                    version,
+                    filter,
+                    mode,
+                    block_hashes,
+                    max_bytes,
+                    source_community,
+                )
+                .await?;
             }
         }
         PackageCommand::Import {
@@ -4731,10 +4761,13 @@ async fn handle_package_archive_export(
     paths: Vec<std::path::PathBuf>,
     version: Option<String>,
     filters: Vec<String>,
+    mode: PackageExportMode,
+    block_hashes: Vec<String>,
+    max_bytes: Option<u64>,
+    source_community: Option<String>,
 ) -> Result<()> {
     let output_json = ctx.output_json;
     let (sources, destination) = split_drop_paths(paths)?;
-    let filter = parse_drop_filters(&filters)?;
     let multiple = sources.len() > 1;
     if multiple {
         let output_dir = destination
@@ -4759,13 +4792,14 @@ async fn handle_package_archive_export(
         add_drop_content(&node, &manifest, &source).await?;
         let manifests = vec![manifest];
         let output = drop_output_path(&source, destination.as_deref(), multiple)?;
-        let mut options = DropExportOptions::default();
-        if let Some(requested_version) = &version {
-            options = options.with_version(requested_version.clone());
-        }
-        if let Some(engine) = &filter {
-            options = options.with_filter(engine.clone());
-        }
+        let options = package_export_options(
+            version.as_deref(),
+            &filters,
+            mode,
+            &block_hashes,
+            max_bytes,
+            source_community.as_deref(),
+        )?;
         results.push(exporter.export_manifests(&manifests, output, options).await?);
     }
     print_package_archive_exports(&results, output_json)?;
@@ -4780,6 +4814,10 @@ async fn handle_package_collection_export(
     paths: Vec<std::path::PathBuf>,
     version: Option<String>,
     filters: Vec<String>,
+    mode: PackageExportMode,
+    block_hashes: Vec<String>,
+    max_bytes: Option<u64>,
+    source_community: Option<String>,
 ) -> Result<()> {
     let output = collection_export_output(collection_id, &paths)?;
     let filter = parse_drop_filters(&filters)?.map(|engine| engine.config());
@@ -4787,9 +4825,97 @@ async fn handle_package_collection_export(
         .await?
         .ok_or_else(|| anyhow::anyhow!("exporting a collection ID requires the daemon"))?;
     let result = client
-        .export_collection_archive(collection_id.to_string(), version, output, filter)
+        .export_collection_archive_with_options(
+            collection_id.to_string(),
+            version,
+            output,
+            filter,
+            package_export_mode_name(mode),
+            block_hashes,
+            max_bytes,
+            source_community,
+        )
         .await?;
     print_package_archive_exports(std::slice::from_ref(&result), ctx.output_json)
+}
+
+fn package_export_options(
+    version: Option<&str>,
+    filters: &[String],
+    mode: PackageExportMode,
+    block_hashes: &[String],
+    max_bytes: Option<u64>,
+    source_community: Option<&str>,
+) -> Result<DropExportOptions> {
+    let mut options = DropExportOptions::default().with_mode(package_export_mode(mode, block_hashes, max_bytes)?);
+    if let Some(version) = version {
+        options = options.with_version(version);
+    }
+    if let Some(engine) = parse_drop_filters(filters)? {
+        options = options.with_filter(engine);
+    }
+    if let Some(community) = source_community {
+        options = options.with_source_community(community);
+    }
+    Ok(options)
+}
+
+fn package_export_mode_name(mode: PackageExportMode) -> String {
+    match mode {
+        PackageExportMode::Collection => "collection",
+        PackageExportMode::MissingBlocks => "missing-blocks",
+        PackageExportMode::RepairBundle => "repair-bundle",
+        PackageExportMode::Contribution => "contribution",
+    }
+    .to_owned()
+}
+
+fn package_export_mode(
+    mode: PackageExportMode,
+    block_hashes: &[String],
+    max_bytes: Option<u64>,
+) -> Result<DropExportMode> {
+    let hashes = block_hashes
+        .iter()
+        .map(|value| {
+            value
+                .parse::<BlobHash>()
+                .map_err(|error| anyhow::anyhow!("invalid block hash {value:?}: {error}"))
+        })
+        .collect::<Result<std::collections::BTreeSet<_>>>()?;
+    match mode {
+        PackageExportMode::Collection => {
+            if !hashes.is_empty() || max_bytes.is_some() {
+                anyhow::bail!("--block-hash and --max-bytes require a non-collection export mode");
+            }
+            Ok(DropExportMode::Collection)
+        }
+        PackageExportMode::MissingBlocks => {
+            if max_bytes.is_some() {
+                anyhow::bail!("--max-bytes cannot be used with --mode missing-blocks");
+            }
+            if hashes.is_empty() {
+                anyhow::bail!("--mode missing-blocks requires at least one --block-hash");
+            }
+            Ok(DropExportMode::MissingBlocks(hashes))
+        }
+        PackageExportMode::RepairBundle => {
+            if max_bytes.is_some() {
+                anyhow::bail!("--max-bytes cannot be used with --mode repair-bundle");
+            }
+            if hashes.is_empty() {
+                anyhow::bail!("--mode repair-bundle requires at least one --block-hash");
+            }
+            Ok(DropExportMode::RepairBundle(hashes))
+        }
+        PackageExportMode::Contribution => {
+            if !hashes.is_empty() {
+                anyhow::bail!("--block-hash cannot be used with --mode contribution");
+            }
+            let max_bytes = max_bytes.ok_or_else(|| anyhow::anyhow!("--mode contribution requires --max-bytes"))?;
+            Ok(DropExportMode::Contribution { max_bytes })
+        }
+    }
 }
 
 fn print_package_archive_exports(results: &[DropExportResult], output_json: bool) -> Result<()> {
@@ -4802,6 +4928,7 @@ fn print_package_archive_exports(results: &[DropExportResult], output_json: bool
                     "collection": result.collection_id.to_string(),
                     "version": result.version,
                     "manifest": result.manifest.to_string(),
+                    "index": result.index.to_string(),
                     "entries": result.entry_count,
                     "blocks": result.block_count,
                     "archive_size": result.archive_size,
@@ -5876,10 +6003,11 @@ fn handle_network_events(data_dir: &std::path::Path, network_id: &str, limit: us
                     "event_type": e.event_type,
                     "peer": e.peer,
                     "details": e.details,
+                    "metadata_json": e.metadata_json,
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string(&json_events)?);
+        println!("{}", json_list("events", json_events)?);
     } else {
         println!("Events for network {network_id}:");
         for event in &events {
@@ -5907,6 +6035,7 @@ fn handle_network_health(
     if let Some(network_id) = network {
         let events = stats_db.recent_network_events(&network_id, 100)?;
         let sessions = stats_db.recent_sync_sessions(&network_id, 100)?;
+        let event_counts = stats_db.network_event_counts(&network_id)?;
         if output_json {
             println!(
                 "{}",
@@ -5914,6 +6043,7 @@ fn handle_network_health(
                     "network_id": network_id,
                     "events": events.len(),
                     "sessions": sessions.len(),
+                    "event_counts": event_counts,
                 })
             );
         } else {
@@ -5929,12 +6059,14 @@ fn handle_network_health(
                 .map(|n| {
                     let id = n.id.to_string();
                     let events = stats_db.recent_network_events(&id, 1).unwrap_or_default();
+                    let event_counts = stats_db.network_event_counts(&id).unwrap_or_default();
                     serde_json::json!({
                         "name": n.name,
                         "id": id,
                         "member_count": n.members.len(),
                         "folder_count": n.folders.len(),
                         "last_event": events.first().map(|e| e.timestamp),
+                        "event_counts": event_counts,
                     })
                 })
                 .collect();

@@ -11,12 +11,12 @@ use tokio::{
 };
 use uuid::Uuid;
 
+use crate::folder::archive_format::{DropIndex, parse_car_header as parse_format_header};
 use crate::{
     error::{Result, SyncwebError},
     folder::CollectionManifest,
 };
 
-const CAR_VERSION: u64 = 1;
 const CID_VERSION: u64 = 1;
 const RAW_CODEC: u64 = 0x55;
 const BLAKE3_MULTIHASH: u64 = 0x1e;
@@ -30,6 +30,7 @@ const COPY_BUFFER_SIZE: usize = 64 * 1024;
 #[non_exhaustive]
 pub struct DropVerifyResult {
     pub manifest: Hash,
+    pub index: Option<Hash>,
     pub collection_id: Uuid,
     pub version: String,
     pub entry_count: usize,
@@ -119,7 +120,14 @@ where
         .map_err(|error| SyncwebError::operation("CAR header length is not representable", error))?;
     let mut header = vec![0_u8; header_len];
     read_exact(&mut reader, &mut header, "failed to read CAR header").await?;
-    let root = parse_car_header(&header)?;
+    let roots = parse_format_header(&header)?;
+    let root = roots[0];
+    let index_root = roots.get(1).copied();
+    if roots.len() > 2 {
+        return Err(SyncwebError::InvalidConfig(
+            "drop archive contains more than one optional index root".to_owned(),
+        ));
+    }
 
     let first_section = read_section_header(&mut reader)
         .await?
@@ -164,8 +172,41 @@ where
     }
 
     let mut seen = BTreeSet::new();
+    let mut index = None;
     let mut block_count = 1_usize;
     let mut bytes_verified = manifest_size;
+    if let Some(index_root) = index_root {
+        let index_section = read_section_header(&mut reader)
+            .await?
+            .ok_or_else(|| SyncwebError::InvalidConfig("drop archive is missing its index block".to_owned()))?;
+        if index_section.hash != index_root || index_section.payload_size > MAX_MANIFEST_SIZE {
+            return Err(SyncwebError::InvalidConfig(
+                "drop index block does not match its CAR root".to_owned(),
+            ));
+        }
+        let (index_hash, index_data, index_size) = read_payload(&mut reader, index_section.payload_size, true).await?;
+        if index_hash != index_root {
+            return Err(SyncwebError::InvalidConfig(
+                "drop index hash does not match its CID".to_owned(),
+            ));
+        }
+        let index_bytes =
+            index_data.ok_or_else(|| SyncwebError::InvalidConfig("drop index was not buffered".to_owned()))?;
+        let parsed_index = DropIndex::from_bytes(&index_bytes)?;
+        if parsed_index.manifest != root
+            || parsed_index.collection_id != manifest.collection_id
+            || parsed_index.collection_version != manifest.version
+        {
+            return Err(SyncwebError::InvalidConfig(
+                "drop index metadata does not match the collection manifest".to_owned(),
+            ));
+        }
+        index = Some(index_root);
+        bytes_verified = bytes_verified
+            .checked_add(index_size)
+            .ok_or_else(|| SyncwebError::operation("verified drop size overflow", "u64 limit exceeded"))?;
+        block_count = block_count.saturating_add(1);
+    }
     while let Some(section) = read_section_header(&mut reader).await? {
         let expected_size = expected.get(&section.hash).ok_or_else(|| {
             SyncwebError::InvalidConfig(format!(
@@ -213,6 +254,7 @@ where
 
     Ok(DropVerifyResult {
         manifest: root,
+        index,
         collection_id: manifest.collection_id,
         version: manifest.version,
         entry_count: manifest.entries.len(),
@@ -417,100 +459,4 @@ where
         .await
         .map(|_| ())
         .map_err(|error| SyncwebError::operation(context, error))
-}
-
-fn parse_car_header(header: &[u8]) -> Result<Hash> {
-    let mut offset = 0_usize;
-    let root_marker = read_slice_byte(header, &mut offset, "CAR root field")?;
-    if root_marker != 0x0a {
-        return Err(SyncwebError::InvalidConfig(
-            "CAR header does not contain a root CID".to_owned(),
-        ));
-    }
-    let cid_length_raw = read_slice_varint(header, &mut offset, "CAR root CID length")?;
-    let cid_length = usize::try_from(cid_length_raw)
-        .map_err(|error| SyncwebError::operation("CAR root CID length is not representable", error))?;
-    let cid_end = offset
-        .checked_add(cid_length)
-        .ok_or_else(|| SyncwebError::operation("CAR root CID range overflow", "usize limit exceeded"))?;
-    let cid = header
-        .get(offset..cid_end)
-        .ok_or_else(|| SyncwebError::InvalidConfig("CAR root CID is truncated".to_owned()))?;
-    offset = cid_end;
-    let version_marker = read_slice_byte(header, &mut offset, "CAR version field")?;
-    if version_marker != 0x10 {
-        return Err(SyncwebError::InvalidConfig(
-            "CAR header does not contain a version".to_owned(),
-        ));
-    }
-    let version = read_slice_varint(header, &mut offset, "CAR version")?;
-    if version != CAR_VERSION || offset != header.len() {
-        return Err(SyncwebError::InvalidConfig(
-            "unsupported or malformed CAR header".to_owned(),
-        ));
-    }
-    parse_cid(cid)
-}
-
-fn parse_cid(cid: &[u8]) -> Result<Hash> {
-    let mut offset = 0_usize;
-    let version = read_slice_varint(cid, &mut offset, "CID version")?;
-    let codec = read_slice_varint(cid, &mut offset, "CID codec")?;
-    let hash_code = read_slice_varint(cid, &mut offset, "CID multihash code")?;
-    let hash_size = read_slice_varint(cid, &mut offset, "CID multihash length")?;
-    if version != CID_VERSION || codec != RAW_CODEC || hash_code != BLAKE3_MULTIHASH || hash_size != HASH_SIZE {
-        return Err(SyncwebError::InvalidConfig(
-            "drop contains an unsupported root content identifier".to_owned(),
-        ));
-    }
-    let hash_end = offset
-        .checked_add(
-            usize::try_from(HASH_SIZE)
-                .map_err(|error| SyncwebError::operation("CID hash length is not representable", error))?,
-        )
-        .ok_or_else(|| SyncwebError::operation("CID hash range overflow", "usize limit exceeded"))?;
-    let digest = cid
-        .get(offset..hash_end)
-        .ok_or_else(|| SyncwebError::InvalidConfig("CID digest is truncated".to_owned()))?;
-    if hash_end != cid.len() {
-        return Err(SyncwebError::InvalidConfig("CID contains trailing bytes".to_owned()));
-    }
-    let hash: [u8; 32] = digest
-        .try_into()
-        .map_err(|error| SyncwebError::InvalidConfig(format!("CID digest must be 32 bytes: {error}")))?;
-    Ok(Hash::from_bytes(hash))
-}
-
-fn read_slice_byte(bytes: &[u8], offset: &mut usize, name: &'static str) -> Result<u8> {
-    let byte = bytes
-        .get(*offset)
-        .copied()
-        .ok_or_else(|| SyncwebError::InvalidConfig(format!("{name} is truncated")))?;
-    *offset = offset
-        .checked_add(1)
-        .ok_or_else(|| SyncwebError::operation("CAR offset overflow", name))?;
-    Ok(byte)
-}
-
-fn read_slice_varint(bytes: &[u8], offset: &mut usize, name: &'static str) -> Result<u64> {
-    let mut value = 0_u64;
-    let mut shift = 0_u32;
-    for index in 0..10 {
-        let byte = read_slice_byte(bytes, offset, name)?;
-        let bits = u64::from(byte & 0x7f);
-        if shift == 63 && bits > 1 {
-            return Err(SyncwebError::InvalidConfig(format!("{name} varint is too large")));
-        }
-        value |= bits << shift;
-        if byte & 0x80 == 0 {
-            return Ok(value);
-        }
-        if index == 9 {
-            return Err(SyncwebError::InvalidConfig(format!("{name} varint is too large")));
-        }
-        shift = shift
-            .checked_add(7)
-            .ok_or_else(|| SyncwebError::operation("CAR varint shift overflow", name))?;
-    }
-    Err(SyncwebError::InvalidConfig(format!("{name} varint is too large")))
 }

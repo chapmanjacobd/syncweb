@@ -53,7 +53,7 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
         .import_archive(&archive, DropImportOptions::default(), None)
         .await?;
     ensure!(result.collection_manifest == manifest);
-    ensure!(result.local_missing_block_count == 1);
+    ensure!(result.local_missing_block_count == 2);
     ensure!(result.local_reused_block_count == 0);
     ensure!(destination.blob_store().has(hash).await?);
 
@@ -65,8 +65,8 @@ async fn import_drop_roundtrip_and_materialization() -> Result<()> {
         .import_archive(&archive, DropImportOptions::default(), None)
         .await?;
     ensure!(repeated.local_missing_block_count == 0);
-    ensure!(repeated.local_reused_block_count == 1);
-    ensure!(repeated.record_local_availability(&destination)? == 2);
+    ensure!(repeated.local_reused_block_count == 2);
+    ensure!(repeated.record_local_availability(&destination)? == 3);
     ensure!(
         destination
             .provider_peer_snapshot(&hash)?

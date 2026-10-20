@@ -1,7 +1,11 @@
 #![cfg(unix)]
 
 use anyhow::{Context, ensure};
-use std::process::Command;
+use std::{
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    time::{Duration, Instant},
+};
 
 fn cli_test_dir(name: &str) -> anyhow::Result<std::path::PathBuf> {
     let dir = std::env::temp_dir().join(format!("syncweb-daemon-test-{name}-{}", uuid::Uuid::new_v4()));
@@ -79,6 +83,54 @@ fn wait_for_daemon_stopped(data_dir_arg: &str) -> anyhow::Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
     anyhow::bail!("timed out waiting for daemon to stop");
+}
+
+struct ProcessFleet {
+    children: Vec<Child>,
+    data_dirs: Vec<PathBuf>,
+}
+
+impl ProcessFleet {
+    fn new() -> Self {
+        Self {
+            children: Vec::new(),
+            data_dirs: Vec::new(),
+        }
+    }
+
+    fn spawn(&mut self, label: &str) -> anyhow::Result<&PathBuf> {
+        let data_dir = cli_test_dir(label)?;
+        let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+        let child = Command::new(env!("CARGO_BIN_EXE_syncweb"))
+            .args([
+                "--data-dir",
+                data_dir_arg,
+                "start",
+                "--no-relay",
+                "--no-mdns",
+                "--max-threads",
+                "1",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("spawn scale-gate daemon")?;
+        self.data_dirs.push(data_dir);
+        self.children.push(child);
+        self.data_dirs.last().context("scale-gate data directory")
+    }
+}
+
+impl Drop for ProcessFleet {
+    fn drop(&mut self) {
+        for child in &mut self.children {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        for data_dir in &self.data_dirs {
+            let _ = std::fs::remove_dir_all(data_dir);
+        }
+    }
 }
 
 #[test]
@@ -1509,6 +1561,76 @@ fn test_start_media_only_exits() -> anyhow::Result<()> {
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&data_dir);
+    Ok(())
+}
+
+#[test]
+#[ignore = "resource-intensive LAN acceptance gate"]
+fn test_live_process_scale_gate() -> anyhow::Result<()> {
+    for node_count in [10_usize, 50, 100] {
+        let mut fleet = ProcessFleet::new();
+        for node in 0..node_count {
+            let _ = fleet.spawn(&format!("scale-{node_count}-{node}"))?;
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(45);
+        while Instant::now() < deadline {
+            let ready = fleet.data_dirs.iter().all(|data_dir| {
+                data_dir
+                    .to_str()
+                    .and_then(|path| syncweb(&["--data-dir", path, "status"]).ok())
+                    .is_some_and(|status| status.status.success() && stdout_contains(&status, "daemon: running"))
+            });
+            if ready {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+
+        for data_dir in &fleet.data_dirs {
+            let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+            let status = syncweb(&["--data-dir", data_dir_arg, "status"])?;
+            ensure!(
+                status.status.success() && stdout_contains(&status, "daemon: running"),
+                "scale gate node did not become ready: {}",
+                String::from_utf8_lossy(&status.stderr)
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_network_events_json_uses_stable_envelope() -> anyhow::Result<()> {
+    let data_dir = cli_test_dir("network-events-json")?;
+    let stats = syncweb_core::storage::stats_db::StatsDatabase::open(data_dir.join("default").join("stats.db"))?;
+    stats.record_network_event(
+        "community-a",
+        syncweb_core::net::network_log::NetworkEventType::RequestRejected.as_str(),
+        Some("peer-a"),
+        Some("object too large"),
+        Some(r#"{"limit":1024}"#),
+    )?;
+    drop(stats);
+
+    let data_dir_arg = data_dir.to_str().context("UTF-8 path")?;
+    let output = syncweb(&["--data-dir", data_dir_arg, "--json", "network", "events", "community-a"])?;
+    ensure!(output.status.success(), "network events should succeed");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).context("parse events JSON")?;
+    let events = value
+        .get("events")
+        .and_then(serde_json::Value::as_array)
+        .context("events JSON should use an object envelope")?;
+    ensure!(events.len() == 1, "expected one event: {value}");
+    ensure!(
+        events[0].get("event_type") == Some(&serde_json::Value::from("request_rejected")),
+        "event type should be machine-readable: {value}"
+    );
+    ensure!(
+        events[0].get("metadata_json") == Some(&serde_json::Value::from(r#"{"limit":1024}"#)),
+        "event metadata should be preserved: {value}"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
     Ok(())
 }
 

@@ -409,6 +409,11 @@ async fn test_daemon_import_export_archive_via_ipc() -> Result<()> {
                 namespace: export_ns,
                 version: None,
                 output: export_path,
+                filter: None,
+                mode: None,
+                block_hashes: Vec::new(),
+                max_bytes: None,
+                source_community: None,
             }))
             .await?;
         ensure!(matches!(export_response, IpcResponse::ExportComplete(_)));

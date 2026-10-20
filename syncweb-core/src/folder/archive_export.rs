@@ -22,21 +22,64 @@ use crate::{
     node::blob_store::BlobStore,
 };
 
-use super::{CollectionEntry, CollectionManifest};
-
-const CAR_VERSION: u64 = 1;
-const CID_VERSION: u64 = 1;
-const RAW_CODEC: u64 = 0x55;
-const BLAKE3_MULTIHASH: u64 = 0x1e;
-const HASH_SIZE: u64 = 32;
+use super::{
+    CollectionEntry, CollectionManifest,
+    archive_format::{DropIndex, DropProviderHint, car_header, cid_for_hash, encode_varint},
+};
 const COPY_BUFFER_SIZE: usize = 64 * 1024;
 
+/// Select which content a drop contributes to an archive.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DropExportMode {
+    /// Export every entry in the selected collection version.
+    Collection,
+    /// Export only the listed blocks that are missing at the destination.
+    MissingBlocks(BTreeSet<Hash>),
+    /// Export only the listed blocks as a repair bundle.
+    RepairBundle(BTreeSet<Hash>),
+    /// Export entries in manifest order until the byte budget is exhausted.
+    Contribution { max_bytes: u64 },
+}
+
+impl Default for DropExportMode {
+    fn default() -> Self {
+        Self::Collection
+    }
+}
+
+impl DropExportMode {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Collection => "collection",
+            Self::MissingBlocks(_) => "missing-blocks",
+            Self::RepairBundle(_) => "repair-bundle",
+            Self::Contribution { .. } => "contribution",
+        }
+    }
+}
+
 /// Options controlling which collection version and entries are included.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct DropExportOptions {
     version: Option<String>,
     filter: Option<FilterEngine>,
+    mode: DropExportMode,
+    source_community: Option<String>,
+    provider_hints: Vec<DropProviderHint>,
+}
+
+impl Default for DropExportOptions {
+    fn default() -> Self {
+        Self {
+            version: None,
+            filter: None,
+            mode: DropExportMode::Collection,
+            source_community: None,
+            provider_hints: Vec::new(),
+        }
+    }
 }
 
 impl DropExportOptions {
@@ -53,6 +96,24 @@ impl DropExportOptions {
     }
 
     #[must_use]
+    pub fn with_mode(mut self, mode: DropExportMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    #[must_use]
+    pub fn with_source_community(mut self, community: impl Into<String>) -> Self {
+        self.source_community = Some(community.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_provider_hints(mut self, providers: Vec<DropProviderHint>) -> Self {
+        self.provider_hints = providers;
+        self
+    }
+
+    #[must_use]
     pub fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
@@ -60,6 +121,11 @@ impl DropExportOptions {
     #[must_use]
     pub const fn filter(&self) -> Option<&FilterEngine> {
         self.filter.as_ref()
+    }
+
+    #[must_use]
+    pub const fn mode(&self) -> &DropExportMode {
+        &self.mode
     }
 }
 
@@ -71,6 +137,7 @@ pub struct DropExportResult {
     pub collection_id: uuid::Uuid,
     pub version: String,
     pub manifest: Hash,
+    pub index: Hash,
     pub entry_count: usize,
     pub block_count: usize,
     pub archive_size: u64,
@@ -148,11 +215,22 @@ impl DropExporter {
         let _export_guard = self.export_lock.lock().await;
         let selected = in_pool(pool, || select_manifest(manifests, options.version()))?;
         let filtered = in_pool(pool, || filter_manifest(selected, options.filter()))?;
-        let (manifest_bytes, manifest_hash, entries) = in_pool(pool, || -> Result<_> {
+        let filtered = in_pool(pool, || select_mode(filtered, &options.mode))?;
+        let (manifest_bytes, manifest_hash, entries, index_bytes, index_hash) = in_pool(pool, || -> Result<_> {
             let manifest_bytes = filtered.to_bytes()?;
             let manifest_hash = Hash::new(&manifest_bytes);
             let entries = unique_entries(&filtered.entries);
-            Ok((manifest_bytes, manifest_hash, entries))
+            let index = DropIndex::from_manifest(
+                &filtered,
+                manifest_hash,
+                &entries,
+                options.mode.label(),
+                options.source_community.clone(),
+                options.provider_hints.clone(),
+            )?;
+            let index_bytes = index.to_bytes()?;
+            let index_hash = Hash::new(&index_bytes);
+            Ok((manifest_bytes, manifest_hash, entries, index_bytes, index_hash))
         })?;
         for entry in &entries {
             if !self.blob_store.has(entry.content_id).await? {
@@ -172,7 +250,15 @@ impl DropExporter {
             Uuid::new_v4()
         ));
         let write_result = self
-            .write_archive(&staging, &manifest_bytes, manifest_hash, &entries, pool)
+            .write_archive(
+                &staging,
+                &manifest_bytes,
+                manifest_hash,
+                &index_bytes,
+                index_hash,
+                &entries,
+                pool,
+            )
             .await;
         if let Err(error) = write_result {
             remove_if_present(&staging).await?;
@@ -191,8 +277,9 @@ impl DropExporter {
             collection_id: filtered.collection_id,
             version: filtered.version,
             manifest: manifest_hash,
+            index: index_hash,
             entry_count: filtered.entries.len(),
-            block_count: entries.len().saturating_add(1),
+            block_count: entries.len().saturating_add(2),
             archive_size,
         })
     }
@@ -202,6 +289,8 @@ impl DropExporter {
         staging: &Path,
         manifest_bytes: &[u8],
         manifest_hash: Hash,
+        index_bytes: &[u8],
+        index_hash: Hash,
         entries: &[CollectionEntry],
         pool: Option<&ManagedPool>,
     ) -> Result<()> {
@@ -209,9 +298,10 @@ impl DropExporter {
             .await
             .map_err(|error| SyncwebError::operation("failed to create drop archive", error))?;
         let mut encoder = ZstdEncoder::new(file);
-        let header = car_header(manifest_hash)?;
+        let header = car_header(&[manifest_hash, index_hash])?;
         encoder.write_all(&header).await?;
         write_section(&mut encoder, manifest_hash, manifest_bytes).await?;
+        write_section(&mut encoder, index_hash, index_bytes).await?;
         let temporary_dir = staging.parent().unwrap_or_else(|| Path::new("."));
         for entry in entries {
             write_blob_section(&self.blob_store, &mut encoder, entry, temporary_dir, pool).await?;
@@ -308,6 +398,45 @@ fn filter_manifest(manifest: CollectionManifest, filter: Option<&FilterEngine>) 
     filtered.public_key = None;
     filtered.validate()?;
     Ok(filtered)
+}
+
+fn select_mode(mut manifest: CollectionManifest, mode: &DropExportMode) -> Result<CollectionManifest> {
+    match mode {
+        DropExportMode::Collection => Ok(manifest),
+        DropExportMode::MissingBlocks(hashes) | DropExportMode::RepairBundle(hashes) => {
+            if hashes.is_empty() {
+                return Err(SyncwebError::InvalidConfig(
+                    "a block-selection export requires at least one hash".to_owned(),
+                ));
+            }
+            manifest.entries.retain(|entry| hashes.contains(&entry.content_id));
+            manifest.signature = None;
+            manifest.public_key = None;
+            manifest.validate()?;
+            Ok(manifest)
+        }
+        DropExportMode::Contribution { max_bytes } => {
+            let mut total = 0_u64;
+            let mut selected = BTreeSet::new();
+            manifest.entries.retain(|entry| {
+                if selected.contains(&entry.content_id) {
+                    return true;
+                }
+                let fits = total
+                    .checked_add(entry.size)
+                    .is_some_and(|candidate| candidate <= *max_bytes);
+                if fits {
+                    total = total.saturating_add(entry.size);
+                    selected.insert(entry.content_id);
+                }
+                fits
+            });
+            manifest.signature = None;
+            manifest.public_key = None;
+            manifest.validate()?;
+            Ok(manifest)
+        }
+    }
 }
 
 fn unique_entries(entries: &[CollectionEntry]) -> Vec<CollectionEntry> {
@@ -414,42 +543,6 @@ async fn write_section_prefix<W: AsyncWrite + Unpin>(writer: &mut W, hash: Hash,
     writer.write_all(&encoded_size).await?;
     writer.write_all(&cid).await?;
     Ok(())
-}
-
-fn car_header(root: Hash) -> Result<Vec<u8>> {
-    let cid = cid_for_hash(root);
-    let cid_length =
-        u64::try_from(cid.len()).map_err(|error| SyncwebError::operation("CAR root CID is too large", error))?;
-    let mut header = Vec::with_capacity(cid.len().saturating_add(8));
-    header.push(0x0a);
-    encode_varint(cid_length, &mut header);
-    header.extend_from_slice(&cid);
-    header.push(0x10);
-    encode_varint(CAR_VERSION, &mut header);
-    let header_length =
-        u64::try_from(header.len()).map_err(|error| SyncwebError::operation("CAR header is too large", error))?;
-    let mut encoded = Vec::with_capacity(header.len().saturating_add(10));
-    encode_varint(header_length, &mut encoded);
-    encoded.extend_from_slice(&header);
-    Ok(encoded)
-}
-
-fn cid_for_hash(hash: Hash) -> Vec<u8> {
-    let mut cid = Vec::with_capacity(2 + 2 + 2 + 32);
-    encode_varint(CID_VERSION, &mut cid);
-    encode_varint(RAW_CODEC, &mut cid);
-    encode_varint(BLAKE3_MULTIHASH, &mut cid);
-    encode_varint(HASH_SIZE, &mut cid);
-    cid.extend_from_slice(hash.as_bytes());
-    cid
-}
-
-fn encode_varint(mut value: u64, output: &mut Vec<u8>) {
-    while value >= 0x80 {
-        output.push(value.to_le_bytes()[0] | 0x80);
-        value >>= 7;
-    }
-    output.push(value.to_le_bytes()[0]);
 }
 
 async fn remove_if_present(path: &Path) -> Result<()> {

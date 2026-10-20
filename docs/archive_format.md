@@ -20,10 +20,17 @@ The archive format is essentially a Zstandard-compressed Content Addressable aRc
 
 * Extension: `.car.zst`
 * MIME Type: `application/vnd.syncweb.package+zstd`
-* Underlying Structure: 
+* Underlying Structure:
   1. A root CID pointing to the JSON `CollectionManifest`.
-  2. All the file blobs referenced in the manifest's `entries` array.
-  3. The whole stream is compressed using `zstd` (which provides excellent compression ratios and decompression speeds).
+  2. A second root CID pointing to a JSON `DropIndex` describing the archive.
+  3. The unique file blobs selected by the manifest and export mode.
+  4. The whole stream is compressed using `zstd` (which provides excellent compression ratios and decompression speeds).
+
+The second root is optional when reading legacy archives. New archives include
+the index so an offline recipient can inspect roots, collection identity,
+selected blocks, logical paths, export mode, and optional source-community
+metadata before importing. Provider capability hints may also be included by
+library callers.
 
 ### Why CAR?
 Iroh natively speaks CAR for bulk blob export and import. Instead of inventing a custom tarball or zip format (which would require re-hashing all files on import), a CAR file maintains the BLAKE3 content-addressed nature of the data. When imported, Iroh can verify and ingest the blobs directly into its blob store with zero overhead.
@@ -46,6 +53,18 @@ syncweb package export --version 1.2.0 ./my-dataset my-dataset_v1.2.0.car.zst
 # Export a partial package using granular filtering
 syncweb package export --filter "ext!=mp4" ./my-dataset my-dataset-lite.car.zst
 
+# Export only blocks needed by a destination
+syncweb package export --mode missing-blocks \
+  --block-hash <BLAKE3_HASH> ./my-dataset missing.car.zst
+
+# Export a bounded contribution bundle
+syncweb package export --mode contribution --max-bytes 104857600 \
+  --source-community classroom ./my-dataset contribution.car.zst
+
+# Export a repair bundle for selected blocks
+syncweb package export --mode repair-bundle \
+  --block-hash <BLAKE3_HASH> ./my-dataset repair.car.zst
+
 # Export multiple packages at the same time (last argument is output directory)
 syncweb package export ./pkg1 ./pkg2 ./exports/
 ```
@@ -67,10 +86,10 @@ let result = syncweb_core::verify_archive("my-dataset.car.zst").await?;
 ```
 
 Verification decompresses and parses the CAR incrementally. It checks the CAR
-root, manifest serialization and signature, every content block's BLAKE3 hash
-and size, and that the archive contains exactly the blocks referenced by the
-manifest. Header, section, manifest, and varint limits are checked before any
-attacker-controlled allocation.
+roots, manifest serialization and signature, optional index metadata, every
+content block's BLAKE3 hash and size, and that the archive contains exactly the
+blocks referenced by the manifest. Header, section, manifest, index, and
+varint limits are checked before any attacker-controlled allocation.
 
 ## Implementation Details
 
@@ -79,8 +98,9 @@ attacker-controlled allocation.
    manifest supplied by the package source.
 2. Filter & Collect Entries: Evaluate each `CollectionEntry` with the existing
    `FilterEngine`. A filtered manifest is unsigned because its content changed.
-3. Generate CAR Stream: Write a CAR v1 header, the manifest as the root block,
-   and each unique referenced BLAKE3 blob using raw BLAKE3 CIDs.
+3. Generate CAR Stream: Write a CAR v1 header, the manifest and self-describing
+   `DropIndex` as root blocks, and each unique selected BLAKE3 blob using raw
+   BLAKE3 CIDs.
 4. Compress: Stream CAR bytes through an asynchronous Zstandard encoder while
    copying blob data in bounded chunks and checking its size and hash.
 5. Write Atomically: Write to a unique staging file and rename it into place
@@ -90,8 +110,8 @@ attacker-controlled allocation.
 
 ### Import Pipeline (`archive_import`)
 1. Decompress the `.car.zst` file through a streaming Zstandard decoder.
-2. Validate the CAR header, root manifest, signatures, sizes, hashes,
-   duplicate blocks, and dependencies before mutating the local blob store.
+2. Validate the CAR header, root manifest, optional index, signatures, sizes,
+   hashes, duplicate blocks, and dependencies before mutating the local blob store.
 3. Optionally evaluate each manifest entry with `FilterEngine`; rejected
    blocks are consumed and verified but are not retained.
 4. Stage accepted blocks in bounded temporary files, then ingest them into the

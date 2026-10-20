@@ -1,11 +1,14 @@
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use anyhow::{Context, Result};
 use async_compression::tokio::bufread::ZstdDecoder;
 use syncweb_core::{
     daemon::ManagedPool,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterRule, MatchCriteria},
-    folder::{CollectionEntry, CollectionManifest, DropExportOptions, DropExporter},
+    folder::{
+        CollectionEntry, CollectionManifest, DropExportMode, DropExportOptions, DropExporter, DropIndex,
+        DropProviderHint,
+    },
     node::{
         identity::IdentityManager,
         iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
@@ -115,9 +118,10 @@ async fn test_export_drop_basic_and_empty_package() -> Result<()> {
         .export_archive(&collection_manifest, &output)
         .await?;
     anyhow::ensure!(result.entry_count == 2);
-    anyhow::ensure!(result.block_count == 3);
+    anyhow::ensure!(result.block_count == 4);
+    anyhow::ensure!(result.index != result.manifest);
     let blocks = read_archive(&output).await?;
-    anyhow::ensure!(blocks.len() == 3);
+    anyhow::ensure!(blocks.len() == 4);
     let first_block = blocks.first().context("CAR has no manifest block")?;
     anyhow::ensure!(first_block.0 == result.manifest);
     anyhow::ensure!(CollectionManifest::from_bytes(&first_block.1)? == collection_manifest);
@@ -128,7 +132,7 @@ async fn test_export_drop_basic_and_empty_package() -> Result<()> {
         .export_archive(&empty_manifest, &empty_output)
         .await?;
     anyhow::ensure!(empty_result.entry_count == 0);
-    anyhow::ensure!(read_archive(&empty_output).await?.len() == 1);
+    anyhow::ensure!(read_archive(&empty_output).await?.len() == 2);
     node.stop().await?;
     Ok(())
 }
@@ -191,7 +195,7 @@ async fn test_export_drop_concurrent_replacement_is_valid() -> Result<()> {
     first?;
     second?;
     let blocks = read_archive(&output).await?;
-    anyhow::ensure!(blocks.len() == 2);
+    anyhow::ensure!(blocks.len() == 3);
     anyhow::ensure!(
         CollectionManifest::from_bytes(&blocks.first().context("CAR has no manifest block")?.1)?.version == "1.0.0"
     );
@@ -250,6 +254,58 @@ async fn test_export_drop_with_pool_matches_without_pool() -> Result<()> {
         .await?;
     anyhow::ensure!(hash == manifest.entries.first().context("manifest has no entry")?.content_id);
     anyhow::ensure!(fs::read(plain_output)? == fs::read(pooled_output)?);
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_export_drop_index_and_bounded_modes() -> Result<()> {
+    let directory = TestDirectory::new("syncweb-drop-test")?;
+    let node = test_node(&directory).await?;
+    let collection_id = uuid::Uuid::new_v4();
+    let files = [
+        ("a.txt", b"aaa".as_slice()),
+        ("b.txt", b"bbbb".as_slice()),
+        ("c.txt", b"ccccc".as_slice()),
+    ];
+    let collection_manifest = manifest(collection_id, "1.0.0", &files)?;
+    let mut hashes = Vec::new();
+    for (_, data) in files {
+        hashes.push(node.blob_store().add_bytes(data).await?);
+    }
+    let output = directory.path().join("repair.car.zst");
+    let mut requested = BTreeSet::new();
+    requested.insert(hashes[1]);
+    let result = DropExporter::new(node.blob_store().clone())
+        .export_manifests(
+            std::slice::from_ref(&collection_manifest),
+            &output,
+            DropExportOptions::default()
+                .with_mode(DropExportMode::RepairBundle(requested))
+                .with_source_community("classroom")
+                .with_provider_hints(vec![DropProviderHint::new("peer-a", true, false)]),
+        )
+        .await?;
+    anyhow::ensure!(result.entry_count == 1);
+    anyhow::ensure!(result.block_count == 3);
+    let blocks = read_archive(&output).await?;
+    let index = DropIndex::from_bytes(&blocks[1].1)?;
+    anyhow::ensure!(index.mode == "repair-bundle");
+    anyhow::ensure!(index.source_community.as_deref() == Some("classroom"));
+    anyhow::ensure!(index.providers.len() == 1);
+    anyhow::ensure!(index.blocks.len() == 1);
+    anyhow::ensure!(index.blocks[0].hash == hashes[1]);
+
+    let contribution_output = directory.path().join("contribution.car.zst");
+    let contribution = DropExporter::new(node.blob_store().clone())
+        .export_manifests(
+            std::slice::from_ref(&collection_manifest),
+            &contribution_output,
+            DropExportOptions::default().with_mode(DropExportMode::Contribution { max_bytes: 7 }),
+        )
+        .await?;
+    anyhow::ensure!(contribution.entry_count == 2);
+    anyhow::ensure!(contribution.block_count == 4);
     node.stop().await?;
     Ok(())
 }

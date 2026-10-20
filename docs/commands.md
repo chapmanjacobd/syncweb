@@ -629,6 +629,8 @@ syncweb stats network --period 24h
 syncweb stats network --since 24h --json   # Last 24h of transfer events as JSON
 syncweb stats network --follow             # Stream sync progress live
 syncweb stats network --follow --once      # One-shot snapshot (cron-safe) and exit
+syncweb --json network events <network-id> # Operational events under {"events":[...]}
+syncweb --json network health              # Network health with event_counts metrics
 syncweb stats files --folder ./documents
 syncweb verify ./documents
 syncweb config schedule

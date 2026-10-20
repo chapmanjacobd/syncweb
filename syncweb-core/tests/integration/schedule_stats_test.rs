@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use syncweb_core::{
     bandwidth_stats::BandwidthStats,
+    net::network_log::NetworkEventType,
     schedule::{ScheduleConfig, ScheduleFolderConfig, ScheduleManager},
+    storage::stats_db::StatsDatabase,
 };
 
 #[test]
@@ -53,6 +55,43 @@ fn bandwidth_stats_persist_and_reset() -> anyhow::Result<()> {
     reset.reset();
     anyhow::ensure!(reset.total_download == 0);
     anyhow::ensure!(reset.per_folder.is_empty());
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn operational_network_events_are_counted_and_queryable() -> anyhow::Result<()> {
+    let directory = std::env::temp_dir().join(format!("syncweb-network-events-{}", uuid::Uuid::new_v4()));
+    let database = StatsDatabase::open(directory.join("stats.db"))?;
+    database.record_network_event(
+        "community-a",
+        NetworkEventType::DiscoveryObserved.as_str(),
+        Some("peer-a"),
+        Some("beacon"),
+        Some(r#"{"source":"lan"}"#),
+    )?;
+    database.record_network_event(
+        "community-a",
+        NetworkEventType::RepairFinished.as_str(),
+        Some("peer-b"),
+        Some("repaired"),
+        None,
+    )?;
+    database.record_network_event(
+        "community-a",
+        NetworkEventType::RepairFinished.as_str(),
+        Some("peer-c"),
+        Some("repaired"),
+        None,
+    )?;
+
+    let counts = database.network_event_counts("community-a")?;
+    assert_eq!(counts.get("discovery_observed"), Some(&1));
+    assert_eq!(counts.get("repair_finished"), Some(&2));
+    let events = database.recent_network_events("community-a", 10)?;
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].metadata_json.as_deref(), Some(r#"{"source":"lan"}"#));
+
     std::fs::remove_dir_all(directory)?;
     Ok(())
 }

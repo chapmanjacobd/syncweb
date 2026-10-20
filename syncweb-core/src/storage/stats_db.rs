@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     Result, SyncwebError,
@@ -107,7 +107,10 @@ impl StatsDatabase {
                 timestamp INTEGER NOT NULL,
                 network_id TEXT NOT NULL,
                 event_type TEXT NOT NULL CHECK(event_type IN (
-                    'peer_joined','peer_left','sync_started','sync_finished',
+                    'peer_joined','peer_left','discovery_observed',
+                    'provider_lease_accepted','provider_lease_expired',
+                    'segment_transfer','repair_started','repair_finished',
+                    'request_rejected','sync_started','sync_finished',
                     'relay_connected','relay_disconnected','relay_failed',
                     'topic_subscribed','topic_unsubscribed',
                     'member_added','member_removed','folder_added','folder_removed',
@@ -142,6 +145,7 @@ impl StatsDatabase {
             );",
             )
             .map_err(|error| SyncwebError::operation("failed to initialize stats database schema", error))?;
+        migrate_network_events_schema(&connection)?;
         let _ = connection.execute_batch("ALTER TABLE bandwidth_events ADD COLUMN network_id TEXT");
         let _ = connection.execute_batch(
             "CREATE VIEW IF NOT EXISTS network_bandwidth_summary AS
@@ -759,6 +763,38 @@ impl StatsDatabase {
         Ok(records)
     }
 
+    /// Count persisted operational events by type for a network.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn network_event_counts(&self, network_id: &str) -> Result<BTreeMap<String, u64>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
+        let mut stmt = connection
+            .prepare(
+                "SELECT event_type, COUNT(*)
+                 FROM network_events
+                 WHERE network_id = ?1
+                 GROUP BY event_type
+                 ORDER BY event_type",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare network event counts query", error))?;
+        let counts = stmt
+            .query_map(params![network_id], |row| {
+                let count: i64 = row.get(1)?;
+                Ok((row.get::<_, String>(0)?, count.cast_unsigned()))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query network event counts", error))?
+            .collect::<std::result::Result<BTreeMap<_, _>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read network event counts", error))?;
+        drop(stmt);
+        drop(connection);
+        Ok(counts)
+    }
+
     /// Query recent sync sessions for a given network.
     ///
     /// # Errors
@@ -924,7 +960,7 @@ impl StatsDatabase {
 }
 
 /// A record from the `network_events` table.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct NetworkEventRecord {
     pub id: i64,
@@ -934,6 +970,56 @@ pub struct NetworkEventRecord {
     pub peer: Option<String>,
     pub details: Option<String>,
     pub metadata_json: Option<String>,
+}
+
+fn migrate_network_events_schema(connection: &Connection) -> Result<()> {
+    let schema: Option<String> = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'network_events'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| SyncwebError::operation("failed to inspect network event schema", error))?;
+    let schema = schema.unwrap_or_default();
+    if schema.contains("'request_rejected'") {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "DROP INDEX IF EXISTS idx_network_events_ts;
+             DROP INDEX IF EXISTS idx_network_events_network;
+             DROP INDEX IF EXISTS idx_network_events_type;
+             ALTER TABLE network_events RENAME TO network_events_legacy;
+             CREATE TABLE network_events (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 timestamp INTEGER NOT NULL,
+                 network_id TEXT NOT NULL,
+                 event_type TEXT NOT NULL CHECK(event_type IN (
+                     'peer_joined','peer_left','discovery_observed',
+                     'provider_lease_accepted','provider_lease_expired',
+                     'segment_transfer','repair_started','repair_finished',
+                     'request_rejected','sync_started','sync_finished',
+                     'relay_connected','relay_disconnected','relay_failed',
+                     'topic_subscribed','topic_unsubscribed',
+                     'member_added','member_removed','folder_added','folder_removed',
+                     'ticket_created','ticket_accepted','kicked'
+                 )),
+                 peer TEXT,
+                 details TEXT,
+                 metadata_json TEXT
+             );
+             INSERT INTO network_events(id, timestamp, network_id, event_type, peer, details, metadata_json)
+             SELECT id, timestamp, network_id, event_type, peer, details, metadata_json
+             FROM network_events_legacy;
+             DROP TABLE network_events_legacy;
+             CREATE INDEX idx_network_events_ts ON network_events(timestamp);
+             CREATE INDEX idx_network_events_network ON network_events(network_id);
+             CREATE INDEX idx_network_events_type ON network_events(event_type);",
+        )
+        .map_err(|error| SyncwebError::operation("failed to migrate network event schema", error))?;
+    Ok(())
 }
 
 /// A record from the `network_sync_sessions` table.

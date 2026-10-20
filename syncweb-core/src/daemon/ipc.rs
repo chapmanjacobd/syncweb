@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Write,
     path::{Path, PathBuf},
     str::FromStr,
@@ -21,9 +21,9 @@ use crate::{
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry},
     folder::{
-        CollectionHead, CollectionManifest, CollectionStore, DropExportOptions, DropExportResult, DropExporter,
-        DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription, ShareOptions,
-        SyncMode, share_folder,
+        CollectionHead, CollectionManifest, CollectionStore, DropExportMode, DropExportOptions, DropExportResult,
+        DropExporter, DropImportOptions, DropImportResult, DropImporter, FolderLike, FolderManager, PublicSubscription,
+        ShareOptions, SyncMode, share_folder,
     },
     fs::{Importer, Scanner},
     indexing::{IndexingService, Link, LinkStore},
@@ -49,6 +49,75 @@ use std::time::Duration;
 const IPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(1);
+
+fn apply_archive_export_options(
+    mut options: DropExportOptions,
+    filter: Option<FilterConfig>,
+    mode: Option<String>,
+    block_hashes: Vec<String>,
+    max_bytes: Option<u64>,
+    source_community: Option<String>,
+) -> Result<DropExportOptions> {
+    if let Some(filter) = filter {
+        options = options.with_filter(FilterEngine::new(filter)?);
+    }
+    let hashes = block_hashes
+        .iter()
+        .map(|value| {
+            value
+                .parse::<iroh_blobs::Hash>()
+                .map_err(|error| SyncwebError::InvalidConfig(format!("invalid archive block hash {value:?}: {error}")))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    let mode = mode.as_deref().unwrap_or("collection");
+    let export_mode = match mode {
+        "collection" => {
+            if !hashes.is_empty() || max_bytes.is_some() {
+                return Err(SyncwebError::InvalidConfig(
+                    "block hashes and max bytes require a non-collection export mode".to_owned(),
+                ));
+            }
+            DropExportMode::Collection
+        }
+        "missing-blocks" => {
+            if hashes.is_empty() || max_bytes.is_some() {
+                return Err(SyncwebError::InvalidConfig(
+                    "missing-blocks mode requires block hashes and does not accept max bytes".to_owned(),
+                ));
+            }
+            DropExportMode::MissingBlocks(hashes)
+        }
+        "repair-bundle" => {
+            if hashes.is_empty() || max_bytes.is_some() {
+                return Err(SyncwebError::InvalidConfig(
+                    "repair-bundle mode requires block hashes and does not accept max bytes".to_owned(),
+                ));
+            }
+            DropExportMode::RepairBundle(hashes)
+        }
+        "contribution" => {
+            if !hashes.is_empty() {
+                return Err(SyncwebError::InvalidConfig(
+                    "contribution mode does not accept block hashes".to_owned(),
+                ));
+            }
+            DropExportMode::Contribution {
+                max_bytes: max_bytes
+                    .ok_or_else(|| SyncwebError::InvalidConfig("contribution mode requires max bytes".to_owned()))?,
+            }
+        }
+        other => {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "unsupported archive export mode {other:?}"
+            )));
+        }
+    };
+    options = options.with_mode(export_mode);
+    if let Some(community) = source_community {
+        options = options.with_source_community(community);
+    }
+    Ok(options)
+}
 
 /// Transport used by an IPC client to exchange newline-delimited messages.
 #[async_trait::async_trait]
@@ -235,6 +304,16 @@ pub enum IpcCommand {
         namespace: String,
         version: Option<String>,
         output: PathBuf,
+        #[serde(default)]
+        filter: Option<FilterConfig>,
+        #[serde(default)]
+        mode: Option<String>,
+        #[serde(default)]
+        block_hashes: Vec<String>,
+        #[serde(default)]
+        max_bytes: Option<u64>,
+        #[serde(default)]
+        source_community: Option<String>,
     },
     ExportCollectionArchive {
         collection: String,
@@ -242,6 +321,14 @@ pub enum IpcCommand {
         output: PathBuf,
         #[serde(default)]
         filter: Option<FilterConfig>,
+        #[serde(default)]
+        mode: Option<String>,
+        #[serde(default)]
+        block_hashes: Vec<String>,
+        #[serde(default)]
+        max_bytes: Option<u64>,
+        #[serde(default)]
+        source_community: Option<String>,
     },
     Join {
         ticket: String,
@@ -1199,8 +1286,25 @@ impl IpcServer {
         namespace: String,
         version: Option<String>,
         output: PathBuf,
+        filter: Option<FilterConfig>,
+        mode: Option<String>,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
     ) -> IpcResponse {
-        match self.handle_export_archive(namespace, version, output).await {
+        match self
+            .handle_export_archive(
+                namespace,
+                version,
+                output,
+                filter,
+                mode,
+                block_hashes,
+                max_bytes,
+                source_community,
+            )
+            .await
+        {
             Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
             Err(error) => response_from_error(error),
         }
@@ -1212,9 +1316,22 @@ impl IpcServer {
         version: Option<String>,
         output: PathBuf,
         filter: Option<FilterConfig>,
+        mode: Option<String>,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
     ) -> IpcResponse {
         match self
-            .handle_export_collection_archive(collection, version, output, filter)
+            .handle_export_collection_archive(
+                collection,
+                version,
+                output,
+                filter,
+                mode,
+                block_hashes,
+                max_bytes,
+                source_community,
+            )
             .await
         {
             Ok(result) => IpcResponse::ExportComplete(Box::new(result)),
@@ -1290,15 +1407,45 @@ impl IpcServer {
                 namespace,
                 version,
                 output,
-            } => self.handle_export_archive_response(namespace, version, output).await,
+                filter,
+                mode,
+                block_hashes,
+                max_bytes,
+                source_community,
+            } => {
+                self.handle_export_archive_response(
+                    namespace,
+                    version,
+                    output,
+                    filter,
+                    mode,
+                    block_hashes,
+                    max_bytes,
+                    source_community,
+                )
+                .await
+            }
             C::ExportCollectionArchive {
                 collection,
                 version,
                 output,
                 filter,
+                mode,
+                block_hashes,
+                max_bytes,
+                source_community,
             } => {
-                self.handle_export_collection_archive_response(collection, version, output, filter)
-                    .await
+                self.handle_export_collection_archive_response(
+                    collection,
+                    version,
+                    output,
+                    filter,
+                    mode,
+                    block_hashes,
+                    max_bytes,
+                    source_community,
+                )
+                .await
             }
             C::Download { namespace, strategy } => self.handle_download_response(namespace, strategy).await,
             C::MaterializeTransfers { namespace } => self.handle_materialize_transfers(namespace).await,
@@ -1987,6 +2134,11 @@ impl IpcServer {
         namespace: String,
         version: Option<String>,
         output: PathBuf,
+        filter: Option<FilterConfig>,
+        mode: Option<String>,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
     ) -> Result<DropExportResult> {
         let context = self.archive_context.clone().ok_or_else(|| {
             SyncwebError::operation("daemon archive IPC is unavailable", "server has no node context")
@@ -1996,9 +2148,10 @@ impl IpcServer {
         let folder = FolderManager::new(&context.node).get(namespace_id).await?;
         let head = Self::latest_collection_head(&context.node, folder.doc()).await?;
         let manifests = Self::collection_manifests(&context.node, folder.doc(), head).await?;
-        let options = version.map_or_else(DropExportOptions::default, |value| {
+        let mut options = version.map_or_else(DropExportOptions::default, |value| {
             DropExportOptions::default().with_version(value)
         });
+        options = apply_archive_export_options(options, filter, mode, block_hashes, max_bytes, source_community)?;
         DropExporter::new(context.node.blob_store().clone())
             .export_drop_with_options(&manifests, output, options, Some(context.pool.as_ref()))
             .await
@@ -2010,6 +2163,10 @@ impl IpcServer {
         version: Option<String>,
         output: PathBuf,
         filter: Option<FilterConfig>,
+        mode: Option<String>,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
     ) -> Result<DropExportResult> {
         let context = self.archive_context.clone().ok_or_else(|| {
             SyncwebError::operation("daemon archive IPC is unavailable", "server has no node context")
@@ -2036,13 +2193,10 @@ impl IpcServer {
                 "collection {collection_id} was not found in daemon-managed folders"
             ))
         })?;
-        let filter_engine = filter.map(FilterEngine::new).transpose()?;
         let mut options = version.map_or_else(DropExportOptions::default, |value| {
             DropExportOptions::default().with_version(value)
         });
-        if let Some(engine) = filter_engine {
-            options = options.with_filter(engine);
-        }
+        options = apply_archive_export_options(options, filter, mode, block_hashes, max_bytes, source_community)?;
         DropExporter::new(context.node.blob_store().clone())
             .export_drop_with_options(&collection_manifests, output, options, Some(context.pool.as_ref()))
             .await
@@ -4122,12 +4276,37 @@ impl IpcClient {
         version: Option<String>,
         output: PathBuf,
     ) -> Result<DropExportResult> {
+        self.export_archive_with_options(namespace, version, output, None, None, Vec::new(), None, None)
+            .await
+    }
+
+    /// Export a managed folder as an archive with explicit selection metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the daemon request fails or an export option is invalid.
+    pub async fn export_archive_with_options(
+        &self,
+        namespace: String,
+        version: Option<String>,
+        output: PathBuf,
+        filter: Option<FilterConfig>,
+        mode: Option<String>,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
+    ) -> Result<DropExportResult> {
         let response = self
             .request(
                 IpcCommand::ExportArchive {
                     namespace,
                     version,
                     output,
+                    filter,
+                    mode,
+                    block_hashes,
+                    max_bytes,
+                    source_community,
                 },
                 "export archive",
             )
@@ -4152,6 +4331,35 @@ impl IpcClient {
         output: PathBuf,
         filter: Option<FilterConfig>,
     ) -> Result<DropExportResult> {
+        self.export_collection_archive_with_options(
+            collection,
+            version,
+            output,
+            filter,
+            "collection".to_owned(),
+            Vec::new(),
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// Export a collection with explicit selection metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the daemon request fails or an export option is invalid.
+    pub async fn export_collection_archive_with_options(
+        &self,
+        collection: String,
+        version: Option<String>,
+        output: PathBuf,
+        filter: Option<FilterConfig>,
+        mode: String,
+        block_hashes: Vec<String>,
+        max_bytes: Option<u64>,
+        source_community: Option<String>,
+    ) -> Result<DropExportResult> {
         let response = self
             .request(
                 IpcCommand::ExportCollectionArchive {
@@ -4159,6 +4367,10 @@ impl IpcClient {
                     version,
                     output,
                     filter,
+                    mode: Some(mode),
+                    block_hashes,
+                    max_bytes,
+                    source_community,
                 },
                 "export collection archive",
             )

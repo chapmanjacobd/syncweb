@@ -55,10 +55,13 @@ records user CPU, system CPU, and maximum resident memory through GNU
 `/usr/bin/time` when available.
 
 These simulator results are regression gates for control-plane policy, not a
-claim of live-LAN capacity. A future 10/50/100-node multi-process gate must
-use the reference host profile above and additionally record transfer
-completion, network traffic, open files, CPU, and memory before its results
-can become a release decision.
+claim of live-LAN capacity. The ignored CLI acceptance gate
+`cargo test -p syncweb --test daemon_integration_test test_live_process_scale_gate -- --ignored`
+starts and verifies real daemon processes at 10, 50, and 100 nodes, then
+cleans them up. It is a startup/readiness gate rather than a release-capacity
+claim; runs intended for release decisions should use the reference host
+profile and additionally record transfer completion, network traffic, open
+files, CPU, and memory.
 
 ### Local discovery control-plane budget
 

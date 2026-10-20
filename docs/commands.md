@@ -29,6 +29,14 @@ trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 (always pinned, never persisted). `folders join` accepts either the `syncweb://...` URL or a bare
 ticket.
 
+Use `folders pin` and `folders unpin` to make the current folder contents
+explicitly retained or eligible for normal blob-store eviction:
+
+```bash
+syncweb folders pin ./dataset
+syncweb folders unpin ./dataset
+```
+
 For secure automation, every command that accepts a ticket accepts `-` in the ticket
 position to read the complete ticket from stdin. The ticket is therefore not present in
 the process command line (`/proc/*/cmdline`). For example:
@@ -68,6 +76,8 @@ syncweb package upgrade <new-manifest-ticket>
 ```
 
 Use `package export` and `package import` for a compressed offline archive.
+Use `package inspect` to verify an archive and print its roots, collection,
+version, block count, and verified byte count without importing it.
 Installations default to the local data directory's package store, or to an
 explicit install root when one is passed to `package install`/`package upgrade`.
 `--json` is available for automation on each step; package list-shaped results
@@ -573,6 +583,7 @@ syncweb config set discovery.interface eth0
 | | `package info` | Detailed package metadata |
 | | `package export` | Export package versions as compressed `.car.zst` drops |
 | | `package import` | Import and install a compressed `.car.zst` drop (`--no-seeding` keeps imported blocks local) |
+| | `package inspect` | Verify and inspect a compressed `.car.zst` drop without importing it |
 | | `package install` | Fetch + verify + install package |
 | | `package upgrade` | Update to latest version |
 | | `package remove` | Remove installed package |

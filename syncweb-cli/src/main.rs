@@ -17,12 +17,12 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FoldersCommand,
-        ImportArgs, ListingFlags, NetworkCommand, PackageCommand, PackageExportMode, RestoreArgs, ScheduleCommand,
-        SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand, SnapshotCreateArgs,
-        SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs, StatsSeedingArgs,
-        TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs, TransferJobArgs,
-        TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FolderRetentionArgs,
+        FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand, PackageExportMode, RestoreArgs,
+        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
+        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
+        TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -4312,6 +4312,9 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             }
             handle_package_info(ctx, ticket, hash, node_id).await?;
         }
+        PackageCommand::Inspect { archive } => {
+            handle_package_archive_inspect(archive, output_json).await?;
+        }
         PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
             let ticket = cli::ticket::resolve_ticket(&ticket)?;
             // Resolve to an absolute path so the daemon (whose working
@@ -4560,6 +4563,41 @@ fn handle_package_switch(
         );
     } else {
         println!("current: {collection} {version}");
+    }
+    Ok(())
+}
+
+async fn handle_package_archive_inspect(archive: PathBuf, output_json: bool) -> Result<()> {
+    let result = syncweb_core::folder::verify_archive(&archive).await?;
+    if output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "verified",
+                "archive": archive,
+                "manifest": result.manifest.to_string(),
+                "index": result.index.map(|hash| hash.to_string()),
+                "collection": result.collection_id.to_string(),
+                "version": result.version,
+                "entries": result.entry_count,
+                "blocks": result.block_count,
+                "bytes_verified": result.bytes_verified,
+            })
+        );
+    } else {
+        let mut table = Table::new();
+        table.add_row(["Archive", &archive.display().to_string()]);
+        table.add_row(["Status", "verified"]);
+        table.add_row(["Manifest", &result.manifest.to_string()]);
+        if let Some(index) = result.index {
+            table.add_row(["Index", &index.to_string()]);
+        }
+        table.add_row(["Collection", &result.collection_id.to_string()]);
+        table.add_row(["Version", &result.version]);
+        table.add_row(["Entries", &result.entry_count.to_string()]);
+        table.add_row(["Blocks", &result.block_count.to_string()]);
+        table.add_row(["Bytes verified", &result.bytes_verified.to_string()]);
+        println!("{table}");
     }
     Ok(())
 }
@@ -6245,7 +6283,56 @@ async fn handle_folders(ctx: &CliContext<'_>, command: Option<FoldersCommand>) -
         Some(FoldersCommand::Join(join)) => handle_join(ctx, join).await,
         Some(FoldersCommand::Leave(leave)) => handle_leave(ctx, leave).await,
         Some(FoldersCommand::Import(import)) => handle_import(ctx, import).await,
+        Some(FoldersCommand::Pin(args)) => handle_folder_retention(ctx, args, true).await,
+        Some(FoldersCommand::Unpin(args)) => handle_folder_retention(ctx, args, false).await,
     }
+}
+
+async fn handle_folder_retention(ctx: &CliContext<'_>, args: FolderRetentionArgs, pinned: bool) -> Result<()> {
+    let selector = args.folder;
+    let data_dir = ctx.data_dir;
+    let action = if pinned { "pinned" } else { "unpinned" };
+    if let Some(client) = daemon_client_or_start(data_dir, ctx.no_daemon, ctx.network).await? {
+        let namespace = resolve_namespace_via_daemon(&client, &selector).await?;
+        let message = client.set_folder_retention(namespace.clone(), pinned).await?;
+        if ctx.output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "status": action,
+                    "namespace": namespace,
+                    "message": message,
+                })
+            );
+        } else {
+            println!("{message}");
+        }
+        return Ok(());
+    }
+
+    let node = open_node(data_dir).await?;
+    let manager = FolderManager::new(&node);
+    let namespace = manager.resolve_namespace(&selector).await?;
+    let folder = manager.get(namespace).await?;
+    let count = if pinned {
+        folder.pin_all_content().await?
+    } else {
+        folder.unpin_all_content().await?
+    };
+    if ctx.output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": action,
+                "namespace": namespace.to_string(),
+                "blobs": count,
+            })
+        );
+    } else {
+        println!("{action}: {namespace} ({count} blobs)");
+    }
+    node.stop().await?;
+    Ok(())
 }
 
 #[async_recursion]

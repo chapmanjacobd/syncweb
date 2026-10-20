@@ -102,9 +102,6 @@ Tests: invitation join, capability denial, expiry/revocation, conflicting
 Make offline exchange a first-class way to add content and providers to a
 swarm, not only a one-time archive restore.
 
-- [ ] Support resumable, inspectable imports and exports with clear duplicate
-  and conflicting-root behavior.
-
 Likely code: `syncweb-core/src/archive`, package lifecycle modules,
 `docs/archive_format.md` implementation, daemon IPC, and archive CLI commands.
 
@@ -116,8 +113,6 @@ publication.
 
 Make communal participation understandable and controllable.
 
-- [ ] Add explicit commands or options for community create/join, pin,
-  unpin, seed, pause contribution, and set resource budgets.
 Likely code: daemon lifecycle, IPC, `syncweb-cli/src/cli/commands.rs`,
 config, status rendering, and logging/metrics.
 

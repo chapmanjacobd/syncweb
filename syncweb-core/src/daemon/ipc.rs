@@ -392,6 +392,10 @@ pub enum IpcCommand {
         #[serde(default)]
         delete_files: bool,
     },
+    SetFolderRetention {
+        namespace: String,
+        pinned: bool,
+    },
     Share {
         namespace: String,
         #[serde(default)]
@@ -1493,6 +1497,7 @@ impl IpcServer {
                 namespace,
                 delete_files,
             } => self.handle_leave_folder(namespace, delete_files).await,
+            C::SetFolderRetention { namespace, pinned } => self.handle_folder_retention(namespace, pinned).await,
             C::Status
             | C::ListFolders
             | C::AddFolder { .. }
@@ -1557,7 +1562,8 @@ impl IpcServer {
             | C::ListConflicts { .. }
             | C::VerifyIntegrity { .. }
             | C::Unsubscribe { .. }
-            | C::LeaveFolder { .. } => self.handle_folder_group(request.command).await,
+            | C::LeaveFolder { .. }
+            | C::SetFolderRetention { .. } => self.handle_folder_group(request.command).await,
             C::Share { .. } | C::ShareList | C::Unshare { .. } => self.handle_share_group(request.command).await,
             C::SnapshotCreate { .. }
             | C::SnapshotList { .. }
@@ -1700,6 +1706,43 @@ impl IpcServer {
                     message: format!("left: {namespace}"),
                 }
             }
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_folder_retention(&self, namespace: String, pinned: bool) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon folder retention IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let namespace_id = match iroh_docs::NamespaceId::from_str(&namespace) {
+            Ok(id) => id,
+            Err(error) => {
+                return IpcResponse::Error {
+                    message: format!("invalid namespace: {error}"),
+                };
+            }
+        };
+        let folder = match FolderManager::new(&context.node).get(namespace_id).await {
+            Ok(folder) => folder,
+            Err(error) => return response_from_error(error),
+        };
+        let result = if pinned {
+            folder.pin_all_content().await
+        } else {
+            folder.unpin_all_content().await
+        };
+        match result {
+            Ok(count) => IpcResponse::Ok {
+                message: format!(
+                    "{}: {namespace} ({count} blobs)",
+                    if pinned { "pinned" } else { "unpinned" }
+                ),
+            },
             Err(error) => response_from_error(error),
         }
     }
@@ -4574,6 +4617,19 @@ impl IpcClient {
         )
     }
 
+    /// Pin or unpin all current blobs in a managed folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the daemon request fails or returns an unexpected response.
+    pub async fn set_folder_retention(&self, namespace: String, pinned: bool) -> Result<String> {
+        Self::expect_message(
+            "folder retention",
+            self.request(IpcCommand::SetFolderRetention { namespace, pinned }, "folder retention")
+                .await?,
+        )
+    }
+
     /// Share a folder or one of its blobs and return the resulting message.
     ///
     /// # Errors
@@ -5267,6 +5323,17 @@ mod tests {
         let enc8 = serde_json::to_vec(&req8).expect("serialize");
         let dec8: IpcRequest = serde_json::from_slice(&enc8).expect("deserialize");
         assert!(matches!(dec8.command, IpcCommand::SubscribePublic { .. }));
+
+        let req9 = IpcRequest::new(IpcCommand::SetFolderRetention {
+            namespace: "ns".to_owned(),
+            pinned: true,
+        });
+        let enc9 = serde_json::to_vec(&req9).expect("serialize");
+        let dec9: IpcRequest = serde_json::from_slice(&enc9).expect("deserialize");
+        assert!(matches!(
+            dec9.command,
+            IpcCommand::SetFolderRetention { pinned: true, .. }
+        ));
     }
 
     #[tokio::test]
@@ -5308,6 +5375,22 @@ mod tests {
             .handle_request(IpcRequest::new(IpcCommand::LeaveFolder {
                 namespace: "ns".to_owned(),
                 delete_files: false,
+            }))
+            .await;
+        assert!(matches!(
+            response,
+            IpcResponse::Error { message } if message.contains("no node context")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_ipc_folder_retention_no_context() {
+        let handle = DaemonHandle::new(state());
+        let server = IpcServer::new(socket_path(), handle);
+        let response = server
+            .handle_request(IpcRequest::new(IpcCommand::SetFolderRetention {
+                namespace: "ns".to_owned(),
+                pinned: true,
             }))
             .await;
         assert!(matches!(

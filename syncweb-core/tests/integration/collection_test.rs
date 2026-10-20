@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use iroh_blobs::Hash;
 use syncweb_core::{
+    CommunityId,
     folder::{CollectionEntry, CollectionManifest, PackageDependency, PackageManager, PackageProfile},
     storage::node_db::NodeDatabase,
 };
@@ -45,6 +46,24 @@ fn manifest_signature_serialization_and_verification_round_trip() -> anyhow::Res
     ensure!(decoded.signature.is_some());
     ensure!(decoded.public_key.is_some());
     decoded.verify_signature()?;
+    Ok(())
+}
+
+#[test]
+fn community_scoped_manifest_requires_matching_signed_scope() -> anyhow::Result<()> {
+    let community = CommunityId::from_bytes([3; 32]);
+    let mut manifest = manifest(Uuid::new_v4(), "1.0.0", b"community")?;
+    manifest.bind_community(community);
+    assert!(manifest.validate_for_community(Some(community)).is_err());
+
+    manifest.sign(&SigningKey::from_bytes(&[6; 32]))?;
+    manifest.validate_for_community(Some(community))?;
+    assert!(
+        manifest
+            .validate_for_community(Some(CommunityId::from_bytes([4; 32])))
+            .is_err()
+    );
+    assert!(manifest.validate_for_community(None).is_err());
     Ok(())
 }
 

@@ -15,6 +15,14 @@ exports cannot leave a partially written destination. Content blocks are
 copied in bounded chunks and verified against their manifest hash while they
 stream through the Zstandard encoder.
 
+Use `syncweb package inspect` to verify and inspect an archive without changing
+the local blob store or installing the package:
+
+```bash
+syncweb package inspect my-dataset.car.zst
+syncweb --json package inspect my-dataset.car.zst
+```
+
 ## Format Specification
 The archive format is essentially a Zstandard-compressed Content Addressable aRchive (CAR), matching Iroh's native CAR export conventions.
 
@@ -75,6 +83,9 @@ A user can import a archive file. The system extracts the manifest, ingests the 
 ```bash
 # Import a archive file
 syncweb package import my-dataset.car.zst
+
+# Inspect and verify it without importing
+syncweb package inspect my-dataset.car.zst
 ```
 
 ### 3. Verifying a Drop
@@ -118,6 +129,15 @@ varint limits are checked before any attacker-controlled allocation.
    local blob store after the complete archive passes validation.
 5. Publish the validated manifest into a new local `iroh-docs` namespace.
 6. Materialize accepted blobs through a staging directory and atomic rename.
+
+Import is restart-safe: validation never exposes partial materialization, and
+blob ingestion is content-addressed and idempotent. If an import is interrupted
+after some blocks are stored, rerunning `package import` reuses those verified
+blocks rather than creating duplicates; if it is interrupted before final
+materialization or installation, the destination remains unchanged and the
+same command can be retried. Export has the corresponding atomic behavior:
+rerunning after an interruption replaces only a completed destination and
+never treats a partial staging file as a valid archive.
 
 ```rust
 let result = syncweb_core::import_archive(

@@ -130,6 +130,16 @@ pub enum FoldersCommand {
     Leave(LeaveArgs),
     #[command(about = "Import local files into a synchronized folder")]
     Import(ImportArgs),
+    #[command(about = "Pin every current folder blob for local retention")]
+    Pin(FolderRetentionArgs),
+    #[command(about = "Unpin every current folder blob from local retention")]
+    Unpin(FolderRetentionArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct FolderRetentionArgs {
+    #[arg(default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
 }
 
 /// Sub-operations for the `conflicts` verb.
@@ -974,6 +984,11 @@ pub enum PackageCommand {
         hash: Option<String>,
         #[arg(long, help = "Node ID hosting the manifest blob")]
         node_id: Option<String>,
+    },
+    #[command(about = "Inspect and verify a compressed CAR archive without importing it")]
+    Inspect {
+        #[arg(value_name = "ARCHIVE")]
+        archive: PathBuf,
     },
     #[command(about = "Verify, stage, and atomically install a collection version")]
     Install {

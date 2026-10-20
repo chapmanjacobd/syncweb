@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::{
     error::{Result, SyncwebError},
     folder::SyncwebFolder,
+    net::CommunityId,
     node::{blob_store::BlobStore, docs_engine::DocsEngine},
 };
 
@@ -203,6 +204,11 @@ impl PackageProfile {
 pub struct CollectionManifest {
     pub schema_version: u32,
     pub collection_id: Uuid,
+    /// Optional community scope for manifests exchanged inside a communal swarm.
+    ///
+    /// The value is part of the signed and content-addressed representation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub community_id: Option<String>,
     pub version: String,
     pub parent: Option<Hash>,
     #[serde(default)]
@@ -224,6 +230,7 @@ impl CollectionManifest {
         Self {
             schema_version: SCHEMA_VERSION,
             collection_id,
+            community_id: None,
             version: version.into(),
             parent: None,
             changelog: None,
@@ -233,6 +240,46 @@ impl CollectionManifest {
             public_key: None,
             metadata: None,
         }
+    }
+
+    /// Bind this manifest to a community before signing or publishing it.
+    pub fn bind_community(&mut self, community: CommunityId) {
+        self.community_id = Some(community.to_string());
+    }
+
+    /// Return the validated community scope carried by this manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the serialized community identity is malformed.
+    pub fn community(&self) -> Result<Option<CommunityId>> {
+        self.community_id.as_deref().map(str::parse).transpose()
+    }
+
+    /// Validate the manifest against an exact local community scope.
+    ///
+    /// A scoped manifest must be signed. `None` is an intentional scope:
+    /// unscoped nodes reject named-community manifests and named communities
+    /// reject unscoped manifests.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the manifest is malformed, unsigned while scoped,
+    /// outside the expected community, or has an invalid signature.
+    pub fn validate_for_community(&self, expected: Option<CommunityId>) -> Result<()> {
+        self.validate()?;
+        let actual = self.community()?;
+        if actual != expected {
+            return Err(SyncwebError::AccessDenied(
+                "collection manifest is outside the local community".to_owned(),
+            ));
+        }
+        if actual.is_some() && self.signature.is_none() {
+            return Err(SyncwebError::MissingSignature(
+                "community-scoped collection manifest".to_owned(),
+            ));
+        }
+        self.verify_signature()
     }
 
     /// # Errors

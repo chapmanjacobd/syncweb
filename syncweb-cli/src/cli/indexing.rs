@@ -306,8 +306,8 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
     let output_json = ctx.output_json;
     match command {
         ProviderCommand::Add { collection, provider } => {
-            let provider = super::ticket::resolve_ticket(&provider)?;
-            let ticket = provider.parse::<BlobTicket>()?;
+            let resolved_provider = super::ticket::resolve_ticket(&provider)?;
+            let ticket = resolved_provider.parse::<BlobTicket>()?;
             let store = open_link_store(data_dir)?;
             let expected_hash = store.collection_hash(&collection)?;
             ensure!(
@@ -317,7 +317,7 @@ pub fn handle_provider(ctx: &CliContext<'_>, command: ProviderCommand) -> Result
             store.register_mirror(ticket.clone())?;
             print_status(
                 output_json,
-                serde_json::json!({"status": "added", "hash": ticket.hash().to_string(), "provider": provider}),
+                serde_json::json!({"status": "added", "hash": ticket.hash().to_string(), "provider": resolved_provider}),
                 format!("provider added: {}\nprovider: {provider}", ticket.hash()),
             )?;
         }

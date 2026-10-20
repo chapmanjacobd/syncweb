@@ -795,17 +795,17 @@ mod tests {
             assert!(report.inventory_bytes > 0);
             assert!(report.repair_attempts > 0);
             assert!(report.repairs > 0);
-            let node_count = u64::from(node_count);
+            let node_count_u64 = u64::from(node_count);
             assert!(
-                report.inventory_messages <= node_count.saturating_mul(4),
+                report.inventory_messages <= node_count_u64.saturating_mul(4),
                 "inventory messages exceeded the four-round budget: {report:?}"
             );
             assert!(
-                report.inventory_bytes <= node_count.saturating_mul(4).saturating_mul(32),
+                report.inventory_bytes <= node_count_u64.saturating_mul(4).saturating_mul(32),
                 "inventory bytes exceeded the four-round budget: {report:?}"
             );
             println!(
-                "scale nodes={node_count} rounds={} inventory_messages={} inventory_bytes={} \
+                "scale nodes={node_count_u64} rounds={} inventory_messages={} inventory_bytes={} \
                  duplicate_inventory_messages={} repair_attempts={} completed_repairs={} \
                  failed_repairs={} open_fds={:?}",
                 report.rounds,
@@ -815,7 +815,7 @@ mod tests {
                 report.repair_attempts,
                 report.repairs,
                 report.failed_repairs,
-                std::fs::read_dir("/proc/self/fd").ok().map(|entries| entries.count()),
+                std::fs::read_dir("/proc/self/fd").ok().map(std::iter::Iterator::count),
             );
         }
     }

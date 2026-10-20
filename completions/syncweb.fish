@@ -39,6 +39,7 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "reload" -d 'Ask the
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "sync" -d 'Ask the local daemon to trigger synchronization'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "devices" -d 'Show this device\'s Iroh and Syncthing identities'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "folders" -d 'Manage synchronized folders (bare: list managed folders)'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "conflicts" -d 'Inspect divergent document variants'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "ls" -d 'List files in a local folder'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stat" -d 'Show detailed metadata for a local file'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "find" -d 'Search local files'
@@ -56,7 +57,9 @@ complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "watch" -d 'Watch a 
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "snapshot" -d 'Manage content-addressed snapshots'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "indexing" -d 'Manage opt-in indexing, catalogs, and metadata'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "stats" -d 'Show statistics for folders and files'
-complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "db" -d 'Database maintenance: check, vacuum, stats, backup'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "backup" -d 'Back up databases, configuration, identity, and optionally blobs'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "restore" -d 'Restore a verified backup into a new data directory'
+complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "db" -d 'Database maintenance: check, vacuum, and stats'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "config" -d 'Show or update local configuration'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "version" -d 'Show syncweb version information'
 complete -c syncweb -n "__fish_syncweb_needs_command" -f -a "completions" -d 'Generate shell completions'
@@ -116,17 +119,19 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l yes -d 'Assu
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand devices" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l yes -d 'Assume yes to every destructive-operation prompt'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "create" -d 'Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "join" -d 'Join a folder from an Iroh document ticket'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
-complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import" -f -a "import" -d 'Import local files into a synchronized folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "create" -d 'Create a synchronized folder and print a read-only join ticket/URL (--write for write access, --no-share to skip)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "join" -d 'Join a folder from an Iroh document ticket'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "leave" -d 'Leave a synchronized folder, optionally deleting its local files'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "import" -d 'Import local files into a synchronized folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "pin" -d 'Pin every current folder blob for local retention'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and not __fish_seen_subcommand_from create join leave import pin unpin" -f -a "unpin" -d 'Unpin every current folder blob from local retention'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l mode -d 'Sync mode: sendreceive, receiveonly, or sendonly' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l network -d 'Add the created folder to a named network' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from create" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
@@ -182,6 +187,53 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from import" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from import" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from import" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from pin" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand folders; and __fish_seen_subcommand_from unpin" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -f -a "list" -d 'List all divergent paths in a synchronized folder'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -f -a "show" -d 'Show every variant for one conflicting path'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and not __fish_seen_subcommand_from list show resolve" -f -a "resolve" -d 'Remove acknowledged conflict artifacts without changing synced entries'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -s f -l folder -d 'Namespace ID or path to a managed folder' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -s f -l folder -d 'Namespace ID or path to a managed folder' -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand conflicts; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l sort -d 'Collect and sort output instead of streaming it' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l threads -d 'Scanner threads (1 disables parallelism, 0 uses all available CPUs)' -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand ls" -l path-prefix -d 'Only entries whose path starts with this prefix' -r
@@ -566,26 +618,27 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_su
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand link; and __fish_seen_subcommand_from revoke" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l verbose -d 'Enable verbose structured logging'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l yes -d 'Assume yes to every destructive-operation prompt'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -s h -l help -d 'Print help'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "add" -d 'Scan one or more paths into a package manifest (creates it if missing)'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "bump" -d 'Create a new package manifest version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "publish" -d 'Publish a package manifest ticket and announce it to the catalog'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "export" -d 'Export package directories or collection IDs as compressed CAR archive files'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "import" -d 'Import and install a compressed CAR archive file'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "info" -d 'Show a collection manifest from a ticket or blob hash'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "install" -d 'Verify, stage, and atomically install a collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "upgrade" -d 'Install a newer collection manifest version via ticket'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "remove" -d 'Remove a non-current installed collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "verify" -d 'Verify an installed collection version'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "list" -d 'List locally installed collections'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "versions" -d 'List installed versions for a collection'
-complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info install upgrade remove verify list versions switch" -f -a "switch" -d 'Switch the active installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "add" -d 'Scan one or more paths into a package manifest (creates it if missing)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "bump" -d 'Create a new package manifest version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "publish" -d 'Publish a package manifest ticket and announce it to the catalog'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "export" -d 'Export package directories or collection IDs as compressed CAR archive files'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "import" -d 'Import and install a compressed CAR archive file'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "info" -d 'Show a collection manifest from a ticket or blob hash'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "inspect" -d 'Inspect and verify a compressed CAR archive without importing it'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "install" -d 'Verify, stage, and atomically install a collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "upgrade" -d 'Install a newer collection manifest version via ticket'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "remove" -d 'Remove a non-current installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "verify" -d 'Verify an installed collection version'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "list" -d 'List locally installed collections'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "versions" -d 'List installed versions for a collection'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and not __fish_seen_subcommand_from add bump publish export import info inspect install upgrade remove verify list versions switch" -f -a "switch" -d 'Switch the active installed collection version'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l version -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l name -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from add" -l root -d 'Override the common root for logical path rebasing; a file is its own root' -r -F
@@ -618,6 +671,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from publish" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l version -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l filter -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l mode -r -f -a "collection\t''
+missing-blocks\t''
+repair-bundle\t''
+contribution\t''"
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l block-hash -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l max-bytes -r
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l source-community -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -627,6 +687,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l filter -r
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l no-seeding -d 'Do not enroll imported blocks as locally available providers'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from import" -l yes -d 'Assume yes to every destructive-operation prompt'
@@ -642,6 +703,13 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from info" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from inspect" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand package; and __fish_seen_subcommand_from install" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -940,6 +1008,22 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_s
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
 complete -c syncweb -n "__fish_syncweb_using_subcommand stats; and __fish_seen_subcommand_from seeding" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l output -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l include-blobs -d 'Also copy the blob store (can be very large); off by default'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand backup" -s h -l help -d 'Print help'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l verbose -d 'Enable verbose structured logging'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l yes -d 'Assume yes to every destructive-operation prompt'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l no-daemon -l embedded -d 'Bypass the daemon and use an embedded node for supported commands'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -l no-color -d 'Disable ANSI colors in interactive prompts and progress output'
+complete -c syncweb -n "__fish_syncweb_using_subcommand restore" -s h -l help -d 'Print help'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -950,7 +1034,7 @@ complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "check" -d 'Run integrity check on all databases'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "vacuum" -d 'Run VACUUM to reclaim space in all databases'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "stats" -d 'Show database sizes and table statistics'
-complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "backup" -d 'Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)'
+complete -c syncweb -n "__fish_syncweb_using_subcommand db; and not __fish_seen_subcommand_from check vacuum stats backup" -f -a "backup" -d 'Back up databases, configuration, identity, and optionally blobs'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l data-dir -d 'Directory used for persistent node identity and data' -r -F
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l verbose -d 'Enable verbose structured logging'
 complete -c syncweb -n "__fish_syncweb_using_subcommand db; and __fish_seen_subcommand_from check" -l json -d 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'

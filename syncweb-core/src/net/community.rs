@@ -62,12 +62,12 @@ impl FromStr for CommunityId {
     type Err = SyncwebError;
 
     fn from_str(value: &str) -> Result<Self> {
-        let bytes = hex::decode(value)
+        let decoded = hex::decode(value)
             .map_err(|error| SyncwebError::InvalidConfig(format!("invalid community ID: {error}")))?;
-        let bytes: [u8; COMMUNITY_ID_BYTES] = bytes.try_into().map_err(|bytes: Vec<u8>| {
+        let bytes: [u8; COMMUNITY_ID_BYTES] = decoded.try_into().map_err(|invalid_bytes: Vec<u8>| {
             SyncwebError::InvalidConfig(format!(
                 "community ID must contain {COMMUNITY_ID_BYTES} bytes, got {}",
-                bytes.len()
+                invalid_bytes.len()
             ))
         })?;
         Ok(Self(bytes))
@@ -99,8 +99,8 @@ impl CommunityIdentity {
     ///
     /// Returns an error when the display name is empty, too long, or contains
     /// control characters.
-    pub fn from_parts(id: CommunityId, name: impl Into<String>) -> Result<Self> {
-        let name = name.into();
+    pub fn from_parts(id: CommunityId, display_name: impl Into<String>) -> Result<Self> {
+        let name = display_name.into();
         validate_name(&name)?;
         Ok(Self { id, name })
     }
@@ -460,7 +460,10 @@ impl CommunityInvitation {
 
 impl Display for CommunityInvitation {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let bytes = self.to_bytes().map_err(|_| std::fmt::Error)?;
+        let bytes = self.to_bytes().map_err(|error| {
+            tracing::debug!(%error, "failed to serialize community invitation for display");
+            std::fmt::Error
+        })?;
         write!(formatter, "{COMMUNITY_URI_PREFIX}{}", hex::encode(bytes))
     }
 }

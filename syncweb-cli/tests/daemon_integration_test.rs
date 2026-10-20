@@ -39,13 +39,13 @@ fn ticket_from_share_output(out: &str) -> String {
 /// Extract the namespace printed by `create` (or similar), ignoring the
 /// optional "next steps:" block and any `syncweb://folder/` URL wrapper.
 fn namespace_from_output(out: &str) -> String {
-    let line = out
+    let candidate = out
         .lines()
         .map(str::trim)
         .find(|line| !line.is_empty() && !line.starts_with("next steps:") && !line.starts_with("  -"))
         .unwrap_or_else(|| out.trim());
-    let line = line.strip_prefix("syncweb://folder/").unwrap_or(line);
-    line.split('?').next().unwrap_or(line).trim().to_owned()
+    let namespace = candidate.strip_prefix("syncweb://folder/").unwrap_or(candidate);
+    namespace.split('?').next().unwrap_or(namespace).trim().to_owned()
 }
 
 fn stdout_contains(output: &std::process::Output, needle: &str) -> bool {
@@ -91,7 +91,7 @@ struct ProcessFleet {
 }
 
 impl ProcessFleet {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             children: Vec::new(),
             data_dirs: Vec::new(),
@@ -1622,12 +1622,13 @@ fn test_network_events_json_uses_stable_envelope() -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .context("events JSON should use an object envelope")?;
     ensure!(events.len() == 1, "expected one event: {value}");
+    let event = events.first().context("events JSON should contain an event")?;
     ensure!(
-        events[0].get("event_type") == Some(&serde_json::Value::from("request_rejected")),
+        event.get("event_type") == Some(&serde_json::Value::from("request_rejected")),
         "event type should be machine-readable: {value}"
     );
     ensure!(
-        events[0].get("metadata_json") == Some(&serde_json::Value::from(r#"{"limit":1024}"#)),
+        event.get("metadata_json") == Some(&serde_json::Value::from(r#"{"limit":1024}"#)),
         "event metadata should be preserved: {value}"
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -3069,11 +3070,11 @@ fn test_read_only_folder_does_not_record_watcher_errors() -> anyhow::Result<()> 
         "alice share: {}",
         String::from_utf8_lossy(&share.stderr)
     );
-    let ticket = String::from_utf8(share.stdout)
+    let share_output = String::from_utf8(share.stdout)
         .context("UTF-8 output")?
         .trim()
         .to_owned();
-    let ticket = ticket_from_share_output(&ticket);
+    let ticket = ticket_from_share_output(&share_output);
 
     let start_b = daemon_start_bg(bob_data_arg)?;
     ensure!(start_b.status.success(), "bob daemon should start");

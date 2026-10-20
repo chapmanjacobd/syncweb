@@ -408,25 +408,25 @@ impl CommunityModerationPolicy {
             return self.reject(node_id, object_size, now, "object exceeds community size limit");
         }
         if let Some(limit) = self.rate_limit {
-            let (window_start, used) = self.usage.get(&node_id).copied().unwrap_or((now, 0));
-            let (window_start, used) = if now.saturating_sub(window_start) >= limit.window_secs {
+            let (previous_window_start, previous_used) = self.usage.get(&node_id).copied().unwrap_or((now, 0));
+            let (window_start, used) = if now.saturating_sub(previous_window_start) >= limit.window_secs {
                 (now, 0)
             } else {
-                (window_start, used)
+                (previous_window_start, previous_used)
             };
-            let next = used
+            let next_used_result = used
                 .checked_add(object_size)
                 .ok_or_else(|| SyncwebError::AccessDenied("community contribution rate budget overflow".to_owned()));
-            let next = match next {
-                Ok(next) => next,
+            let next_used = match next_used_result {
+                Ok(value) => value,
                 Err(error) => {
                     return self.reject(node_id, object_size, now, &error.to_string());
                 }
             };
-            if next > limit.max_bytes {
+            if next_used > limit.max_bytes {
                 return self.reject(node_id, object_size, now, "community contribution rate limit exceeded");
             }
-            self.usage.insert(node_id.clone(), (window_start, next));
+            self.usage.insert(node_id.clone(), (window_start, next_used));
         }
         self.record(CommunityAuditEvent {
             node: node_id,
@@ -439,7 +439,6 @@ impl CommunityModerationPolicy {
     }
 
     /// Return the retained moderation audit events in chronological order.
-    #[must_use]
     pub fn audit_events(&self) -> impl Iterator<Item = &CommunityAuditEvent> {
         self.audit.iter()
     }
@@ -534,24 +533,39 @@ mod tests {
 
         let events = policy.audit_events().collect::<Vec<_>>();
         assert_eq!(events.len(), 4);
-        assert!(events[0].accepted);
+        assert!(events.first().expect("first audit event should exist").accepted);
         assert_eq!(
-            events[1].reason.as_deref(),
+            events
+                .get(1)
+                .expect("second audit event should exist")
+                .reason
+                .as_deref(),
             Some("community contribution rate limit exceeded")
         );
-        assert_eq!(events[2].reason.as_deref(), Some("object exceeds community size limit"));
-        assert_eq!(events[3].reason.as_deref(), Some("node is denylisted"));
+        assert_eq!(
+            events.get(2).expect("third audit event should exist").reason.as_deref(),
+            Some("object exceeds community size limit")
+        );
+        assert_eq!(
+            events
+                .get(3)
+                .expect("fourth audit event should exist")
+                .reason
+                .as_deref(),
+            Some("node is denylisted")
+        );
     }
 
     #[test]
     fn revocation_rejects_invalid_targets_and_untrusted_issuers() {
         let issuer = key(4);
         let community = CommunityId::from_bytes([8; 32]);
-        let mut revocation = CommunityRevocation::new(community, public_key(&issuer), None, None, 100, "invalid");
-        assert!(revocation.sign(&issuer).is_err());
+        let mut invalid_revocation =
+            CommunityRevocation::new(community, public_key(&issuer), None, None, 100, "invalid");
+        assert!(invalid_revocation.sign(&issuer).is_err());
 
         let mut policy = CommunityAdmissionPolicy::new(community);
-        let mut revocation = CommunityRevocation::new(
+        let mut untrusted_revocation = CommunityRevocation::new(
             community,
             public_key(&issuer),
             Some(public_key(&key(5))),
@@ -559,7 +573,7 @@ mod tests {
             100,
             "not trusted",
         );
-        revocation.sign(&issuer).expect("revocation should sign");
-        assert!(policy.add_revocation(revocation, 100).is_err());
+        untrusted_revocation.sign(&issuer).expect("revocation should sign");
+        assert!(policy.add_revocation(untrusted_revocation, 100).is_err());
     }
 }

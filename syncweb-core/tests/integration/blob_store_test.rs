@@ -182,7 +182,8 @@ async fn test_segment_request_falls_back_to_whole_blob_peer() -> anyhow::Result<
     let payload = b"whole blob compatibility";
     let hash = first.blob_store().add_bytes(payload).await?;
 
-    let request = TransferRequest::for_segment(hash, payload.len() as u64, 6, 4, vec![first.endpoint().addr()])?;
+    let request =
+        TransferRequest::for_segment(hash, u64::try_from(payload.len())?, 6, 4, vec![first.endpoint().addr()])?;
     let report = fetch_blob_requests(
         second.blob_store(),
         second.endpoint(),

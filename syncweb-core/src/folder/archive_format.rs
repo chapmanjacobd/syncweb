@@ -166,11 +166,11 @@ impl DropIndex {
 }
 
 fn validate_source_community(manifest: &CollectionManifest, source_community: Option<&str>) -> Result<()> {
-    let Some(source_community) = source_community else {
+    let Some(source_label) = source_community else {
         return Ok(());
     };
     let manifest_community = manifest.community()?;
-    let source_id = match source_community.parse::<CommunityId>() {
+    let source_id = match source_label.parse::<CommunityId>() {
         Ok(source_id) => source_id,
         Err(_) if manifest_community.is_none() => {
             // Legacy archives used a human-readable source label. Keep

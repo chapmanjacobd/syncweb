@@ -53,7 +53,7 @@ async fn binary_divergence_materializes_a_full_conflict_copy() -> anyhow::Result
     anyhow::ensure!(variants.len() == 2, "expected two divergent binary variants");
     let variant_entries: Vec<_> = variants.iter().map(|entry| (*entry).clone()).collect();
     let winner = select_winner(&variant_entries).context("winner should be selected")?;
-    let loser_hash = variants
+    let loser_variant_hash = variants
         .iter()
         .map(|entry| entry.content_hash())
         .find(|hash| *hash != winner.content_hash())
@@ -68,8 +68,8 @@ async fn binary_divergence_materializes_a_full_conflict_copy() -> anyhow::Result
     let winner_bytes_from_store = node.blob_store().get(winner.content_hash()).await?;
     anyhow::ensure!(canonical == winner_bytes_from_store.as_ref());
 
-    let conflict = mount_root.join(conflict_path(Path::new("binary.dat"), loser_hash));
-    let loser_bytes_from_store = node.blob_store().get(loser_hash).await?;
+    let conflict = mount_root.join(conflict_path(Path::new("binary.dat"), loser_variant_hash));
+    let loser_bytes_from_store = node.blob_store().get(loser_variant_hash).await?;
     anyhow::ensure!(tokio::fs::read(&conflict).await? == loser_bytes_from_store.as_ref());
     anyhow::ensure!(!mount_root.join("binary.dat.diff").exists());
 
@@ -125,7 +125,7 @@ async fn selected_download_materializes_conflict_artifacts() -> anyhow::Result<(
     anyhow::ensure!(variants.len() == 2, "expected two divergent binary variants");
     let variant_entries: Vec<_> = variants.iter().map(|entry| (*entry).clone()).collect();
     let winner = select_winner(&variant_entries).context("winner should be selected")?;
-    let loser_hash = variants
+    let loser_variant_hash = variants
         .iter()
         .map(|entry| entry.content_hash())
         .find(|hash| *hash != winner.content_hash())
@@ -138,7 +138,7 @@ async fn selected_download_materializes_conflict_artifacts() -> anyhow::Result<(
     anyhow::ensure!(mount_root.join("binary.dat").exists());
     anyhow::ensure!(
         mount_root
-            .join(conflict_path(Path::new("binary.dat"), loser_hash))
+            .join(conflict_path(Path::new("binary.dat"), loser_variant_hash))
             .exists()
     );
 
@@ -341,13 +341,14 @@ async fn receiveonly_conflict_is_reported_without_materializing_loser() -> anyho
     let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
     let reports = list_conflicts(&node, entries.clone()).await?;
     anyhow::ensure!(reports.len() == 1);
-    anyhow::ensure!(reports[0].path == "note.txt");
-    anyhow::ensure!(reports[0].variants.iter().filter(|variant| variant.winner).count() == 1);
+    let report = reports.first().context("expected one conflict report")?;
+    anyhow::ensure!(report.path == "note.txt");
+    anyhow::ensure!(report.variants.iter().filter(|variant| variant.winner).count() == 1);
 
     let variants: Vec<_> = entries.iter().filter(|entry| entry.key() == b"note.txt").collect();
     let variant_entries: Vec<_> = variants.iter().map(|entry| (*entry).clone()).collect();
     let winner = select_winner(&variant_entries).context("winner should be selected")?;
-    let loser_hash = variants
+    let loser_variant_hash = variants
         .iter()
         .map(|entry| entry.content_hash())
         .find(|hash| *hash != winner.content_hash())
@@ -362,7 +363,7 @@ async fn receiveonly_conflict_is_reported_without_materializing_loser() -> anyho
     anyhow::ensure!(!mount_root.join(diff_path(Path::new("note.txt"))).exists());
     anyhow::ensure!(
         !mount_root
-            .join(conflict_path(Path::new("note.txt"), loser_hash))
+            .join(conflict_path(Path::new("note.txt"), loser_variant_hash))
             .exists()
     );
 
@@ -396,7 +397,8 @@ async fn metadata_only_conflict_stays_at_document_level_until_content_is_local()
     let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
     let reports = list_conflicts(&node, entries).await?;
     anyhow::ensure!(reports.len() == 1);
-    anyhow::ensure!(reports[0].variants.iter().all(|variant| !variant.local));
+    let report = reports.first().context("expected one conflict report")?;
+    anyhow::ensure!(report.variants.iter().all(|variant| !variant.local));
 
     let mount_root = directory.path().join("materialized");
     let outcome = materialize_folder_content(&node, &manager, folder.namespace_id(), &mount_root).await?;

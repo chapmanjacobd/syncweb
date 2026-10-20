@@ -94,7 +94,7 @@ async fn test_all_variants_returns_every_author_version_for_key() -> anyhow::Res
     anyhow::ensure!(
         variants
             .iter()
-            .map(|entry| entry.content_hash())
+            .map(iroh_docs::Entry::content_hash)
             .collect::<std::collections::BTreeSet<_>>()
             .len()
             == 2

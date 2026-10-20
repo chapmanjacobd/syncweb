@@ -368,10 +368,14 @@ mod tests {
         lease.contents = vec![ProviderContent::blob(hash(3))];
         assert!(lease.verify().is_err());
 
-        let lease = signed_lease();
-        assert!(lease.validate(150, Some("community-b"), &folder().to_string()).is_err());
+        let mismatched_lease = signed_lease();
         assert!(
-            lease
+            mismatched_lease
+                .validate(150, Some("community-b"), &folder().to_string())
+                .is_err()
+        );
+        assert!(
+            mismatched_lease
                 .validate(150, Some("community-a"), &NamespaceId::from(&[8_u8; 32]).to_string())
                 .is_err()
         );

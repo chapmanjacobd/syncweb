@@ -28,6 +28,11 @@ use super::{
 };
 const COPY_BUFFER_SIZE: usize = 64 * 1024;
 
+struct ArchiveBlock<'a> {
+    hash: Hash,
+    bytes: &'a [u8],
+}
+
 /// Select which content a drop contributes to an archive.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -43,7 +48,6 @@ pub enum DropExportMode {
     /// Export entries in manifest order until the byte budget is exhausted.
     Contribution { max_bytes: u64 },
 }
-
 
 impl DropExportMode {
     const fn label(&self) -> &'static str {
@@ -211,8 +215,8 @@ impl DropExporter {
     ) -> Result<DropExportResult> {
         let _export_guard = self.export_lock.lock().await;
         let selected = in_pool(pool, || select_manifest(manifests, options.version()))?;
-        let filtered = in_pool(pool, || filter_manifest(selected, options.filter()))?;
-        let filtered = in_pool(pool, || select_mode(filtered, &options.mode))?;
+        let filtered_manifest = in_pool(pool, || filter_manifest(selected, options.filter()))?;
+        let filtered = in_pool(pool, || select_mode(filtered_manifest, &options.mode))?;
         let (manifest_bytes, manifest_hash, entries, index_bytes, index_hash) = in_pool(pool, || -> Result<_> {
             let manifest_bytes = filtered.to_bytes()?;
             let manifest_hash = Hash::new(&manifest_bytes);
@@ -249,10 +253,14 @@ impl DropExporter {
         let write_result = self
             .write_archive(
                 &staging,
-                &manifest_bytes,
-                manifest_hash,
-                &index_bytes,
-                index_hash,
+                ArchiveBlock {
+                    hash: manifest_hash,
+                    bytes: &manifest_bytes,
+                },
+                ArchiveBlock {
+                    hash: index_hash,
+                    bytes: &index_bytes,
+                },
                 &entries,
                 pool,
             )
@@ -284,10 +292,8 @@ impl DropExporter {
     async fn write_archive(
         &self,
         staging: &Path,
-        manifest_bytes: &[u8],
-        manifest_hash: Hash,
-        index_bytes: &[u8],
-        index_hash: Hash,
+        manifest: ArchiveBlock<'_>,
+        index: ArchiveBlock<'_>,
         entries: &[CollectionEntry],
         pool: Option<&ManagedPool>,
     ) -> Result<()> {
@@ -295,10 +301,10 @@ impl DropExporter {
             .await
             .map_err(|error| SyncwebError::operation("failed to create drop archive", error))?;
         let mut encoder = ZstdEncoder::new(file);
-        let header = car_header(&[manifest_hash, index_hash])?;
+        let header = car_header(&[manifest.hash, index.hash])?;
         encoder.write_all(&header).await?;
-        write_section(&mut encoder, manifest_hash, manifest_bytes).await?;
-        write_section(&mut encoder, index_hash, index_bytes).await?;
+        write_section(&mut encoder, manifest.hash, manifest.bytes).await?;
+        write_section(&mut encoder, index.hash, index.bytes).await?;
         let temporary_dir = staging.parent().unwrap_or_else(|| Path::new("."));
         for entry in entries {
             write_blob_section(&self.blob_store, &mut encoder, entry, temporary_dir, pool).await?;

@@ -116,6 +116,7 @@ pub struct Daemon {
     node: Arc<IrohNode>,
     handle: DaemonHandle,
     sync_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Option<String>>>,
+    watch_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<tokio::sync::oneshot::Sender<Result<()>>>>,
     intent_tasks: Mutex<HashMap<NamespaceId, Option<JoinHandle<()>>>>,
     intent_controls: IntentControls,
     watchers: Mutex<HashMap<String, FsWatcher>>,
@@ -137,6 +138,15 @@ struct PendingWatch {
 #[derive(Clone, Copy)]
 struct WatchEvaluation<'a> {
     filter: Option<&'a FilterEngine>,
+    exclude: &'a [String],
+}
+
+struct WatchEvent<'a> {
+    namespace: NamespaceId,
+    root: &'a Path,
+    relative: &'a Path,
+    path: &'a Path,
+    removed: bool,
     exclude: &'a [String],
 }
 
@@ -353,11 +363,13 @@ impl Daemon {
             }
         }
         let (sync_sender, sync_receiver) = mpsc::unbounded_channel();
-        let handle = DaemonHandle::with_channels_and_reload(
+        let (watch_sender, watch_receiver) = mpsc::unbounded_channel();
+        let handle = DaemonHandle::with_channels_and_reload_and_watch(
             initial_handle.state.clone(),
             initial_handle.folder_registry.clone(),
             initial_handle.shutdown_sender.clone(),
             sync_sender,
+            watch_sender,
             initial_handle.reload_requested.clone(),
         );
         let indexing = match IndexingService::new(config.data_dir.join("indexing.sqlite")) {
@@ -406,6 +418,7 @@ impl Daemon {
             node,
             handle,
             sync_receiver: tokio::sync::Mutex::new(sync_receiver),
+            watch_receiver: tokio::sync::Mutex::new(watch_receiver),
             intent_tasks: Mutex::new(HashMap::new()),
             intent_controls: Arc::new(Mutex::new(HashMap::new())),
             watchers: Mutex::new(HashMap::new()),
@@ -484,7 +497,7 @@ impl Daemon {
             "daemon runtime initialized"
         );
         self.run_initial_setup().await?;
-        let (mut server_task, bridge_task, media_task) = self.spawn_server_tasks()?;
+        let (mut server_task, bridge_task, media_task) = self.spawn_server_tasks();
         let (mut shutdown, mut signal_task, mut interval, mut watch_interval, shutdown_sender) = self.runtime_timers();
         if let Err(error) = self.run_cycle().await {
             tracing::error!(%error, "initial daemon cycle failed");
@@ -537,7 +550,7 @@ impl Daemon {
         self.spawn_maintenance_task().await;
     }
 
-    fn spawn_server_tasks(&self) -> Result<ServerTasks> {
+    fn spawn_server_tasks(&self) -> ServerTasks {
         let server = self.ipc_server.clone();
         let server_task = tokio::spawn(async move { server.serve().await });
 
@@ -564,7 +577,7 @@ impl Daemon {
             tokio::spawn(async move { media_srv.run(media_shutdown).await })
         });
 
-        Ok((server_task, bridge_task, media_task))
+        (server_task, bridge_task, media_task)
     }
 
     async fn wait_for_server_tasks(
@@ -625,6 +638,11 @@ impl Daemon {
                     match trigger {
                         Some(namespace) => self.run_trigger(namespace).await?,
                         None => break Ok(()),
+                    }
+                }
+                watch_request = self.receive_watch_request() => {
+                    if let Some(response) = watch_request {
+                        let _ = response.send(self.start_watching().await);
                     }
                 }
                 _ = watch_interval.tick() => self.handle_watch_events().await?,
@@ -1256,12 +1274,7 @@ impl Daemon {
         if relative.as_os_str().is_empty() {
             return Ok(());
         }
-        let size = std::fs::metadata(path).map_or(0, |metadata| metadata.len());
-        let accepted = evaluation.filter.is_none_or(|active| {
-            active.evaluate_for_folder(&namespace.to_string(), &FilterEntry::new(relative.to_path_buf(), size))
-                != FilterAction::Reject
-        });
-        if !accepted {
+        if !Self::accepts_watch_event(namespace, relative, path, evaluation.filter) {
             return Ok(());
         }
 
@@ -1272,66 +1285,124 @@ impl Daemon {
             tracing::debug!(%namespace, path = %path.display(), "ignoring filesystem change for read-only folder");
             return Ok(());
         }
-        let result = if removed || !path.exists() {
-            let logical_path = crate::fs::logical_path(relative);
-            folder.delete_entry(logical_path.as_bytes()).await.map(|()| 1_u64)
-        } else if path.is_file() {
-            if self.matches_known_entry(&folder, relative, path).await? {
-                tracing::debug!(%namespace, path = %path.display(), "ignoring watcher event for known folder content");
-                return Ok(());
-            }
-            let importer = Importer::new(
-                self.node.blob_store().clone(),
-                self.node.docs_engine().clone(),
-                folder.doc().clone(),
-                folder.author(),
+        let result = self
+            .apply_watch_event(
+                &folder,
+                WatchEvent {
+                    namespace,
+                    root,
+                    relative,
+                    path,
+                    removed,
+                    exclude: evaluation.exclude,
+                },
             )
-            .with_root(root)
-            .with_ignore_patterns(evaluation.exclude.to_vec());
-            importer
-                .import_path(path)
-                .await
-                .map(|entries| u64::try_from(entries.len()).unwrap_or(u64::MAX))
-        } else {
-            Ok(0)
-        };
+            .await;
         match result {
             Ok(entries) if entries > 0 => {
-                self.handle
-                    .folder_registry
-                    .write()
-                    .await
-                    .record_import(namespace, entries, current_timestamp());
-                if let Some(filters) = live_filters {
-                    self.start_supervision(namespace, filters).await?;
-                }
+                self.record_watch_import(namespace, entries, live_filters).await?;
             }
             Ok(_) => {}
             Err(error) => {
-                self.handle
-                    .folder_registry
-                    .write()
-                    .await
-                    .record_error(namespace, error.to_string());
-                tracing::warn!(%namespace, path = %path.display(), %error, "filesystem change will be retried");
-                if !removed && is_recoverable_watch_error(&error) {
-                    let mut pending = self.pending_watch_events.lock().map_err(|poisoned| {
-                        SyncwebError::operation("daemon watch queue mutex is poisoned", poisoned)
-                    })?;
-                    let ready_at = Instant::now()
-                        .checked_add(self.config.watch_debounce)
-                        .unwrap_or_else(Instant::now);
-                    let entry = pending.entry(namespace.to_string()).or_insert_with(|| PendingWatch {
-                        paths: HashMap::new(),
-                        ready_at,
-                    });
-                    entry.ready_at = ready_at;
-                    entry.paths.insert(path.to_path_buf(), false);
-                    drop(pending);
-                }
+                self.record_watch_error(namespace, path, removed, error).await?;
             }
         }
         Ok(())
+    }
+
+    fn accepts_watch_event(
+        namespace: NamespaceId,
+        relative: &Path,
+        path: &Path,
+        filter: Option<&FilterEngine>,
+    ) -> bool {
+        let size = std::fs::metadata(path).map_or(0, |metadata| metadata.len());
+        filter.is_none_or(|active| {
+            active.evaluate_for_folder(&namespace.to_string(), &FilterEntry::new(relative.to_path_buf(), size))
+                != FilterAction::Reject
+        })
+    }
+
+    async fn apply_watch_event(&self, folder: &crate::folder::SyncwebFolder, event: WatchEvent<'_>) -> Result<u64> {
+        if event.removed || !event.path.exists() {
+            let logical_path = crate::fs::logical_path(event.relative);
+            return folder.delete_entry(logical_path.as_bytes()).await.map(|()| 1_u64);
+        }
+        if !event.path.is_file() {
+            return Ok(0);
+        }
+        if self.matches_known_entry(folder, event.relative, event.path).await? {
+            tracing::debug!(
+                namespace = %event.namespace,
+                path = %event.path.display(),
+                "ignoring watcher event for known folder content"
+            );
+            return Ok(0);
+        }
+        let importer = Importer::new(
+            self.node.blob_store().clone(),
+            self.node.docs_engine().clone(),
+            folder.doc().clone(),
+            folder.author(),
+        )
+        .with_root(event.root)
+        .with_ignore_patterns(event.exclude.to_vec());
+        importer
+            .import_path(event.path)
+            .await
+            .map(|entries| u64::try_from(entries.len()).unwrap_or(u64::MAX))
+    }
+
+    async fn record_watch_import(
+        &self,
+        namespace: NamespaceId,
+        entries: u64,
+        live_filters: Option<&SubscribeFilters>,
+    ) -> Result<()> {
+        self.handle
+            .folder_registry
+            .write()
+            .await
+            .record_import(namespace, entries, current_timestamp());
+        if let Some(filters) = live_filters {
+            self.start_supervision(namespace, filters).await?;
+        }
+        Ok(())
+    }
+
+    async fn record_watch_error(
+        &self,
+        namespace: NamespaceId,
+        path: &Path,
+        removed: bool,
+        error: SyncwebError,
+    ) -> Result<()> {
+        self.handle
+            .folder_registry
+            .write()
+            .await
+            .record_error(namespace, error.to_string());
+        tracing::warn!(%namespace, path = %path.display(), %error, "filesystem change will be retried");
+        if !removed && is_recoverable_watch_error(&error) {
+            let mut pending = self.lock_pending_watch_events()?;
+            let ready_at = Instant::now()
+                .checked_add(self.config.watch_debounce)
+                .unwrap_or_else(Instant::now);
+            let entry = pending.entry(namespace.to_string()).or_insert_with(|| PendingWatch {
+                paths: HashMap::new(),
+                ready_at,
+            });
+            entry.ready_at = ready_at;
+            entry.paths.insert(path.to_path_buf(), false);
+            drop(pending);
+        }
+        Ok(())
+    }
+
+    fn lock_pending_watch_events(&self) -> Result<std::sync::MutexGuard<'_, HashMap<String, PendingWatch>>> {
+        self.pending_watch_events
+            .lock()
+            .map_err(|poisoned| SyncwebError::operation("daemon watch queue mutex is poisoned", poisoned))
     }
 
     async fn matches_known_entry(
@@ -1494,6 +1565,10 @@ impl Daemon {
 
     async fn receive_sync_trigger(&self) -> Option<Option<String>> {
         self.sync_receiver.lock().await.recv().await
+    }
+
+    async fn receive_watch_request(&self) -> Option<tokio::sync::oneshot::Sender<Result<()>>> {
+        self.watch_receiver.lock().await.recv().await
     }
 
     async fn shutdown_resources(&self) -> Result<()> {
@@ -1829,28 +1904,36 @@ async fn reconcile_folder_once(node: &IrohNode, manager: &FolderManager, db: &No
     if !folder.is_writable() {
         return;
     }
-    match crate::sync::materialize_folder_content(node, manager, namespace, &mount_root).await {
-        Ok(outcome) => {
-            if outcome.summary.materialized > 0 || outcome.summary.conflicts > 0 {
-                tracing::info!(
-                    %namespace,
-                    materialized = outcome.summary.materialized,
-                    conflicts = outcome.summary.conflicts,
-                    pending = outcome.summary.pending,
-                    "reconciled folder after live sync"
-                );
-            }
-            // Pending blobs may finish shortly after this pass; nudge once
-            // more so the next trailing edge picks them up.
-            if outcome.summary.pending > 0 {
-                tokio::time::sleep(Duration::from_millis(750)).await;
-                let _ = crate::sync::materialize_folder_content(node, manager, namespace, &mount_root).await;
-            }
-        }
+    reconcile_folder_content(node, manager, namespace, &mount_root).await;
+}
+
+async fn reconcile_folder_content(node: &IrohNode, manager: &FolderManager, namespace: NamespaceId, mount_root: &Path) {
+    let outcome = match crate::sync::materialize_folder_content(node, manager, namespace, mount_root).await {
+        Ok(outcome) => outcome,
         Err(error) => {
             tracing::warn!(%namespace, %error, "reconciler failed to materialize folder");
+            return;
         }
+    };
+    if outcome.summary.materialized > 0 || outcome.summary.conflicts > 0 {
+        tracing::info!(
+            %namespace,
+            materialized = outcome.summary.materialized,
+            conflicts = outcome.summary.conflicts,
+            pending = outcome.summary.pending,
+            "reconciled folder after live sync"
+        );
     }
+    if outcome.summary.pending > 0 {
+        // Pending blobs may finish shortly after this pass; nudge once more so
+        // the next trailing edge picks them up.
+        tokio::time::sleep(Duration::from_millis(750)).await;
+        let _ = crate::sync::materialize_folder_content(node, manager, namespace, mount_root).await;
+    }
+}
+
+fn lock_namespace_set(set: &std::sync::Mutex<HashSet<NamespaceId>>) -> std::sync::MutexGuard<'_, HashSet<NamespaceId>> {
+    set.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn build_reconciler(
@@ -1862,17 +1945,12 @@ fn build_reconciler(
     let busy = Arc::new(std::sync::Mutex::new(HashSet::<NamespaceId>::new()));
     let rerun = Arc::new(std::sync::Mutex::new(HashSet::<NamespaceId>::new()));
     Arc::new(move |namespace| {
-        let mut busy_guard = match busy.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let mut busy_guard = lock_namespace_set(&busy);
         if !busy_guard.insert(namespace) {
             drop(busy_guard);
-            let mut rerun_guard = match rerun.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => poisoned.into_inner(),
-            };
+            let mut rerun_guard = lock_namespace_set(&rerun);
             rerun_guard.insert(namespace);
+            drop(rerun_guard);
             return;
         }
         drop(busy_guard);
@@ -1887,20 +1965,16 @@ fn build_reconciler(
                 tokio::time::sleep(RECONCILE_SETTLE).await;
                 reconcile_folder_once(&node_handle, &manager_handle, &db_handle, namespace).await;
 
-                let mut busy_guard = match busy_set.lock() {
-                    Ok(guard) => guard,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-                let mut rerun_guard = match rerun_set.lock() {
-                    Ok(guard) => guard,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
+                let mut completed_busy_guard = lock_namespace_set(&busy_set);
+                let mut rerun_guard = lock_namespace_set(&rerun_set);
                 if rerun_guard.remove(&namespace) {
                     drop(rerun_guard);
-                    drop(busy_guard);
+                    drop(completed_busy_guard);
                     continue;
                 }
-                busy_guard.remove(&namespace);
+                completed_busy_guard.remove(&namespace);
+                drop(rerun_guard);
+                drop(completed_busy_guard);
                 break;
             }
         });

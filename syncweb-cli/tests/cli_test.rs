@@ -2917,9 +2917,9 @@ fn manpages_match_visible_help_commands() -> anyhow::Result<()> {
     );
     let actual: std::collections::BTreeSet<_> = std::fs::read_dir(&directory)
         .context("read generated manpages")?
-        .map(|entry| {
-            entry
-                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .map(|read_result| {
+            read_result
+                .map(|dir_entry| dir_entry.file_name().to_string_lossy().into_owned())
                 .context("read generated manpage entry")
         })
         .collect::<anyhow::Result<_>>()?;

@@ -997,6 +997,7 @@ async fn test_two_daemons_sync_folder_via_relay() -> Result<()> {
     .await
 }
 
+#[expect(clippy::too_many_lines, reason = "covers the complete daemon conflict lifecycle")]
 #[tokio::test]
 async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()> {
     Box::pin(async move {
@@ -1033,9 +1034,9 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
             }))
             .await?;
         ensure!(matches!(join, IpcResponse::Ok { .. }), "join failed: {join:?}");
-        let folders = daemons.client_b.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
-        let IpcResponse::FolderList(folders) = folders else {
-            anyhow::bail!("unexpected folder list response: {folders:?}");
+        let folder_response = daemons.client_b.send(IpcRequest::new(IpcCommand::ListFolders)).await?;
+        let IpcResponse::FolderList(folders) = folder_response else {
+            anyhow::bail!("unexpected folder list response: {folder_response:?}");
         };
         let joined_status = folders
             .iter()
@@ -1045,7 +1046,7 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
             joined_status.mode == "sendreceive",
             "joined folder is not writable: {joined_status:?}"
         );
-        tokio::time::sleep(Duration::from_millis(1_000)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         let subscribe = daemons
             .client_a
@@ -1059,7 +1060,7 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
             matches!(subscribe, IpcResponse::Ok { .. }),
             "failed to start daemon A subscription: {subscribe:?}"
         );
-        tokio::time::sleep(Duration::from_millis(1_000)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         let note_path_b = joined_path.join("note.bin");
         fs::write(&note_path_b, b"from B\0")?;
@@ -1078,7 +1079,7 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
 
         let note_path_a = folder_path.join("note.bin");
         fs::write(&note_path_a, b"from A\0")?;
-        let import = daemons
+        let import_a = daemons
             .client_a
             .send(IpcRequest::new(IpcCommand::ImportFiles {
                 namespace: Some(namespace.clone()),
@@ -1086,8 +1087,8 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
             }))
             .await?;
         ensure!(
-            matches!(import, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
-            "A import failed: {import:?}"
+            matches!(import_a, IpcResponse::ImportFilesComplete { entries } if entries >= 1),
+            "A import failed: {import_a:?}"
         );
         let a_entry = wait_for_local_entry(&daemons.client_a, &namespace, "note.bin", &[]).await?;
         ensure!(
@@ -1103,7 +1104,7 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
         ensure!(matches!(sync, IpcResponse::Ok { .. }), "conflict sync failed: {sync:?}");
 
         let selector = joined_path.to_string_lossy().into_owned();
-        let mut before = None;
+        let mut conflict_before = None;
         for _ in 0..120 {
             let response = daemons
                 .client_b
@@ -1118,12 +1119,12 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
                         && report.variants.iter().all(|variant| variant.local)
                 })
             {
-                before = Some(conflicts);
+                conflict_before = Some(conflicts);
                 break;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
-        let before = before.context("daemon did not observe the remote conflict")?;
+        let before = conflict_before.context("daemon did not observe the remote conflict")?;
         let before_note = before
             .iter()
             .find(|report| report.path == "note.bin")
@@ -1155,15 +1156,14 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
         );
 
         tokio::time::sleep(Duration::from_millis(1_500)).await;
-        let after = match daemons
+        let after_response = daemons
             .client_b
             .send(IpcRequest::new(IpcCommand::ListConflicts {
                 folder: selector.clone(),
             }))
-            .await?
-        {
-            IpcResponse::Conflicts(conflicts) => conflicts,
-            response => anyhow::bail!("unexpected conflict response: {response:?}"),
+            .await?;
+        let IpcResponse::Conflicts(after) = after_response else {
+            anyhow::bail!("unexpected conflict response");
         };
         let after_note = after
             .iter()

@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH backup 1  "backup " 
+.SH NAME
+backup \- Back up databases, configuration, identity, and optionally blobs
+.SH SYNOPSIS
+\fBbackup\fR [\fB\-\-output\fR] [\fB\-\-include\-blobs\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Back up databases, configuration, identity, and optionally blobs
+.SH OPTIONS
+.TP
+\fB\-\-output\fR \fI<OUTPUT>\fR [default: .]
+
+.TP
+\fB\-\-include\-blobs\fR
+Also copy the blob store (can be very large); off by default
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

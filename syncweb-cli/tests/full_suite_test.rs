@@ -1236,7 +1236,7 @@ fn backup_restore_requires_identity_confirmation_and_verifies_manifest() -> anyh
     )?;
     assert_success(&restored, "restore")?;
     let restored_value: serde_json::Value = serde_json::from_slice(&restored.stdout)?;
-    ensure!(restored_value["status"] == "restored");
+    ensure!(restored_value.get("status") == Some(&serde_json::Value::from("restored")));
     ensure!(restored_target.join("default").join("identity.key").exists());
     let restored_check = run_with_data(&restored_target, &["--json", "db", "check"])?;
     assert_success(&restored_check, "restored db check")?;
@@ -1244,7 +1244,10 @@ fn backup_restore_requires_identity_confirmation_and_verifies_manifest() -> anyh
     let manifest_path = backup_path.join("manifest.json");
     let original_manifest = fs::read_to_string(&manifest_path)?;
     let mut unsupported: serde_json::Value = serde_json::from_str(&original_manifest)?;
-    unsupported["format_version"] = serde_json::json!(999);
+    unsupported
+        .as_object_mut()
+        .context("backup manifest object")?
+        .insert("format_version".to_owned(), serde_json::json!(999));
     fs::write(&manifest_path, serde_json::to_vec_pretty(&unsupported)?)?;
     let unsupported_target = test_dir("restore-unsupported");
     let unsupported_result = run_with_data(
@@ -1258,8 +1261,9 @@ fn backup_restore_requires_identity_confirmation_and_verifies_manifest() -> anyh
     );
 
     let mut incomplete: serde_json::Value = serde_json::from_str(&original_manifest)?;
-    incomplete["files"]
-        .as_array_mut()
+    incomplete
+        .get_mut("files")
+        .and_then(serde_json::Value::as_array_mut)
         .context("backup manifest files")?
         .push(serde_json::json!("interrupted.db"));
     fs::write(&manifest_path, serde_json::to_vec_pretty(&incomplete)?)?;
@@ -1282,7 +1286,7 @@ fn backup_restore_requires_identity_confirmation_and_verifies_manifest() -> anyh
             fs::read_dir(parent)?.all(|entry| {
                 entry
                     .ok()
-                    .and_then(|entry| entry.file_name().into_string().ok())
+                    .and_then(|dir_entry| dir_entry.file_name().into_string().ok())
                     .is_none_or(|name| !name.starts_with(&format!(".{target_name}.restore-")))
             }),
             "interrupted restore should remove its staging directory"

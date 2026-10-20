@@ -6,7 +6,7 @@ use iroh::SecretKey;
 use iroh_blobs::Hash;
 use n0_future::StreamExt;
 use syncweb_core::{
-    ProviderContent, ProviderLease, ProviderLeaseOptions,
+    ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
     filter::FilterEntry,
     folder::{FolderManager, SyncMode},
     node::{
@@ -96,8 +96,8 @@ fn peer_tracker_records_bounded_transfer_telemetry() -> anyhow::Result<()> {
 #[test]
 fn provider_lease_is_scope_validated_before_registry_ingest() -> anyhow::Result<()> {
     let signing_key = SigningKey::from_bytes(&[41; 32]);
-    let provider = signing_key.verifying_key().to_bytes();
-    let provider = iroh::PublicKey::from_bytes(&provider)?;
+    let provider_bytes = signing_key.verifying_key().to_bytes();
+    let provider = iroh::PublicKey::from_bytes(&provider_bytes)?;
     let folder = iroh_docs::NamespaceId::from([9; 32]);
     let mut lease = ProviderLease::new(
         provider,
@@ -106,7 +106,7 @@ fn provider_lease_is_scope_validated_before_registry_ingest() -> anyhow::Result<
             folder,
             None,
             vec![ProviderContent::blob(blob(7))],
-            Default::default(),
+            ProviderCapabilities::default(),
             10,
             20,
         ),

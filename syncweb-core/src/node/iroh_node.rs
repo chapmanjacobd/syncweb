@@ -522,12 +522,14 @@ impl IrohNode {
     where
         I: IntoIterator<Item = Hash>,
     {
-        let mut registry = self.provider_registry_guard()?;
         let provider = self.endpoint.id();
         let mut unique = HashSet::new();
-        for hash in hashes {
-            if unique.insert(hash) {
-                registry.record_observation(hash, provider, ObservationSource::OfflineImport, 100);
+        {
+            let mut registry = self.provider_registry_guard()?;
+            for hash in hashes {
+                if unique.insert(hash) {
+                    registry.record_observation(hash, provider, ObservationSource::OfflineImport, 100);
+                }
             }
         }
         Ok(unique.len())

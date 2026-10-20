@@ -13,9 +13,9 @@ pub use transfers::{TransferJobSummary, process_transfer_jobs};
 #[cfg(unix)]
 pub use ipc::UnixSocketTransport;
 pub use ipc::{
-    BlobPeerAvailability, DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus, IpcClient, IpcCommand,
-    IpcListener, IpcRequest, IpcResponse, IpcServer, IpcTransport, JoinOptions, PackageInfoResult,
-    PeerAvailabilityReport, PeerInfo, SnapshotDiffReport, SnapshotInfo, WatchConfig,
+    ArchiveExportOptions, BlobPeerAvailability, DaemonHandle, EntryRow, FolderEntry, FolderRegistry, FolderStatus,
+    IpcClient, IpcCommand, IpcListener, IpcRequest, IpcResponse, IpcServer, IpcTransport, JoinOptions,
+    PackageInfoResult, PeerAvailabilityReport, PeerInfo, SnapshotDiffReport, SnapshotInfo, WatchConfig,
 };
 pub use pool::ManagedPool;
 pub use route::{daemon_client, try_daemon, with_node};

@@ -280,7 +280,11 @@ async fn test_export_rejects_archive_scope_that_disagrees_with_manifest() -> Res
         .await
         .expect_err("mismatched archive scope must be rejected");
     anyhow::ensure!(error.to_string().contains("community"));
-    anyhow::ensure!(hash == collection_manifest.entries[0].content_id);
+    let first_entry = collection_manifest
+        .entries
+        .first()
+        .context("collection manifest should contain an entry")?;
+    anyhow::ensure!(hash == first_entry.content_id);
     node.stop().await?;
     Ok(())
 }
@@ -300,9 +304,10 @@ async fn test_export_drop_index_and_bounded_modes() -> Result<()> {
     for (_, data) in files {
         hashes.push(node.blob_store().add_bytes(data).await?);
     }
+    let requested_hash = *hashes.get(1).context("expected a second blob hash")?;
     let output = directory.path().join("repair.car.zst");
     let mut requested = BTreeSet::new();
-    requested.insert(hashes[1]);
+    requested.insert(requested_hash);
     let result = DropExporter::new(node.blob_store().clone())
         .export_manifests(
             std::slice::from_ref(&collection_manifest),
@@ -316,12 +321,14 @@ async fn test_export_drop_index_and_bounded_modes() -> Result<()> {
     anyhow::ensure!(result.entry_count == 1);
     anyhow::ensure!(result.block_count == 3);
     let blocks = read_archive(&output).await?;
-    let index = DropIndex::from_bytes(&blocks[1].1)?;
+    let index_block = blocks.get(1).context("archive should contain an index block")?;
+    let index = DropIndex::from_bytes(&index_block.1)?;
     anyhow::ensure!(index.mode == "repair-bundle");
     anyhow::ensure!(index.source_community.as_deref() == Some("classroom"));
     anyhow::ensure!(index.providers.len() == 1);
     anyhow::ensure!(index.blocks.len() == 1);
-    anyhow::ensure!(index.blocks[0].hash == hashes[1]);
+    let first_index_block = index.blocks.first().context("repair index should contain a block")?;
+    anyhow::ensure!(first_index_block.hash == requested_hash);
 
     let contribution_output = directory.path().join("contribution.car.zst");
     let contribution = DropExporter::new(node.blob_store().clone())

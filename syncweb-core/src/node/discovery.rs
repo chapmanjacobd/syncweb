@@ -216,7 +216,7 @@ impl TopicTracker {
     /// be read.
     pub async fn find_provider_leases(&self, namespace_id: NamespaceId) -> Result<Vec<ProviderLease>> {
         let entry = self.topic(namespace_id).await?;
-        let mut leases = HashMap::new();
+        let mut leases_by_provider = HashMap::new();
         let now = distributed_topic_tracker::unix_minute(0);
         for minute in [now.saturating_sub(1), now] {
             let records = entry
@@ -240,15 +240,15 @@ impl TopicTracker {
                 let Ok(provider) = lease.provider_id() else {
                     continue;
                 };
-                let replace = leases
+                let replace = leases_by_provider
                     .get(&provider)
                     .is_none_or(|existing: &ProviderLease| lease.observed_at > existing.observed_at);
                 if replace {
-                    leases.insert(provider, lease);
+                    leases_by_provider.insert(provider, lease);
                 }
             }
         }
-        let mut leases: Vec<_> = leases.into_values().collect();
+        let mut leases: Vec<_> = leases_by_provider.into_values().collect();
         leases.sort_by(|left, right| left.provider.cmp(&right.provider));
         Ok(leases)
     }

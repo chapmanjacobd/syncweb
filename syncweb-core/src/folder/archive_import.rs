@@ -422,7 +422,10 @@ where
     let mut header = vec![0_u8; header_len];
     read_exact(&mut reader, &mut header, "failed to read CAR header").await?;
     let roots = parse_format_header(&header)?;
-    let root = roots[0];
+    let root = roots
+        .first()
+        .copied()
+        .ok_or_else(|| SyncwebError::InvalidConfig("drop archive has no CAR roots".to_owned()))?;
     let index_root = roots.get(1).copied();
     if roots.len() > 2 {
         return Err(SyncwebError::InvalidConfig(
@@ -451,17 +454,17 @@ where
     let mut index = None;
     let mut index_bytes = None;
     let mut block_count = 1_usize;
-    if let Some(index_root) = index_root {
+    if let Some(index_root_value) = index_root {
         let index_section = read_section_header(&mut reader)
             .await?
             .ok_or_else(|| SyncwebError::InvalidConfig("drop archive is missing its index block".to_owned()))?;
-        if index_section.hash != index_root || index_section.payload_size > MAX_MANIFEST_SIZE {
+        if index_section.hash != index_root_value || index_section.payload_size > MAX_MANIFEST_SIZE {
             return Err(SyncwebError::InvalidConfig(
                 "drop index block does not match its CAR root".to_owned(),
             ));
         }
         let bytes = read_payload_to_vec(&mut reader, index_section.payload_size, "drop index").await?;
-        if Hash::new(&bytes) != index_root {
+        if Hash::new(&bytes) != index_root_value {
             return Err(SyncwebError::InvalidConfig(
                 "drop index hash does not match its CID".to_owned(),
             ));

@@ -1814,8 +1814,8 @@ impl NodeDatabase {
              WHERE namespace_id = ?1 AND entry_key = ?2",
                 params![namespace_id, entry_key],
                 |row| {
-                    let hash_bytes: Vec<u8> = row.get(0)?;
-                    let hash_bytes: [u8; 32] = hash_bytes.try_into().map_err(|bytes: Vec<u8>| {
+                    let hash_bytes_vec: Vec<u8> = row.get(0)?;
+                    let hash_bytes: [u8; 32] = hash_bytes_vec.try_into().map_err(|bytes: Vec<u8>| {
                         rusqlite::Error::FromSqlConversionFailure(
                             0,
                             rusqlite::types::Type::Blob,

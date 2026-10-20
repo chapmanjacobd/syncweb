@@ -86,11 +86,14 @@ fn operational_network_events_are_counted_and_queryable() -> anyhow::Result<()> 
     )?;
 
     let counts = database.network_event_counts("community-a")?;
-    assert_eq!(counts.get("discovery_observed"), Some(&1));
-    assert_eq!(counts.get("repair_finished"), Some(&2));
+    anyhow::ensure!(counts.get("discovery_observed") == Some(&1));
+    anyhow::ensure!(counts.get("repair_finished") == Some(&2));
     let events = database.recent_network_events("community-a", 10)?;
-    assert_eq!(events.len(), 3);
-    assert_eq!(events[0].metadata_json.as_deref(), Some(r#"{"source":"lan"}"#));
+    anyhow::ensure!(events.len() == 3);
+    let first_event = events
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("recent network events should not be empty"))?;
+    anyhow::ensure!(first_event.metadata_json.as_deref() == Some(r#"{"source":"lan"}"#));
 
     std::fs::remove_dir_all(directory)?;
     Ok(())

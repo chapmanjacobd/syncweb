@@ -394,8 +394,11 @@ const fn default_dht_max_records_per_minute() -> usize {
     DEFAULT_DHT_MAX_RECORDS_PER_MINUTE
 }
 
-const fn default_dht_read_interval_ms() -> u64 {
-    DEFAULT_DHT_READ_INTERVAL.as_millis() as u64
+fn default_dht_read_interval_ms() -> u64 {
+    DEFAULT_DHT_READ_INTERVAL
+        .as_secs()
+        .saturating_mul(1_000)
+        .saturating_add(u64::from(DEFAULT_DHT_READ_INTERVAL.subsec_millis()))
 }
 
 fn default_sync_mode() -> String {

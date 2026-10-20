@@ -23,3 +23,4 @@ This crate provides the foundational building blocks for the syncweb application
 * `node`: Iroh node integration and identity management.
 * `search`: Find engine for querying synchronized assets.
 * `sync`: The core synchronization engine and session management.
+* `swarm_simulator`: Deterministic inventory, repair, and fault simulation.

@@ -232,6 +232,105 @@ _arguments "${_arguments_options[@]}" : \
 ':path:_files' \
 && ret=0
 ;;
+(pin)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::folder -- Namespace ID or path to a managed folder:_default' \
+&& ret=0
+;;
+(unpin)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::folder -- Namespace ID or path to a managed folder:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(conflicts)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_syncweb__subcmd__conflicts_commands" \
+"*::: :->conflicts" \
+&& ret=0
+
+    case $state in
+    (conflicts)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:syncweb-conflicts-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::folder -- Namespace ID or path to a managed folder:_default' \
+&& ret=0
+;;
+(show)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Namespace ID or path to a managed folder]:FOLDER:_default' \
+'--folder=[Namespace ID or path to a managed folder]:FOLDER:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':path -- Logical path within the synchronized folder:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Namespace ID or path to a managed folder]:FOLDER:_default' \
+'--folder=[Namespace ID or path to a managed folder]:FOLDER:_default' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Logical path to acknowledge; omit to acknowledge every conflict:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -902,6 +1001,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--version=[]:VERSION:_default' \
 '*--filter=[]:EXPRESSION:_default' \
+'--mode=[]:MODE:(collection missing-blocks repair-bundle contribution)' \
+'*--block-hash=[]:HASH:_default' \
+'--max-bytes=[]:BYTES:_default' \
+'--source-community=[]:COMMUNITY:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
@@ -918,6 +1021,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '*--filter=[]:EXPRESSION:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--no-seeding[Do not enroll imported blocks as locally available providers]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -943,6 +1047,20 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 '::ticket:_default' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':archive:_files' \
 && ret=0
 ;;
 (install)
@@ -1556,6 +1674,35 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(backup)
+_arguments "${_arguments_options[@]}" : \
+'--output=[]:OUTPUT:_files' \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--include-blobs[Also copy the blob store (can be very large); off by default]' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--verbose[Enable verbose structured logging]' \
+'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
+'--yes[Assume yes to every destructive-operation prompt]' \
+'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
+'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
+'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':backup -- Backup directory containing manifest.json:_files' \
+&& ret=0
+;;
 (db)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1813,6 +1960,7 @@ _syncweb_commands() {
 'sync:Ask the local daemon to trigger synchronization' \
 'devices:Show this device'\''s Iroh and Syncthing identities' \
 'folders:Manage synchronized folders (bare\: list managed folders)' \
+'conflicts:Inspect divergent document variants' \
 'ls:List files in a local folder' \
 'stat:Show detailed metadata for a local file' \
 'find:Search local files' \
@@ -1830,7 +1978,9 @@ _syncweb_commands() {
 'snapshot:Manage content-addressed snapshots' \
 'indexing:Manage opt-in indexing, catalogs, and metadata' \
 'stats:Show statistics for folders and files' \
-'db:Database maintenance\: check, vacuum, stats, backup' \
+'backup:Back up databases, configuration, identity, and optionally blobs' \
+'restore:Restore a verified backup into a new data directory' \
+'db:Database maintenance\: check, vacuum, and stats' \
 'config:Show or update local configuration' \
 'version:Show syncweb version information' \
 'completions:Generate shell completions' \
@@ -1843,6 +1993,11 @@ _syncweb_commands() {
 _syncweb__subcmd__access_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb access commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__backup_commands] )) ||
+_syncweb__subcmd__backup_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb backup commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__completions_commands] )) ||
 _syncweb__subcmd__completions_commands() {
@@ -1886,13 +2041,37 @@ _syncweb__subcmd__config__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb config show commands' commands "$@"
 }
+(( $+functions[_syncweb__subcmd__conflicts_commands] )) ||
+_syncweb__subcmd__conflicts_commands() {
+    local commands; commands=(
+'list:List all divergent paths in a synchronized folder' \
+'show:Show every variant for one conflicting path' \
+'resolve:Remove acknowledged conflict artifacts without changing synced entries' \
+    )
+    _describe -t commands 'syncweb conflicts commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__conflicts__subcmd__list_commands] )) ||
+_syncweb__subcmd__conflicts__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb conflicts list commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__conflicts__subcmd__resolve_commands] )) ||
+_syncweb__subcmd__conflicts__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb conflicts resolve commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__conflicts__subcmd__show_commands] )) ||
+_syncweb__subcmd__conflicts__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb conflicts show commands' commands "$@"
+}
 (( $+functions[_syncweb__subcmd__db_commands] )) ||
 _syncweb__subcmd__db_commands() {
     local commands; commands=(
 'check:Run integrity check on all databases' \
 'vacuum:Run VACUUM to reclaim space in all databases' \
 'stats:Show database sizes and table statistics' \
-'backup:Back up databases, config, and identity to a directory (blobs opt-in with --include-blobs)' \
+'backup:Back up databases, configuration, identity, and optionally blobs' \
     )
     _describe -t commands 'syncweb db commands' commands "$@"
 }
@@ -1938,6 +2117,8 @@ _syncweb__subcmd__folders_commands() {
 'join:Join a folder from an Iroh document ticket' \
 'leave:Leave a synchronized folder, optionally deleting its local files' \
 'import:Import local files into a synchronized folder' \
+'pin:Pin every current folder blob for local retention' \
+'unpin:Unpin every current folder blob from local retention' \
     )
     _describe -t commands 'syncweb folders commands' commands "$@"
 }
@@ -1960,6 +2141,16 @@ _syncweb__subcmd__folders__subcmd__join_commands() {
 _syncweb__subcmd__folders__subcmd__leave_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb folders leave commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__folders__subcmd__pin_commands] )) ||
+_syncweb__subcmd__folders__subcmd__pin_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb folders pin commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__folders__subcmd__unpin_commands] )) ||
+_syncweb__subcmd__folders__subcmd__unpin_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb folders unpin commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__help_commands] )) ||
 _syncweb__subcmd__help_commands() {
@@ -2124,6 +2315,7 @@ _syncweb__subcmd__package_commands() {
 'export:Export package directories or collection IDs as compressed CAR archive files' \
 'import:Import and install a compressed CAR archive file' \
 'info:Show a collection manifest from a ticket or blob hash' \
+'inspect:Inspect and verify a compressed CAR archive without importing it' \
 'install:Verify, stage, and atomically install a collection version' \
 'upgrade:Install a newer collection manifest version via ticket' \
 'remove:Remove a non-current installed collection version' \
@@ -2158,6 +2350,11 @@ _syncweb__subcmd__package__subcmd__import_commands() {
 _syncweb__subcmd__package__subcmd__info_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package info commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__package__subcmd__inspect_commands] )) ||
+_syncweb__subcmd__package__subcmd__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb package inspect commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__package__subcmd__install_commands] )) ||
 _syncweb__subcmd__package__subcmd__install_commands() {
@@ -2203,6 +2400,11 @@ _syncweb__subcmd__package__subcmd__versions_commands() {
 _syncweb__subcmd__reload_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb reload commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__restore_commands] )) ||
+_syncweb__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb restore commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__search_commands] )) ||
 _syncweb__subcmd__search_commands() {

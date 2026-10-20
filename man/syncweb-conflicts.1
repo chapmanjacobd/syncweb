@@ -1,0 +1,26 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH conflicts 1  "conflicts " 
+.SH NAME
+conflicts \- Inspect divergent document variants
+.SH SYNOPSIS
+\fBconflicts\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Inspect divergent document variants
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+conflicts\-list(1)
+List all divergent paths in a synchronized folder
+.TP
+conflicts\-show(1)
+Show every variant for one conflicting path
+.TP
+conflicts\-resolve(1)
+Remove acknowledged conflict artifacts without changing synced entries
+.TP
+conflicts\-help(1)
+Print this message or the help of the given subcommand(s)

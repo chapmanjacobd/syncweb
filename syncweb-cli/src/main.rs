@@ -39,7 +39,10 @@ use syncweb_core::{
     allocation::{AllocationCandidate, AllocationDecision, RootCapacity, StorageRoot, allocate},
     bandwidth_stats::BandwidthStats,
     cancel_session,
-    daemon::{Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile, daemon_socket_path, pid_is_alive},
+    daemon::{
+        ArchiveExportOptions, Daemon, DaemonConfig, EntryRow, IpcClient, PidLock, StateFile, daemon_socket_path,
+        pid_is_alive,
+    },
     filter::{FilterAction, FilterConfig, FilterEngine, FilterEntry, FilterRule, MatchCriteria},
     folder::{
         CollectionEntry, CollectionManifest, CollectionStore, DropExportMode, DropExportOptions, DropExportResult,
@@ -743,7 +746,7 @@ async fn spawn_daemon_and_wait(
             Ok(()) => return Ok(()),
             Err(error) => {
                 let exited = child.try_wait()?.is_some();
-                if !exited || attempt + 1 == DAEMON_AUTO_START_ATTEMPTS {
+                if !exited || attempt == DAEMON_AUTO_START_ATTEMPTS.saturating_sub(1) {
                     return Err(error);
                 }
                 last_error = Some(error);
@@ -751,7 +754,7 @@ async fn spawn_daemon_and_wait(
             }
         }
     }
-    Err(last_error.expect("daemon startup attempts should record an error"))
+    Err(last_error.ok_or_else(|| anyhow::anyhow!("daemon startup attempts exhausted without an error"))?)
 }
 
 /// Wait until the daemon for `data_dir` answers on its IPC socket.
@@ -1500,14 +1503,14 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
         Some(matched)
     };
 
-    download_via_daemon_or_node(
+    Box::pin(download_via_daemon_or_node(
         ctx.data_dir,
         ctx.output_json,
         ctx.no_daemon,
         ctx.network,
         &command,
         matched.as_deref(),
-    )
+    ))
     .await
 }
 
@@ -2774,12 +2777,12 @@ async fn handle_stats_seeding(ctx: &CliContext<'_>, command: &StatsSeedingArgs) 
         let hash = entry.content_hash();
         let local = folder.has_local(hash).await?;
         let path = PathBuf::from(String::from_utf8_lossy(entry.key()).into_owned());
-        let peers = node.provider_peer_snapshot(&hash)?;
+        let provider_peers = node.provider_peer_snapshot(&hash)?;
         candidates.push(FetchCandidate::with_peer_state(
             path,
             hash,
             entry.content_len(),
-            peers.map(|peers| peers.len()),
+            provider_peers.map(|peers| peers.len()),
             local,
         ));
     }
@@ -3426,7 +3429,7 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
     } else {
         JoinFetch::Lazy
     };
-    let next_steps = join_next_steps(subscribe, fetch);
+    let daemon_next_steps = join_next_steps(subscribe, fetch);
     if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
         let message = client
             .join(
@@ -3444,11 +3447,14 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
         if output_json {
             println!(
                 "{}",
-                with_next_steps(serde_json::json!({"status": "ok", "message": message}), &next_steps,)
+                with_next_steps(
+                    serde_json::json!({"status": "ok", "message": message}),
+                    &daemon_next_steps,
+                )
             );
         } else {
             println!("{message}");
-            print_next_steps(&next_steps);
+            print_next_steps(&daemon_next_steps);
         }
         return Ok(());
     }
@@ -3547,7 +3553,7 @@ async fn sync_joined_folder_metadata(
     })
     .await;
     let _ = intent.cancel();
-    result.map_err(|_| anyhow::anyhow!("metadata synchronization timed out"))??;
+    result.context("metadata synchronization timed out")??;
     Ok(())
 }
 
@@ -4301,27 +4307,34 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             }
         }
         PackageCommand::Info { ticket, hash, node_id } => {
-            let ticket = ticket.as_deref().map(cli::ticket::resolve_ticket).transpose()?;
+            let resolved_ticket = ticket.as_deref().map(cli::ticket::resolve_ticket).transpose()?;
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let info = client.package_info(ticket, hash, node_id).await?;
+                let info = client.package_info(resolved_ticket, hash, node_id).await?;
                 return print_package_info_response(&info, output_json);
             }
-            handle_package_info(ctx, ticket, hash, node_id).await?;
+            handle_package_info(ctx, resolved_ticket, hash, node_id).await?;
         }
         PackageCommand::Inspect { archive } => {
             handle_package_archive_inspect(archive, output_json).await?;
         }
-        PackageCommand::Install { ticket, path } | PackageCommand::Upgrade { ticket, path } => {
-            let ticket = cli::ticket::resolve_ticket(&ticket)?;
+        PackageCommand::Install {
+            ticket: ticket_value,
+            path,
+        }
+        | PackageCommand::Upgrade {
+            ticket: ticket_value,
+            path,
+        } => {
+            let resolved_ticket = cli::ticket::resolve_ticket(&ticket_value)?;
             // Resolve to an absolute path so the daemon (whose working
             // directory differs from the CLI's) installs where the caller asked.
-            let install_root = path.map(|path| canonical_path(&path));
+            let install_root = path.map(|raw_path| canonical_path(&raw_path));
             if let Some(client) = syncweb_core::daemon::daemon_client(data_dir)? {
-                let result = client.package_install(ticket, install_root).await?;
+                let result = client.package_install(resolved_ticket, install_root).await?;
                 print_package_install_response(result, output_json);
                 return Ok(());
             }
-            handle_package_install(ctx, &packages, ticket, install_root).await?;
+            handle_package_install(ctx, &packages, resolved_ticket, install_root).await?;
         }
         PackageCommand::Remove {
             collection: collection_id,
@@ -4668,7 +4681,7 @@ async fn handle_package_archive_import(
             );
         } else {
             println!(
-                "imported: {} {} ({} entries; {} new, {} reused blocks; {} locally available)",
+                "imported: {} {} ({} entries); {} new, {} reused blocks; {} locally available",
                 result.collection_id,
                 result.version,
                 result.imported_entry_count,
@@ -4754,7 +4767,7 @@ async fn handle_package_archive_import(
         );
     } else {
         println!(
-            "imported: {collection} {version} ({} entries; {} new, {} reused blocks; {} locally available)",
+            "imported: {collection} {version} ({} entries); {} new, {} reused blocks; {} locally available",
             result.imported_entry_count,
             result.local_missing_block_count,
             result.local_reused_block_count,
@@ -4790,6 +4803,10 @@ async fn open_node_offline(data_dir: &std::path::Path) -> Result<IrohNode> {
 }
 
 #[async_recursion]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "package export forwards independent command-line options"
+)]
 async fn handle_package_archive_export(
     ctx: &CliContext<'_>,
     paths: Vec<std::path::PathBuf>,
@@ -4842,6 +4859,10 @@ async fn handle_package_archive_export(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "package export forwards independent command-line options"
+)]
 async fn handle_package_collection_export(
     ctx: &CliContext<'_>,
     collection_id: uuid::Uuid,
@@ -4858,17 +4879,14 @@ async fn handle_package_collection_export(
     let client = daemon_client_or_start(ctx.data_dir, ctx.no_daemon, ctx.network)
         .await?
         .ok_or_else(|| anyhow::anyhow!("exporting a collection ID requires the daemon"))?;
+    let options = ArchiveExportOptions::new()
+        .with_filter(filter)
+        .with_mode(Some(package_export_mode_name(mode)))
+        .with_block_hashes(block_hashes)
+        .with_max_bytes(max_bytes)
+        .with_source_community(source_community);
     let result = client
-        .export_collection_archive_with_options(
-            collection_id.to_string(),
-            version,
-            output,
-            filter,
-            package_export_mode_name(mode),
-            block_hashes,
-            max_bytes,
-            source_community,
-        )
+        .export_collection_archive_with_options(collection_id.to_string(), version, output, options)
         .await?;
     print_package_archive_exports(std::slice::from_ref(&result), ctx.output_json)
 }
@@ -4882,8 +4900,8 @@ fn package_export_options(
     source_community: Option<&str>,
 ) -> Result<DropExportOptions> {
     let mut options = DropExportOptions::default().with_mode(package_export_mode(mode, block_hashes, max_bytes)?);
-    if let Some(version) = version {
-        options = options.with_version(version);
+    if let Some(version_value) = version {
+        options = options.with_version(version_value);
     }
     if let Some(engine) = parse_drop_filters(filters)? {
         options = options.with_filter(engine);
@@ -4946,8 +4964,11 @@ fn package_export_mode(
             if !hashes.is_empty() {
                 anyhow::bail!("--block-hash cannot be used with --mode contribution");
             }
-            let max_bytes = max_bytes.ok_or_else(|| anyhow::anyhow!("--mode contribution requires --max-bytes"))?;
-            Ok(DropExportMode::Contribution { max_bytes })
+            let contribution_max_bytes =
+                max_bytes.ok_or_else(|| anyhow::anyhow!("--mode contribution requires --max-bytes"))?;
+            Ok(DropExportMode::Contribution {
+                max_bytes: contribution_max_bytes,
+            })
         }
     }
 }
@@ -5653,8 +5674,8 @@ fn copy_restore_entry(source: &Path, destination: &Path) -> Result<()> {
     if metadata.is_dir() {
         std::fs::create_dir_all(destination)?;
         for child in std::fs::read_dir(source)? {
-            let child = child?;
-            copy_restore_entry(&child.path(), &destination.join(child.file_name()))?;
+            let child_entry = child?;
+            copy_restore_entry(&child_entry.path(), &destination.join(child_entry.file_name()))?;
         }
     } else if metadata.is_file() {
         if let Some(parent) = destination.parent() {
@@ -5704,8 +5725,10 @@ fn resolve_package_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> Pa
         return root;
     }
     if paths.len() == 1 {
-        if paths[0].is_file() {
-            return paths[0].clone();
+        if let Some(path) = paths.first()
+            && path.is_file()
+        {
+            return path.clone();
         }
         let parent = paths
             .first()
@@ -5862,8 +5885,8 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             }
         }
         NetworkCommand::Join { ticket } => {
-            let ticket = cli::ticket::resolve_ticket(&ticket)?;
-            let parsed = ticket.parse()?;
+            let resolved_ticket = cli::ticket::resolve_ticket(&ticket)?;
+            let parsed = resolved_ticket.parse()?;
             let id = manager.join(parsed)?;
             print_network_joined(&id.to_string(), output_json);
         }
@@ -6461,12 +6484,12 @@ async fn handle_conflicts(ctx: &CliContext<'_>, command: ConflictCommand) -> Res
         ConflictCommand::Resolve(_) => unreachable!("resolve is handled above"),
     };
     let reports = load_conflicts(ctx, &folder).await?;
-    if let Some(path) = path {
-        let path = normalize_logical_path(&path);
+    if let Some(raw_path) = path {
+        let logical_path = normalize_logical_path(&raw_path);
         let report = reports
             .iter()
-            .find(|report| report.path == path)
-            .ok_or_else(|| anyhow::anyhow!("no conflict found for '{path}'"))?;
+            .find(|report| report.path == logical_path)
+            .ok_or_else(|| anyhow::anyhow!("no conflict found for '{logical_path}'"))?;
         if ctx.output_json {
             println!("{}", json_list("conflicts", std::slice::from_ref(report))?);
         } else {
@@ -7982,10 +8005,13 @@ mod tests {
 
         let (resolved_root, entries) = scan_collection_entries(std::slice::from_ref(&file), Some(file.clone()))?;
 
-        assert_eq!(resolved_root, file);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].logical_path, PathBuf::from("content.zim"));
-        assert_eq!(entries[0].size, 7);
+        anyhow::ensure!(resolved_root == file);
+        anyhow::ensure!(entries.len() == 1);
+        let entry = entries
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("single-file package scan returned no entries"))?;
+        anyhow::ensure!(entry.logical_path == PathBuf::from("content.zim"));
+        anyhow::ensure!(entry.size == 7);
         std::fs::remove_dir_all(root)?;
         Ok(())
     }

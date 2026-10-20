@@ -191,7 +191,10 @@ where
     let mut header = vec![0_u8; header_len];
     read_exact(&mut reader, &mut header, "failed to read CAR header").await?;
     let roots = parse_format_header(&header)?;
-    let root = roots[0];
+    let root = roots
+        .first()
+        .copied()
+        .ok_or_else(|| SyncwebError::InvalidConfig("drop archive has no CAR roots".to_owned()))?;
     let index_root = roots.get(1).copied();
     if roots.len() > 2 {
         return Err(SyncwebError::InvalidConfig(
@@ -249,17 +252,17 @@ where
     let mut index = None;
     let mut block_count = 1_usize;
     let mut bytes_verified = manifest_size;
-    if let Some(index_root) = index_root {
+    if let Some(index_root_value) = index_root {
         let index_section = read_section_header(&mut reader)
             .await?
             .ok_or_else(|| SyncwebError::InvalidConfig("drop archive is missing its index block".to_owned()))?;
-        if index_section.hash != index_root || index_section.payload_size > MAX_MANIFEST_SIZE {
+        if index_section.hash != index_root_value || index_section.payload_size > MAX_MANIFEST_SIZE {
             return Err(SyncwebError::InvalidConfig(
                 "drop index block does not match its CAR root".to_owned(),
             ));
         }
         let (index_hash, index_data, index_size) = read_payload(&mut reader, index_section.payload_size, true).await?;
-        if index_hash != index_root {
+        if index_hash != index_root_value {
             return Err(SyncwebError::InvalidConfig(
                 "drop index hash does not match its CID".to_owned(),
             ));
@@ -276,7 +279,7 @@ where
                 "drop index metadata does not match the collection manifest".to_owned(),
             ));
         }
-        index = Some(index_root);
+        index = Some(index_root_value);
         bytes_verified = bytes_verified
             .checked_add(index_size)
             .ok_or_else(|| SyncwebError::operation("verified drop size overflow", "u64 limit exceeded"))?;

@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn stdin_ticket_is_trimmed() {
         assert_eq!(
-            read_ticket("  ticket-value\n".as_bytes()).expect("read ticket"),
+            read_ticket(&b"  ticket-value\n"[..]).expect("read ticket"),
             "ticket-value"
         );
     }
@@ -58,14 +58,14 @@ mod tests {
     #[test]
     fn stdin_ticket_ignores_following_guidance() {
         assert_eq!(
-            read_ticket("ticket-value\n\nnext steps:\n  use the ticket\n".as_bytes()).expect("read ticket"),
+            read_ticket(&b"ticket-value\n\nnext steps:\n  use the ticket\n"[..]).expect("read ticket"),
             "ticket-value"
         );
     }
 
     #[test]
     fn empty_stdin_ticket_is_rejected() {
-        let error = read_ticket("\n".as_bytes()).expect_err("empty ticket should fail");
+        let error = read_ticket(&b"\n"[..]).expect_err("empty ticket should fail");
         assert!(error.to_string().contains("empty"));
     }
 }

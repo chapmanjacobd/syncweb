@@ -84,8 +84,8 @@ pub fn beacon_datagrams_per_minute(interval: Duration, target_count: usize) -> u
         .checked_div(interval_ms)
         .unwrap_or(u128::MAX);
     let total = periodic_sends
-        .saturating_add(BEACON_BURST_COUNT as u128)
-        .saturating_mul(target_count as u128);
+        .saturating_add(u128::try_from(BEACON_BURST_COUNT).unwrap_or(u128::MAX))
+        .saturating_mul(u128::try_from(target_count).unwrap_or(u128::MAX));
     u64::try_from(total).unwrap_or(u64::MAX)
 }
 
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn beacon_budget_counts_periodic_and_change_broadcasts() {
-        assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(60), 1), 4);
+        assert_eq!(beacon_datagrams_per_minute(Duration::from_mins(1), 1), 4);
         assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(1), 2), 126);
         assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(1), 0), 0);
     }

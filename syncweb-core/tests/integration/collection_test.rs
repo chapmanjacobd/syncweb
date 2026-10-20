@@ -54,16 +54,16 @@ fn community_scoped_manifest_requires_matching_signed_scope() -> anyhow::Result<
     let community = CommunityId::from_bytes([3; 32]);
     let mut manifest = manifest(Uuid::new_v4(), "1.0.0", b"community")?;
     manifest.bind_community(community);
-    assert!(manifest.validate_for_community(Some(community)).is_err());
+    ensure!(manifest.validate_for_community(Some(community)).is_err());
 
     manifest.sign(&SigningKey::from_bytes(&[6; 32]))?;
     manifest.validate_for_community(Some(community))?;
-    assert!(
+    ensure!(
         manifest
             .validate_for_community(Some(CommunityId::from_bytes([4; 32])))
             .is_err()
     );
-    assert!(manifest.validate_for_community(None).is_err());
+    ensure!(manifest.validate_for_community(None).is_err());
     Ok(())
 }
 

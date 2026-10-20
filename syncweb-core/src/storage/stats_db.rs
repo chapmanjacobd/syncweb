@@ -981,8 +981,8 @@ fn migrate_network_events_schema(connection: &Connection) -> Result<()> {
         )
         .optional()
         .map_err(|error| SyncwebError::operation("failed to inspect network event schema", error))?;
-    let schema = schema.unwrap_or_default();
-    if schema.contains("'request_rejected'") {
+    let schema_sql = schema.unwrap_or_default();
+    if schema_sql.contains("'request_rejected'") {
         return Ok(());
     }
 

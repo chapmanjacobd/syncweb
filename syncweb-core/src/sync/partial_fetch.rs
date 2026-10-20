@@ -243,7 +243,7 @@ impl SegmentAssembler {
     ///
     /// Returns an error when the chunk has the wrong hash, is outside the
     /// assembled blob, overlaps an earlier chunk, or cannot be copied safely.
-    pub fn add(&mut self, chunk: SegmentChunk) -> Result<()> {
+    pub fn add(&mut self, chunk: &SegmentChunk) -> Result<()> {
         if chunk.segment.hash != self.hash {
             return Err(crate::error::SyncwebError::InvalidConfig(
                 "segment belongs to a different blob".to_owned(),
@@ -360,8 +360,8 @@ impl TransferScheduler {
     ) -> Result<TransferReport> {
         let config = self.config.clone();
         self.fetch_with(input_requests, cancellation, move |request, request_cancellation| {
-            let config = config.clone();
-            async move { fetch_request(node, request, request_cancellation, &config).await }
+            let request_config = config.clone();
+            async move { fetch_request(node, request, request_cancellation, &request_config).await }
         })
         .await
     }
@@ -531,7 +531,7 @@ where
     }
     let attempt_cancellation = cancellation.child_token();
     let mut results = stream::iter(peers.iter().cloned().map(|peer| {
-        let fetch = fetch.clone();
+        let fetcher = fetch.clone();
         let request_cancellation = attempt_cancellation.clone();
         async move {
             tokio::select! {
@@ -539,7 +539,7 @@ where
                     "content transfer cancelled",
                     "provider race cancelled",
                 )),
-                result = fetch(peer, request_cancellation.clone()) => result,
+                result = fetcher(peer, request_cancellation.clone()) => result,
             }
         }
     }))
@@ -582,12 +582,12 @@ pub async fn fetch_blob_requests(
     cancellation: CancellationToken,
 ) -> Result<TransferReport> {
     let scheduler = TransferScheduler::new(TransferSchedulerConfig::default())?;
-    let blobs = blobs.clone();
-    let endpoint = endpoint.clone();
+    let shared_blobs = blobs.clone();
+    let shared_endpoint = endpoint.clone();
     scheduler
         .fetch_with(requests, cancellation, move |request, request_cancellation| {
-            let blobs = blobs.clone();
-            let endpoint = endpoint.clone();
+            let request_blobs = shared_blobs.clone();
+            let request_endpoint = shared_endpoint.clone();
             async move {
                 let mut last_error = None;
                 for attempt in 0..DEFAULT_TRANSFER_ATTEMPTS {
@@ -596,11 +596,11 @@ pub async fn fetch_blob_requests(
                         &request_cancellation,
                         DEFAULT_PROVIDER_CONCURRENCY,
                         |peer, _| {
-                            let blobs = blobs.clone();
-                            let endpoint = endpoint.clone();
+                            let peer_blobs = request_blobs.clone();
+                            let peer_endpoint = request_endpoint.clone();
                             async move {
-                                let ticket = blobs.ticket_for_addr(peer, request.hash);
-                                blobs.fetch(&endpoint, &ticket).await.map(|()| request.size)
+                                let ticket = peer_blobs.ticket_for_addr(peer, request.hash);
+                                peer_blobs.fetch(&peer_endpoint, &ticket).await.map(|()| request.size)
                             }
                         },
                     )
@@ -1093,15 +1093,22 @@ mod scheduler_tests {
     fn segment_assembler_accepts_disjoint_provider_chunks_and_verifies_hash() {
         let payload = b"multi-provider content".to_vec();
         let hash = Hash::from_bytes(*blake3::hash(&payload).as_bytes());
-        let mut assembler = SegmentAssembler::new(hash, payload.len() as u64, payload.len() as u64)
-            .expect("assembler should be created");
+        let payload_size = u64::try_from(payload.len()).expect("payload length fits u64");
+        let mut assembler =
+            SegmentAssembler::new(hash, payload_size, payload_size).expect("assembler should be created");
         let first = TransferSegment::new(hash, 0, 6).expect("first range");
-        let second = TransferSegment::new(hash, 6, (payload.len() - 6) as u64).expect("second range");
+        let second_length = u64::try_from(payload.len().saturating_sub(6)).expect("payload length fits u64");
+        let second = TransferSegment::new(hash, 6, second_length).expect("second range");
         assembler
-            .add(SegmentChunk::new(second, payload[6..].to_vec()).expect("second chunk"))
+            .add(
+                &SegmentChunk::new(second, payload.get(6..).expect("second range exists").to_vec())
+                    .expect("second chunk"),
+            )
             .expect("second chunk should be accepted");
         assembler
-            .add(SegmentChunk::new(first, payload[..6].to_vec()).expect("first chunk"))
+            .add(
+                &SegmentChunk::new(first, payload.get(..6).expect("first range exists").to_vec()).expect("first chunk"),
+            )
             .expect("first chunk should be accepted");
         assert_eq!(assembler.finish().expect("assembled payload"), payload);
     }
@@ -1110,24 +1117,30 @@ mod scheduler_tests {
     fn segment_assembler_rejects_overlap_gaps_and_corrupt_hashes() {
         let payload = b"0123456789".to_vec();
         let hash = Hash::from_bytes(*blake3::hash(&payload).as_bytes());
-        let mut assembler = SegmentAssembler::new(hash, payload.len() as u64, 100).expect("assembler");
+        let payload_size = u64::try_from(payload.len()).expect("payload length fits u64");
+        let mut assembler = SegmentAssembler::new(hash, payload_size, 100).expect("assembler");
         let first = TransferSegment::new(hash, 0, 5).expect("first range");
         let overlap = TransferSegment::new(hash, 4, 6).expect("overlap range");
         assembler
-            .add(SegmentChunk::new(first, payload[..5].to_vec()).expect("first chunk"))
+            .add(
+                &SegmentChunk::new(first, payload.get(..5).expect("first range exists").to_vec()).expect("first chunk"),
+            )
             .expect("first chunk should be accepted");
         assert!(
             assembler
-                .add(SegmentChunk::new(overlap, payload[4..].to_vec()).expect("overlap chunk"))
+                .add(
+                    &SegmentChunk::new(overlap, payload.get(4..).expect("overlap range exists").to_vec())
+                        .expect("overlap chunk")
+                )
                 .is_err()
         );
         assert!(assembler.finish().is_err(), "the missing tail must be rejected");
 
         let wrong_hash = Hash::from_bytes([9; 32]);
-        let mut corrupt = SegmentAssembler::new(wrong_hash, payload.len() as u64, 100).expect("assembler");
-        let full = TransferSegment::new(wrong_hash, 0, payload.len() as u64).expect("full range");
+        let mut corrupt = SegmentAssembler::new(wrong_hash, payload_size, 100).expect("assembler");
+        let full = TransferSegment::new(wrong_hash, 0, payload_size).expect("full range");
         corrupt
-            .add(SegmentChunk::new(full, payload).expect("full chunk"))
+            .add(&SegmentChunk::new(full, payload).expect("full chunk"))
             .expect("full chunk should be accepted");
         assert!(corrupt.finish().is_err(), "content hash mismatch must be rejected");
     }
@@ -1245,25 +1258,25 @@ mod scheduler_tests {
             EndpointAddr::new(iroh::SecretKey::generate().public()),
             EndpointAddr::new(iroh::SecretKey::generate().public()),
         ];
-        let successful_peer = peers[1].id;
+        let successful_peer = peers.get(1).expect("three peers should be available").id;
         let active = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
         let result = fetch_from_peers(&peers, &CancellationToken::new(), 2, {
-            let active = Arc::clone(&active);
-            let peak = Arc::clone(&peak);
+            let callback_active = Arc::clone(&active);
+            let callback_peak = Arc::clone(&peak);
             move |peer, _| {
-                let active = Arc::clone(&active);
-                let peak = Arc::clone(&peak);
+                let attempt_active = Arc::clone(&callback_active);
+                let attempt_peak = Arc::clone(&callback_peak);
                 async move {
-                    let current = active.fetch_add(1, Ordering::SeqCst).saturating_add(1);
-                    peak.fetch_max(current, Ordering::SeqCst);
+                    let current = attempt_active.fetch_add(1, Ordering::SeqCst).saturating_add(1);
+                    attempt_peak.fetch_max(current, Ordering::SeqCst);
                     if peer.id == successful_peer {
                         tokio::time::sleep(Duration::from_millis(5)).await;
-                        active.fetch_sub(1, Ordering::SeqCst);
+                        attempt_active.fetch_sub(1, Ordering::SeqCst);
                         Ok(7)
                     } else {
                         tokio::time::sleep(Duration::from_millis(50)).await;
-                        active.fetch_sub(1, Ordering::SeqCst);
+                        attempt_active.fetch_sub(1, Ordering::SeqCst);
                         Err(crate::error::SyncwebError::operation("provider failed", "test failure"))
                     }
                 }

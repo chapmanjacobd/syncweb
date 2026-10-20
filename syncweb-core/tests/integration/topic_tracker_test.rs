@@ -78,7 +78,7 @@ async fn test_publish_and_find_provider_lease() -> anyhow::Result<()> {
         .await?;
     let leases = node.topic_tracker().find_provider_leases(doc.id()).await?;
     ensure!(leases.len() == 1);
-    ensure!(leases[0] == lease);
+    ensure!(leases.first() == Some(&lease));
     ensure!(node.refresh_provider_leases(doc.id(), 15, None).await? == 1);
     ensure!(
         node.provider_peer_snapshot(&hash)?

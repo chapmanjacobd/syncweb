@@ -484,41 +484,44 @@ pub fn merge_text_three_way(base: &[u8], left: &[u8], right: &[u8]) -> Option<Th
         let left_edit = left_edits.get(left_index);
         let right_edit = right_edits.get(right_index);
         let next_start = match (left_edit, right_edit) {
-            (Some(left), Some(right)) => left.start.min(right.start),
-            (Some(left), None) => left.start,
-            (None, Some(right)) => right.start,
+            (Some(left_candidate), Some(right_candidate)) => left_candidate.start.min(right_candidate.start),
+            (Some(left_candidate), None) => left_candidate.start,
+            (None, Some(right_candidate)) => right_candidate.start,
             (None, None) => break,
         };
         output.extend(base_lines.get(cursor..next_start)?);
 
         match (left_edit, right_edit) {
-            (Some(left), Some(right)) if edits_overlap(left, right) => {
-                let start = left.start.min(right.start);
-                let mut end = left.end.max(right.end);
+            (Some(left_candidate), Some(right_candidate)) if edits_overlap(left_candidate, right_candidate) => {
+                let start = left_candidate.start.min(right_candidate.start);
+                let mut end = left_candidate.end.max(right_candidate.end);
                 let mut left_end = left_index;
                 let mut right_end = right_index;
                 loop {
-                    let mut expanded = false;
-                    if let Some(edit) = left_edits.get(left_end)
+                    let left_expanded = if let Some(edit) = left_edits.get(left_end)
                         && (edit.start < end || (edit.start == start && end == start))
                     {
                         end = end.max(edit.end);
                         left_end = left_end.saturating_add(1);
-                        expanded = true;
-                    }
-                    if let Some(edit) = right_edits.get(right_end)
+                        true
+                    } else {
+                        false
+                    };
+                    let right_expanded = if let Some(edit) = right_edits.get(right_end)
                         && (edit.start < end || (edit.start == start && end == start))
                     {
                         end = end.max(edit.end);
                         right_end = right_end.saturating_add(1);
-                        expanded = true;
-                    }
-                    if !expanded {
+                        true
+                    } else {
+                        false
+                    };
+                    if !left_expanded && !right_expanded {
                         break;
                     }
                 }
-                let left_result = apply_edits(&base_lines, start, end, &left_edits[left_index..left_end])?;
-                let right_result = apply_edits(&base_lines, start, end, &right_edits[right_index..right_end])?;
+                let left_result = apply_edits(&base_lines, start, end, left_edits.get(left_index..left_end)?)?;
+                let right_result = apply_edits(&base_lines, start, end, right_edits.get(right_index..right_end)?)?;
                 if left_result != right_result {
                     return Some(ThreeWayMerge::Conflict);
                 }
@@ -527,19 +530,19 @@ pub fn merge_text_three_way(base: &[u8], left: &[u8], right: &[u8]) -> Option<Th
                 right_index = right_end;
                 cursor = end;
             }
-            (Some(left), Some(right)) if left.end <= right.start => {
-                output.extend(left.replacement.iter().copied());
-                cursor = left.end;
+            (Some(left_candidate), Some(right_candidate)) if left_candidate.end <= right_candidate.start => {
+                output.extend(left_candidate.replacement.iter().copied());
+                cursor = left_candidate.end;
                 left_index = left_index.saturating_add(1);
             }
-            (Some(left), None) => {
-                output.extend(left.replacement.iter().copied());
-                cursor = left.end;
+            (Some(left_candidate), None) => {
+                output.extend(left_candidate.replacement.iter().copied());
+                cursor = left_candidate.end;
                 left_index = left_index.saturating_add(1);
             }
-            (_, Some(right)) => {
-                output.extend(right.replacement.iter().copied());
-                cursor = right.end;
+            (_, Some(right_candidate)) => {
+                output.extend(right_candidate.replacement.iter().copied());
+                cursor = right_candidate.end;
                 right_index = right_index.saturating_add(1);
             }
             (None, None) => break,
@@ -772,7 +775,7 @@ pub(crate) async fn materialize_folder_content_for_folder(
         if selected_paths.is_some_and(|paths| !paths.contains(&path)) {
             continue;
         }
-        let path = safe_relative_path(&path)?;
+        let safe_path = safe_relative_path(&path)?;
         let Some(winner) = select_winner(&variants) else {
             continue;
         };
@@ -786,8 +789,7 @@ pub(crate) async fn materialize_folder_content_for_folder(
         let already_resolved = tracked_ancestor_hash.is_some_and(|hash| hash == winner_hash);
         let mut materialization_hash = winner_hash;
         let mut materialization_size = winner_size;
-        let mut clean_merge = false;
-        if writable
+        let clean_merge = if writable
             && has_conflict
             && let Some(ancestor_hash) = tracked_ancestor_hash
             && let Some(merged_hash) = try_merge_text_conflict(node, ancestor_hash, winner_hash, &variants).await?
@@ -797,9 +799,11 @@ pub(crate) async fn materialize_folder_content_for_folder(
             folder.set_blob_ref(&key, merged_hash, merged_size).await?;
             materialization_hash = merged_hash;
             materialization_size = merged_size;
-            clean_merge = true;
-        }
-        let destination = mount_root.join(path);
+            true
+        } else {
+            false
+        };
+        let destination = mount_root.join(safe_path);
         match export_if_different(node, materialization_hash, materialization_size, &destination).await {
             Ok(true) => {
                 summary.materialized = summary.materialized.saturating_add(1);
@@ -830,7 +834,7 @@ pub(crate) async fn materialize_folder_content_for_folder(
         }
         if has_conflict && writable && !clean_merge && !already_resolved {
             let conflict_paths =
-                materialize_conflicts(node, namespace, winner_hash, &variants, path, mount_root).await;
+                materialize_conflicts(node, namespace, winner_hash, &variants, safe_path, mount_root).await;
             summary.conflicts = summary.conflicts.saturating_add(conflict_paths.len());
             written.extend(conflict_paths);
         }

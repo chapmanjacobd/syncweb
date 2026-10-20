@@ -143,12 +143,17 @@ impl PinPolicy {
 /// Build a class-aware pin name. Expiry is included only for reclaimable
 /// classes, making old names remain readable and conservatively retained.
 #[must_use]
-pub fn classified_pin_name(class: PinClass, scope: impl AsRef<str>, hash: Hash, expires_at: Option<u64>) -> String {
-    let scope = scope.as_ref();
-    match expires_at {
-        Some(expires_at) => format!("{}ttl/{expires_at}/{scope}/{hash}", class.prefix()),
-        None => format!("{}scope/{scope}/{hash}", class.prefix()),
-    }
+pub fn classified_pin_name(
+    class: PinClass,
+    scope_value: impl AsRef<str>,
+    hash: Hash,
+    expires_at: Option<u64>,
+) -> String {
+    let scope = scope_value.as_ref();
+    expires_at.map_or_else(
+        || format!("{}scope/{scope}/{hash}", class.prefix()),
+        |expiration| format!("{}ttl/{expiration}/{scope}/{hash}", class.prefix()),
+    )
 }
 
 /// Pin name for a publicly shared folder blob.
@@ -229,7 +234,7 @@ mod tests {
         ];
         let candidates = PinPolicy::default().gc_candidates(&pins, 50);
         assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].hash, hash(1));
+        assert_eq!(candidates.first().expect("one GC candidate should exist").hash, hash(1));
     }
 
     #[test]

@@ -53,8 +53,8 @@ impl ReplicaScope {
 
     fn specificity(&self) -> usize {
         usize::from(self.community.is_some())
-            + usize::from(self.folder.is_some())
-            + usize::from(self.collection.is_some())
+            .saturating_add(usize::from(self.folder.is_some()))
+            .saturating_add(usize::from(self.collection.is_some()))
     }
 }
 
@@ -134,7 +134,7 @@ impl ProviderTopology {
             ProviderPath::Relay => 2,
             ProviderPath::Unknown => 1,
         };
-        let locality_score = u64::from(self.interface.is_some()) + u64::from(self.subnet.is_some());
+        let locality_score = u64::from(self.interface.is_some()).saturating_add(u64::from(self.subnet.is_some()));
         let latency_score = self.latency_ms.map_or(0, |latency| {
             1_000_000_u64.saturating_sub(u64::from(latency).min(1_000_000))
         });
@@ -319,24 +319,24 @@ impl RepairPolicy {
     /// Return a deterministic retry timestamp derived from `failed_at`.
     #[must_use]
     pub fn retry_at(self, hash: Hash, failed_at: u64) -> u64 {
-        self.retry_at_seed(
-            u64::from_le_bytes(hash.as_bytes()[..8].try_into().expect("hash has eight bytes")),
-            failed_at,
-        )
+        self.retry_at_seed(prefix_u64(hash.as_bytes()), failed_at)
     }
 
     /// Return an owner-specific retry timestamp so repair coordinators do not
     /// wake at the same instant for the same content.
     #[must_use]
     pub fn retry_at_for(self, hash: Hash, owner: PublicKey, failed_at: u64) -> u64 {
-        let hash_seed = u64::from_le_bytes(hash.as_bytes()[..8].try_into().expect("hash has eight bytes"));
-        let owner_seed = u64::from_le_bytes(owner.as_bytes()[..8].try_into().expect("public key has eight bytes"));
+        let hash_seed = prefix_u64(hash.as_bytes());
+        let owner_seed = prefix_u64(owner.as_bytes());
         self.retry_at_seed(hash_seed ^ owner_seed, failed_at)
     }
 
     const fn retry_at_seed(self, seed: u64, failed_at: u64) -> u64 {
         let span = self.jitter_window.saturating_add(1);
-        let offset = if span == 0 { 0 } else { seed % span };
+        let offset = match seed.checked_rem(span) {
+            Some(value) => value,
+            None => 0,
+        };
         failed_at.saturating_add(offset)
     }
 
@@ -344,11 +344,18 @@ impl RepairPolicy {
     #[must_use]
     pub fn owns(self, hash: Hash, owner: PublicKey) -> bool {
         let buckets = u32::from(self.ownership_buckets.max(1));
-        let hash_bucket = u32::from_le_bytes(hash.as_bytes()[..4].try_into().expect("hash has four bytes")) % buckets;
-        let owner_bucket =
-            u32::from_le_bytes(owner.as_bytes()[..4].try_into().expect("public keys have four bytes")) % buckets;
+        let hash_bucket = prefix_u32(hash.as_bytes()).checked_rem(buckets).unwrap_or(0);
+        let owner_bucket = prefix_u32(owner.as_bytes()).checked_rem(buckets).unwrap_or(0);
         hash_bucket == owner_bucket
     }
+}
+
+fn prefix_u64(bytes: &[u8]) -> u64 {
+    bytes.first_chunk::<8>().map_or(0, |prefix| u64::from_le_bytes(*prefix))
+}
+
+fn prefix_u32(bytes: &[u8]) -> u32 {
+    bytes.first_chunk::<4>().map_or(0, |prefix| u32::from_le_bytes(*prefix))
 }
 
 /// Stateless replication controller.
@@ -516,11 +523,13 @@ impl ReplicationController {
                 );
 
             let mut eligible = providers
-                .iter().filter(|&provider| {
+                .iter()
+                .filter(|&provider| {
                     provider.eligible_at(now)
                         && !known.contains(&provider.provider)
                         && !confirmed.contains(&provider.provider)
-                }).cloned()
+                })
+                .cloned()
                 .collect::<Vec<_>>();
             eligible.sort_by(|left, right| {
                 right
@@ -600,10 +609,10 @@ mod tests {
             community: Some("lan-a".to_owned()),
             ..ReplicaScope::global()
         };
-        assert_eq!(controller.target_for(&scope), Some(&controller.targets[1]));
+        assert_eq!(controller.target_for(&scope), controller.targets.get(1));
         assert_eq!(
             controller.target_for(&ReplicaScope::global()),
-            Some(&controller.targets[0])
+            controller.targets.first()
         );
     }
 
@@ -627,7 +636,7 @@ mod tests {
             )
             .expect("matching target");
 
-        let status = &plan.statuses[0];
+        let status = plan.statuses.first().expect("reconciliation should produce a status");
         assert_eq!(status.known_replicas, 1);
         assert_eq!(status.confirmed_replicas, 0);
         assert_eq!(
@@ -708,8 +717,14 @@ mod tests {
             .expect("matching target");
 
         assert_eq!(plan.requests().len(), 2);
-        assert_eq!(plan.requests()[0].provider, provider(2));
-        assert_eq!(plan.requests()[1].provider, provider(3));
+        assert_eq!(
+            plan.requests().first().expect("first request should exist").provider,
+            provider(2)
+        );
+        assert_eq!(
+            plan.requests().get(1).expect("second request should exist").provider,
+            provider(3)
+        );
     }
 
     #[test]
@@ -729,7 +744,7 @@ mod tests {
             )
             .expect("matching target");
 
-        let status = &plan.statuses[0];
+        let status = plan.statuses.first().expect("reconciliation should produce a status");
         assert_eq!(status.known_replicas, 1);
         assert_eq!(status.confirmed_replicas, 0);
         assert_eq!(
@@ -748,17 +763,31 @@ mod tests {
         let content = ReplicaContent::new(hash(6), vec![], vec![]);
         let confirmed = ProviderReservation::new(hash(6), provider(2), 5, 20, true, true).expect("valid reservation");
         let active = controller
-            .reconcile_with_reservations(&ReplicaScope::global(), 10, &[content.clone()], &[], &[confirmed])
+            .reconcile_with_reservations(
+                &ReplicaScope::global(),
+                10,
+                std::slice::from_ref(&content),
+                &[],
+                &[confirmed],
+            )
             .expect("matching target");
-        assert_eq!(active.statuses[0].confirmed_replicas, 1);
+        assert_eq!(
+            active
+                .statuses
+                .first()
+                .expect("active status should exist")
+                .confirmed_replicas,
+            1
+        );
         assert!(active.requests().is_empty());
 
         let expired = ProviderReservation::new(hash(6), provider(2), 5, 10, true, true).expect("valid reservation");
         let after_expiry = controller
             .reconcile_with_reservations(&ReplicaScope::global(), 10, &[content], &[], &[expired])
             .expect("matching target");
-        assert_eq!(after_expiry.statuses[0].known_replicas, 0);
-        assert_eq!(after_expiry.statuses[0].confirmed_replicas, 0);
+        let status = after_expiry.statuses.first().expect("post-expiry status should exist");
+        assert_eq!(status.known_replicas, 0);
+        assert_eq!(status.confirmed_replicas, 0);
     }
 
     #[test]
@@ -831,8 +860,9 @@ mod tests {
             .reconcile(&ReplicaScope::global(), 20, &[content], &[stale, state(2, 50)])
             .expect("matching target");
 
-        assert_eq!(plan.statuses[0].known_replicas, 0);
-        assert_eq!(plan.statuses[0].confirmed_replicas, 0);
+        let status = plan.statuses.first().expect("reconciliation should produce a status");
+        assert_eq!(status.known_replicas, 0);
+        assert_eq!(status.confirmed_replicas, 0);
         assert_eq!(
             plan.requests(),
             vec![ReplicationRequest {

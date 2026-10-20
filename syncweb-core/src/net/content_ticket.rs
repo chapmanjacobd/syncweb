@@ -218,7 +218,10 @@ impl CommunityContentTicket {
 
 impl Display for CommunityContentTicket {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let bytes = self.to_bytes().map_err(|_| std::fmt::Error)?;
+        let bytes = self.to_bytes().map_err(|error| {
+            tracing::debug!(%error, "failed to serialize community content ticket for display");
+            std::fmt::Error
+        })?;
         write!(formatter, "{COMMUNITY_CONTENT_TICKET_URI_PREFIX}{}", hex::encode(bytes))
     }
 }
@@ -281,7 +284,8 @@ mod tests {
         ticket.sign(&issuer).expect("ticket should sign");
         ticket.ticket = blob_ticket([8; 32]).to_string();
         assert!(ticket.verify().is_err());
-        let ticket = CommunityContentTicket::new(community, public_key(&issuer), &blob_ticket([7; 32]), 100, Some(200));
-        assert!(ticket.validate(200, community).is_err());
+        let expired_ticket =
+            CommunityContentTicket::new(community, public_key(&issuer), &blob_ticket([7; 32]), 100, Some(200));
+        assert!(expired_ticket.validate(200, community).is_err());
     }
 }

@@ -420,7 +420,14 @@ mod tests {
         cache
             .upsert(summary(peer, 9, 30), 11)
             .expect("stale summary should be ignored");
-        assert_eq!(cache.summaries(11)[0].expires_at, 20);
+        assert_eq!(
+            cache
+                .summaries(11)
+                .first()
+                .expect("cached summary should exist")
+                .expires_at,
+            20
+        );
     }
 
     #[test]

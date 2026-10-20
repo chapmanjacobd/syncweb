@@ -214,7 +214,7 @@ impl NeighborMap {
 
     fn trim_to_capacity(&self) {
         while self.peers.len() > self.max_neighbors {
-            let candidate = self
+            let candidate_option = self
                 .peers
                 .iter()
                 .min_by(|left, right| {
@@ -224,10 +224,10 @@ impl NeighborMap {
                         .then(left.key().as_bytes().cmp(right.key().as_bytes()))
                 })
                 .map(|entry| *entry.key());
-            let Some(candidate) = candidate else {
+            let Some(candidate_key) = candidate_option else {
                 break;
             };
-            self.peers.remove(&candidate);
+            self.peers.remove(&candidate_key);
         }
     }
 }

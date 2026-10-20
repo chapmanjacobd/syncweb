@@ -52,6 +52,17 @@ pub struct ProviderCapabilities {
     pub supports_relay: bool,
 }
 
+impl ProviderCapabilities {
+    /// Construct a capability summary for discovery and provider leases.
+    #[must_use]
+    pub const fn new(supports_segments: bool, supports_relay: bool) -> Self {
+        Self {
+            supports_segments,
+            supports_relay,
+        }
+    }
+}
+
 /// Unsigned fields used to construct a provider lease.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]

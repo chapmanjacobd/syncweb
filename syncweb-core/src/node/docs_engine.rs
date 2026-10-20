@@ -346,6 +346,29 @@ impl DocsEngine {
             .map_err(|error| SyncwebError::operation("failed to read document query result", error))
     }
 
+    /// Read every entry for one document key, including author-specific variants.
+    ///
+    /// The normal latest-entry queries collapse divergent writes. Conflict
+    /// resolution uses this view so each version remains available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the document query fails.
+    pub async fn all_variants(&self, doc: &Doc, key: impl AsRef<[u8]>) -> Result<Vec<Entry>> {
+        let entries = doc
+            .get_many(Query::all().key_exact(key))
+            .await
+            .map_err(|error| SyncwebError::operation("failed to query document variants", error))?;
+        tokio::pin!(entries);
+        let mut output = Vec::new();
+        while let Some(entry_result) = n0_future::StreamExt::next(&mut entries).await {
+            let entry =
+                entry_result.map_err(|error| SyncwebError::operation("failed to read document variant", error))?;
+            output.push(entry);
+        }
+        Ok(output)
+    }
+
     /// Read the latest non-empty entry for every document key.
     ///
     /// # Errors

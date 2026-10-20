@@ -6,6 +6,7 @@ use std::{
 };
 
 use iroh::PublicKey;
+use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -300,6 +301,14 @@ impl NodeDatabase {
             PRIMARY KEY(content_hash, namespace_id, entry_key)
         );
         CREATE INDEX IF NOT EXISTS idx_blob_folders_hash ON blob_folders(content_hash);
+        CREATE TABLE IF NOT EXISTS conflict_ancestors (
+            namespace_id TEXT NOT NULL,
+            entry_key BLOB NOT NULL,
+            content_hash BLOB NOT NULL CHECK(length(content_hash) = 32),
+            size INTEGER NOT NULL CHECK(size >= 0),
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(namespace_id, entry_key)
+        );
         CREATE TABLE IF NOT EXISTS sync_checkpoints (
             namespace_id TEXT NOT NULL,
             session_id TEXT NOT NULL,
@@ -1743,6 +1752,84 @@ impl NodeDatabase {
             .map_err(|error| SyncwebError::operation("failed to remove blob folder association", error))?;
         drop(connection);
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Conflict ancestor methods
+    // ------------------------------------------------------------------
+
+    /// Record the latest materialized content to use as a common ancestor for
+    /// future text conflict resolution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn record_conflict_ancestor(
+        &self,
+        namespace_id: &str,
+        entry_key: &[u8],
+        content_hash: Hash,
+        size: u64,
+    ) -> Result<()> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let now = current_timestamp().cast_signed();
+        connection
+            .execute(
+                "INSERT INTO conflict_ancestors(namespace_id, entry_key, content_hash, size, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(namespace_id, entry_key) DO UPDATE SET
+                content_hash = excluded.content_hash,
+                size = excluded.size,
+                updated_at = excluded.updated_at",
+                params![
+                    namespace_id,
+                    entry_key,
+                    content_hash.as_bytes().as_slice(),
+                    size.cast_signed(),
+                    now
+                ],
+            )
+            .map_err(|error| SyncwebError::operation("failed to record conflict ancestor", error))?;
+        drop(connection);
+        Ok(())
+    }
+
+    /// Load the latest materialized content recorded as a conflict ancestor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or contains an invalid
+    /// content hash.
+    pub fn load_conflict_ancestor(&self, namespace_id: &str, entry_key: &[u8]) -> Result<Option<(Hash, u64)>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|error| SyncwebError::operation("node database mutex is poisoned", error))?;
+        let result = connection
+            .query_row(
+                "SELECT content_hash, size FROM conflict_ancestors
+             WHERE namespace_id = ?1 AND entry_key = ?2",
+                params![namespace_id, entry_key],
+                |row| {
+                    let hash_bytes: Vec<u8> = row.get(0)?;
+                    let hash_bytes: [u8; 32] = hash_bytes.try_into().map_err(|bytes: Vec<u8>| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Blob,
+                            format!("expected 32-byte conflict ancestor hash, got {} bytes", bytes.len()).into(),
+                        )
+                    })?;
+                    let size: i64 = row.get(1)?;
+                    Ok((Hash::from_bytes(hash_bytes), size.cast_unsigned()))
+                },
+            )
+            .optional()
+            .map_err(|error| SyncwebError::operation("failed to load conflict ancestor", error))?;
+        drop(connection);
+        Ok(result)
     }
 
     /// List all namespace IDs associated with a network.

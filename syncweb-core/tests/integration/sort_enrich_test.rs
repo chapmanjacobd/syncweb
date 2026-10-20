@@ -190,11 +190,10 @@ async fn daemon_peer_availability_returns_report_shape() -> Result<()> {
     };
     ensure!(report.folder == ns.to_string(), "report should name the folder");
     ensure!(report.peers.is_empty(), "no networks joined -> no inbound peers");
-    let mut paths = report.per_blob.iter().map(|blob| blob.path.clone()).collect::<Vec<_>>();
-    paths.sort_unstable();
+    let paths = report.per_blob.iter().map(|blob| blob.path.clone()).collect::<Vec<_>>();
     ensure!(
         paths == ["a.txt", "b.txt"],
-        "per_blob should list both blobs: {paths:?}"
+        "per_blob should use deterministic path ordering: {paths:?}"
     );
     for blob in &report.per_blob {
         if blob.path == "a.txt" {

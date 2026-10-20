@@ -93,6 +93,8 @@ pub struct SimulationConfig {
     pub replica_target: usize,
     /// Seed for deterministic message-loss decisions.
     pub seed: u64,
+    /// Minimum rounds between repeated repair attempts for one target/block.
+    pub repair_backoff_rounds: u64,
     /// Faults applied while the simulation runs.
     pub faults: FaultConfig,
 }
@@ -102,6 +104,7 @@ impl Default for SimulationConfig {
         Self {
             replica_target: 2,
             seed: 0x5eed,
+            repair_backoff_rounds: 1,
             faults: FaultConfig::default(),
         }
     }
@@ -158,6 +161,7 @@ pub struct SwarmSimulator {
     repair_attempts: u64,
     dropped_messages: u64,
     failed_repairs: u64,
+    next_repair_round: BTreeMap<(SimNodeId, Hash), u64>,
     inventory_messages: u64,
     inventory_bytes: u64,
     duplicate_inventory_messages: u64,
@@ -207,6 +211,7 @@ impl SwarmSimulator {
             repair_attempts: 0,
             dropped_messages: 0,
             failed_repairs: 0,
+            next_repair_round: BTreeMap::new(),
             inventory_messages: 0,
             inventory_bytes: 0,
             duplicate_inventory_messages: 0,
@@ -499,6 +504,13 @@ impl SwarmSimulator {
                 {
                     continue;
                 }
+                if self
+                    .next_repair_round
+                    .get(&(target, hash))
+                    .is_some_and(|next_round| *next_round > self.round)
+                {
+                    continue;
+                }
                 self.repair_attempts = self.repair_attempts.saturating_add(1);
                 let has_provider = replicas.iter().copied().any(|source| {
                     self.can_exchange(source, target)
@@ -509,21 +521,25 @@ impl SwarmSimulator {
                 });
                 if !has_provider {
                     self.failed_repairs = self.failed_repairs.saturating_add(1);
+                    self.defer_repair(target, hash);
                     continue;
                 }
                 if self.config.faults.disk_exhausted_nodes.contains(&target) {
                     self.failed_repairs = self.failed_repairs.saturating_add(1);
+                    self.defer_repair(target, hash);
                     continue;
                 }
                 if self.message_is_dropped() {
                     self.dropped_messages = self.dropped_messages.saturating_add(1);
                     self.failed_repairs = self.failed_repairs.saturating_add(1);
+                    self.defer_repair(target, hash);
                     continue;
                 }
                 if let Some(state) = self.nodes.get_mut(&target) {
                     state.inventory.insert(hash);
                     self.repairs = self.repairs.saturating_add(1);
                 }
+                self.next_repair_round.remove(&(target, hash));
                 if self
                     .nodes
                     .values()
@@ -535,6 +551,11 @@ impl SwarmSimulator {
                 }
             }
         }
+    }
+
+    fn defer_repair(&mut self, target: SimNodeId, hash: Hash) {
+        let next_round = self.round.saturating_add(self.config.repair_backoff_rounds.max(1));
+        self.next_repair_round.insert((target, hash), next_round);
     }
 
     fn known_blocks(&self) -> BTreeSet<Hash> {
@@ -613,6 +634,33 @@ mod tests {
 
         assert_eq!(first_report, second_report);
         assert_eq!(first.node_inventory(SimNodeId(1)).expect("node exists"), vec![hash(1)]);
+    }
+
+    #[test]
+    fn failed_repairs_back_off_instead_of_storming() {
+        let mut faults = FaultConfig::default();
+        faults.set_packet_loss(100).expect("valid packet loss");
+        let mut simulator = SwarmSimulator::new(
+            2,
+            SimulationConfig {
+                replica_target: 2,
+                repair_backoff_rounds: 3,
+                faults,
+                ..SimulationConfig::default()
+            },
+        )
+        .expect("simulator should start");
+        simulator
+            .import_block(SimNodeId(0), hash(12))
+            .expect("import should work");
+
+        simulator.step();
+        assert_eq!(simulator.report(1).repair_attempts, 1);
+        simulator.step();
+        simulator.step();
+        assert_eq!(simulator.report(3).repair_attempts, 1);
+        simulator.step();
+        assert_eq!(simulator.report(4).repair_attempts, 2);
     }
 
     #[test]

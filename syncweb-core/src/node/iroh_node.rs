@@ -8,11 +8,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayManager;
 use crate::provider_lease::ProviderLease;
-use crate::sync::{EvictionStrategy, ObservationSource, PeerTracker};
+use crate::storage::node_db::NodeDatabase;
+use crate::sync::{
+    EvictionStrategy, ObservationSource, PeerTracker, TransferRequest, TransferScheduler, TransferSchedulerConfig,
+};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::blob_store::BlobStore;
@@ -176,6 +180,9 @@ pub struct IrohNode {
     /// The Syncthing (BEP) relay manager, when `bep.enabled` is set. Keeps the
     /// registration loops and the custom transport's backend alive.
     relay: Option<RelayManager>,
+    /// Persistent local state used by materialization, including conflict
+    /// ancestors that are not part of the replicated document.
+    node_db: NodeDatabase,
 }
 
 impl IrohNode {
@@ -274,6 +281,7 @@ impl IrohNode {
         tokio::fs::create_dir_all(&docs_dir)
             .await
             .map_err(|error| SyncwebError::operation("failed to create docs directory", error))?;
+        let node_db = NodeDatabase::open(data_dir.join("node.db"))?;
 
         let base = match relay_mode {
             RelayMode::Default => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
@@ -350,6 +358,7 @@ impl IrohNode {
             topic_tracker,
             provider_registry: Mutex::new(PeerTracker::new(16_384, EvictionStrategy::Lru)),
             relay,
+            node_db,
         })
     }
 
@@ -388,6 +397,12 @@ impl IrohNode {
     #[must_use]
     pub const fn docs_engine(&self) -> &DocsEngine {
         &self.docs_engine
+    }
+
+    /// Return the node-local database used for materialization state.
+    #[must_use]
+    pub const fn node_db(&self) -> &NodeDatabase {
+        &self.node_db
     }
 
     #[must_use]
@@ -454,6 +469,44 @@ impl IrohNode {
     ) -> Result<usize> {
         self.provider_registry_guard()?
             .record_lease(lease, now, community, folder)
+    }
+
+    /// Refresh verified provider leases from the namespace discovery topic.
+    ///
+    /// Leases are advisory and remote input, so malformed or out-of-scope
+    /// leases are ignored while discovery failures remain visible to callers.
+    /// Accepted observations are then available to partial-fetch ranking.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when discovery fails or the provider registry mutex is
+    /// poisoned by a non-policy failure.
+    pub async fn refresh_provider_leases(
+        &self,
+        namespace_id: iroh_docs::NamespaceId,
+        now: u64,
+        community: Option<&str>,
+    ) -> Result<usize> {
+        let leases = self.topic_tracker.find_provider_leases(namespace_id).await?;
+        let folder = namespace_id.to_string();
+        let mut accepted = 0_usize;
+        for lease in leases {
+            match self.accept_provider_lease(&lease, now, community, &folder) {
+                Ok(count) => accepted = accepted.saturating_add(count),
+                Err(
+                    SyncwebError::AccessDenied(_)
+                    | SyncwebError::InvalidConfig(_)
+                    | SyncwebError::InvalidIdentity(_)
+                    | SyncwebError::InvalidSignature(_)
+                    | SyncwebError::MissingSignature(_)
+                    | SyncwebError::InvalidTicket(_),
+                ) => {
+                    tracing::debug!(%namespace_id, provider = %lease.provider, "ignored out-of-scope provider lease");
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(accepted)
     }
 
     /// Record content imported from an offline archive as locally available.
@@ -595,7 +648,21 @@ impl IrohNode {
                 .filter(|ticket| ticket.hash() == content_hash)
                 .cloned()
                 .collect();
-            crate::node::blob_store::try_fetch_first_working(&candidates, |ticket| self.force_fetch(ticket)).await?;
+            let peers = candidates.iter().map(|ticket| ticket.addr().clone()).collect();
+            let scheduler = TransferScheduler::new(TransferSchedulerConfig::default())?;
+            let report = scheduler
+                .fetch(
+                    self,
+                    vec![TransferRequest::new(content_hash, 0, peers)],
+                    CancellationToken::new(),
+                )
+                .await?;
+            if report.completed != 1 {
+                return Err(SyncwebError::operation(
+                    "failed to fetch blob",
+                    "all provider tickets failed",
+                ));
+            }
         }
         let pin_name = crate::pins::download_pin(content_hash);
         self.blob_store.pin(&pin_name, content_hash).await?;

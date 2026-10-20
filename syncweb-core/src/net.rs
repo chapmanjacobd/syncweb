@@ -13,7 +13,7 @@ pub mod topology;
 pub use crate::node::identity::DeviceId;
 pub use community::{
     COMMUNITY_INVITATION_VERSION, CommunityCapabilities, CommunityCapability, CommunityId, CommunityIdentity,
-    CommunityInvitation,
+    CommunityInvitation, CommunityRole,
 };
 pub use community_policy::{
     COMMUNITY_REVOCATION_VERSION, CommunityAdmissionPolicy, CommunityAuditEvent, CommunityModerationPolicy,

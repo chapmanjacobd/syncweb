@@ -15,7 +15,13 @@ pub fn resolve_ticket(value: &str) -> Result<String> {
 fn read_ticket<R: Read>(mut reader: R) -> Result<String> {
     let mut input = String::new();
     reader.read_to_string(&mut input).context("read ticket from stdin")?;
-    let ticket = input.trim();
+    // Human-readable commands print a ticket followed by a next-steps block.
+    // A ticket is single-line, so do not pass the guidance text to parsers.
+    let ticket = input
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
     if ticket.is_empty() {
         anyhow::bail!("ticket read from stdin is empty");
     }
@@ -45,6 +51,14 @@ mod tests {
     fn stdin_ticket_is_trimmed() {
         assert_eq!(
             read_ticket("  ticket-value\n".as_bytes()).expect("read ticket"),
+            "ticket-value"
+        );
+    }
+
+    #[test]
+    fn stdin_ticket_ignores_following_guidance() {
+        assert_eq!(
+            read_ticket("ticket-value\n\nnext steps:\n  use the ticket\n".as_bytes()).expect("read ticket"),
             "ticket-value"
         );
     }

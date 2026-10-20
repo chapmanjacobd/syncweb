@@ -71,6 +71,11 @@ permissions is checked independently:
 * `relay`: offer or consume relay assistance; and
 * `contribute`: upload content or bandwidth to the community.
 
+Invitations may also carry an operator-visible role (`member`, `contributor`,
+`relay`, `moderator`, or `owner`). Capabilities remain independently signed
+permissions, and invitation validation rejects a role that grants a capability
+outside its role's ceiling.
+
 The core API includes `read_only()` and `all()` presets, but callers should
 construct the smallest capability set needed for each invitation. A read-only
 invitation therefore cannot be promoted into a writer by merely discovering a

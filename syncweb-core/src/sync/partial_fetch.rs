@@ -1,8 +1,8 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     future::Future,
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use futures_util::stream::{self, StreamExt as FuturesStreamExt};
@@ -18,6 +18,7 @@ use crate::node::iroh_node::IrohNode;
 use crate::sync::conflict::materialize_folder_content_for_folder;
 
 const DEFAULT_TRANSFER_CONCURRENCY: usize = 4;
+const DEFAULT_PROVIDER_CONCURRENCY: usize = 2;
 const DEFAULT_TRANSFER_ATTEMPTS: usize = 3;
 const DEFAULT_TRANSFER_BACKOFF: Duration = Duration::from_millis(100);
 const DEFAULT_TRANSFER_MAX_BACKOFF: Duration = Duration::from_secs(2);
@@ -28,6 +29,8 @@ const DEFAULT_TRANSFER_MAX_BACKOFF: Duration = Duration::from_secs(2);
 pub struct TransferSchedulerConfig {
     /// Maximum number of blob requests that may be in flight at once.
     pub max_concurrent: usize,
+    /// Maximum number of providers raced for one blob request.
+    pub max_provider_concurrent: usize,
     /// Number of provider rounds attempted for each request.
     pub max_attempts: usize,
     /// Delay before the first retry round.
@@ -40,6 +43,7 @@ impl Default for TransferSchedulerConfig {
     fn default() -> Self {
         Self {
             max_concurrent: DEFAULT_TRANSFER_CONCURRENCY,
+            max_provider_concurrent: DEFAULT_PROVIDER_CONCURRENCY,
             max_attempts: DEFAULT_TRANSFER_ATTEMPTS,
             backoff_base: DEFAULT_TRANSFER_BACKOFF,
             backoff_max: DEFAULT_TRANSFER_MAX_BACKOFF,
@@ -52,6 +56,11 @@ impl TransferSchedulerConfig {
         if self.max_concurrent == 0 {
             return Err(crate::error::SyncwebError::InvalidConfig(
                 "transfer scheduler concurrency must be non-zero".to_owned(),
+            ));
+        }
+        if self.max_provider_concurrent == 0 {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "transfer scheduler provider concurrency must be non-zero".to_owned(),
             ));
         }
         if self.max_attempts == 0 {
@@ -162,6 +171,150 @@ impl TransferSegment {
     }
 }
 
+/// Bytes returned for one independently fetched blob range.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct SegmentChunk {
+    pub segment: TransferSegment,
+    pub bytes: Vec<u8>,
+}
+
+impl SegmentChunk {
+    /// Construct a chunk after checking that its payload matches the range.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the payload length does not equal the segment
+    /// length.
+    pub fn new(segment: TransferSegment, bytes: Vec<u8>) -> Result<Self> {
+        let length = u64::try_from(bytes.len())
+            .map_err(|error| crate::error::SyncwebError::operation("segment payload length is invalid", error))?;
+        if length != segment.length {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment payload length does not match the requested range".to_owned(),
+            ));
+        }
+        Ok(Self { segment, bytes })
+    }
+}
+
+/// Bounded assembler for independently fetched content ranges.
+///
+/// Chunks may arrive in any order and can be supplied by different providers.
+/// Overlapping chunks are rejected so a failed or corrupt provider cannot
+/// silently overwrite bytes from another provider. [`finish`](Self::finish)
+/// requires complete coverage and verifies the final content-addressed hash.
+#[derive(Clone, Debug)]
+pub struct SegmentAssembler {
+    hash: Hash,
+    size: u64,
+    bytes: Vec<u8>,
+    ranges: BTreeMap<u64, u64>,
+    covered: u64,
+}
+
+impl SegmentAssembler {
+    /// Create an assembler with an explicit maximum in-memory size.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the blob size cannot fit in memory or exceeds
+    /// `max_size`.
+    pub fn new(hash: Hash, size: u64, max_size: u64) -> Result<Self> {
+        if size > max_size {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment assembly exceeds the configured size limit".to_owned(),
+            ));
+        }
+        let capacity = usize::try_from(size)
+            .map_err(|error| crate::error::SyncwebError::operation("segment assembly size is invalid", error))?;
+        Ok(Self {
+            hash,
+            size,
+            bytes: vec![0; capacity],
+            ranges: BTreeMap::new(),
+            covered: 0,
+        })
+    }
+
+    /// Add one chunk, preserving range ownership and rejecting overlap.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the chunk has the wrong hash, is outside the
+    /// assembled blob, overlaps an earlier chunk, or cannot be copied safely.
+    pub fn add(&mut self, chunk: SegmentChunk) -> Result<()> {
+        if chunk.segment.hash != self.hash {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment belongs to a different blob".to_owned(),
+            ));
+        }
+        let start = chunk.segment.offset;
+        let end = chunk.segment.end();
+        if end > self.size {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment exceeds the assembled blob size".to_owned(),
+            ));
+        }
+        if self
+            .ranges
+            .range(..=start)
+            .next_back()
+            .is_some_and(|(_, previous_end)| *previous_end > start)
+            || self
+                .ranges
+                .range(start..)
+                .next()
+                .is_some_and(|(next_start, _)| *next_start < end)
+        {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment overlaps an earlier chunk".to_owned(),
+            ));
+        }
+        let start_index = usize::try_from(start)
+            .map_err(|error| crate::error::SyncwebError::operation("segment offset is invalid", error))?;
+        let end_index = usize::try_from(end)
+            .map_err(|error| crate::error::SyncwebError::operation("segment end is invalid", error))?;
+        self.bytes
+            .get_mut(start_index..end_index)
+            .ok_or_else(|| crate::error::SyncwebError::InvalidConfig("segment range is not addressable".to_owned()))?
+            .copy_from_slice(&chunk.bytes);
+        self.ranges.insert(start, end);
+        self.covered = self.covered.saturating_add(chunk.segment.length);
+        Ok(())
+    }
+
+    /// Verify complete coverage and the final content-addressed hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a range is missing, the assembled bytes do not
+    /// hash to the requested blob, or the assembler was given inconsistent
+    /// ranges.
+    pub fn finish(self) -> Result<Vec<u8>> {
+        if self.covered != self.size {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "segment assembly is incomplete".to_owned(),
+            ));
+        }
+        let mut cursor = 0_u64;
+        for (start, end) in self.ranges {
+            if start != cursor {
+                return Err(crate::error::SyncwebError::InvalidConfig(
+                    "segment assembly contains a gap".to_owned(),
+                ));
+            }
+            cursor = end;
+        }
+        if cursor != self.size || blake3::hash(&self.bytes).as_bytes() != self.hash.as_bytes() {
+            return Err(crate::error::SyncwebError::InvalidConfig(
+                "assembled segments failed content hash verification".to_owned(),
+            ));
+        }
+        Ok(self.bytes)
+    }
+}
+
 /// Aggregate result from a bounded transfer run.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
@@ -191,7 +344,7 @@ impl TransferScheduler {
         Ok(Self { config })
     }
 
-    /// Fetch requests using fresh provider ordering and whole-blob fallback.
+    /// Fetch requests using fresh provider ordering and bounded provider racing.
     ///
     /// Requests for the same hash are deduplicated before work starts. A
     /// cancelled run stops launching new work and cancels in-flight retries.
@@ -327,17 +480,20 @@ async fn fetch_request(
                 "scheduler cancellation requested",
             ));
         }
-        for peer in &request.peers {
-            if cancellation.is_cancelled() {
-                return Err(crate::error::SyncwebError::operation(
-                    "content transfer cancelled",
-                    "scheduler cancellation requested",
-                ));
-            }
-            match node.force_fetch_from_peer(peer, request.hash).await {
-                Ok(()) => return Ok(request.size),
-                Err(error) => last_error = Some(error),
-            }
+        match fetch_from_peers(
+            &request.peers,
+            &cancellation,
+            config.max_provider_concurrent,
+            |peer, _| async move {
+                node.force_fetch_from_peer(&peer, request.hash)
+                    .await
+                    .map(|()| request.size)
+            },
+        )
+        .await
+        {
+            Ok(bytes) => return Ok(bytes),
+            Err(error) => last_error = Some(error),
         }
         let retry = attempt.saturating_add(1);
         if retry < config.max_attempts {
@@ -357,11 +513,64 @@ async fn fetch_request(
     }))
 }
 
+async fn fetch_from_peers<F, Fut>(
+    peers: &[EndpointAddr],
+    cancellation: &CancellationToken,
+    max_concurrent: usize,
+    fetch: F,
+) -> Result<u64>
+where
+    F: Fn(EndpointAddr, CancellationToken) -> Fut + Clone + Send + Sync,
+    Fut: Future<Output = Result<u64>> + Send,
+{
+    if peers.is_empty() {
+        return Err(crate::error::SyncwebError::operation(
+            "content transfer failed",
+            "no provider was available",
+        ));
+    }
+    let attempt_cancellation = cancellation.child_token();
+    let mut results = stream::iter(peers.iter().cloned().map(|peer| {
+        let fetch = fetch.clone();
+        let request_cancellation = attempt_cancellation.clone();
+        async move {
+            tokio::select! {
+                () = request_cancellation.cancelled() => Err(crate::error::SyncwebError::operation(
+                    "content transfer cancelled",
+                    "provider race cancelled",
+                )),
+                result = fetch(peer, request_cancellation.clone()) => result,
+            }
+        }
+    }))
+    .buffer_unordered(max_concurrent);
+    let mut last_error = None;
+    while let Some(result) = results.next().await {
+        match result {
+            Ok(bytes) => {
+                attempt_cancellation.cancel();
+                return Ok(bytes);
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+    if cancellation.is_cancelled() {
+        return Err(crate::error::SyncwebError::operation(
+            "content transfer cancelled",
+            "scheduler cancellation requested",
+        ));
+    }
+    Err(last_error.unwrap_or_else(|| {
+        crate::error::SyncwebError::operation("content transfer failed", "no provider was available")
+    }))
+}
+
 /// Fetch content requests through blob tickets using the common scheduler.
 ///
-/// Each request may contain multiple provider addresses. A provider is tried
-/// in order for each retry round, and the Iroh blob path verifies the complete
-/// content-addressed blob before the request is reported as successful.
+/// Each request may contain multiple provider addresses. Eligible providers
+/// are raced with bounded concurrency for each retry round, and the Iroh blob
+/// path verifies the complete content-addressed blob before the request is
+/// reported as successful.
 ///
 /// # Errors
 ///
@@ -382,17 +591,27 @@ pub async fn fetch_blob_requests(
             async move {
                 let mut last_error = None;
                 for attempt in 0..DEFAULT_TRANSFER_ATTEMPTS {
-                    for peer in &request.peers {
-                        if request_cancellation.is_cancelled() {
-                            return Err(crate::error::SyncwebError::operation(
-                                "content transfer cancelled",
-                                "scheduler cancellation requested",
-                            ));
-                        }
-                        let ticket = blobs.ticket_for_addr(peer.clone(), request.hash);
-                        match blobs.fetch(&endpoint, &ticket).await {
-                            Ok(()) => return Ok(request.size),
-                            Err(error) => last_error = Some(error),
+                    let attempt_result = fetch_from_peers(
+                        &request.peers,
+                        &request_cancellation,
+                        DEFAULT_PROVIDER_CONCURRENCY,
+                        |peer, _| {
+                            let blobs = blobs.clone();
+                            let endpoint = endpoint.clone();
+                            async move {
+                                let ticket = blobs.ticket_for_addr(peer, request.hash);
+                                blobs.fetch(&endpoint, &ticket).await.map(|()| request.size)
+                            }
+                        },
+                    )
+                    .await;
+                    match attempt_result {
+                        Ok(bytes) => return Ok(bytes),
+                        Err(error) => {
+                            if request_cancellation.is_cancelled() {
+                                return Err(error);
+                            }
+                            last_error = Some(error);
                         }
                     }
                     let retry = attempt.saturating_add(1);
@@ -409,7 +628,7 @@ pub async fn fetch_blob_requests(
                     }
                 }
                 Err(last_error.unwrap_or_else(|| {
-                    crate::error::SyncwebError::operation("content transfer failed", "no provider was available")
+                    crate::error::SyncwebError::operation("content transfer failed", "all providers failed")
                 }))
             }
         })
@@ -443,6 +662,16 @@ pub async fn fetch_selected_content_with_cancel(
     strategy: &FetchStrategy,
     cancellation: CancellationToken,
 ) -> Result<u64> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    if let Err(error) = node.refresh_provider_leases(folder.namespace_id(), now, None).await {
+        tracing::debug!(
+            namespace = %folder.namespace_id(),
+            %error,
+            "provider lease refresh unavailable; continuing with discovered peers"
+        );
+    }
     let mut candidates = Vec::new();
     for entry in folder.content_entries().await? {
         let hash = entry.content_hash();
@@ -861,10 +1090,60 @@ mod scheduler_tests {
     }
 
     #[test]
+    fn segment_assembler_accepts_disjoint_provider_chunks_and_verifies_hash() {
+        let payload = b"multi-provider content".to_vec();
+        let hash = Hash::from_bytes(*blake3::hash(&payload).as_bytes());
+        let mut assembler = SegmentAssembler::new(hash, payload.len() as u64, payload.len() as u64)
+            .expect("assembler should be created");
+        let first = TransferSegment::new(hash, 0, 6).expect("first range");
+        let second = TransferSegment::new(hash, 6, (payload.len() - 6) as u64).expect("second range");
+        assembler
+            .add(SegmentChunk::new(second, payload[6..].to_vec()).expect("second chunk"))
+            .expect("second chunk should be accepted");
+        assembler
+            .add(SegmentChunk::new(first, payload[..6].to_vec()).expect("first chunk"))
+            .expect("first chunk should be accepted");
+        assert_eq!(assembler.finish().expect("assembled payload"), payload);
+    }
+
+    #[test]
+    fn segment_assembler_rejects_overlap_gaps_and_corrupt_hashes() {
+        let payload = b"0123456789".to_vec();
+        let hash = Hash::from_bytes(*blake3::hash(&payload).as_bytes());
+        let mut assembler = SegmentAssembler::new(hash, payload.len() as u64, 100).expect("assembler");
+        let first = TransferSegment::new(hash, 0, 5).expect("first range");
+        let overlap = TransferSegment::new(hash, 4, 6).expect("overlap range");
+        assembler
+            .add(SegmentChunk::new(first, payload[..5].to_vec()).expect("first chunk"))
+            .expect("first chunk should be accepted");
+        assert!(
+            assembler
+                .add(SegmentChunk::new(overlap, payload[4..].to_vec()).expect("overlap chunk"))
+                .is_err()
+        );
+        assert!(assembler.finish().is_err(), "the missing tail must be rejected");
+
+        let wrong_hash = Hash::from_bytes([9; 32]);
+        let mut corrupt = SegmentAssembler::new(wrong_hash, payload.len() as u64, 100).expect("assembler");
+        let full = TransferSegment::new(wrong_hash, 0, payload.len() as u64).expect("full range");
+        corrupt
+            .add(SegmentChunk::new(full, payload).expect("full chunk"))
+            .expect("full chunk should be accepted");
+        assert!(corrupt.finish().is_err(), "content hash mismatch must be rejected");
+    }
+
+    #[test]
     fn scheduler_rejects_invalid_limits() {
         assert!(
             TransferScheduler::new(TransferSchedulerConfig {
                 max_concurrent: 0,
+                ..TransferSchedulerConfig::default()
+            })
+            .is_err()
+        );
+        assert!(
+            TransferScheduler::new(TransferSchedulerConfig {
+                max_provider_concurrent: 0,
                 ..TransferSchedulerConfig::default()
             })
             .is_err()
@@ -957,6 +1236,43 @@ mod scheduler_tests {
         trigger_task.await.expect("cancellation task should finish");
         assert!(report.cancelled > 0);
         assert_eq!(report.completed, 0);
+    }
+
+    #[tokio::test]
+    async fn provider_race_is_bounded_and_uses_the_first_success() {
+        let peers = vec![
+            EndpointAddr::new(iroh::SecretKey::generate().public()),
+            EndpointAddr::new(iroh::SecretKey::generate().public()),
+            EndpointAddr::new(iroh::SecretKey::generate().public()),
+        ];
+        let successful_peer = peers[1].id;
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let result = fetch_from_peers(&peers, &CancellationToken::new(), 2, {
+            let active = Arc::clone(&active);
+            let peak = Arc::clone(&peak);
+            move |peer, _| {
+                let active = Arc::clone(&active);
+                let peak = Arc::clone(&peak);
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst).saturating_add(1);
+                    peak.fetch_max(current, Ordering::SeqCst);
+                    if peer.id == successful_peer {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        Ok(7)
+                    } else {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        Err(crate::error::SyncwebError::operation("provider failed", "test failure"))
+                    }
+                }
+            }
+        })
+        .await
+        .expect("one provider should succeed");
+        assert_eq!(result, 7);
+        assert!(peak.load(Ordering::SeqCst) <= 2);
     }
 }
 

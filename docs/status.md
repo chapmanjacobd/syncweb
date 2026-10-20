@@ -20,7 +20,7 @@ planned must not be presented as a default guarantee.
 | JSON automation | Global `--json` is supported by the command handlers; list results use named object envelopes, and `stats network --follow` emits documented NDJSON records. |
 | Package distribution | The common flow is `package add`/`bump` -> `package publish` -> `package info` or `package install` -> `package upgrade`; archive export/import remains available for offline transfer. |
 | Shared filters | `ls`, `find`, `sort`, `download`, and `verify` share the `--ext`, `--size`, `--depth`, `--type`, `--modified-*`, and `--remote-only` vocabulary, with compatibility aliases for older spellings. |
-| Conflict safety | Last-writer-wins materialization keeps compact text diffs when beneficial and full conflict copies otherwise; the CRDT remains the source of truth. |
+| Conflict safety | Materialization uses a tracked common ancestor for bounded clean text merges, records the merged result as a local CRDT entry, and falls back to last-writer-wins with compact diffs or full conflict copies; the CRDT remains the source of truth. |
 | Conflict inspection | `conflicts list` and `conflicts show` expose divergent variants, deterministic winners, timestamps, authors, hashes, sizes, and local availability in table or JSON output; `conflicts resolve` removes acknowledged materialized artifacts without changing CRDT entries. |
 
 The named network gate is deliberately narrower than the full suite:

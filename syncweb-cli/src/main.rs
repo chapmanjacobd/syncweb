@@ -65,11 +65,12 @@ use syncweb_core::{
         stats_db::StatsDatabase,
     },
     sync::{
-        AreaFilter, ConflictReport, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent, list_conflicts,
-        resolve_conflict_artifacts,
+        AreaFilter, ConflictReport, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent, TransferRequest,
+        TransferScheduler, TransferSchedulerConfig, list_conflicts, resolve_conflict_artifacts,
     },
     verify::IntegrityChecker,
 };
+use tokio_util::sync::CancellationToken;
 
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
 const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
@@ -362,7 +363,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         return handle_db(&ctx, db_cmd);
     }
     if let Command::Backup(args) = command {
-        return handle_db_backup(&ctx.data_dir, &args.output, args.include_blobs, ctx.output_json);
+        return handle_db_backup(ctx.data_dir, &args.output, args.include_blobs, ctx.output_json);
     }
     if let Command::Restore(args) = command {
         return handle_backup_restore(&ctx, &args);
@@ -2390,39 +2391,31 @@ async fn try_repair(
         .find_peers(folder.namespace_id())
         .await
         .unwrap_or_default();
+    let scheduler = match TransferScheduler::new(TransferSchedulerConfig::default()) {
+        Ok(scheduler) => scheduler,
+        Err(error) => {
+            tracing::error!(%error, "failed to configure repair scheduler");
+            for item in corrupted {
+                result.attempted = result.attempted.saturating_add(1);
+                result.failed.push(syncweb_core::verify::RepairOutcome::new(
+                    item.path.clone(),
+                    item.expected_hash,
+                    false,
+                    Some(error.to_string()),
+                ));
+            }
+            return result;
+        }
+    };
 
     for item in corrupted {
         result.attempted = result.attempted.saturating_add(1);
         let hash = item.expected_hash;
-        let mut repaired = false;
-
-        // Try --from tickets first
-        for (ticket_hash, ticket) in &provider_tickets {
-            if *ticket_hash != hash {
-                continue;
-            }
-            match node.force_fetch(ticket).await {
-                Ok(()) => {
-                    repaired = true;
-                    break;
-                }
-                Err(e) => {
-                    result.failed.push(syncweb_core::verify::RepairOutcome::new(
-                        item.path.clone(),
-                        hash,
-                        false,
-                        Some(format!("ticket provider: {e}")),
-                    ));
-                }
-            }
-        }
-        if repaired {
-            result.repaired = result.repaired.saturating_add(1);
-            continue;
-        }
-
-        // Try namespace peers
-        let mut any_error = None;
+        let mut providers = provider_tickets
+            .iter()
+            .filter(|(ticket_hash, _)| *ticket_hash == hash)
+            .map(|(_, ticket)| ticket.addr().clone())
+            .collect::<Vec<_>>();
         let scheduled_peers = match node.schedule_provider_peers(&hash, &namespace_peers) {
             Ok(peers) => peers,
             Err(error) => {
@@ -2430,17 +2423,19 @@ async fn try_repair(
                 namespace_peers.clone()
             }
         };
-        for peer in &scheduled_peers {
-            match node.force_fetch_from_peer(peer, hash).await {
-                Ok(()) => {
-                    repaired = true;
-                    break;
-                }
-                Err(e) => {
-                    any_error = Some(format!("peer {}: {e}", peer.id));
-                }
+        for peer in scheduled_peers {
+            if !providers.iter().any(|candidate| candidate.id == peer.id) {
+                providers.push(peer);
             }
         }
+        let repaired = scheduler
+            .fetch(
+                node,
+                vec![TransferRequest::new(hash, 0, providers)],
+                CancellationToken::new(),
+            )
+            .await
+            .is_ok_and(|report| report.completed == 1);
         if repaired {
             result.repaired = result.repaired.saturating_add(1);
         } else {
@@ -2448,7 +2443,7 @@ async fn try_repair(
                 item.path.clone(),
                 hash,
                 false,
-                any_error.or_else(|| Some("no alternative providers available".to_owned())),
+                Some("no alternative providers available".to_owned()),
             ));
         }
     }
@@ -4455,7 +4450,7 @@ async fn handle_package_install(
     node.stop().await?;
     let next_steps = package_install_next_steps(
         &collection_manifest.collection_id.to_string(),
-        &collection_manifest.version.to_string(),
+        &collection_manifest.version.clone(),
     );
     if output_json {
         println!(
@@ -6832,11 +6827,11 @@ async fn resolve_selector_embedded(
                 for folder in manager.list().await? {
                     let ns = folder.namespace_id().to_string();
                     // Try to see if any mount in DB for this ns equals root; also try the selector itself.
-                    if std::fs::canonicalize(&selector).unwrap_or_else(|_| selector.to_path_buf()) == root
+                    if std::fs::canonicalize(selector).unwrap_or_else(|_| selector.to_path_buf()) == root
                         || selector.canonicalize().unwrap_or_else(|_| selector.to_path_buf()) == root
                     {
                         // If the selector is the exact root and it's a live folder, use it.
-                        found_fallback = Some((ns.clone(), folder));
+                        found_fallback = Some((ns, folder));
                         break;
                     }
                 }

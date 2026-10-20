@@ -284,7 +284,7 @@ impl CommunityAdmissionPolicy {
 
     /// Return the trusted issuer identities.
     #[must_use]
-    pub fn trusted_issuers(&self) -> &BTreeSet<String> {
+    pub const fn trusted_issuers(&self) -> &BTreeSet<String> {
         &self.trusted_issuers
     }
 
@@ -365,7 +365,7 @@ impl Default for CommunityModerationPolicy {
 
 impl CommunityModerationPolicy {
     /// Set or clear the maximum object size accepted by this policy.
-    pub fn set_max_object_size(&mut self, max_bytes: Option<u64>) {
+    pub const fn set_max_object_size(&mut self, max_bytes: Option<u64>) {
         self.max_object_size = max_bytes;
     }
 

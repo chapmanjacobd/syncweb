@@ -27,9 +27,9 @@ checks never start a daemon.
 
 syncweb documents two native service-manager integrations:
 
-* **systemd user or system services** on Linux. Keep the daemon in the
+* systemd user or system services on Linux. Keep the daemon in the
   foreground and let systemd restart it after an unexpected failure.
-* **launchd agents or daemons** on macOS. Keep the daemon in the foreground
+* launchd agents or daemons on macOS. Keep the daemon in the foreground
   and use `KeepAlive` for restart policy.
 
 Other supervisors may run the same foreground command if they preserve the

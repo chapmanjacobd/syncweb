@@ -74,6 +74,37 @@ async fn test_set_get_entry() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn test_all_variants_returns_every_author_version_for_key() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-services-test")?;
+    let node = test_node(&directory, "node", None).await?;
+    let doc = node.docs_engine().create_namespace().await?;
+    let first_author = node.docs_engine().author().await?;
+    let mut rng = rand::rng();
+    let second_author = node
+        .docs_engine()
+        .import_author(iroh_docs::Author::new(&mut rng))
+        .await?;
+
+    node.docs_engine().set(&doc, first_author, b"key", b"first").await?;
+    node.docs_engine().set(&doc, second_author, b"key", b"second").await?;
+
+    let variants = node.docs_engine().all_variants(&doc, b"key").await?;
+    anyhow::ensure!(variants.len() == 2);
+    anyhow::ensure!(variants.iter().all(|entry| entry.key() == b"key".as_slice()));
+    anyhow::ensure!(
+        variants
+            .iter()
+            .map(|entry| entry.content_hash())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            == 2
+    );
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_watch_entries() -> anyhow::Result<()> {
     let directory = TestDirectory::new("syncweb-services-test")?;
     let node = test_node(&directory, "node", None).await?;

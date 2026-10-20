@@ -293,7 +293,7 @@ impl PeerTracker {
         self.clock = self.clock.saturating_add(1);
         let negative = &self.negative;
         let negative_expiry = self.negative_expiry;
-        self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
+        let mut peers = self.entries.get_mut(blob_hash).map_or_else(Vec::new, |entry| {
             if entry.last_seen.elapsed() > self.expiry {
                 return Vec::new();
             }
@@ -310,7 +310,9 @@ impl PeerTracker {
                 })
                 .map(|(peer, _)| *peer)
                 .collect()
-        })
+        });
+        peers.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        peers
     }
 
     #[must_use]
@@ -346,12 +348,14 @@ impl PeerTracker {
         if entry.last_seen.elapsed() > self.expiry {
             return Vec::new();
         }
-        entry
+        let mut observations = entry
             .peers
             .iter()
             .filter(|(peer, _)| !self.is_negative(blob_hash, peer))
             .map(|(peer, record)| (*peer, record.metadata))
-            .collect()
+            .collect::<Vec<_>>();
+        observations.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
+        observations
     }
 
     /// Rank discovered providers for a blob.

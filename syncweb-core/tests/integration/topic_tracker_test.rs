@@ -1,7 +1,10 @@
 use anyhow::ensure;
 
-use syncweb_core::node::identity::IdentityManager;
-use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
+use syncweb_core::{
+    ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
+    node::identity::IdentityManager,
+    node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode},
+};
 
 use crate::test_utils::TestDirectory;
 
@@ -44,6 +47,43 @@ async fn test_find_peers() -> anyhow::Result<()> {
     node.topic_tracker().announce(doc.id()).await?;
     let peers = node.topic_tracker().find_peers(doc.id()).await?;
     anyhow::ensure!(peers.is_empty());
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_publish_and_find_provider_lease() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-services-lease-test")?;
+    let node = test_node(&directory, "node", None).await?;
+    let doc = node.docs_engine().create_namespace().await?;
+    let hash = iroh_blobs::Hash::from_bytes([7; 32]);
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&node.endpoint().secret_key().to_bytes());
+    let mut lease = ProviderLease::new(
+        node.endpoint().id(),
+        ProviderLeaseOptions::new(
+            None,
+            doc.id(),
+            None,
+            vec![ProviderContent::blob(hash)],
+            ProviderCapabilities::new(true, false),
+            10,
+            20,
+        ),
+    );
+    lease.sign(&signing_key)?;
+
+    node.topic_tracker()
+        .publish_provider_lease(doc.id(), lease.clone())
+        .await?;
+    let leases = node.topic_tracker().find_provider_leases(doc.id()).await?;
+    ensure!(leases.len() == 1);
+    ensure!(leases[0] == lease);
+    ensure!(node.refresh_provider_leases(doc.id(), 15, None).await? == 1);
+    ensure!(
+        node.provider_peer_snapshot(&hash)?
+            .is_some_and(|providers| providers.contains(&node.endpoint().id()))
+    );
 
     node.stop().await?;
     Ok(())

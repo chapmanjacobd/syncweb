@@ -11,6 +11,7 @@ use iroh_blobs::{
 };
 use n0_future::StreamExt;
 use std::path::{Path, PathBuf};
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{Result, SyncwebError};
 
@@ -345,7 +346,20 @@ impl BlobStore {
                 .filter(|ticket| ticket.hash() == content_hash)
                 .cloned()
                 .collect();
-            try_fetch_first_working(&candidates, |ticket| self.fetch(endpoint, ticket)).await?;
+            let peers = candidates.iter().map(|ticket| ticket.addr().clone()).collect();
+            let report = crate::sync::partial_fetch::fetch_blob_requests(
+                self,
+                endpoint,
+                vec![crate::sync::partial_fetch::TransferRequest::new(content_hash, 0, peers)],
+                CancellationToken::new(),
+            )
+            .await?;
+            if report.completed != 1 {
+                return Err(SyncwebError::operation(
+                    "failed to fetch blob",
+                    "all provider tickets failed",
+                ));
+            }
         }
         let pin_name = crate::pins::download_pin(content_hash);
         self.pin(&pin_name, content_hash).await?;
@@ -409,28 +423,4 @@ fn absolute_path(path: impl AsRef<Path>) -> Result<PathBuf> {
 #[must_use]
 pub fn raw_blob_ticket(addr: EndpointAddr, hash: Hash) -> BlobTicket {
     BlobTicket::new(addr, hash, BlobFormat::Raw)
-}
-
-/// Try each provider in order until one succeeds, returning the first success.
-/// This is the shared "first working provider wins" primitive used by
-/// fetch-with-fallback flows; [`crate::indexing::links::fetch_from_mirrors`] is
-/// the synchronous twin for resolver closures.
-///
-/// # Errors
-///
-/// Returns the last fetch error, or a generic error when no provider succeeded.
-pub(crate) async fn try_fetch_first_working<'a, T, U, F, Fut>(items: &'a [T], mut fetch: F) -> Result<U>
-where
-    T: Sync,
-    F: FnMut(&'a T) -> Fut + Send,
-    Fut: std::future::Future<Output = Result<U>> + Send + 'a,
-{
-    let mut last_error: Option<SyncwebError> = None;
-    for item in items {
-        match fetch(item).await {
-            Ok(value) => return Ok(value),
-            Err(error) => last_error = Some(error),
-        }
-    }
-    Err(last_error.unwrap_or_else(|| SyncwebError::operation("failed to fetch blob", "no working provider ticket")))
 }

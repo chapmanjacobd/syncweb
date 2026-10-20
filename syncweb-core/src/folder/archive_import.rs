@@ -62,7 +62,7 @@ impl DropImportOptions {
 
     /// Require imported manifests to belong to one named community.
     #[must_use]
-    pub fn with_community(mut self, community: CommunityId) -> Self {
+    pub const fn with_community(mut self, community: CommunityId) -> Self {
         self.expected_community = Some(community);
         self.require_open_community = false;
         self
@@ -70,7 +70,7 @@ impl DropImportOptions {
 
     /// Require imported manifests to be explicitly unscoped.
     #[must_use]
-    pub fn with_open_community(mut self) -> Self {
+    pub const fn with_open_community(mut self) -> Self {
         self.expected_community = None;
         self.require_open_community = true;
         self

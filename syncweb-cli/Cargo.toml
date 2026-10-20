@@ -12,6 +12,7 @@ readme = "README.md"
 [dependencies]
 syncweb-core = { path = "../syncweb-core", version = "0.1.1-alpha.12" }
 tokio.workspace = true
+tokio-util.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 rayon.workspace = true

@@ -65,7 +65,7 @@ pub use net::{
     COMMUNITY_CONTENT_TICKET_VERSION, COMMUNITY_INVITATION_VERSION, COMMUNITY_REVOCATION_VERSION, CachePeerConfig,
     CommunityAdmissionPolicy, CommunityAuditEvent, CommunityCapabilities, CommunityCapability, CommunityContentTicket,
     CommunityId, CommunityIdentity, CommunityInvitation, CommunityMergeDecision, CommunityModerationPolicy,
-    CommunityRateLimit, CommunityRevocation, InventorySummary, PartitionMergePolicy, RendezvousCache,
+    CommunityRateLimit, CommunityRevocation, CommunityRole, InventorySummary, PartitionMergePolicy, RendezvousCache,
     community_merge_decision,
 };
 pub use pins::{PinClass, PinPolicy, PinRecord, classified_pin_name};

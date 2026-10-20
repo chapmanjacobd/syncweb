@@ -122,7 +122,7 @@ impl Default for PinPolicy {
 impl PinPolicy {
     /// Return an expiry timestamp for a newly created pin class.
     #[must_use]
-    pub fn expiry_at(self, class: PinClass, now: u64) -> Option<u64> {
+    pub const fn expiry_at(self, class: PinClass, now: u64) -> Option<u64> {
         let ttl = match class {
             PinClass::Temporary => self.temporary_ttl,
             PinClass::Cache => self.cache_ttl,
@@ -133,7 +133,7 @@ impl PinPolicy {
 
     /// Return the pins that are safe to remove during this GC pass.
     #[must_use]
-    pub fn gc_candidates<'a>(self, pins: &'a [PinRecord], now: u64) -> Vec<&'a PinRecord> {
+    pub fn gc_candidates(self, pins: &[PinRecord], now: u64) -> Vec<&PinRecord> {
         pins.iter()
             .filter(|pin| pin.class.is_gc_eligible() && pin.is_expired(now))
             .collect()

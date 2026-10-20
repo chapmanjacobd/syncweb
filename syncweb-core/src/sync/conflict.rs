@@ -6,8 +6,9 @@
 //! recoverable) and materializes winner + losers to a mount root:
 //!
 //! - The winner (greatest `timestamp()`, ties broken deterministically by
-//!   author) always keeps the original path — matching the `single_latest_per_key`
-//!   collapsed view used everywhere else.
+//!   author), or a clean three-way merge recorded as a new local entry, keeps
+//!   the original path — matching the `single_latest_per_key` collapsed view
+//!   used everywhere else.
 //! - A single text loser gets a compact `<path>.diff` when that diff is smaller
 //!   than the winner; otherwise each loser is written as
 //!   `<path>.conflict.<short-hash>`, so no version is ever lost on disk.
@@ -35,11 +36,21 @@ const MAX_TEXT_DIFF_BYTES: usize = 1_048_576;
 const MAX_TEXT_DIFF_LINES: usize = 2_048;
 const DIFF_CONTEXT_LINES: usize = 3;
 
+/// Result of a bounded three-way text merge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ThreeWayMerge {
+    /// Both edits can be represented without overlapping changes.
+    Clean(Vec<u8>),
+    /// The edits overlap and the caller should retain both source variants.
+    Conflict,
+}
+
 /// Outcome of one materialization pass over a folder.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct MaterializeSummary {
-    /// Distinct keys whose winner was written to the mount root.
+    /// Distinct keys whose canonical content was written to the mount root.
     pub materialized: usize,
     /// Loser variants written as a diff or `<path>.conflict.<short-hash>`.
     pub conflicts: usize,
@@ -97,10 +108,14 @@ pub async fn resolve_conflict_artifacts(
 }
 
 fn safe_relative_path(path: &Path) -> Result<&Path> {
-    if path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir))
+    if path.as_os_str().is_empty()
+        || path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::CurDir | Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
     {
         return Err(SyncwebError::operation(
             "cannot resolve conflict artifacts",
@@ -358,6 +373,186 @@ fn line_diff<'a>(left: &[&'a str], right: &[&'a str]) -> Option<Vec<DiffLine<'a>
     Some(result)
 }
 
+struct LineEdit<'a> {
+    start: usize,
+    end: usize,
+    replacement: Vec<&'a str>,
+}
+
+fn line_edits<'a>(base: &[&'a str], side: &[&'a str]) -> Option<Vec<LineEdit<'a>>> {
+    let operations = line_diff(base, side)?;
+    let mut edits = Vec::new();
+    let mut base_index = 0_usize;
+    let mut current: Option<LineEdit<'a>> = None;
+    for operation in operations {
+        match operation {
+            DiffLine::Equal(_) => {
+                if let Some(edit) = current.take() {
+                    edits.push(edit);
+                }
+                base_index = base_index.saturating_add(1);
+            }
+            DiffLine::Delete(_) => {
+                let edit = current.get_or_insert_with(|| LineEdit {
+                    start: base_index,
+                    end: base_index,
+                    replacement: Vec::new(),
+                });
+                edit.end = edit.end.saturating_add(1);
+                base_index = base_index.saturating_add(1);
+            }
+            DiffLine::Insert(line) => {
+                current
+                    .get_or_insert_with(|| LineEdit {
+                        start: base_index,
+                        end: base_index,
+                        replacement: Vec::new(),
+                    })
+                    .replacement
+                    .push(line);
+            }
+        }
+    }
+    if let Some(edit) = current {
+        edits.push(edit);
+    }
+    Some(edits)
+}
+
+fn edits_overlap(left: &LineEdit<'_>, right: &LineEdit<'_>) -> bool {
+    if left.start == left.end && right.start == right.end {
+        left.start == right.start
+    } else if left.start == left.end {
+        (right.start..right.end).contains(&left.start)
+    } else if right.start == right.end {
+        (left.start..left.end).contains(&right.start)
+    } else {
+        left.start < right.end && right.start < left.end
+    }
+}
+
+fn apply_edits<'a>(base: &[&'a str], start: usize, end: usize, edits: &[LineEdit<'a>]) -> Option<Vec<&'a str>> {
+    let mut output = Vec::new();
+    let mut cursor = start;
+    for edit in edits {
+        if edit.start < cursor || edit.end > end {
+            return None;
+        }
+        output.extend(base.get(cursor..edit.start)?);
+        output.extend(edit.replacement.iter().copied());
+        cursor = edit.end;
+    }
+    output.extend(base.get(cursor..end)?);
+    Some(output)
+}
+
+fn bounded_text_lines(bytes: &[u8]) -> Option<Vec<&str>> {
+    if bytes.len() > MAX_TEXT_DIFF_BYTES {
+        return None;
+    }
+    let text = str::from_utf8(bytes).ok()?;
+    let lines: Vec<_> = text.split_inclusive('\n').collect();
+    (lines.len() <= MAX_TEXT_DIFF_LINES).then_some(lines)
+}
+
+/// Merge two bounded UTF-8 line edits against a common ancestor.
+///
+/// A clean result is returned when edits touch disjoint ranges, or when both
+/// sides made the same change. Overlapping edits return [`ThreeWayMerge::Conflict`]
+/// so the caller can preserve both variants instead of silently choosing one.
+#[must_use]
+pub fn merge_text_three_way(base: &[u8], left: &[u8], right: &[u8]) -> Option<ThreeWayMerge> {
+    let base_lines = bounded_text_lines(base)?;
+    let left_lines = bounded_text_lines(left)?;
+    let right_lines = bounded_text_lines(right)?;
+    if left == right {
+        return Some(ThreeWayMerge::Clean(left.to_vec()));
+    }
+    if left == base {
+        return Some(ThreeWayMerge::Clean(right.to_vec()));
+    }
+    if right == base {
+        return Some(ThreeWayMerge::Clean(left.to_vec()));
+    }
+
+    let left_edits = line_edits(&base_lines, &left_lines)?;
+    let right_edits = line_edits(&base_lines, &right_lines)?;
+    let mut output = Vec::new();
+    let (mut left_index, mut right_index, mut cursor) = (0_usize, 0_usize, 0_usize);
+
+    while left_index < left_edits.len() || right_index < right_edits.len() {
+        let left_edit = left_edits.get(left_index);
+        let right_edit = right_edits.get(right_index);
+        let next_start = match (left_edit, right_edit) {
+            (Some(left), Some(right)) => left.start.min(right.start),
+            (Some(left), None) => left.start,
+            (None, Some(right)) => right.start,
+            (None, None) => break,
+        };
+        output.extend(base_lines.get(cursor..next_start)?);
+
+        match (left_edit, right_edit) {
+            (Some(left), Some(right)) if edits_overlap(left, right) => {
+                let start = left.start.min(right.start);
+                let mut end = left.end.max(right.end);
+                let mut left_end = left_index;
+                let mut right_end = right_index;
+                loop {
+                    let mut expanded = false;
+                    if let Some(edit) = left_edits.get(left_end)
+                        && (edit.start < end || (edit.start == start && end == start))
+                    {
+                        end = end.max(edit.end);
+                        left_end = left_end.saturating_add(1);
+                        expanded = true;
+                    }
+                    if let Some(edit) = right_edits.get(right_end)
+                        && (edit.start < end || (edit.start == start && end == start))
+                    {
+                        end = end.max(edit.end);
+                        right_end = right_end.saturating_add(1);
+                        expanded = true;
+                    }
+                    if !expanded {
+                        break;
+                    }
+                }
+                let left_result = apply_edits(&base_lines, start, end, &left_edits[left_index..left_end])?;
+                let right_result = apply_edits(&base_lines, start, end, &right_edits[right_index..right_end])?;
+                if left_result != right_result {
+                    return Some(ThreeWayMerge::Conflict);
+                }
+                output.extend(left_result);
+                left_index = left_end;
+                right_index = right_end;
+                cursor = end;
+            }
+            (Some(left), Some(right)) if left.end <= right.start => {
+                output.extend(left.replacement.iter().copied());
+                cursor = left.end;
+                left_index = left_index.saturating_add(1);
+            }
+            (Some(left), None) => {
+                output.extend(left.replacement.iter().copied());
+                cursor = left.end;
+                left_index = left_index.saturating_add(1);
+            }
+            (_, Some(right)) => {
+                output.extend(right.replacement.iter().copied());
+                cursor = right.end;
+                right_index = right_index.saturating_add(1);
+            }
+            (None, None) => break,
+        }
+    }
+    output.extend(base_lines.get(cursor..)?);
+    let mut merged = String::new();
+    for line in output {
+        merged.push_str(line);
+    }
+    Some(ThreeWayMerge::Clean(merged.into_bytes()))
+}
+
 fn append_diff_line(output: &mut String, prefix: char, line: &str) {
     output.push(prefix);
     output.push_str(line);
@@ -448,6 +643,42 @@ async fn try_materialize_text_diff(
     Ok(Some(write_if_different(&diff, &diff_path(path)).await?))
 }
 
+async fn try_merge_text_conflict(
+    node: &IrohNode,
+    ancestor_hash: Hash,
+    winner_hash: Hash,
+    variants: &[Entry],
+) -> Result<Option<Hash>> {
+    let side_hashes: BTreeSet<_> = variants
+        .iter()
+        .map(Entry::content_hash)
+        .filter(|hash| *hash != Hash::EMPTY && *hash != ancestor_hash)
+        .collect();
+    if side_hashes.len() != 2 || !side_hashes.contains(&winner_hash) {
+        return Ok(None);
+    }
+    let Some(loser_hash) = side_hashes.iter().copied().find(|hash| *hash != winner_hash) else {
+        return Ok(None);
+    };
+    if ancestor_hash == Hash::EMPTY
+        || !node.blob_store().has(ancestor_hash).await?
+        || !node.blob_store().has(winner_hash).await?
+        || !node.blob_store().has(loser_hash).await?
+    {
+        return Ok(None);
+    }
+    let base = node.blob_store().get(ancestor_hash).await?;
+    let winner = node.blob_store().get(winner_hash).await?;
+    let loser = node.blob_store().get(loser_hash).await?;
+    let Some(ThreeWayMerge::Clean(merged)) = merge_text_three_way(&base, &winner, &loser) else {
+        return Ok(None);
+    };
+    if merged == winner {
+        return Ok(None);
+    }
+    Ok(Some(node.blob_store().add_bytes(&merged).await?))
+}
+
 async fn materialize_conflicts(
     node: &IrohNode,
     namespace: iroh_docs::NamespaceId,
@@ -498,9 +729,10 @@ async fn materialize_conflicts(
 
 /// Materialize every entry of `folder` under `mount_root`, resolving conflicts.
 ///
-/// The winner of each key keeps its original path. A single text loser is
-/// written as `<path>.diff` when the compact diff is smaller than the winner;
-/// otherwise losing variants are written as `<path>.conflict.<short-hash>`.
+/// The winner of each key, or a clean three-way merge, keeps its original path.
+/// A single text loser is written as `<path>.diff` when the compact diff is
+/// smaller than the winner; otherwise losing variants are written as
+/// `<path>.conflict.<short-hash>`.
 /// A `receiveonly` folder materializes only the winner (it must never resolve a
 /// conflict by writing locally). Blobs that are not yet local are skipped and
 /// reported as `pending`.
@@ -530,6 +762,7 @@ pub(crate) async fn materialize_folder_content_for_folder(
     selected_paths: Option<&BTreeSet<PathBuf>>,
 ) -> Result<MaterializeOutcome> {
     let namespace = folder.namespace_id();
+    let namespace_string = namespace.to_string();
     let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
     let grouped = group_by_key(entries);
     let mut summary = MaterializeSummary::default();
@@ -539,18 +772,40 @@ pub(crate) async fn materialize_folder_content_for_folder(
         if selected_paths.is_some_and(|paths| !paths.contains(&path)) {
             continue;
         }
+        let path = safe_relative_path(&path)?;
         let Some(winner) = select_winner(&variants) else {
             continue;
         };
         let winner_hash = winner.content_hash();
         let winner_size = winner.content_len();
-        let destination = mount_root.join(&path);
-        match export_if_different(node, winner_hash, winner_size, &destination).await {
+        let distinct_hashes: BTreeSet<_> = variants.iter().map(Entry::content_hash).collect();
+        let has_conflict = distinct_hashes.len() > 1;
+        let writable = folder.mode().can_write_locally() && folder.is_writable();
+        let ancestor = node.node_db().load_conflict_ancestor(&namespace_string, &key)?;
+        let tracked_ancestor_hash = ancestor.map(|(hash, _)| hash);
+        let already_resolved = tracked_ancestor_hash.is_some_and(|hash| hash == winner_hash);
+        let mut materialization_hash = winner_hash;
+        let mut materialization_size = winner_size;
+        let mut clean_merge = false;
+        if writable
+            && has_conflict
+            && let Some(ancestor_hash) = tracked_ancestor_hash
+            && let Some(merged_hash) = try_merge_text_conflict(node, ancestor_hash, winner_hash, &variants).await?
+        {
+            let merged_size = u64::try_from(node.blob_store().get(merged_hash).await?.len())
+                .map_err(|error| SyncwebError::operation("merged conflict content is too large", error))?;
+            folder.set_blob_ref(&key, merged_hash, merged_size).await?;
+            materialization_hash = merged_hash;
+            materialization_size = merged_size;
+            clean_merge = true;
+        }
+        let destination = mount_root.join(path);
+        match export_if_different(node, materialization_hash, materialization_size, &destination).await {
             Ok(true) => {
                 summary.materialized = summary.materialized.saturating_add(1);
                 written.push(destination.clone());
             }
-            Ok(false) if !node.blob_store().has(winner_hash).await? => {
+            Ok(false) if !node.blob_store().has(materialization_hash).await? => {
                 summary.pending = summary.pending.saturating_add(1);
             }
             Ok(false) => {}
@@ -558,12 +813,27 @@ pub(crate) async fn materialize_folder_content_for_folder(
                 tracing::warn!(%namespace, path = %path.display(), %error, "failed to materialize winner");
             }
         }
-        if !folder.mode().can_write_locally() || !folder.is_writable() {
+        if !node.blob_store().has(materialization_hash).await? {
             continue;
         }
-        let conflict_paths = materialize_conflicts(node, namespace, winner_hash, &variants, &path, mount_root).await;
-        summary.conflicts = summary.conflicts.saturating_add(conflict_paths.len());
-        written.extend(conflict_paths);
+        if clean_merge {
+            node.node_db().record_conflict_ancestor(
+                &namespace_string,
+                &key,
+                materialization_hash,
+                materialization_size,
+            )?;
+        }
+        if !clean_merge && !has_conflict {
+            node.node_db()
+                .record_conflict_ancestor(&namespace_string, &key, winner_hash, winner_size)?;
+        }
+        if has_conflict && writable && !clean_merge && !already_resolved {
+            let conflict_paths =
+                materialize_conflicts(node, namespace, winner_hash, &variants, path, mount_root).await;
+            summary.conflicts = summary.conflicts.saturating_add(conflict_paths.len());
+            written.extend(conflict_paths);
+        }
     }
     Ok(MaterializeOutcome { summary, written })
 }
@@ -655,6 +925,42 @@ mod tests {
         assert!(build_text_diff(b"\0binary", b"\0changed").is_none());
         let large = vec![b'a'; MAX_TEXT_DIFF_BYTES.saturating_add(1)];
         assert!(build_text_diff(&large, b"small").is_none());
+    }
+
+    #[test]
+    fn three_way_merge_combines_disjoint_line_edits() {
+        let base = b"one\ntwo\nthree\n";
+        let left = b"ONE\ntwo\nthree\n";
+        let right = b"one\ntwo\nTHREE\n";
+        assert_eq!(
+            merge_text_three_way(base, left, right),
+            Some(ThreeWayMerge::Clean(b"ONE\ntwo\nTHREE\n".to_vec()))
+        );
+    }
+
+    #[test]
+    fn three_way_merge_accepts_identical_edits() {
+        let base = b"one\ntwo\n";
+        let edited = b"one\nTWO\n";
+        assert_eq!(
+            merge_text_three_way(base, edited, edited),
+            Some(ThreeWayMerge::Clean(edited.to_vec()))
+        );
+    }
+
+    #[test]
+    fn three_way_merge_reports_overlapping_edits() {
+        let base = b"one\ntwo\nthree\n";
+        let left = b"one\nLEFT\nthree\n";
+        let right = b"one\nRIGHT\nthree\n";
+        assert_eq!(merge_text_three_way(base, left, right), Some(ThreeWayMerge::Conflict));
+    }
+
+    #[test]
+    fn three_way_merge_rejects_binary_and_oversized_content() {
+        assert_eq!(merge_text_three_way(&[0xff, 0], &[0xff, 1], &[0xff, 2]), None);
+        let large = vec![b'a'; MAX_TEXT_DIFF_BYTES.saturating_add(1)];
+        assert_eq!(merge_text_three_way(b"base", &large, b"right"), None);
     }
 
     #[test]

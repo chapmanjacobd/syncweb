@@ -118,6 +118,52 @@ pub enum CommunityCapability {
     Contribute,
 }
 
+/// A coarse operator-visible role carried by a community invitation.
+///
+/// Capabilities remain the authorization source of truth. Roles provide a
+/// stable label for status and audit output, while validation prevents an
+/// invitation from granting capabilities outside its declared role.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum CommunityRole {
+    Member,
+    Contributor,
+    Relay,
+    Moderator,
+    Owner,
+}
+
+impl CommunityRole {
+    /// Return whether this role permits a capability to be granted.
+    #[must_use]
+    pub const fn allows(self, capability: CommunityCapability) -> bool {
+        match self {
+            Self::Member => matches!(capability, CommunityCapability::Discovery | CommunityCapability::Read),
+            Self::Contributor => matches!(
+                capability,
+                CommunityCapability::Discovery
+                    | CommunityCapability::Read
+                    | CommunityCapability::Pin
+                    | CommunityCapability::Contribute
+            ),
+            Self::Relay => matches!(
+                capability,
+                CommunityCapability::Discovery | CommunityCapability::Read | CommunityCapability::Relay
+            ),
+            Self::Moderator => matches!(
+                capability,
+                CommunityCapability::Discovery
+                    | CommunityCapability::Read
+                    | CommunityCapability::Write
+                    | CommunityCapability::Pin
+                    | CommunityCapability::Relay
+            ),
+            Self::Owner => true,
+        }
+    }
+}
+
 /// Independent permissions carried by a community invitation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -186,6 +232,8 @@ pub struct CommunityInvitation {
     pub issuer: String,
     pub subject: Option<String>,
     pub capabilities: CommunityCapabilities,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<CommunityRole>,
     pub issued_at: u64,
     pub expires_at: Option<u64>,
     pub nonce: String,
@@ -203,6 +251,28 @@ impl CommunityInvitation {
         issued_at: u64,
         expires_at: Option<u64>,
     ) -> Self {
+        Self::new_with_role(
+            community,
+            issuer,
+            subject,
+            capabilities,
+            inferred_role(capabilities),
+            issued_at,
+            expires_at,
+        )
+    }
+
+    /// Construct an unsigned invitation with an explicit operator role.
+    #[must_use]
+    pub fn new_with_role(
+        community: &CommunityIdentity,
+        issuer: PublicKey,
+        subject: Option<PublicKey>,
+        capabilities: CommunityCapabilities,
+        role: CommunityRole,
+        issued_at: u64,
+        expires_at: Option<u64>,
+    ) -> Self {
         Self {
             version: COMMUNITY_INVITATION_VERSION,
             community_id: community.id.to_string(),
@@ -210,11 +280,18 @@ impl CommunityInvitation {
             issuer: issuer.to_string(),
             subject: subject.map(|key| key.to_string()),
             capabilities,
+            role: Some(role),
             issued_at,
             expires_at,
             nonce: hex::encode(rand::random::<[u8; COMMUNITY_NONCE_BYTES]>()),
             signature: String::new(),
         }
+    }
+
+    /// Return this invitation's optional role label.
+    #[must_use]
+    pub const fn role(&self) -> Option<CommunityRole> {
+        self.role
     }
 
     /// Sign the invitation with the community issuer's identity key.
@@ -350,6 +427,22 @@ impl CommunityInvitation {
                 "community invitation must grant at least one capability".to_owned(),
             ));
         }
+        if let Some(role) = self.role {
+            for capability in [
+                CommunityCapability::Discovery,
+                CommunityCapability::Read,
+                CommunityCapability::Write,
+                CommunityCapability::Pin,
+                CommunityCapability::Relay,
+                CommunityCapability::Contribute,
+            ] {
+                if self.capabilities.allows(capability) && !role.allows(capability) {
+                    return Err(SyncwebError::InvalidTicket(format!(
+                        "community invitation role {role:?} cannot grant {capability:?}"
+                    )));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -401,6 +494,20 @@ fn validate_name(name: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+const fn inferred_role(capabilities: CommunityCapabilities) -> CommunityRole {
+    if capabilities.contribute && (capabilities.write || capabilities.relay) {
+        CommunityRole::Owner
+    } else if capabilities.contribute || capabilities.pin {
+        CommunityRole::Contributor
+    } else if capabilities.write {
+        CommunityRole::Moderator
+    } else if capabilities.relay {
+        CommunityRole::Relay
+    } else {
+        CommunityRole::Member
+    }
 }
 
 #[cfg(test)]
@@ -459,6 +566,44 @@ mod tests {
         assert!(!capabilities.allows(CommunityCapability::Write));
         assert!(!capabilities.allows(CommunityCapability::Relay));
         assert!(!capabilities.allows(CommunityCapability::Contribute));
+    }
+
+    #[test]
+    fn roles_bound_capabilities_and_round_trip() {
+        let issuer = key(5);
+        let subject = key(6);
+        let community = CommunityIdentity::new("Role test").expect("valid community");
+        let mut invitation = CommunityInvitation::new_with_role(
+            &community,
+            public_key(&issuer),
+            Some(public_key(&subject)),
+            CommunityCapabilities {
+                discovery: true,
+                read: true,
+                pin: true,
+                ..CommunityCapabilities::default()
+            },
+            CommunityRole::Contributor,
+            100,
+            None,
+        );
+        invitation.sign(&issuer).expect("role invitation should sign");
+        let decoded = CommunityInvitation::from_bytes(invitation.to_bytes().expect("encode")).expect("decode");
+        assert_eq!(decoded.role(), Some(CommunityRole::Contributor));
+        decoded
+            .validate(100, Some(community.id))
+            .expect("role invitation should validate");
+
+        let mut invalid = CommunityInvitation::new_with_role(
+            &community,
+            public_key(&issuer),
+            None,
+            CommunityCapabilities::all(),
+            CommunityRole::Member,
+            100,
+            None,
+        );
+        assert!(invalid.sign(&issuer).is_err());
     }
 
     #[test]

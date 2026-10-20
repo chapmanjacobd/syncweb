@@ -360,19 +360,22 @@ fn test_track_peer_availability() -> anyhow::Result<()> {
 
 #[test]
 fn test_peer_tracker_multiple_peers_per_blob() -> anyhow::Result<()> {
-    let a = SecretKey::generate().public();
-    let b = SecretKey::generate().public();
-    let c = SecretKey::generate().public();
+    let a = SecretKey::from_bytes(&[1; 32]).public();
+    let b = SecretKey::from_bytes(&[2; 32]).public();
+    let c = SecretKey::from_bytes(&[3; 32]).public();
     let mut tracker = PeerTracker::new(10, EvictionStrategy::Lru);
 
+    tracker.record_peer(blob(1), c);
     tracker.record_peer(blob(1), a);
     tracker.record_peer(blob(1), b);
-    tracker.record_peer(blob(1), c);
 
     anyhow::ensure!(tracker.peer_count(&blob(1)) == 3);
     ensure!(tracker.contains(&blob(1), &a));
     ensure!(tracker.contains(&blob(1), &b));
     ensure!(tracker.contains(&blob(1), &c));
+    let mut expected = vec![a, b, c];
+    expected.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+    ensure!(tracker.get_peers(&blob(1)) == expected);
     Ok(())
 }
 

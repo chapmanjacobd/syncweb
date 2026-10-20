@@ -4971,6 +4971,7 @@ dependencies = [
  "serde_json",
  "syncweb-core",
  "tokio",
+ "tokio-util",
  "toml",
  "tracing",
  "tracing-appender",

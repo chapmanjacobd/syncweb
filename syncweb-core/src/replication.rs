@@ -334,7 +334,7 @@ impl RepairPolicy {
         self.retry_at_seed(hash_seed ^ owner_seed, failed_at)
     }
 
-    fn retry_at_seed(self, seed: u64, failed_at: u64) -> u64 {
+    const fn retry_at_seed(self, seed: u64, failed_at: u64) -> u64 {
         let span = self.jitter_window.saturating_add(1);
         let offset = if span == 0 { 0 } else { seed % span };
         failed_at.saturating_add(offset)
@@ -386,7 +386,7 @@ impl ReplicationController {
 
     /// Configure deterministic repair spreading for this controller.
     #[must_use]
-    pub fn with_repair_policy(mut self, policy: RepairPolicy, owner: Option<PublicKey>) -> Self {
+    pub const fn with_repair_policy(mut self, policy: RepairPolicy, owner: Option<PublicKey>) -> Self {
         self.repair_policy = policy;
         self.repair_owner = owner;
         self
@@ -516,13 +516,11 @@ impl ReplicationController {
                 );
 
             let mut eligible = providers
-                .iter()
-                .cloned()
-                .filter(|provider| {
+                .iter().filter(|&provider| {
                     provider.eligible_at(now)
                         && !known.contains(&provider.provider)
                         && !confirmed.contains(&provider.provider)
-                })
+                }).cloned()
                 .collect::<Vec<_>>();
             eligible.sort_by(|left, right| {
                 right

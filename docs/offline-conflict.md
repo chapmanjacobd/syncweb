@@ -47,6 +47,10 @@ impl OfflineQueue {
 When two devices edit the same file offline, iroh-docs detects the conflict (two entries for the same key from different authors). We provide automatic resolution with clear UX:
 
 Resolution strategy (default):
+- When a previously materialized common ancestor is available, attempt a
+  bounded UTF-8 line-based three-way merge of the two divergent edits. A clean
+  merge is stored as a new local CRDT entry and materialized at the canonical
+  path; overlapping edits fall through to the artifact behavior below.
 - Best-effort: at decode time, attempt to read both versions as text (UTF-8)
 - If both versions are decodable as text and the generated diff is smaller than the latest LWW winner, save a diff file instead of the full file
 - Otherwise, save the full file (both versions kept)

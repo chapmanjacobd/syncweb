@@ -31,8 +31,10 @@ const COPY_BUFFER_SIZE: usize = 64 * 1024;
 /// Select which content a drop contributes to an archive.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum DropExportMode {
     /// Export every entry in the selected collection version.
+    #[default]
     Collection,
     /// Export only the listed blocks that are missing at the destination.
     MissingBlocks(BTreeSet<Hash>),
@@ -42,14 +44,9 @@ pub enum DropExportMode {
     Contribution { max_bytes: u64 },
 }
 
-impl Default for DropExportMode {
-    fn default() -> Self {
-        Self::Collection
-    }
-}
 
 impl DropExportMode {
-    fn label(&self) -> &'static str {
+    const fn label(&self) -> &'static str {
         match self {
             Self::Collection => "collection",
             Self::MissingBlocks(_) => "missing-blocks",

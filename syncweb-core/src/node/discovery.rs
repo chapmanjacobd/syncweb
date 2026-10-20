@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-use crate::error::{Result, SyncwebError};
+use crate::{
+    error::{Result, SyncwebError},
+    provider_lease::ProviderLease,
+};
 
 /// How often a node republishes its address presence record and refreshes its
 /// view of peers for the DHT topic.
@@ -43,6 +46,8 @@ struct PresenceRecord {
     tag: [u8; 8],
     node_id: [u8; 32],
     addrs: Vec<TransportAddr>,
+    #[serde(default)]
+    lease: Option<ProviderLease>,
 }
 
 /// A joined topic and the record publishers used to read/write the DHT.
@@ -92,6 +97,7 @@ pub struct TopicTracker {
     gossip: Gossip,
     topics: Arc<Mutex<HashMap<[u8; 32], TopicEntry>>>,
     peers: PeerCache,
+    leases: Arc<Mutex<HashMap<[u8; 32], ProviderLease>>>,
     endpoint: Endpoint,
     relay_addr: Option<CustomAddr>,
     dht_config: DhtDiscoveryConfig,
@@ -109,6 +115,7 @@ impl TopicTracker {
             gossip: gossip.clone(),
             topics: Arc::new(Mutex::new(HashMap::new())),
             peers: Arc::new(Mutex::new(HashMap::new())),
+            leases: Arc::new(Mutex::new(HashMap::new())),
             endpoint: endpoint.clone(),
             relay_addr,
             dht_config,
@@ -159,6 +166,93 @@ impl TopicTracker {
         Ok(peers.into_values().collect())
     }
 
+    /// Publish one signed, bounded provider lease alongside this node's
+    /// presence record for a namespace.
+    ///
+    /// The lease remains advisory: callers still need to verify content bytes
+    /// before treating a provider as authoritative. A lease for another
+    /// provider or namespace is rejected before it is published.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the lease identity or namespace does not match
+    /// this tracker, or when the discovery record cannot be published.
+    pub async fn publish_provider_lease(&self, namespace_id: NamespaceId, lease: ProviderLease) -> Result<()> {
+        let provider = lease.provider_id()?;
+        if provider != self.endpoint.id() {
+            return Err(SyncwebError::AccessDenied(
+                "provider lease identity does not match the local endpoint".to_owned(),
+            ));
+        }
+        if lease.folder != namespace_id.to_string() {
+            return Err(SyncwebError::AccessDenied(
+                "provider lease namespace does not match the discovery topic".to_owned(),
+            ));
+        }
+        lease.verify()?;
+        let entry = self.topic(namespace_id).await?;
+        let key = *namespace_id.as_bytes();
+        self.leases.lock().await.insert(key, lease.clone());
+        publish_presence(
+            &entry,
+            &self.endpoint,
+            self.relay_addr.as_ref(),
+            Some(lease),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+        Ok(())
+    }
+
+    /// Return verified provider leases discovered for a namespace.
+    ///
+    /// Invalid or stale records are ignored as untrusted remote input. The
+    /// caller can apply its own community and expiry policy before ingesting a
+    /// lease into the provider registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the topic cannot be joined or DHT records cannot
+    /// be read.
+    pub async fn find_provider_leases(&self, namespace_id: NamespaceId) -> Result<Vec<ProviderLease>> {
+        let entry = self.topic(namespace_id).await?;
+        let mut leases = HashMap::new();
+        let now = distributed_topic_tracker::unix_minute(0);
+        for minute in [now.saturating_sub(1), now] {
+            let records = entry
+                .bootstrap
+                .get_records(minute, tokio_util::sync::CancellationToken::new())
+                .await
+                .map_err(|error| SyncwebError::operation("failed to read discovery leases", error))?;
+            for record in records {
+                let Ok(presence) = record.content::<PresenceRecord>() else {
+                    continue;
+                };
+                if presence.tag != PRESENCE_TAG {
+                    continue;
+                }
+                let Some(lease) = presence.lease else {
+                    continue;
+                };
+                if lease.folder != namespace_id.to_string() || lease.verify().is_err() {
+                    continue;
+                }
+                let Ok(provider) = lease.provider_id() else {
+                    continue;
+                };
+                let replace = leases
+                    .get(&provider)
+                    .is_none_or(|existing: &ProviderLease| lease.observed_at > existing.observed_at);
+                if replace {
+                    leases.insert(provider, lease);
+                }
+            }
+        }
+        let mut leases: Vec<_> = leases.into_values().collect();
+        leases.sort_by(|left, right| left.provider.cmp(&right.provider));
+        Ok(leases)
+    }
+
     async fn topic(&self, namespace_id: NamespaceId) -> Result<TopicEntry> {
         let key = *namespace_id.as_bytes();
         let existing = self.topics.lock().await.get(&key).cloned();
@@ -195,6 +289,7 @@ impl TopicTracker {
             self.endpoint.clone(),
             self.relay_addr.clone(),
             self.peers.clone(),
+            self.leases.clone(),
             key,
         );
         Ok(entry)
@@ -216,6 +311,7 @@ impl TopicTracker {
         endpoint: Endpoint,
         relay_addr: Option<CustomAddr>,
         peers: PeerCache,
+        leases: Arc<Mutex<HashMap<[u8; 32], ProviderLease>>>,
         topic_key: [u8; 32],
     ) {
         tokio::spawn(async move {
@@ -225,7 +321,8 @@ impl TopicTracker {
             let own_id = endpoint.id();
             loop {
                 ticker.tick().await;
-                publish_presence(&entry, &endpoint, relay_addr.as_ref(), cancel.clone()).await;
+                let lease = leases.lock().await.get(&topic_key).cloned();
+                publish_presence(&entry, &endpoint, relay_addr.as_ref(), lease, cancel.clone()).await;
                 let discovered = collect_peers(&entry, own_id, cancel.clone()).await;
                 peers.lock().await.insert(topic_key, discovered);
             }
@@ -260,12 +357,14 @@ async fn publish_presence(
     entry: &TopicEntry,
     endpoint: &Endpoint,
     relay_addr: Option<&CustomAddr>,
+    lease: Option<ProviderLease>,
     cancel: tokio_util::sync::CancellationToken,
 ) {
     let content = PresenceRecord {
         tag: PRESENCE_TAG,
         node_id: *endpoint.id().as_bytes(),
         addrs: presence_addrs(endpoint, relay_addr),
+        lease,
     };
     let Ok(record) = entry
         .presence

@@ -15,17 +15,18 @@ pub mod subscribe;
 
 pub use actor::{Actor, ActorHandle, ActorPanic};
 pub use conflict::{
-    ConflictReport, ConflictVariant, MaterializeOutcome, MaterializeSummary, conflict_path, diff_path, list_conflicts,
-    materialize_folder_content, resolve_conflict_artifacts, select_winner,
+    ConflictReport, ConflictVariant, MaterializeOutcome, MaterializeSummary, ThreeWayMerge, conflict_path, diff_path,
+    list_conflicts, materialize_folder_content, merge_text_three_way, resolve_conflict_artifacts, select_winner,
 };
 pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};
 pub use intents::{IntentControl, IntentHandle, SyncCommand, SyncEvent};
 pub use lazy_fetch::LazyFetch;
 pub use partial_fetch::{
-    BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, TransferReport, TransferRequest,
-    TransferScheduler, TransferSchedulerConfig, TransferSegment, fetch_blob_requests, fetch_selected_content,
-    fetch_selected_content_with_cancel, materialize_selected_content, strategy_selects_only_local,
+    BlobHealth, FetchCandidate, FetchFilter, FetchStrategy, HealthReport, SegmentAssembler, SegmentChunk,
+    TransferReport, TransferRequest, TransferScheduler, TransferSchedulerConfig, TransferSegment, fetch_blob_requests,
+    fetch_selected_content, fetch_selected_content_with_cancel, materialize_selected_content,
+    strategy_selects_only_local,
 };
 pub use peer_tracker::{
     DEFAULT_MAX_PEERS_PER_BLOB, EfficientPeerCache, EvictionStrategy, ObservationSource, PeerTracker,

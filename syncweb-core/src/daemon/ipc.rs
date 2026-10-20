@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 #[cfg(unix)]
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     bandwidth_stats::{FileStatsCollector, FileStatsReport},
@@ -33,7 +34,7 @@ use crate::{
     storage::node_db::NodeDatabase,
     sync::{
         ActiveSession, AreaFilter, ConflictReport, FetchFilter, FetchStrategy, SubscribeParams, SyncEngine, SyncEvent,
-        cancel_session, list_conflicts,
+        TransferRequest, TransferScheduler, TransferSchedulerConfig, cancel_session, list_conflicts,
     },
     verify::IntegrityChecker,
 };
@@ -2942,6 +2943,7 @@ impl IpcServer {
                 pct_seeded,
             });
         }
+        per_blob.sort_by(|left, right| left.path.cmp(&right.path).then(left.hash.cmp(&right.hash)));
         IpcResponse::PeerAvailability(Box::new(PeerAvailabilityReport {
             folder: namespace_str,
             peers,
@@ -3030,6 +3032,22 @@ impl IpcServer {
             .find_peers(namespace_id)
             .await
             .unwrap_or_default();
+        let scheduler = match TransferScheduler::new(TransferSchedulerConfig::default()) {
+            Ok(scheduler) => scheduler,
+            Err(error) => {
+                tracing::error!(%error, "failed to configure daemon repair scheduler");
+                for item in corrupted {
+                    result.attempted = result.attempted.saturating_add(1);
+                    result.failed.push(crate::verify::RepairOutcome {
+                        path: item.path.clone(),
+                        hash: item.expected_hash,
+                        success: false,
+                        error: Some(error.to_string()),
+                    });
+                }
+                return result;
+            }
+        };
 
         for item in corrupted {
             result.attempted = result.attempted.saturating_add(1);
@@ -3048,16 +3066,31 @@ impl IpcServer {
                     discovered_peers.clone()
                 }
             };
-            let repaired = crate::node::blob_store::try_fetch_first_working(&candidate_tickets, |ticket| {
-                context.node.force_fetch(ticket)
-            })
-            .await
-            .is_ok()
-                || crate::node::blob_store::try_fetch_first_working(&scheduled_peers, |peer| async {
-                    context.node.force_fetch_from_peer(peer, hash).await
-                })
+            let mut peers = Vec::with_capacity(candidate_tickets.len().saturating_add(scheduled_peers.len()));
+            for ticket in &candidate_tickets {
+                if !peers
+                    .iter()
+                    .any(|peer: &iroh::EndpointAddr| peer.id == ticket.addr().id)
+                {
+                    peers.push(ticket.addr().clone());
+                }
+            }
+            for peer in scheduled_peers {
+                if !peers
+                    .iter()
+                    .any(|candidate: &iroh::EndpointAddr| candidate.id == peer.id)
+                {
+                    peers.push(peer);
+                }
+            }
+            let repaired = scheduler
+                .fetch(
+                    &context.node,
+                    vec![TransferRequest::new(hash, 0, peers)],
+                    CancellationToken::new(),
+                )
                 .await
-                .is_ok();
+                .is_ok_and(|report| report.completed == 1);
             if repaired {
                 result.repaired = result.repaired.saturating_add(1);
             } else {

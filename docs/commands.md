@@ -572,7 +572,7 @@ syncweb config set discovery.interface eth0
 | | `package publish` | Publish a package manifest ticket and announce it to the catalog |
 | | `package info` | Detailed package metadata |
 | | `package export` | Export package versions as compressed `.car.zst` drops |
-| | `package import` | Import and install a compressed `.car.zst` drop |
+| | `package import` | Import and install a compressed `.car.zst` drop (`--no-seeding` keeps imported blocks local) |
 | | `package install` | Fetch + verify + install package |
 | | `package upgrade` | Update to latest version |
 | | `package remove` | Remove installed package |
@@ -791,16 +791,10 @@ beacon_interval_ms = 1000
 # Applies to the beacon only; mDNS always uses the default multicast
 # interface.
 # interface = "eth0"
-
-[discovery.topic_tracker]
-# distributed-topic-tracker settings
-enabled = true
-# Rate limit for DHT writes (records per minute per topic)
-dht_write_limit = 5
-# Bubble detection threshold (merge if fewer than N neighbors)
-bubble_threshold = 4
-# Secret rotation strategy: "sha512" (default)
-secret_rotation = "sha512"
+# Maximum DHT bootstrap records published per topic and minute.
+dht_max_records_per_minute = 5
+# Minimum interval between DHT discovery polls, in milliseconds.
+dht_read_interval_ms = 2000
 
 [folders]
 default_path = "~/IrohSyncweb"

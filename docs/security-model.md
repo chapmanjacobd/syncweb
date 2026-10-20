@@ -132,6 +132,22 @@ Capability links are enforced at blob serve time — the requesting peer must be
 
 The `default/` daemon has no network membership concept. It applies no peer allowlist — any authenticated peer can connect and download any blob. This is the fully public mode. Users who want access control should adopt named networks.
 
+### Community Trust Boundaries
+
+Treat the three common participation modes as different trust boundaries:
+
+| Community mode | What is protected | Operator responsibility |
+|---|---|---|
+| Open LAN (`default/`) | Content integrity and authenticated transport only; there is no membership allowlist | Do not place sensitive content in the default daemon. Anyone who can obtain a valid peer address can request content exposed by that daemon. |
+| Named private network (`--network <name>`) | Separate data directory, identity, discovery scope, and membership-gated ALPN connections | Distribute invitations out of band, remove departed members, and rotate the network identity if its key is compromised. A removed peer keeps content it already downloaded. |
+| Offline-imported community | CAR/BLAKE3 integrity and signed collection metadata, independent of live reachability | Verify the archive before import, treat its community and provider hints as untrusted metadata, and use `package import --no-seeding` when the local node must not advertise the imported blocks. |
+
+Offline import does not grant access to a named network and does not prove that
+the source community is still trusted. A successful import means only that the
+archive's manifest and content blocks passed local verification; enrolling the
+node as an availability observation is a separate, explicit policy step after
+the import and publication have completed.
+
 ### Identity per Network
 
 Each per-network daemon uses a separate Ed25519 identity key (`data_dir/<network>/identity.key`), generated on first run. This means:

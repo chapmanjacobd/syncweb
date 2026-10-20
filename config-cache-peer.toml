@@ -1,0 +1,17 @@
+# Dedicated LAN cache-peer defaults.
+# Favor availability and throughput while retaining an explicit upload budget.
+[schedule]
+active_hours = ""
+
+[transfer_limits]
+max_upload_per_day = "20G"
+max_download_per_day = "20G"
+
+[parallel]
+threads = 0
+
+[cache]
+max_cache_size = 100000
+
+[advanced]
+blob_cache_size_gb = 50

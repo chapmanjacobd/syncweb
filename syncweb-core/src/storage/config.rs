@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, SyncwebError};
 use crate::net::RelayConfig;
+use crate::node::discovery::{DEFAULT_DHT_MAX_RECORDS_PER_MINUTE, DEFAULT_DHT_READ_INTERVAL};
 use crate::schedule::{ScheduleConfig, TimeWindow};
 use crate::transfer_limits::TransferLimitsConfig;
 
@@ -124,6 +125,16 @@ impl Config {
                 })?;
             }
             "discovery.interface" => self.discovery.interface = Some(value.to_owned()),
+            "discovery.dht_max_records_per_minute" => {
+                self.discovery.dht_max_records_per_minute = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
+            "discovery.dht_read_interval_ms" => {
+                self.discovery.dht_read_interval_ms = value.parse().map_err(|error| {
+                    SyncwebError::InvalidConfig(format!("{key} must be a non-negative integer: {error}"))
+                })?;
+            }
             "default_path" => self.default_path = Some(PathBuf::from(value)),
             "default_sync_mode" => {
                 value.parse::<crate::folder::SyncMode>()?;
@@ -169,7 +180,8 @@ impl Config {
                      transfer_limits.max_upload_per_day, transfer_limits.max_upload_per_month, \
                      parallel.threads, cache.max_cache_size, \
                      advanced.blob_cache_size_gb, discovery.mdns, discovery.beacon, discovery.beacon_base_port, \
-                     discovery.beacon_interval_ms, discovery.interface, default_path, default_sync_mode, \
+                     discovery.beacon_interval_ms, discovery.interface, discovery.dht_max_records_per_minute, \
+                     discovery.dht_read_interval_ms, default_path, default_sync_mode, \
                      <namespace>.subscribe, channels.<name>.ticket"
                 )));
             }
@@ -343,6 +355,13 @@ pub struct DiscoveryConfig {
     /// Restrict the beacon to a single network interface by name, if any.
     #[serde(default)]
     pub interface: Option<String>,
+    /// Maximum DHT bootstrap records published per topic and minute (default: 5).
+    #[serde(default = "default_dht_max_records_per_minute")]
+    pub dht_max_records_per_minute: usize,
+    /// Minimum interval between DHT discovery polls, in milliseconds
+    /// (default: 2000).
+    #[serde(default = "default_dht_read_interval_ms")]
+    pub dht_read_interval_ms: u64,
 }
 
 impl Default for DiscoveryConfig {
@@ -353,6 +372,8 @@ impl Default for DiscoveryConfig {
             beacon_base_port: default_beacon_base_port(),
             beacon_interval_ms: default_beacon_interval_ms(),
             interface: None,
+            dht_max_records_per_minute: default_dht_max_records_per_minute(),
+            dht_read_interval_ms: default_dht_read_interval_ms(),
         }
     }
 }
@@ -367,6 +388,14 @@ const fn default_beacon_base_port() -> u16 {
 
 const fn default_beacon_interval_ms() -> u64 {
     1_000
+}
+
+const fn default_dht_max_records_per_minute() -> usize {
+    DEFAULT_DHT_MAX_RECORDS_PER_MINUTE
+}
+
+const fn default_dht_read_interval_ms() -> u64 {
+    DEFAULT_DHT_READ_INTERVAL.as_millis() as u64
 }
 
 fn default_sync_mode() -> String {

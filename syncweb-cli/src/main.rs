@@ -534,6 +534,8 @@ async fn handle_start(ctx: &CliContext<'_>, args: StartArgs) -> Result<()> {
         .discovery_interface
         .clone()
         .or_else(|| app_config.discovery.interface.clone());
+    daemon_config.discovery.dht_max_records_per_minute = app_config.discovery.dht_max_records_per_minute;
+    daemon_config.discovery.dht_read_interval = Duration::from_millis(app_config.discovery.dht_read_interval_ms);
     let daemon = Daemon::new(daemon_config).await?;
     let state = daemon.state().await;
     // Log the startup record: `--log-file` is useless if the file stays empty
@@ -4263,9 +4265,13 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
                 handle_package_archive_export(ctx, paths, version, filter).await?;
             }
         }
-        PackageCommand::Import { archives, filter } => {
+        PackageCommand::Import {
+            archives,
+            filter,
+            no_seeding,
+        } => {
             for archive in archives {
-                handle_package_archive_import(ctx, archive, filter.clone()).await?;
+                handle_package_archive_import(ctx, archive, filter.clone(), !no_seeding).await?;
             }
         }
         PackageCommand::Info { ticket, hash, node_id } => {
@@ -4533,6 +4539,7 @@ async fn handle_package_archive_import(
     ctx: &CliContext<'_>,
     archive: std::path::PathBuf,
     filters: Vec<String>,
+    seed: bool,
 ) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
@@ -4556,6 +4563,7 @@ async fn handle_package_archive_import(
                 archive.clone(),
                 staging.clone(),
                 filter.as_ref().map(FilterEngine::config),
+                seed,
             )
             .await?;
         if packages
@@ -4589,7 +4597,8 @@ async fn handle_package_archive_import(
                     "new_blocks": result.local_missing_block_count,
                     "reused_blocks": result.local_reused_block_count,
                     "local_availability": result.local_availability_count,
-                    "provider_lease": "pending",
+                    "provider_lease": if seed { "pending" } else { "disabled" },
+                    "seeding": if seed { "enabled" } else { "disabled" },
                     "namespace": result.namespace_id.map(|id| id.to_string()),
                 })
             );
@@ -4654,7 +4663,9 @@ async fn handle_package_archive_import(
         .publish(&result.collection_manifest, 1)
         .await?;
     let namespace = folder.namespace_id();
-    result.record_local_availability(&node)?;
+    if seed {
+        result.record_local_availability(&node)?;
+    }
     node.stop().await?;
 
     if output_json {
@@ -4672,7 +4683,8 @@ async fn handle_package_archive_import(
                 "new_blocks": result.local_missing_block_count,
                 "reused_blocks": result.local_reused_block_count,
                 "local_availability": result.local_availability_count,
-                "provider_lease": "pending",
+                "provider_lease": if seed { "pending" } else { "disabled" },
+                "seeding": if seed { "enabled" } else { "disabled" },
                 "namespace": namespace,
             })
         );

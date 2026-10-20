@@ -148,6 +148,10 @@ impl IpcTransport for UnixSocketTransport {
     }
 }
 
+const fn default_seed_import() -> bool {
+    true
+}
+
 /// A request sent over the local daemon control channel.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -224,6 +228,8 @@ pub enum IpcCommand {
         input: PathBuf,
         target: PathBuf,
         filter: Option<FilterConfig>,
+        #[serde(default = "default_seed_import")]
+        seed: bool,
     },
     ExportArchive {
         namespace: String,
@@ -1180,8 +1186,9 @@ impl IpcServer {
         input: PathBuf,
         target: PathBuf,
         filter: Option<FilterConfig>,
+        seed: bool,
     ) -> IpcResponse {
-        match self.handle_import_archive(input, target, filter).await {
+        match self.handle_import_archive(input, target, filter, seed).await {
             Ok(result) => IpcResponse::ImportComplete(Box::new(result)),
             Err(error) => response_from_error(error),
         }
@@ -1260,9 +1267,12 @@ impl IpcServer {
     async fn handle_folder_group(&self, cmd: IpcCommand) -> IpcResponse {
         use IpcCommand as C;
         match cmd {
-            C::ImportArchive { input, target, filter } => {
-                self.handle_import_archive_response(input, target, filter).await
-            }
+            C::ImportArchive {
+                input,
+                target,
+                filter,
+                seed,
+            } => self.handle_import_archive_response(input, target, filter, seed).await,
             C::ImportFiles { namespace, path } => self.handle_import_files_response(namespace, path).await,
             C::WatchOnce {
                 namespace,
@@ -1947,6 +1957,7 @@ impl IpcServer {
         input: PathBuf,
         target: PathBuf,
         filter: Option<FilterConfig>,
+        seed: bool,
     ) -> Result<DropImportResult> {
         let context = self.archive_context.clone().ok_or_else(|| {
             SyncwebError::operation("daemon archive IPC is unavailable", "server has no node context")
@@ -1965,7 +1976,9 @@ impl IpcServer {
             .publish(&result.collection_manifest, 1)
             .await?;
         result.namespace_id = Some(folder.namespace_id());
-        result.record_local_availability(&context.node)?;
+        if seed {
+            result.record_local_availability(&context.node)?;
+        }
         Ok(result)
     }
 
@@ -4078,9 +4091,18 @@ impl IpcClient {
         input: PathBuf,
         target: PathBuf,
         filter: Option<FilterConfig>,
+        seed: bool,
     ) -> Result<DropImportResult> {
         let response = self
-            .request(IpcCommand::ImportArchive { input, target, filter }, "import archive")
+            .request(
+                IpcCommand::ImportArchive {
+                    input,
+                    target,
+                    filter,
+                    seed,
+                },
+                "import archive",
+            )
             .await?;
         if let IpcResponse::ImportComplete(result) = response {
             Ok(*result)

@@ -16,7 +16,7 @@ use crate::sync::{EvictionStrategy, ObservationSource, PeerTracker};
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
 use super::blob_store::BlobStore;
-use super::discovery::TopicTracker;
+use super::discovery::{DhtDiscoveryConfig, TopicTracker};
 use super::docs_engine::DocsEngine;
 use super::identity::IdentityManager;
 use super::membership_hook::MembershipHook;
@@ -50,6 +50,10 @@ pub struct DiscoveryConfig {
     pub interface: Option<String>,
     /// 16-byte discovery scope derived from the network name, if any.
     pub scope: Option<[u8; 16]>,
+    /// Maximum number of DHT bootstrap records published per topic and minute.
+    pub dht_max_records_per_minute: usize,
+    /// Minimum interval between DHT discovery polls.
+    pub dht_read_interval: Duration,
 }
 
 impl Default for DiscoveryConfig {
@@ -61,6 +65,8 @@ impl Default for DiscoveryConfig {
             beacon_interval: Duration::from_secs(1),
             interface: None,
             scope: None,
+            dht_max_records_per_minute: crate::node::discovery::DEFAULT_DHT_MAX_RECORDS_PER_MINUTE,
+            dht_read_interval: crate::node::discovery::DEFAULT_DHT_READ_INTERVAL,
         }
     }
 }
@@ -76,6 +82,8 @@ impl DiscoveryConfig {
             beacon_interval: Duration::from_secs(1),
             interface: None,
             scope: None,
+            dht_max_records_per_minute: crate::node::discovery::DEFAULT_DHT_MAX_RECORDS_PER_MINUTE,
+            dht_read_interval: crate::node::discovery::DEFAULT_DHT_READ_INTERVAL,
         }
     }
 }
@@ -324,7 +332,12 @@ impl IrohNode {
         let blob_store = BlobStore::new_with_address_lookup(&blobs, address_lookup);
         let relay_addr = relay.as_ref().map(RelayManager::local_addr);
         let docs_engine = DocsEngine::new(&docs, blobs.store(), endpoint.id(), relay_addr.clone());
-        let topic_tracker = TopicTracker::new(&gossip, &endpoint, relay_addr);
+        let topic_tracker = TopicTracker::new(
+            &gossip,
+            &endpoint,
+            relay_addr,
+            DhtDiscoveryConfig::new(discovery.dht_max_records_per_minute, discovery.dht_read_interval),
+        );
 
         Ok(Self {
             endpoint,

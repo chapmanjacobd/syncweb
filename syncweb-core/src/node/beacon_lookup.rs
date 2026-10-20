@@ -64,7 +64,30 @@ const LOOKUP_DURATION: Duration = Duration::from_secs(10);
 const MAX_DATAGRAM_SIZE: usize = 2_048;
 
 /// Number of beacons sent back-to-back when the published data changes.
-const BURST_COUNT: usize = 3;
+/// Number of immediate broadcasts sent when endpoint data changes.
+pub const BEACON_BURST_COUNT: usize = 3;
+
+/// Estimate beacon datagrams sent by one node in one minute.
+///
+/// The estimate is intentionally conservative: it counts one periodic send
+/// for every interval plus the change-notification burst, multiplied by the
+/// number of broadcast targets. Endpoint data is the only payload carried by
+/// the beacon; inventories use the scoped gossip/DHT control plane instead.
+#[must_use]
+pub fn beacon_datagrams_per_minute(interval: Duration, target_count: usize) -> u64 {
+    if target_count == 0 {
+        return 0;
+    }
+    let interval_ms = interval.as_millis().max(1);
+    let periodic_sends = 60_000_u128
+        .saturating_add(interval_ms.saturating_sub(1))
+        .checked_div(interval_ms)
+        .unwrap_or(u128::MAX);
+    let total = periodic_sends
+        .saturating_add(BEACON_BURST_COUNT as u128)
+        .saturating_mul(target_count as u128);
+    u64::try_from(total).unwrap_or(u64::MAX)
+}
 
 /// A single interface with its IPv4 address and directed broadcast address.
 struct InterfaceInfo {
@@ -191,7 +214,7 @@ impl BeaconAddressLookup {
                             Some(Message::Publish(data)) => {
                                 debug!("beacon data published");
                                 advertised = Some(data.clone());
-                                for _ in 0..BURST_COUNT {
+                                for _ in 0..BEACON_BURST_COUNT {
                                     broadcast_beacon(&send_socket, &targets, Some(data.as_ref()), scope, endpoint_id).await;
                                 }
                             }
@@ -608,5 +631,12 @@ mod tests {
         handle_discovered(&message, id_a, Some(scope_a), &mut peers, &mut pending).await;
         assert!(peers.is_empty());
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn beacon_budget_counts_periodic_and_change_broadcasts() {
+        assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(60), 1), 4);
+        assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(1), 2), 126);
+        assert_eq!(beacon_datagrams_per_minute(Duration::from_secs(1), 0), 0);
     }
 }

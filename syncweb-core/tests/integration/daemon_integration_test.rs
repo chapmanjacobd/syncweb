@@ -395,6 +395,7 @@ async fn test_daemon_import_export_archive_via_ipc() -> Result<()> {
             input: archive_path.clone(),
             target: target.clone(),
             filter: None,
+            seed: true,
         }))
         .await?;
     ensure!(matches!(import_response, IpcResponse::ImportComplete(_)));

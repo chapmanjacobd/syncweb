@@ -1,5 +1,6 @@
 use distributed_topic_tracker::{
-    AutoDiscoveryGossip, Config, DefaultSecretRotation, RecordPublisher, RotationHandle, Topic, TopicId,
+    AutoDiscoveryGossip, BootstrapConfig, Config, DefaultSecretRotation, RecordPublisher, RotationHandle, Topic,
+    TopicId,
 };
 use ed25519_dalek::SigningKey;
 use iroh::{Endpoint, EndpointAddr, PublicKey, TransportAddr};
@@ -23,6 +24,13 @@ use crate::error::{Result, SyncwebError};
 /// loop, reads other nodes' presence records so `find_peers` can return
 /// resolved addresses instead of bare node ids.
 const PRESENCE_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Default maximum number of bootstrap records published per topic and DHT
+/// minute slot.
+pub const DEFAULT_DHT_MAX_RECORDS_PER_MINUTE: usize = 5;
+
+/// Default interval between DHT discovery polls.
+pub const DEFAULT_DHT_READ_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Marker distinguishing a presence record from the tracker's own bootstrap
 /// records, which carry a fixed `GossipRecordContent` layout. A peer ignores
@@ -48,6 +56,37 @@ struct TopicEntry {
 /// Peer addresses discovered per topic, keyed by topic hash.
 type PeerCache = Arc<Mutex<HashMap<[u8; 32], HashMap<PublicKey, EndpointAddr>>>>;
 
+/// Budgets for the DHT-backed discovery control plane.
+///
+/// The write budget is enforced by distributed-topic-tracker's per-minute
+/// bootstrap record limit. The read budget controls how often a topic polls
+/// the DHT for new bootstrap records.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct DhtDiscoveryConfig {
+    pub max_records_per_minute: usize,
+    pub read_interval: Duration,
+}
+
+impl DhtDiscoveryConfig {
+    #[must_use]
+    pub const fn new(max_records_per_minute: usize, read_interval: Duration) -> Self {
+        Self {
+            max_records_per_minute,
+            read_interval,
+        }
+    }
+}
+
+impl Default for DhtDiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            max_records_per_minute: DEFAULT_DHT_MAX_RECORDS_PER_MINUTE,
+            read_interval: DEFAULT_DHT_READ_INTERVAL,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TopicTracker {
     gossip: Gossip,
@@ -55,17 +94,24 @@ pub struct TopicTracker {
     peers: PeerCache,
     endpoint: Endpoint,
     relay_addr: Option<CustomAddr>,
+    dht_config: DhtDiscoveryConfig,
 }
 
 impl TopicTracker {
     #[must_use]
-    pub fn new(gossip: &Gossip, endpoint: &Endpoint, relay_addr: Option<CustomAddr>) -> Self {
+    pub fn new(
+        gossip: &Gossip,
+        endpoint: &Endpoint,
+        relay_addr: Option<CustomAddr>,
+        dht_config: DhtDiscoveryConfig,
+    ) -> Self {
         Self {
             gossip: gossip.clone(),
             topics: Arc::new(Mutex::new(HashMap::new())),
             peers: Arc::new(Mutex::new(HashMap::new())),
             endpoint: endpoint.clone(),
             relay_addr,
+            dht_config,
         }
     }
 
@@ -124,8 +170,9 @@ impl TopicTracker {
         let secret = namespace_id.as_bytes().to_vec();
         let node_secret = self.endpoint.secret_key().to_bytes();
         let signing_key = SigningKey::from_bytes(&node_secret);
+        let tracker_config = Self::tracker_config(self.dht_config);
         let bootstrap = RecordPublisher::builder(topic_id.clone(), signing_key, secret.clone())
-            .config(Config::default())
+            .config(tracker_config.clone())
             .secret_rotation(RotationHandle::new(DefaultSecretRotation))
             .build();
         let topic = self
@@ -134,7 +181,7 @@ impl TopicTracker {
             .await
             .map_err(|error| SyncwebError::operation("failed to join discovery topic", error))?;
         let presence = RecordPublisher::builder(topic_id, presence_signing_key(&node_secret), secret)
-            .config(Config::default())
+            .config(tracker_config)
             .build();
 
         let entry = TopicEntry {
@@ -151,6 +198,17 @@ impl TopicTracker {
             key,
         );
         Ok(entry)
+    }
+
+    fn tracker_config(config: DhtDiscoveryConfig) -> Config {
+        Config::builder()
+            .bootstrap_config(
+                BootstrapConfig::builder()
+                    .max_bootstrap_records(config.max_records_per_minute)
+                    .discovery_poll_interval(config.read_interval.max(Duration::from_millis(1)))
+                    .build(),
+            )
+            .build()
     }
 
     fn spawn_discovery_loop(

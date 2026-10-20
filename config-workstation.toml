@@ -1,0 +1,17 @@
+# Shared-workstation defaults.
+# Keep background contribution bounded and avoid retaining a large local cache.
+[schedule]
+active_hours = "08:00-20:00"
+
+[transfer_limits]
+max_upload_per_day = "500M"
+max_download_per_day = "5G"
+
+[parallel]
+threads = 2
+
+[cache]
+max_cache_size = 2500
+
+[advanced]
+blob_cache_size_gb = 4

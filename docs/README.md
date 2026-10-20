@@ -18,6 +18,7 @@ Focused documentation for the syncweb design and implementation.
 | [api-reference.md](api-reference.md) | Iroh 1.0.2 API reference + implementation patterns |
 | [archive_format.md](archive_format.md) | Archive format design |
 | [indexing.md](indexing.md) | Opt-in indexing service |
+| [communal-membership.md](communal-membership.md) | Community identities, invitations, and independent capabilities |
 
 Design and user-story documents may describe future behavior, but executable
 support is defined by [status.md](status.md).

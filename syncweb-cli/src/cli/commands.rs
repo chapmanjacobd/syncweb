@@ -956,6 +956,8 @@ pub enum PackageCommand {
         archives: Vec<PathBuf>,
         #[arg(long, value_name = "EXPRESSION")]
         filter: Vec<String>,
+        #[arg(long, help = "Do not enroll imported blocks as locally available providers")]
+        no_seeding: bool,
     },
     #[command(about = "Show a collection manifest from a ticket or blob hash")]
     Info {

@@ -5,6 +5,9 @@ use dashmap::DashMap;
 use iroh::PublicKey;
 use tokio::time::{Instant, sleep};
 
+/// Default maximum number of active gossip neighbors retained per node.
+pub const DEFAULT_MAX_NEIGHBORS: usize = 64;
+
 /// Information about a known peer in the neighbor map.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -41,6 +44,7 @@ impl PeerInfo {
 pub struct NeighborMap {
     peers: Arc<DashMap<PublicKey, PeerInfo>>,
     expiration_timeout: Duration,
+    max_neighbors: usize,
 }
 
 impl NeighborMap {
@@ -50,7 +54,16 @@ impl NeighborMap {
     /// peers not seen within the timeout.
     #[must_use]
     pub fn new(expiration_timeout: Duration) -> Self {
-        let map = Self::new_without_cleanup(expiration_timeout);
+        Self::with_capacity(expiration_timeout, DEFAULT_MAX_NEIGHBORS)
+    }
+
+    /// Create a neighbor map with a bounded active-neighbor set.
+    ///
+    /// A zero capacity is treated as one so a caller cannot accidentally
+    /// disable discovery completely.
+    #[must_use]
+    pub fn with_capacity(expiration_timeout: Duration, max_neighbors: usize) -> Self {
+        let map = Self::new_without_cleanup_with_capacity(expiration_timeout, max_neighbors);
         map.spawn_cleanup_task();
         map
     }
@@ -58,20 +71,30 @@ impl NeighborMap {
     /// Create a neighbor map without automatic cleanup (for testing).
     #[must_use]
     pub fn new_without_cleanup(expiration_timeout: Duration) -> Self {
+        Self::new_without_cleanup_with_capacity(expiration_timeout, DEFAULT_MAX_NEIGHBORS)
+    }
+
+    /// Create a bounded neighbor map without automatic cleanup.
+    #[must_use]
+    pub fn new_without_cleanup_with_capacity(expiration_timeout: Duration, max_neighbors: usize) -> Self {
         Self {
             peers: Arc::new(DashMap::new()),
             expiration_timeout,
+            max_neighbors: max_neighbors.max(1),
         }
     }
 
     /// Record a peer as seen, resetting its staleness timer.
     pub fn touch(&self, node_id: PublicKey, name: Option<&str>) {
-        let mut entry = self.peers.entry(node_id).or_insert_with(|| PeerInfo::new(node_id));
-        entry.touch();
-        if let Some(n) = name {
-            entry.name = Some(n.to_string());
+        {
+            let mut entry = self.peers.entry(node_id).or_insert_with(|| PeerInfo::new(node_id));
+            entry.touch();
+            if let Some(n) = name {
+                entry.name = Some(n.to_string());
+            }
+            entry.connected = true;
         }
-        entry.connected = true;
+        self.trim_to_capacity();
     }
 
     /// Mark a peer as disconnected (without removing it).
@@ -109,6 +132,22 @@ impl NeighborMap {
             .collect()
     }
 
+    /// Return up to `limit` connected peers using a deterministic sample.
+    ///
+    /// The seed changes the sample without requiring a global peer list at the
+    /// caller. Only the bounded, non-expired neighbor set is considered.
+    #[must_use]
+    pub fn sample_connected(&self, limit: usize, seed: u64) -> Vec<PeerInfo> {
+        let mut peers = self.list_connected();
+        peers.sort_by(|left, right| {
+            sample_rank(left.node_id, seed)
+                .cmp(&sample_rank(right.node_id, seed))
+                .then(left.node_id.as_bytes().cmp(right.node_id.as_bytes()))
+        });
+        peers.truncate(limit);
+        peers
+    }
+
     /// Return a reference to the underlying peer map.
     #[must_use]
     pub const fn inner(&self) -> &Arc<DashMap<PublicKey, PeerInfo>> {
@@ -123,6 +162,12 @@ impl NeighborMap {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.peers.is_empty()
+    }
+
+    /// Return the maximum number of neighbors retained by this map.
+    #[must_use]
+    pub const fn max_neighbors(&self) -> usize {
+        self.max_neighbors
     }
 
     /// Manually trigger cleanup of all expired peers.
@@ -166,6 +211,35 @@ impl NeighborMap {
             }
         });
     }
+
+    fn trim_to_capacity(&self) {
+        while self.peers.len() > self.max_neighbors {
+            let candidate = self
+                .peers
+                .iter()
+                .min_by(|left, right| {
+                    left.connected
+                        .cmp(&right.connected)
+                        .then(left.last_seen.cmp(&right.last_seen))
+                        .then(left.key().as_bytes().cmp(right.key().as_bytes()))
+                })
+                .map(|entry| *entry.key());
+            let Some(candidate) = candidate else {
+                break;
+            };
+            self.peers.remove(&candidate);
+        }
+    }
+}
+
+fn sample_rank(node_id: PublicKey, seed: u64) -> u64 {
+    let Some(prefix) = node_id.as_bytes().first_chunk::<8>() else {
+        return seed;
+    };
+    let mut value = u64::from_le_bytes(*prefix).wrapping_add(seed);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
 }
 
 #[cfg(test)]
@@ -311,5 +385,44 @@ mod tests {
 
         let _ = map.cleanup();
         assert_eq!(map.len(), 4);
+    }
+
+    #[test]
+    fn capacity_prefers_connected_and_newer_neighbors() {
+        let map = NeighborMap::new_without_cleanup_with_capacity(Duration::from_mins(1), 2);
+        let stale = test_key(1);
+        let retained = test_key(2);
+        let newest = test_key(3);
+
+        map.touch(stale, None);
+        map.mark_disconnected(&stale);
+        map.touch(retained, None);
+        map.touch(newest, None);
+
+        assert_eq!(map.max_neighbors(), 2);
+        assert_eq!(map.len(), 2);
+        assert!(map.list().iter().all(|peer| peer.node_id != stale));
+    }
+
+    #[test]
+    fn sampled_neighbors_are_bounded_and_seeded() {
+        let map = NeighborMap::new_without_cleanup_with_capacity(Duration::from_mins(1), 5);
+        for id in 1..=5 {
+            map.touch(test_key(id), None);
+        }
+
+        let first = map.sample_connected(3, 7);
+        let second = map.sample_connected(3, 7);
+        let changed = map.sample_connected(3, 8);
+
+        assert_eq!(first.len(), 3);
+        assert_eq!(
+            first.iter().map(|peer| peer.node_id).collect::<Vec<_>>(),
+            second.iter().map(|peer| peer.node_id).collect::<Vec<_>>()
+        );
+        assert_ne!(
+            first.iter().map(|peer| peer.node_id).collect::<Vec<_>>(),
+            changed.iter().map(|peer| peer.node_id).collect::<Vec<_>>()
+        );
     }
 }

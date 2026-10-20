@@ -100,11 +100,27 @@ async fn daemon_ipc_archive_operations_use_shared_pool() -> Result<()> {
             input: archive,
             target: target.clone(),
             filter: None,
+            seed: true,
         }))
         .await;
     ensure!(matches!(import_response, IpcResponse::ImportComplete(_)));
     ensure!(target.join("daemon.txt").is_file());
     ensure!(fs::read(target.join("daemon.txt"))? == content);
+
+    let no_seed_target = directory.path().join("imported-no-seed");
+    let no_seed_response = server
+        .handle_request(IpcRequest::new(IpcCommand::ImportArchive {
+            input: collection_archive,
+            target: no_seed_target.clone(),
+            filter: None,
+            seed: false,
+        }))
+        .await;
+    let IpcResponse::ImportComplete(result) = no_seed_response else {
+        anyhow::bail!("no-seed archive import did not complete");
+    };
+    ensure!(result.local_availability_count == 0);
+    ensure!(no_seed_target.join("daemon.txt").is_file());
     node.stop().await?;
     Ok(())
 }

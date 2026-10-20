@@ -296,6 +296,45 @@ threads = 1  # Single-threaded for battery
 blob_cache_size_gb = 2  # Limited storage
 ```
 
+```toml
+# ~/.config/syncweb/config-workstation.toml
+# Optimized for a shared workstation with bounded background contribution
+
+[schedule]
+active_hours = "08:00-20:00"
+
+[transfer_limits]
+max_upload_per_day = "500M"
+max_download_per_day = "5G"
+
+[parallel]
+threads = 2
+
+[cache]
+max_cache_size = 2500
+```
+
+```toml
+# ~/.config/syncweb/config-cache-peer.toml
+# Optimized for a dedicated LAN cache peer
+
+[schedule]
+active_hours = ""  # always active
+
+[transfer_limits]
+max_upload_per_day = "20G"
+max_download_per_day = "20G"
+
+[parallel]
+threads = 0  # auto-detect
+
+[cache]
+max_cache_size = 100000
+
+[advanced]
+blob_cache_size_gb = 50
+```
+
 Users copy the relevant file to `~/.config/syncweb/config.toml` and customize as needed.
 
 ---
@@ -423,5 +462,3 @@ syncweb watch --exclude ".git/" --exclude "node_modules/" ./documents
 ```
 
 ---
-
-

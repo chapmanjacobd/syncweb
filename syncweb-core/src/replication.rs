@@ -99,8 +99,54 @@ impl ReplicaTarget {
     }
 }
 
+/// The transport path observed for a provider.
+///
+/// This is an advisory ordering hint only. Lease validation, availability, and
+/// capacity checks remain authoritative for provider eligibility.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ProviderPath {
+    Direct,
+    Relay,
+    #[default]
+    Unknown,
+}
+
+/// Advisory topology information used to order eligible providers.
+///
+/// Interface and subnet values are opaque labels supplied by discovery. They
+/// are never used for authorization or community membership decisions.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct ProviderTopology {
+    pub interface: Option<String>,
+    pub subnet: Option<String>,
+    pub latency_ms: Option<u32>,
+    pub path: ProviderPath,
+}
+
+impl ProviderTopology {
+    /// Return a deterministic preference score for provider selection.
+    #[must_use]
+    pub fn preference_score(&self) -> u64 {
+        let path_score = match self.path {
+            ProviderPath::Direct => 3_u64,
+            ProviderPath::Relay => 2,
+            ProviderPath::Unknown => 1,
+        };
+        let locality_score = u64::from(self.interface.is_some()) + u64::from(self.subnet.is_some());
+        let latency_score = self.latency_ms.map_or(0, |latency| {
+            1_000_000_u64.saturating_sub(u64::from(latency).min(1_000_000))
+        });
+        path_score
+            .saturating_mul(2_000_000)
+            .saturating_add(locality_score.saturating_mul(1_000_000))
+            .saturating_add(latency_score)
+    }
+}
+
 /// A provider currently eligible to receive a repair request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct ProviderState {
     pub provider: PublicKey,
@@ -108,12 +154,13 @@ pub struct ProviderState {
     pub available: bool,
     pub capacity_available: bool,
     pub score: u64,
+    pub topology: ProviderTopology,
 }
 
 impl ProviderState {
     /// Return whether this provider may be selected at `now`.
     #[must_use]
-    pub const fn eligible_at(self, now: u64) -> bool {
+    pub const fn eligible_at(&self, now: u64) -> bool {
         self.available && self.capacity_available && now < self.lease_expires_at
     }
 }
@@ -416,7 +463,7 @@ impl ReplicationController {
             .ok_or_else(|| SyncwebError::InvalidConfig("no replica target matches the content scope".to_owned()))?;
         let provider_states: HashMap<PublicKey, ProviderState> = providers
             .iter()
-            .copied()
+            .cloned()
             .map(|provider| (provider.provider, provider))
             .collect();
 
@@ -470,7 +517,7 @@ impl ReplicationController {
 
             let mut eligible = providers
                 .iter()
-                .copied()
+                .cloned()
                 .filter(|provider| {
                     provider.eligible_at(now)
                         && !known.contains(&provider.provider)
@@ -479,9 +526,15 @@ impl ReplicationController {
                 .collect::<Vec<_>>();
             eligible.sort_by(|left, right| {
                 right
-                    .score
-                    .cmp(&left.score)
-                    .then(left.provider.as_bytes().cmp(right.provider.as_bytes()))
+                    .topology
+                    .preference_score()
+                    .cmp(&left.topology.preference_score())
+                    .then(
+                        right
+                            .score
+                            .cmp(&left.score)
+                            .then(left.provider.as_bytes().cmp(right.provider.as_bytes())),
+                    )
             });
             let mut selected_providers = HashSet::new();
             let requests = eligible
@@ -526,6 +579,7 @@ mod tests {
             available: true,
             capacity_available: true,
             score,
+            topology: ProviderTopology::default(),
         }
     }
 
@@ -585,6 +639,41 @@ mod tests {
                 .map(|request| request.provider)
                 .collect::<Vec<_>>(),
             vec![provider(4), provider(3), provider(2)]
+        );
+    }
+
+    #[test]
+    fn topology_hints_prefer_direct_and_local_providers() {
+        let target = ReplicaTarget::new(ReplicaScope::global(), 2, None, 0).expect("valid target");
+        let controller = ReplicationController::new(vec![target]);
+        let content = ReplicaContent::new(hash(5), Vec::new(), Vec::new());
+        let direct = ProviderState {
+            topology: ProviderTopology {
+                interface: Some("lan0".to_owned()),
+                subnet: Some("lan-a".to_owned()),
+                latency_ms: Some(10),
+                path: ProviderPath::Direct,
+            },
+            ..state(1, 1)
+        };
+        let relay = ProviderState {
+            topology: ProviderTopology {
+                latency_ms: Some(1),
+                path: ProviderPath::Relay,
+                ..ProviderTopology::default()
+            },
+            ..state(2, 100)
+        };
+        let plan = controller
+            .reconcile(&ReplicaScope::global(), 10, &[content], &[relay, direct])
+            .expect("matching target");
+
+        assert_eq!(
+            plan.requests()
+                .iter()
+                .map(|request| request.provider)
+                .collect::<Vec<_>>(),
+            vec![provider(1), provider(2)]
         );
     }
 

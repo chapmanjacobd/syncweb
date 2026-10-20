@@ -60,6 +60,28 @@ use the reference host profile above and additionally record transfer
 completion, network traffic, open files, CPU, and memory before its results
 can become a release decision.
 
+### Local discovery control-plane budget
+
+The UDP beacon carries endpoint addresses and an optional relay URL only. It
+does not carry blob inventories, manifests, or provider leases. Named networks
+scope both the beacon port and payload, while the configured beacon interval
+and three-message change burst bound local traffic. For a node with `T`
+broadcast targets and interval `I`, the conservative per-minute estimate is:
+
+```text
+ceil(60 seconds / I) + 3 change broadcasts, multiplied by T
+```
+
+At the default one-second interval and two broadcast targets this is 126
+datagrams per node per minute: 12,600 for 100 nodes, 63,000 for 500 nodes,
+and 126,000 for 1,000 nodes. Operators running larger LANs should increase
+`discovery.beacon_interval_ms`, restrict `discovery.interface`, or disable
+the beacon and use relay/DHT discovery. Inventory reconciliation remains on
+the scoped gossip/DHT control plane, where `dht_max_records_per_minute`
+limits writes per topic and `dht_read_interval_ms` limits discovery polling.
+mDNS is an independent system service and should be included in host packet
+captures when measuring the complete LAN budget.
+
 ### Unit Tests
 - Identity management
 - DeviceId bidirectional conversion (Syncthing ↔ Iroh)

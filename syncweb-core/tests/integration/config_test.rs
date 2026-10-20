@@ -145,3 +145,22 @@ fn transfer_limits_round_trip_and_parse() -> anyhow::Result<()> {
     std::fs::remove_dir_all(directory)?;
     Ok(())
 }
+
+#[test]
+fn discovery_budgets_have_safe_defaults_and_round_trip() -> anyhow::Result<()> {
+    let mut config = Config::default();
+    anyhow::ensure!(config.discovery.dht_max_records_per_minute == 5);
+    anyhow::ensure!(config.discovery.dht_read_interval_ms == 2_000);
+
+    config.set("discovery.dht_max_records_per_minute", "12")?;
+    config.set("discovery.dht_read_interval_ms", "5000")?;
+    anyhow::ensure!(config.discovery.dht_max_records_per_minute == 12);
+    anyhow::ensure!(config.discovery.dht_read_interval_ms == 5_000);
+
+    let directory = std::env::temp_dir().join(format!("syncweb-config-discovery-{}", uuid::Uuid::new_v4()));
+    let path = directory.join("config.toml");
+    config.save(&path)?;
+    anyhow::ensure!(Config::load(&path)? == config);
+    std::fs::remove_dir_all(directory)?;
+    Ok(())
+}

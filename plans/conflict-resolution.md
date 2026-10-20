@@ -177,8 +177,6 @@ re-import guard exists.
 
 ## 7. Open questions
 
-- Which default when timestamps are equal (author ordering is deterministic but
-  arbitrary; consider a stable hash tie-break).
 - Whether to keep conflict copies indefinitely or garbage-collect them once the
   user acknowledges (ties into `conflicts resolve`).
 - Interaction with `--metadata-only` folders (no local bytes → keep conflicts

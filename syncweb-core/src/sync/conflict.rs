@@ -17,7 +17,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     str,
 };
 
@@ -56,6 +56,69 @@ pub struct MaterializeOutcome {
     pub summary: MaterializeSummary,
     /// Absolute paths that were written (both winners and conflict artifacts).
     pub written: Vec<PathBuf>,
+}
+
+/// Remove acknowledged conflict artifacts from a materialized folder.
+///
+/// This only deletes loser artifacts (`.diff` and `.conflict.<hash>` files);
+/// document entries and the canonical winner are left untouched.
+///
+/// # Errors
+///
+/// Returns an error if the folder entries cannot be read, a logical path is
+/// unsafe to resolve below `mount_root`, or an artifact cannot be removed.
+pub async fn resolve_conflict_artifacts(
+    node: &IrohNode,
+    folder: &SyncwebFolder,
+    mount_root: &Path,
+    selected_path: Option<&Path>,
+) -> Result<usize> {
+    let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
+    let reports = list_conflicts(node, entries).await?;
+    let mut removed = 0_usize;
+    for report in reports {
+        let path = Path::new(&report.path);
+        if selected_path.is_some_and(|selected| selected != path) {
+            continue;
+        }
+        let relative = safe_relative_path(path)?;
+        let diff = mount_root.join(diff_path(relative));
+        if remove_if_exists(&diff).await? {
+            removed = removed.saturating_add(1);
+        }
+        for variant in report.variants.into_iter().filter(|variant| !variant.winner) {
+            let artifact = mount_root.join(conflict_path(relative, variant.hash));
+            if remove_if_exists(&artifact).await? {
+                removed = removed.saturating_add(1);
+            }
+        }
+    }
+    Ok(removed)
+}
+
+fn safe_relative_path(path: &Path) -> Result<&Path> {
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(SyncwebError::operation(
+            "cannot resolve conflict artifacts",
+            format!("unsafe logical path '{}'", path.display()),
+        ));
+    }
+    Ok(path)
+}
+
+async fn remove_if_exists(path: &Path) -> Result<bool> {
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(SyncwebError::operation(
+            "failed to remove conflict artifact",
+            format!("{}: {error}", path.display()),
+        )),
+    }
 }
 
 /// One author-specific variant of a conflicting document entry.

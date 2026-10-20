@@ -14,7 +14,10 @@ pub use crate::snapshot::{Snapshot, SnapshotDiff, SnapshotEntry, SnapshotId, Sna
 pub use archive_export::{DropExportMode, DropExportOptions, DropExportResult, DropExporter};
 pub use archive_format::{DropIndex, DropIndexBlock, DropProviderHint};
 pub use archive_import::{DropImportOptions, DropImportResult, DropImporter, import_archive};
-pub use archive_verify::{DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader};
+pub use archive_verify::{
+    DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_archive_for_community,
+    verify_drop_reader, verify_drop_reader_for_community,
+};
 pub use collection::{
     CollectionEntry, CollectionHead, CollectionManifest, CollectionState, CollectionStore, InstalledCollection,
     PackageDependency, PackageMetadata, PackageProfile,

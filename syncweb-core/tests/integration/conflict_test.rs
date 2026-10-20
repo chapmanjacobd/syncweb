@@ -5,7 +5,7 @@ use syncweb_core::{
     folder::{FolderManager, SyncMode},
     sync::{
         FetchFilter, FetchStrategy, conflict_path, diff_path, list_conflicts, materialize_folder_content,
-        materialize_selected_content, select_winner,
+        materialize_selected_content, resolve_conflict_artifacts, select_winner,
     },
 };
 
@@ -70,8 +70,14 @@ async fn binary_divergence_materializes_a_full_conflict_copy() -> anyhow::Result
 
     let conflict = mount_root.join(conflict_path(Path::new("binary.dat"), loser_hash));
     let loser_bytes_from_store = node.blob_store().get(loser_hash).await?;
-    anyhow::ensure!(tokio::fs::read(conflict).await? == loser_bytes_from_store.as_ref());
+    anyhow::ensure!(tokio::fs::read(&conflict).await? == loser_bytes_from_store.as_ref());
     anyhow::ensure!(!mount_root.join("binary.dat.diff").exists());
+
+    let removed = resolve_conflict_artifacts(&node, &folder, &mount_root, None).await?;
+    anyhow::ensure!(removed == 1);
+    anyhow::ensure!(mount_root.join("binary.dat").exists());
+    anyhow::ensure!(!conflict.exists());
+    anyhow::ensure!(resolve_conflict_artifacts(&node, &folder, &mount_root, None).await? == 0);
 
     node.stop().await?;
     Ok(())
@@ -204,6 +210,45 @@ async fn receiveonly_conflict_is_reported_without_materializing_loser() -> anyho
             .join(conflict_path(Path::new("note.txt"), loser_hash))
             .exists()
     );
+
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn metadata_only_conflict_stays_at_document_level_until_content_is_local() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-metadata-only-conflict-test")?;
+    let node = test_node(&directory, "node").await?;
+    let manager = FolderManager::new(&node);
+    let folder = manager.create(SyncMode::SendReceive).await?;
+    folder.set_metadata_only().await?;
+
+    let winner_hash = iroh_blobs::Hash::from_bytes([1; 32]);
+    let loser_hash = iroh_blobs::Hash::from_bytes([2; 32]);
+    let first_author = folder.author();
+    let mut rng = rand::rng();
+    let second_author = node
+        .docs_engine()
+        .import_author(iroh_docs::Author::new(&mut rng))
+        .await?;
+    node.docs_engine()
+        .set_blob(folder.doc(), first_author, "note.txt", winner_hash, 12)
+        .await?;
+    node.docs_engine()
+        .set_blob(folder.doc(), second_author, "note.txt", loser_hash, 11)
+        .await?;
+
+    let entries = folder.docs_engine().list_all_entries(folder.doc()).await?;
+    let reports = list_conflicts(&node, entries).await?;
+    anyhow::ensure!(reports.len() == 1);
+    anyhow::ensure!(reports[0].variants.iter().all(|variant| !variant.local));
+
+    let mount_root = directory.path().join("materialized");
+    let outcome = materialize_folder_content(&node, &manager, folder.namespace_id(), &mount_root).await?;
+    anyhow::ensure!(outcome.summary.materialized == 0);
+    anyhow::ensure!(outcome.summary.conflicts == 0);
+    anyhow::ensure!(outcome.summary.pending == 1);
+    anyhow::ensure!(!mount_root.exists());
 
     node.stop().await?;
     Ok(())

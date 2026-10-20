@@ -58,7 +58,8 @@ pub use folder::archive_export::{DropExportOptions, DropExportResult, DropExport
 pub use folder::archive_import;
 pub use folder::archive_import::{DropImportOptions, DropImportResult, DropImporter, import_archive};
 pub use folder::archive_verify::{
-    DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_drop_reader,
+    DropVerificationResult, DropVerifier, DropVerifyResult, verify_archive, verify_archive_for_community,
+    verify_drop_reader, verify_drop_reader_for_community,
 };
 pub use net::{
     COMMUNITY_CONTENT_TICKET_VERSION, COMMUNITY_INVITATION_VERSION, COMMUNITY_REVOCATION_VERSION, CachePeerConfig,

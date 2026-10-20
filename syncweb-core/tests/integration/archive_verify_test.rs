@@ -9,9 +9,9 @@ use anyhow::{Context as _, Result};
 use async_compression::tokio::write::ZstdEncoder;
 use iroh_blobs::Hash;
 use syncweb_core::{
-    DropVerifier,
+    CommunityId, DropVerifier,
     folder::{CollectionEntry, CollectionManifest},
-    verify_archive,
+    verify_archive, verify_archive_for_community,
 };
 use tokio::{
     fs,
@@ -185,6 +185,28 @@ async fn test_drop_streaming_integrity() -> Result<()> {
         .checked_add(payload.len())
         .context("verified length overflow")?;
     anyhow::ensure!(result.bytes_verified == u64::try_from(verified_len)?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_drop_verify_enforces_community_scope() -> Result<()> {
+    let directory = TestDirectory::new("syncweb-drop-community-verify-test")?;
+    let payload = b"community content";
+    let community = CommunityId::from_bytes([21; 32]);
+    let mut collection_manifest = manifest(payload)?;
+    collection_manifest.bind_community(community);
+    collection_manifest.sign(&ed25519_dalek::SigningKey::from_bytes(&[42; 32]))?;
+    let archive = car(&collection_manifest, payload, None)?;
+    let path = directory.path().join("community.car.zst");
+    compress(&path, &archive).await?;
+
+    verify_archive_for_community(&path, Some(community)).await?;
+    let error = DropVerifier::new()
+        .verify_for_community(&path, Some(CommunityId::from_bytes([22; 32])))
+        .await
+        .expect_err("archive from another community must be rejected");
+    anyhow::ensure!(error.to_string().contains("community"));
+    verify_archive(&path).await?;
     Ok(())
 }
 

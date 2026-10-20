@@ -37,6 +37,19 @@ syncweb folders pin ./dataset
 syncweb folders unpin ./dataset
 ```
 
+Inspect and acknowledge materialized file conflicts without changing the
+underlying synchronized entries:
+
+```bash
+syncweb conflicts list ./dataset
+syncweb conflicts show note.txt --folder ./dataset
+syncweb conflicts resolve note.txt --folder ./dataset --yes
+```
+
+`conflicts resolve` removes only acknowledged `.diff` and
+`.conflict.<hash>` artifacts. The canonical winner and every CRDT variant
+remain recoverable through the synchronized folder metadata.
+
 For secure automation, every command that accepts a ticket accepts `-` in the ticket
 position to read the complete ticket from stdin. The ticket is therefore not present in
 the process command line (`/proc/*/cmdline`). For example:

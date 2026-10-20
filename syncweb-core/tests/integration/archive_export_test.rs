@@ -3,6 +3,7 @@ use std::{collections::BTreeSet, fs, path::Path};
 use anyhow::{Context, Result};
 use async_compression::tokio::bufread::ZstdDecoder;
 use syncweb_core::{
+    CommunityId,
     daemon::ManagedPool,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterRule, MatchCriteria},
     folder::{
@@ -254,6 +255,32 @@ async fn test_export_drop_with_pool_matches_without_pool() -> Result<()> {
         .await?;
     anyhow::ensure!(hash == manifest.entries.first().context("manifest has no entry")?.content_id);
     anyhow::ensure!(fs::read(plain_output)? == fs::read(pooled_output)?);
+    node.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_export_rejects_archive_scope_that_disagrees_with_manifest() -> Result<()> {
+    let directory = TestDirectory::new("syncweb-drop-community-test")?;
+    let node = test_node(&directory).await?;
+    let content = b"community content";
+    let hash = node.blob_store().add_bytes(content).await?;
+    let community = CommunityId::from_bytes([7; 32]);
+    let mut collection_manifest = manifest(uuid::Uuid::new_v4(), "1.0.0", &[("file.txt", content)])?;
+    collection_manifest.bind_community(community);
+    let output = directory.path().join("mismatched-community.car.zst");
+
+    let error = DropExporter::new(node.blob_store().clone())
+        .export_drop_with_options(
+            std::slice::from_ref(&collection_manifest),
+            &output,
+            DropExportOptions::default().with_source_community(CommunityId::from_bytes([8; 32]).to_string()),
+            None,
+        )
+        .await
+        .expect_err("mismatched archive scope must be rejected");
+    anyhow::ensure!(error.to_string().contains("community"));
+    anyhow::ensure!(hash == collection_manifest.entries[0].content_id);
     node.stop().await?;
     Ok(())
 }

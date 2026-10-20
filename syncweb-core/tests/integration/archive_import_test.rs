@@ -4,6 +4,7 @@ use anyhow::{Result, ensure};
 use async_compression::tokio::bufread::ZstdDecoder;
 use ed25519_dalek::SigningKey;
 use syncweb_core::{
+    CommunityId,
     daemon::ManagedPool,
     filter::{FilterAction, FilterConfig, FilterEngine, FilterRule, MatchCriteria},
     folder::{CollectionEntry, CollectionManifest, DropExporter, DropImportOptions, DropImporter},
@@ -296,5 +297,49 @@ async fn import_drop_with_pool_matches_without_pool() -> Result<()> {
     source.stop().await?;
     plain_destination.stop().await?;
     pooled_destination.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn import_drop_enforces_community_scope() -> Result<()> {
+    let directory = TestDirectory::new("syncweb-drop-community-import-test")?;
+    let source = node(&directory, "source").await?;
+    let destination = node(&directory, "destination").await?;
+    let content = b"community import";
+    let hash = source.blob_store().add_bytes(content).await?;
+    let community = CommunityId::from_bytes([11; 32]);
+    let mut manifest = CollectionManifest::new(Uuid::new_v4(), "1.0.0");
+    manifest.bind_community(community);
+    manifest
+        .entries
+        .push(CollectionEntry::new(hash, "file.txt", u64::try_from(content.len())?)?);
+    manifest.sign(&SigningKey::from_bytes(&[42; 32]))?;
+    let archive = directory.path().join("community.car.zst");
+    DropExporter::new(source.blob_store().clone())
+        .export_drop_with_options(
+            std::slice::from_ref(&manifest),
+            &archive,
+            syncweb_core::folder::DropExportOptions::default().with_source_community(community.to_string()),
+            None,
+        )
+        .await?;
+
+    let imported = DropImporter::new(destination.blob_store().clone())
+        .import_archive(&archive, DropImportOptions::default().with_community(community), None)
+        .await?;
+    ensure!(imported.collection_manifest.community()? == Some(community));
+
+    let wrong = DropImporter::new(destination.blob_store().clone())
+        .import_archive(
+            &archive,
+            DropImportOptions::default().with_community(CommunityId::from_bytes([12; 32])),
+            None,
+        )
+        .await
+        .expect_err("archive from another community must be rejected");
+    ensure!(wrong.to_string().contains("community"));
+
+    source.stop().await?;
+    destination.stop().await?;
     Ok(())
 }

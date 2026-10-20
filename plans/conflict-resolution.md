@@ -174,10 +174,3 @@ re-import guard exists.
   bounded text diff is smaller than the winner, otherwise
   `<stem>.conflict.<short-hash>.<ext>`; the winner always keeps the original
   path.
-
-## 7. Open questions
-
-- Whether to keep conflict copies indefinitely or garbage-collect them once the
-  user acknowledges (ties into `conflicts resolve`).
-- Interaction with `--metadata-only` folders (no local bytes → keep conflicts
-  doc-level only).

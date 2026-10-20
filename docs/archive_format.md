@@ -102,6 +102,21 @@ content block's BLAKE3 hash and size, and that the archive contains exactly the
 blocks referenced by the manifest. Header, section, manifest, index, and
 varint limits are checked before any attacker-controlled allocation.
 
+Community-scoped callers can require an exact manifest scope instead of using
+the unrestricted verifier:
+
+```rust
+let result = syncweb_core::verify_archive_for_community(
+    "my-dataset.car.zst",
+    Some(community_id),
+).await?;
+```
+
+Use `None` with `verify_archive_for_community` to require an explicitly open
+manifest. Archive imports provide the same policy through
+`DropImportOptions::with_community` and `with_open_community`; any index
+`source_community` value is also checked against the manifest identity.
+
 ## Implementation Details
 
 ### Export Pipeline (`archive_export`)

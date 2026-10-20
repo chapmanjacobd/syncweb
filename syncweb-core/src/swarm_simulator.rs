@@ -747,6 +747,15 @@ mod tests {
             assert!(report.inventory_bytes > 0);
             assert!(report.repair_attempts > 0);
             assert!(report.repairs > 0);
+            let node_count = u64::from(node_count);
+            assert!(
+                report.inventory_messages <= node_count.saturating_mul(4),
+                "inventory messages exceeded the four-round budget: {report:?}"
+            );
+            assert!(
+                report.inventory_bytes <= node_count.saturating_mul(4).saturating_mul(32),
+                "inventory bytes exceeded the four-round budget: {report:?}"
+            );
             println!(
                 "scale nodes={node_count} rounds={} inventory_messages={} inventory_bytes={} \
                  duplicate_inventory_messages={} repair_attempts={} completed_repairs={} \

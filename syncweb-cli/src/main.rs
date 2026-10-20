@@ -17,12 +17,12 @@ use clap::{CommandFactory, Parser};
 use cli::{
     args::{Cli, CliContext, category_of, effective_data_dir},
     commands::{
-        AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictShowArgs, FolderRetentionArgs,
-        FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand, PackageExportMode, RestoreArgs,
-        ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
-        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
-        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
-        TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictResolveArgs, ConflictShowArgs,
+        FolderRetentionArgs, FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand,
+        PackageExportMode, RestoreArgs, ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs,
+        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
+        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
+        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -66,6 +66,7 @@ use syncweb_core::{
     },
     sync::{
         AreaFilter, ConflictReport, FetchCandidate, FetchFilter, FetchStrategy, SyncEngine, SyncEvent, list_conflicts,
+        resolve_conflict_artifacts,
     },
     verify::IntegrityChecker,
 };
@@ -6456,9 +6457,13 @@ fn render_conflict_detail(report: &ConflictReport) -> String {
 }
 
 async fn handle_conflicts(ctx: &CliContext<'_>, command: ConflictCommand) -> Result<()> {
+    if let ConflictCommand::Resolve(ConflictResolveArgs { folder, path }) = command {
+        return handle_resolve_conflicts(ctx, &folder, path.as_deref()).await;
+    }
     let (folder, path) = match command {
         ConflictCommand::List(ConflictListArgs { folder }) => (folder, None),
         ConflictCommand::Show(ConflictShowArgs { path, folder }) => (folder, Some(path)),
+        ConflictCommand::Resolve(_) => unreachable!("resolve is handled above"),
     };
     let reports = load_conflicts(ctx, &folder).await?;
     if let Some(path) = path {
@@ -6478,6 +6483,57 @@ async fn handle_conflicts(ctx: &CliContext<'_>, command: ConflictCommand) -> Res
         println!("No conflicts found.");
     } else {
         println!("{}", render_conflict_list(&reports));
+    }
+    Ok(())
+}
+
+async fn handle_resolve_conflicts(ctx: &CliContext<'_>, selector: &str, path: Option<&str>) -> Result<()> {
+    let logical_path = path.map(normalize_logical_path);
+    if !confirm_destructive("remove acknowledged conflict artifacts", ctx.yes, ctx.no_color)? {
+        if ctx.output_json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "folder": selector,
+                    "path": logical_path,
+                    "removed": 0,
+                    "cancelled": true,
+                })
+            );
+        } else {
+            println!("Conflict artifacts were not removed.");
+        }
+        return Ok(());
+    }
+    let removed = if let Some(client) = syncweb_core::daemon::daemon_client(ctx.data_dir)? {
+        client
+            .resolve_conflicts(selector.to_owned(), logical_path.clone())
+            .await?
+    } else {
+        let node = open_node(ctx.data_dir).await?;
+        let manager = FolderManager::new(&node);
+        let folder = manager.resolve(Path::new(selector)).await?;
+        if !Path::new(selector).is_dir() {
+            node.stop().await?;
+            anyhow::bail!("conflict resolution without a daemon requires a folder path, not a namespace");
+        }
+        let mount_root = Path::new(selector);
+        let removed =
+            resolve_conflict_artifacts(&node, &folder, mount_root, logical_path.as_deref().map(Path::new)).await?;
+        node.stop().await?;
+        removed
+    };
+    if ctx.output_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "folder": selector,
+                "path": logical_path,
+                "removed": removed,
+            })
+        );
+    } else {
+        println!("Removed {removed} conflict artifact(s).");
     }
     Ok(())
 }

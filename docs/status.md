@@ -21,7 +21,7 @@ planned must not be presented as a default guarantee.
 | Package distribution | The common flow is `package add`/`bump` -> `package publish` -> `package info` or `package install` -> `package upgrade`; archive export/import remains available for offline transfer. |
 | Shared filters | `ls`, `find`, `sort`, `download`, and `verify` share the `--ext`, `--size`, `--depth`, `--type`, `--modified-*`, and `--remote-only` vocabulary, with compatibility aliases for older spellings. |
 | Conflict safety | Last-writer-wins materialization keeps compact text diffs when beneficial and full conflict copies otherwise; the CRDT remains the source of truth. |
-| Conflict inspection | `conflicts list` and `conflicts show` expose divergent variants, deterministic winners, timestamps, authors, hashes, sizes, and local availability in table or JSON output. |
+| Conflict inspection | `conflicts list` and `conflicts show` expose divergent variants, deterministic winners, timestamps, authors, hashes, sizes, and local availability in table or JSON output; `conflicts resolve` removes acknowledged materialized artifacts without changing CRDT entries. |
 
 The named network gate is deliberately narrower than the full suite:
 

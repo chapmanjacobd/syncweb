@@ -1157,7 +1157,9 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
         tokio::time::sleep(Duration::from_millis(1_500)).await;
         let after = match daemons
             .client_b
-            .send(IpcRequest::new(IpcCommand::ListConflicts { folder: selector }))
+            .send(IpcRequest::new(IpcCommand::ListConflicts {
+                folder: selector.clone(),
+            }))
             .await?
         {
             IpcResponse::Conflicts(conflicts) => conflicts,
@@ -1171,6 +1173,19 @@ async fn test_daemon_materializes_conflict_without_reimport_loop() -> Result<()>
             before_note == after_note,
             "materializing the conflict changed the document variants: before={before_note:?}, after={after_note:?}"
         );
+
+        let resolved = daemons
+            .client_b
+            .send(IpcRequest::new(IpcCommand::ResolveConflicts {
+                folder: selector,
+                path: Some("note.bin".to_owned()),
+            }))
+            .await?;
+        ensure!(
+            matches!(resolved, IpcResponse::ConflictsResolved { removed } if removed >= 1),
+            "conflict resolution failed: {resolved:?}"
+        );
+        ensure!(!has_conflict_copy(), "conflict artifact was not removed");
 
         daemons.stop().await?;
         Ok(())

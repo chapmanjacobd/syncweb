@@ -4,7 +4,7 @@ use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Result, SyncwebError};
+use crate::{Result, SyncwebError, net::CommunityId};
 
 use super::{CollectionEntry, CollectionManifest};
 
@@ -73,6 +73,7 @@ impl DropIndex {
         source_community: Option<String>,
         providers: Vec<DropProviderHint>,
     ) -> Result<Self> {
+        validate_source_community(manifest, source_community.as_deref())?;
         let mut roots = vec![manifest_hash];
         if let Some(parent) = manifest.parent
             && parent != manifest_hash
@@ -148,6 +149,42 @@ impl DropIndex {
         }
         Ok(index)
     }
+
+    /// Validate the optional archive scope against its signed manifest.
+    ///
+    /// An index may omit `source_community` for compatibility with older
+    /// archives, but it must never claim a different community than the
+    /// manifest it accompanies.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the index scope is malformed or disagrees with
+    /// the manifest scope.
+    pub fn validate_for_manifest(&self, manifest: &CollectionManifest) -> Result<()> {
+        validate_source_community(manifest, self.source_community.as_deref())
+    }
+}
+
+fn validate_source_community(manifest: &CollectionManifest, source_community: Option<&str>) -> Result<()> {
+    let Some(source_community) = source_community else {
+        return Ok(());
+    };
+    let manifest_community = manifest.community()?;
+    let source_id = match source_community.parse::<CommunityId>() {
+        Ok(source_id) => source_id,
+        Err(_) if manifest_community.is_none() => {
+            // Legacy archives used a human-readable source label. Keep
+            // accepting those labels for unscoped manifests.
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    if manifest_community != Some(source_id) {
+        return Err(SyncwebError::AccessDenied(
+            "drop index community does not match the collection manifest".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn car_header(roots: &[Hash]) -> Result<Vec<u8>> {

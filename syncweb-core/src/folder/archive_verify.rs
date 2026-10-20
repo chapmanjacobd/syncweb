@@ -15,6 +15,7 @@ use crate::folder::archive_format::{DropIndex, parse_car_header as parse_format_
 use crate::{
     error::{Result, SyncwebError},
     folder::CollectionManifest,
+    net::CommunityId,
 };
 
 const CID_VERSION: u64 = 1;
@@ -79,7 +80,44 @@ impl DropVerifier {
         R: AsyncRead + Unpin,
     {
         let decoder = ZstdDecoder::new(BufReader::new(reader));
-        verify_car(decoder).await
+        verify_car(decoder, None, false).await
+    }
+
+    /// Verify a drop and require its manifest to use the given community
+    /// scope. `None` requires an explicitly open, unscoped manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the archive is invalid or outside the requested
+    /// community scope.
+    pub async fn verify_for_community(
+        &self,
+        path: impl AsRef<Path>,
+        community: Option<CommunityId>,
+    ) -> Result<DropVerifyResult> {
+        let file = fs::File::open(path)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to open drop archive", error))?;
+        self.verify_reader_for_community(file, community).await
+    }
+
+    /// Verify a drop reader and require its manifest to use the given
+    /// community scope. `None` requires an explicitly open, unscoped manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the archive is invalid or outside the requested
+    /// community scope.
+    pub async fn verify_reader_for_community<R>(
+        &self,
+        reader: R,
+        community: Option<CommunityId>,
+    ) -> Result<DropVerifyResult>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let decoder = ZstdDecoder::new(BufReader::new(reader));
+        verify_car(decoder, community, true).await
     }
 }
 
@@ -106,7 +144,39 @@ where
     DropVerifier::new().verify_reader(reader).await
 }
 
-async fn verify_car<R>(mut reader: R) -> Result<DropVerifyResult>
+/// Verify a compressed drop archive and require its manifest to use the given
+/// community scope. `None` requires an explicitly open, unscoped manifest.
+///
+/// # Errors
+///
+/// Returns an error when the archive is invalid or outside the requested
+/// community scope.
+pub async fn verify_archive_for_community(
+    path: impl AsRef<Path>,
+    community: Option<CommunityId>,
+) -> Result<DropVerifyResult> {
+    DropVerifier::new().verify_for_community(path, community).await
+}
+
+/// Verify a compressed drop reader and require its manifest to use the given
+/// community scope. `None` requires an explicitly open, unscoped manifest.
+///
+/// # Errors
+///
+/// Returns an error when the archive is invalid or outside the requested
+/// community scope.
+pub async fn verify_drop_reader_for_community<R>(reader: R, community: Option<CommunityId>) -> Result<DropVerifyResult>
+where
+    R: AsyncRead + Unpin,
+{
+    DropVerifier::new().verify_reader_for_community(reader, community).await
+}
+
+async fn verify_car<R>(
+    mut reader: R,
+    expected_community: Option<CommunityId>,
+    enforce_community: bool,
+) -> Result<DropVerifyResult>
 where
     R: AsyncRead + Unpin,
 {
@@ -152,7 +222,11 @@ where
     let manifest_bytes = manifest_data
         .ok_or_else(|| SyncwebError::InvalidConfig("drop manifest was not buffered for verification".to_owned()))?;
     let manifest = CollectionManifest::from_bytes(&manifest_bytes)?;
-    manifest.verify_signature()?;
+    if enforce_community {
+        manifest.validate_for_community(expected_community)?;
+    } else {
+        manifest.verify_signature()?;
+    }
     if manifest.blob_id()? != root {
         return Err(SyncwebError::InvalidConfig(
             "drop manifest hash does not match its serialized content".to_owned(),
@@ -193,6 +267,7 @@ where
         let index_bytes =
             index_data.ok_or_else(|| SyncwebError::InvalidConfig("drop index was not buffered".to_owned()))?;
         let parsed_index = DropIndex::from_bytes(&index_bytes)?;
+        parsed_index.validate_for_manifest(&manifest)?;
         if parsed_index.manifest != root
             || parsed_index.collection_id != manifest.collection_id
             || parsed_index.collection_version != manifest.version

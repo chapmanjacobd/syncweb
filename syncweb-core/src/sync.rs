@@ -16,7 +16,7 @@ pub mod subscribe;
 pub use actor::{Actor, ActorHandle, ActorPanic};
 pub use conflict::{
     ConflictReport, ConflictVariant, MaterializeOutcome, MaterializeSummary, conflict_path, diff_path, list_conflicts,
-    materialize_folder_content, select_winner,
+    materialize_folder_content, resolve_conflict_artifacts, select_winner,
 };
 pub use deleted::{DeletedInfo, DeletedTracker, PruneEvent};
 pub use engine::{SyncEngine, TransferStats};

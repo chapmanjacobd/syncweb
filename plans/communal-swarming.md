@@ -89,27 +89,13 @@ Tests: packet/message budgets, peer-sampling convergence, isolated
 Provide a first-class community boundary for temporary, shared collections
 without weakening named-network access controls.
 
-- [ ] Define how signed manifests, provider leases, and content tickets bind
-  to a community without requiring a central service.
 Likely code: network membership models, ticket/invitation handling,
 connection allowlists, discovery topic scoping, and CLI network commands.
 
 Tests: invitation join, capability denial, expiry/revocation, conflicting
   community IDs, malicious announcements, and restart persistence.
 
-### 5. CAR/USB inventory reconciliation and enrollment
-
-Make offline exchange a first-class way to add content and providers to a
-swarm, not only a one-time archive restore.
-
-Likely code: `syncweb-core/src/archive`, package lifecycle modules,
-`docs/archive_format.md` implementation, daemon IPC, and archive CLI commands.
-
-Tests: interrupted import/export, duplicate blocks, unknown community,
-partial bundle, conflicting manifest, corrupt CAR, and automatic provider
-publication.
-
-### 6. CLI, daemon operations, and observability
+### 5. CLI, daemon operations, and observability
 
 Make communal participation understandable and controllable.
 
@@ -118,14 +104,6 @@ config, status rendering, and logging/metrics.
 
 Tests: JSON schema stability, command permission checks, daemon restart,
 budget enforcement, and end-to-end status transitions.
-
-### 7. Scale simulation and LAN acceptance gates
-
-Validate control-plane and data-plane behavior before claiming large-LAN
-support.
-
-Likely code: integration test harnesses, simulator modules, fixtures, and
-`docs/testing.md`.
 
 ## Delivery order
 
@@ -137,9 +115,7 @@ Likely code: integration test harnesses, simulator modules, fixtures, and
    contribution controls.
 4. Scale discovery: local tracker/cache roles, inventory reconciliation,
    topology hints, and partition handling.
-5. Close the offline loop: CAR indexes, import enrollment, repair bundles,
-   and USB-oriented CLI workflows.
-6. Harden the product: communal admission, moderation, daemon supervision,
+5. Harden the product: communal admission, moderation, daemon supervision,
    UX, metrics, and scale acceptance gates.
 
 ## Completion criteria
@@ -151,10 +127,6 @@ This plan is complete when all of the following are demonstrated:
 - Provider information is authenticated, expiring, observable, and useful to
   partial-fetch decisions without requiring a central tracker.
 - Replica targets converge under churn and do not create repair storms.
-- A 1000-node simulation stays within documented control-plane, memory, and
-  convergence budgets.
-- A verified CAR/USB import can merge missing content, enroll the local node as
-  a provider when permitted, and recover after interruption.
 - Open, named-private, and offline-imported communities have documented
   admission and capability boundaries.
 - The CLI and daemon make downloading, pinning, seeding, contribution limits,

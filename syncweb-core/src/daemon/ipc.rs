@@ -371,6 +371,11 @@ pub enum IpcCommand {
     ListConflicts {
         folder: String,
     },
+    ResolveConflicts {
+        folder: String,
+        #[serde(default)]
+        path: Option<String>,
+    },
     VerifyIntegrity {
         path: PathBuf,
         #[serde(default)]
@@ -512,6 +517,7 @@ pub enum IpcResponse {
     FileStats(Box<FileStatsReport>),
     Entries(Vec<EntryRow>),
     Conflicts(Vec<ConflictReport>),
+    ConflictsResolved { removed: usize },
     PeerAvailability(Box<PeerAvailabilityReport>),
     SnapshotList(Vec<SnapshotInfo>),
     SnapshotDiff(Box<SnapshotDiffReport>),
@@ -1481,6 +1487,7 @@ impl IpcServer {
             C::StatsFiles { folder } => self.handle_stats_files(folder).await,
             C::ListEntries { folder, enrich } => self.handle_list_entries(&folder, enrich).await,
             C::ListConflicts { folder } => self.handle_list_conflicts(&folder).await,
+            C::ResolveConflicts { folder, path } => self.handle_resolve_conflicts(&folder, path.as_deref()).await,
             C::VerifyIntegrity {
                 path,
                 hash,
@@ -1560,6 +1567,7 @@ impl IpcServer {
             | C::StatsFiles { .. }
             | C::ListEntries { .. }
             | C::ListConflicts { .. }
+            | C::ResolveConflicts { .. }
             | C::VerifyIntegrity { .. }
             | C::Unsubscribe { .. }
             | C::LeaveFolder { .. }
@@ -2737,6 +2745,39 @@ impl IpcServer {
         };
         match list_conflicts(&context.node, entries).await {
             Ok(conflicts) => IpcResponse::Conflicts(conflicts),
+            Err(error) => response_from_error(error),
+        }
+    }
+
+    async fn handle_resolve_conflicts(&self, selector: &str, path: Option<&str>) -> IpcResponse {
+        let context = match &self.archive_context {
+            Some(ctx) => ctx.clone(),
+            None => {
+                return IpcResponse::Error {
+                    message: "daemon conflicts IPC is unavailable: server has no node context".to_owned(),
+                };
+            }
+        };
+        let manager = FolderManager::new(&context.node);
+        let folder = match resolve_folder_for_daemon(
+            &manager,
+            &*self.daemon_handle.folder_registry.read().await,
+            Path::new(selector),
+        )
+        .await
+        {
+            Ok(folder) => folder,
+            Err(error) => return error,
+        };
+        let namespace = folder.namespace_id().to_string();
+        let Some(mount_root) = self.daemon_handle.folder_registry.read().await.path_for(&namespace) else {
+            return IpcResponse::Error {
+                message: format!("folder '{selector}' has no registered mount path"),
+            };
+        };
+        let selected_path = path.map(Path::new);
+        match crate::sync::resolve_conflict_artifacts(&context.node, &folder, &mount_root, selected_path).await {
+            Ok(removed) => IpcResponse::ConflictsResolved { removed },
             Err(error) => response_from_error(error),
         }
     }
@@ -4554,6 +4595,22 @@ impl IpcClient {
         }
     }
 
+    /// Remove acknowledged conflict artifacts from a managed folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the daemon request fails or returns an unexpected response.
+    pub async fn resolve_conflicts(&self, folder: String, path: Option<String>) -> Result<usize> {
+        let response = self
+            .request(IpcCommand::ResolveConflicts { folder, path }, "resolve conflicts")
+            .await?;
+        if let IpcResponse::ConflictsResolved { removed } = response {
+            Ok(removed)
+        } else {
+            Err(Self::unexpected_response("resolve conflicts", &response))
+        }
+    }
+
     /// Verify the integrity of a managed folder.
     ///
     /// # Errors
@@ -5013,6 +5070,7 @@ impl IpcClient {
                 | IpcResponse::FileStats(_)
                 | IpcResponse::Entries(_)
                 | IpcResponse::Conflicts(_)
+                | IpcResponse::ConflictsResolved { .. }
                 | IpcResponse::PeerAvailability(_)
                 | IpcResponse::SnapshotList(_)
                 | IpcResponse::SnapshotDiff(_)

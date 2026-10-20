@@ -41,6 +41,24 @@ Revocations can target a device for all of its invitations or a single
 invitation nonce, so admission continues to work during an offline partition
 without silently treating a display name as authority.
 
+## Community-scoped content
+
+Collection manifests can carry the same stable community identity as an
+invitation. A scoped manifest includes `community_id` in its signed,
+content-addressed bytes, and `validate_for_community` requires an exact match:
+an unscoped node rejects a named-community manifest, while a named community
+rejects an unscoped manifest. Scoped manifests must also carry a valid
+Ed25519 signature.
+
+`CommunityContentTicket` wraps an ordinary Iroh blob ticket with a community
+identity, issuer signature, and optional expiry. It serializes as
+`syncweb://content/<hex-json>` or bounded JSON suitable for a CAR metadata
+block. Consumers must validate the issuer signature, expiry, and exact
+community before passing the embedded blob ticket to a fetch operation.
+Provider leases apply the same exact-scope rule to provider observations, so
+manifests, content tickets, and provider availability cannot silently cross
+community boundaries.
+
 ## Independent capabilities
 
 The invitation does not use one overloaded "member" permission. Each of these

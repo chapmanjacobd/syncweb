@@ -149,6 +149,8 @@ pub enum ConflictCommand {
     List(ConflictListArgs),
     #[command(about = "Show every variant for one conflicting path")]
     Show(ConflictShowArgs),
+    #[command(about = "Remove acknowledged conflict artifacts without changing synced entries")]
+    Resolve(ConflictResolveArgs),
 }
 
 #[derive(Debug, Args)]
@@ -161,6 +163,14 @@ pub struct ConflictListArgs {
 pub struct ConflictShowArgs {
     #[arg(help = "Logical path within the synchronized folder")]
     pub path: String,
+    #[arg(short, long, default_value = ".", help = "Namespace ID or path to a managed folder")]
+    pub folder: String,
+}
+
+#[derive(Debug, Args)]
+pub struct ConflictResolveArgs {
+    #[arg(help = "Logical path to acknowledge; omit to acknowledge every conflict")]
+    pub path: Option<String>,
     #[arg(short, long, default_value = ".", help = "Namespace ID or path to a managed folder")]
     pub folder: String,
 }

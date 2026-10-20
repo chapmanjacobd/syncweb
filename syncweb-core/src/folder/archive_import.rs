@@ -20,6 +20,7 @@ use crate::{
     daemon::ManagedPool,
     error::{Result, SyncwebError},
     filter::{FilterAction, FilterEngine, FilterEntry},
+    net::CommunityId,
     node::iroh_node::IrohNode,
 };
 
@@ -42,6 +43,8 @@ const COPY_BUFFER_SIZE: usize = 64 * 1024;
 pub struct DropImportOptions {
     filter: Option<FilterEngine>,
     available_dependencies: BTreeMap<Uuid, Version>,
+    expected_community: Option<CommunityId>,
+    require_open_community: bool,
 }
 
 impl DropImportOptions {
@@ -57,6 +60,22 @@ impl DropImportOptions {
         self
     }
 
+    /// Require imported manifests to belong to one named community.
+    #[must_use]
+    pub fn with_community(mut self, community: CommunityId) -> Self {
+        self.expected_community = Some(community);
+        self.require_open_community = false;
+        self
+    }
+
+    /// Require imported manifests to be explicitly unscoped.
+    #[must_use]
+    pub fn with_open_community(mut self) -> Self {
+        self.expected_community = None;
+        self.require_open_community = true;
+        self
+    }
+
     #[must_use]
     pub const fn filter(&self) -> Option<&FilterEngine> {
         self.filter.as_ref()
@@ -65,6 +84,16 @@ impl DropImportOptions {
     #[must_use]
     pub const fn available_dependencies(&self) -> &BTreeMap<Uuid, Version> {
         &self.available_dependencies
+    }
+
+    fn validate_manifest_scope(&self, manifest: &CollectionManifest) -> Result<()> {
+        if self.require_open_community {
+            manifest.validate_for_community(None)
+        } else if let Some(community) = self.expected_community {
+            manifest.validate_for_community(Some(community))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -438,6 +467,7 @@ where
             ));
         }
         let parsed_index = DropIndex::from_bytes(&bytes)?;
+        parsed_index.validate_for_manifest(&prepared.manifest)?;
         if parsed_index.manifest != root
             || parsed_index.collection_id != prepared.filtered_manifest.collection_id
             || parsed_index.collection_version != prepared.filtered_manifest.version
@@ -527,6 +557,7 @@ fn prepare_manifest(
 ) -> Result<PreparedManifest> {
     let manifest = in_pool(pool, || CollectionManifest::from_bytes(manifest_bytes))?;
     in_pool(pool, || manifest.verify_signature())?;
+    options.validate_manifest_scope(&manifest)?;
     let manifest_hash = in_pool(pool, || Hash::new(manifest_bytes));
     let manifest_blob_id = in_pool(pool, || manifest.blob_id())?;
     if manifest_hash != root || manifest_blob_id != root {

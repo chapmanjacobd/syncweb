@@ -103,7 +103,7 @@ fn help_output_lists_available_commands() -> anyhow::Result<()> {
 }
 
 #[test]
-fn conflicts_help_lists_list_and_show() -> anyhow::Result<()> {
+fn conflicts_help_lists_subcommands() -> anyhow::Result<()> {
     let output = Command::new(env!("CARGO_BIN_EXE_syncweb"))
         .args(["conflicts", "--help"])
         .output()
@@ -113,6 +113,10 @@ fn conflicts_help_lists_list_and_show() -> anyhow::Result<()> {
     let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
     ensure!(help.contains("list"), "conflicts help should include list: {help}");
     ensure!(help.contains("show"), "conflicts help should include show: {help}");
+    ensure!(
+        help.contains("resolve"),
+        "conflicts help should include resolve: {help}"
+    );
     Ok(())
 }
 

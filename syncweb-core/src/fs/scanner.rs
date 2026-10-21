@@ -511,3 +511,193 @@ fn metadata_entry(path: &Path, relative: &Path) -> Result<FileEntry> {
         file_type,
     })
 }
+
+/// A regular file discovered by [`scan_roots`], reduced to the fields callers
+/// need: its logical path relative to the scan root, its content hash, and size.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct ScannedEntry {
+    pub logical_path: PathBuf,
+    pub hash: iroh_blobs::Hash,
+    pub size: u64,
+}
+
+/// Input for [`scan_roots`]: one or more paths to scan plus the rules that
+/// shape the resulting logical paths.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ScanRootsRequest<'a> {
+    /// Paths to scan. Each may be a file or a directory.
+    pub roots: &'a [PathBuf],
+    /// When set, logical paths are computed relative to this root instead of the
+    /// common ancestor of `roots`. Useful for single-file packages.
+    pub root_override: Option<PathBuf>,
+    /// Glob patterns excluded from every scan (merged with any `.syncignore`).
+    pub ignore: IgnoreFilter,
+    /// Worker threads for hashing; `None` or `0` uses the current rayon pool.
+    pub threads: Option<usize>,
+}
+
+impl<'a> ScanRootsRequest<'a> {
+    /// Request a scan of `roots` with no override, no extra ignore patterns,
+    /// and the default thread count.
+    #[must_use]
+    pub const fn new(roots: &'a [PathBuf]) -> Self {
+        Self {
+            roots,
+            root_override: None,
+            ignore: IgnoreFilter { patterns: Vec::new() },
+            threads: None,
+        }
+    }
+
+    /// Compute logical paths relative to `root` instead of the derived root.
+    #[must_use]
+    pub fn with_root_override(mut self, root: PathBuf) -> Self {
+        self.root_override = Some(root);
+        self
+    }
+
+    /// Replace the ignore patterns applied to every scan.
+    #[must_use]
+    pub fn with_ignore(mut self, ignore: IgnoreFilter) -> Self {
+        self.ignore = ignore;
+        self
+    }
+
+    /// Set the worker thread count for hashing.
+    #[must_use]
+    pub const fn with_threads(mut self, threads: Option<usize>) -> Self {
+        self.threads = threads;
+        self
+    }
+}
+
+/// Result of [`scan_roots`]: the resolved root and the sorted, de-duplicated
+/// entries beneath it.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ScanRootsResult {
+    pub root: PathBuf,
+    pub entries: Vec<ScannedEntry>,
+}
+
+impl ScanRootsResult {
+    #[must_use]
+    pub fn into_parts(self) -> (PathBuf, Vec<ScannedEntry>) {
+        (self.root, self.entries)
+    }
+}
+
+/// Scan one or more paths into content-addressed logical entries.
+///
+/// This is the single pure scanning primitive shared by packages (collection
+/// manifests), single-root scans, and the import pipeline's root resolution.
+/// It resolves the logical root, hashes every regular file (honoring ignore
+/// rules), computes each file's logical path relative to that root, sorts by
+/// logical path, and de-duplicates. Duplicate logical paths must agree on
+/// content, otherwise the scan fails.
+///
+/// # Errors
+///
+/// Returns an error if the filesystem cannot be read, a file root is combined
+/// with other inputs, or two inputs resolve to the same logical path with
+/// different content.
+pub fn scan_roots(request: &ScanRootsRequest<'_>) -> Result<ScanRootsResult> {
+    let root = resolve_scan_root(request.roots, request.root_override.clone());
+    if root.is_file() && request.roots.iter().any(|input| input != &root) {
+        return Err(SyncwebError::InvalidConfig(
+            "a file package root can contain only that file".to_owned(),
+        ));
+    }
+    let mut entries: Vec<ScannedEntry> = Vec::new();
+    for input in request.roots {
+        let rel = if root.is_file() {
+            input
+                .file_name()
+                .map(PathBuf::from)
+                .ok_or_else(|| SyncwebError::InvalidConfig("single-file package root has no filename".to_owned()))?
+        } else {
+            input.strip_prefix(&root).unwrap_or(input.as_path()).to_path_buf()
+        };
+        let is_file = input.is_file();
+        let scanned = ParallelScanner::new(input, request.ignore.clone(), request.threads).scan()?;
+        for entry in scanned {
+            if entry.file_type != FileType::File {
+                continue;
+            }
+            let logical_path = if is_file {
+                rel.clone()
+            } else {
+                rel.join(&entry.relative_path)
+            };
+            entries.push(ScannedEntry {
+                logical_path,
+                hash: iroh_blobs::Hash::from_bytes(*entry.hash.as_bytes()),
+                size: entry.size,
+            });
+        }
+    }
+    entries.sort_by(|left, right| left.logical_path.cmp(&right.logical_path));
+    let mut deduped: Vec<ScannedEntry> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if let Some(last) = deduped.last()
+            && last.logical_path == entry.logical_path
+        {
+            if last.hash != entry.hash {
+                return Err(SyncwebError::InvalidConfig(format!(
+                    "conflicting inputs resolve to the same logical path: {}",
+                    entry.logical_path.display()
+                )));
+            }
+            continue;
+        }
+        deduped.push(entry);
+    }
+    Ok(ScanRootsResult { root, entries: deduped })
+}
+
+/// Resolve the logical root for a set of scan inputs.
+///
+/// Mirrors the package tool's historical behavior: an explicit override wins, a
+/// single input uses itself (file) or its parent (directory), and multiple
+/// inputs share their longest common ancestor.
+#[must_use]
+pub fn resolve_scan_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> PathBuf {
+    if let Some(root) = root_override {
+        return root;
+    }
+    if paths.len() == 1 {
+        if let Some(path) = paths.first()
+            && path.is_file()
+        {
+            return path.clone();
+        }
+        let parent = paths
+            .first()
+            .and_then(|path| path.parent())
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        return parent.to_path_buf();
+    }
+    longest_common_ancestor(paths)
+}
+
+/// Longest shared leading path among `paths`, component-wise.
+#[must_use]
+pub fn longest_common_ancestor(paths: &[PathBuf]) -> PathBuf {
+    let Some((first, rest)) = paths.split_first() else {
+        return PathBuf::new();
+    };
+    let mut common: Vec<_> = first.components().collect();
+    for path in rest {
+        let components: Vec<_> = path.components().collect();
+        let shared = common
+            .iter()
+            .zip(components.iter())
+            .take_while(|(left, right)| left == right)
+            .count();
+        common.truncate(shared);
+    }
+    common.into_iter().collect()
+}

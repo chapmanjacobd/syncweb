@@ -217,12 +217,12 @@ fn json_network_list_and_status_envelopes() -> anyhow::Result<()> {
         "network list JSON should include team: {value}"
     );
 
-    let status = run_with_data(&data_dir, &["--json", "network", "status"])?;
-    assert_success(&status, "json network status")?;
+    let status = run_with_data(&data_dir, &["--json", "network", "list", "--health"])?;
+    assert_success(&status, "json network list --health")?;
     let sv: serde_json::Value = serde_json::from_slice(&status.stdout)?;
     ensure!(
         sv.get("networks").and_then(serde_json::Value::as_array).is_some(),
-        "network status JSON should wrap rows under `networks`: {sv}"
+        "network list --health JSON should wrap rows under `networks`: {sv}"
     );
 
     fs::remove_dir_all(&data_dir)?;
@@ -715,8 +715,8 @@ fn install_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<S
 }
 
 fn upgrade_package(data_dir: &std::path::Path, ticket: &str) -> anyhow::Result<()> {
-    let upgrade = run_with_data(data_dir, &["--json", "package", "upgrade", ticket])?;
-    assert_success(&upgrade, "package upgrade")?;
+    let upgrade = run_with_data(data_dir, &["--json", "package", "install", ticket])?;
+    assert_success(&upgrade, "package install (upgrade)")?;
     let value: serde_json::Value = serde_json::from_slice(&upgrade.stdout)?;
     ensure!(
         value.get("status") == Some(&serde_json::Value::from("installed")),
@@ -1002,8 +1002,8 @@ fn package_info_from_ticket_and_hash() -> anyhow::Result<()> {
 #[test]
 fn schedule_and_stats_persist() -> anyhow::Result<()> {
     let data_dir = test_dir("sched-stats");
-    let sched = run_with_data(&data_dir, &["config", "schedule", "set", "--active", "22:00-06:00"])?;
-    assert_success(&sched, "config schedule set")?;
+    let sched = run_with_data(&data_dir, &["config", "set", "schedule.active_hours", "22:00-06:00"])?;
+    assert_success(&sched, "config set schedule.active_hours")?;
 
     let stats = run_with_data(&data_dir, &["--json", "stats", "network"])?;
     assert_success(&stats, "stats")?;
@@ -1079,23 +1079,22 @@ fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
         "manifest should list captured files: {manifest}"
     );
 
-    let legacy_out = test_dir("db-backup-legacy-out");
+    let legacy_out = test_dir("db-backup-second-out");
     let legacy = run_with_data(
         &data_dir,
         &[
             "--json",
-            "db",
             "backup",
             "--output",
             legacy_out.to_str().context("UTF-8 path")?,
         ],
     )?;
-    assert_success(&legacy, "db backup compatibility")?;
+    assert_success(&legacy, "second backup")?;
     let legacy_value: serde_json::Value = serde_json::from_slice(&legacy.stdout)?;
     let legacy_path = legacy_value
         .get("path")
         .and_then(serde_json::Value::as_str)
-        .context("legacy backup JSON should report the backup path")?;
+        .context("backup JSON should report the backup path")?;
     ensure!(std::path::Path::new(legacy_path).join("manifest.json").exists());
 
     // --include-blobs copies the blob store when one exists.
@@ -1120,14 +1119,13 @@ fn db_check_vacuum_stats_and_backup() -> anyhow::Result<()> {
         &blob_data,
         &[
             "--json",
-            "db",
             "backup",
             "--include-blobs",
             "--output",
             blob_out.to_str().context("UTF-8 path")?,
         ],
     )?;
-    assert_success(&with_blobs, "db backup --include-blobs")?;
+    assert_success(&with_blobs, "backup --include-blobs")?;
     let wb: serde_json::Value = serde_json::from_slice(&with_blobs.stdout)?;
     let blob_path = wb
         .get("path")
@@ -1342,8 +1340,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let create_out = stdout_string(&create)?;
     ensure!(create_out.contains("created:"), "should print created: {create_out}");
 
-    let list = run_with_data(&data_dir, &["network", "status"])?;
-    assert_success(&list, "network status")?;
+    let list = run_with_data(&data_dir, &["network", "list"])?;
+    assert_success(&list, "network list")?;
     let list_out = stdout_string(&list)?;
     ensure!(list_out.contains("team"), "should list team: {list_out}");
 
@@ -1358,8 +1356,8 @@ fn network_create_list_invite_leave() -> anyhow::Result<()> {
     let leave = run_with_data(&data_dir, &["network", "leave", "--yes", "team"])?;
     assert_success(&leave, "network leave")?;
 
-    let list_after = run_with_data(&data_dir, &["network", "status"])?;
-    assert_success(&list_after, "network status after leave")?;
+    let list_after = run_with_data(&data_dir, &["network", "list"])?;
+    assert_success(&list_after, "network list after leave")?;
     let list_after_out = stdout_string(&list_after)?;
     ensure!(
         !list_after_out.contains("team"),

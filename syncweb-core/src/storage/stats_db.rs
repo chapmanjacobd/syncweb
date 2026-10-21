@@ -39,7 +39,7 @@ impl StatsDatabase {
     }
 
     fn init_schema(&self) -> Result<()> {
-        let connection = self
+        let mut connection = self
             .connection
             .lock()
             .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
@@ -65,34 +65,20 @@ impl StatsDatabase {
                 bytes INTEGER NOT NULL CHECK(bytes > 0),
                 files INTEGER NOT NULL DEFAULT 1,
                 folder_namespace TEXT,
-                peer TEXT
+                peer TEXT,
+                accounting_scope TEXT NOT NULL DEFAULT 'transfer'
             );
             CREATE INDEX IF NOT EXISTS idx_bw_ts ON bandwidth_events(timestamp);
             CREATE INDEX IF NOT EXISTS idx_bw_folder ON bandwidth_events(folder_namespace);
             CREATE INDEX IF NOT EXISTS idx_bw_peer ON bandwidth_events(peer);
-            CREATE TABLE IF NOT EXISTS bandwidth_period (
-                period_start INTEGER PRIMARY KEY,
-                period_end INTEGER,
-                total_upload INTEGER NOT NULL DEFAULT 0,
-                total_download INTEGER NOT NULL DEFAULT 0,
-                closed INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS bandwidth_folder (
-                period_start INTEGER NOT NULL REFERENCES bandwidth_period(period_start),
-                folder_namespace TEXT NOT NULL,
-                upload INTEGER NOT NULL DEFAULT 0,
-                download INTEGER NOT NULL DEFAULT 0,
-                files_transferred INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(period_start, folder_namespace)
-            );
-            CREATE TABLE IF NOT EXISTS bandwidth_peer (
-                period_start INTEGER NOT NULL REFERENCES bandwidth_period(period_start),
+            CREATE TABLE IF NOT EXISTS peer_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
                 peer TEXT NOT NULL,
-                upload INTEGER NOT NULL DEFAULT 0,
-                download INTEGER NOT NULL DEFAULT 0,
-                connection_count INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(period_start, peer)
+                connection_count INTEGER NOT NULL DEFAULT 1
             );
+            CREATE INDEX IF NOT EXISTS idx_peer_connections_ts ON peer_connections(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_peer_connections_peer ON peer_connections(peer);
             CREATE TABLE IF NOT EXISTS daemon_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp INTEGER NOT NULL,
@@ -146,9 +132,49 @@ impl StatsDatabase {
             )
             .map_err(|error| SyncwebError::operation("failed to initialize stats database schema", error))?;
         migrate_network_events_schema(&connection)?;
-        let _ = connection.execute_batch("ALTER TABLE bandwidth_events ADD COLUMN network_id TEXT");
-        let _ = connection.execute_batch(
-            "CREATE VIEW IF NOT EXISTS network_bandwidth_summary AS
+        let has_network_id: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1
+                    FROM pragma_table_info('bandwidth_events')
+                    WHERE name = 'network_id'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| SyncwebError::operation("failed to inspect bandwidth event schema", error))?;
+        if !has_network_id {
+            connection
+                .execute_batch("ALTER TABLE bandwidth_events ADD COLUMN network_id TEXT")
+                .map_err(|error| SyncwebError::operation("failed to migrate bandwidth event schema", error))?;
+        }
+        let has_accounting_scope = column_exists(&connection, "bandwidth_events", "accounting_scope")
+            .map_err(|error| SyncwebError::operation("failed to inspect bandwidth event accounting scope", error))?;
+        if !has_accounting_scope {
+            connection
+                .execute_batch(
+                    "ALTER TABLE bandwidth_events
+                     ADD COLUMN accounting_scope TEXT NOT NULL DEFAULT 'transfer'",
+                )
+                .map_err(|error| {
+                    SyncwebError::operation("failed to migrate bandwidth event accounting scope", error)
+                })?;
+        }
+        let has_connection_count = column_exists(&connection, "peer_connections", "connection_count")
+            .map_err(|error| SyncwebError::operation("failed to inspect connection event schema", error))?;
+        if !has_connection_count {
+            connection
+                .execute_batch(
+                    "ALTER TABLE peer_connections
+                     ADD COLUMN connection_count INTEGER NOT NULL DEFAULT 1",
+                )
+                .map_err(|error| SyncwebError::operation("failed to migrate connection event schema", error))?;
+        }
+        migrate_legacy_bandwidth_schema(&mut connection)
+            .map_err(|error| SyncwebError::operation("failed to migrate legacy bandwidth tables", error))?;
+        connection
+            .execute_batch(
+                "CREATE VIEW IF NOT EXISTS network_bandwidth_summary AS
              SELECT network_id,
                     MIN(timestamp) AS period_start,
                     MAX(timestamp) AS period_end,
@@ -158,11 +184,12 @@ impl StatsDatabase {
              FROM bandwidth_events
              WHERE network_id IS NOT NULL
              GROUP BY network_id",
-        );
+            )
+            .map_err(|error| SyncwebError::operation("failed to initialize network bandwidth summary", error))?;
         connection
             .execute(
-                "INSERT INTO schema_version(key, value) VALUES ('version', '1')
-             ON CONFLICT(key) DO NOTHING",
+                "INSERT INTO schema_version(key, value) VALUES ('version', '2')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [],
             )
             .map_err(|error| SyncwebError::operation("failed to seed schema version", error))?;
@@ -216,6 +243,9 @@ impl StatsDatabase {
         peer: Option<&str>,
         network_id: Option<&str>,
     ) -> Result<()> {
+        if bytes == 0 {
+            return Ok(());
+        }
         let connection = self
             .connection
             .lock()
@@ -251,22 +281,17 @@ impl StatsDatabase {
             .lock()
             .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
         let now = current_timestamp();
-        let period = find_or_create_period(&connection, now)
-            .map_err(|error| SyncwebError::operation("failed to find or create bandwidth period", error))?;
         connection
             .execute(
-                "INSERT INTO bandwidth_peer(period_start, peer, upload, download, connection_count)
-             VALUES (?1, ?2, 0, 0, 1)
-             ON CONFLICT(period_start, peer) DO UPDATE SET
-                connection_count = connection_count + 1",
-                params![period, peer],
+                "INSERT INTO peer_connections(timestamp, peer, connection_count) VALUES (?1, ?2, 1)",
+                params![now, peer],
             )
             .map_err(|error| SyncwebError::operation("failed to record connection", error))?;
         drop(connection);
         Ok(())
     }
 
-    /// Return aggregated bandwidth statistics for the current period.
+    /// Return event-backed bandwidth statistics for the current period.
     ///
     /// # Errors
     ///
@@ -277,14 +302,14 @@ impl StatsDatabase {
             .lock()
             .map_err(|error| SyncwebError::operation("stats database mutex is poisoned", error))?;
         let now = current_timestamp();
-        let period_start = find_or_create_period(&connection, now)
-            .map_err(|error| SyncwebError::operation("failed to find or create bandwidth period", error))?;
+        let period_start = current_period_start(now);
 
         let (total_upload, total_download): (i64, i64) = connection
             .query_row(
                 "SELECT COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0)
-             FROM bandwidth_events WHERE timestamp >= ?1",
+             FROM bandwidth_events
+             WHERE timestamp >= ?1 AND accounting_scope IN ('transfer', 'legacy_total')",
                 params![period_start],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -293,8 +318,15 @@ impl StatsDatabase {
         let mut per_folder = BTreeMap::new();
         let mut folder_stmt = connection
             .prepare(
-                "SELECT folder_namespace, upload, download, files_transferred
-             FROM bandwidth_folder WHERE period_start = ?1",
+                "SELECT folder_namespace,
+                        COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(files), 0)
+                 FROM bandwidth_events
+                 WHERE timestamp >= ?1
+                   AND accounting_scope IN ('transfer', 'legacy_folder')
+                   AND folder_namespace IS NOT NULL
+                 GROUP BY folder_namespace",
             )
             .map_err(|error| SyncwebError::operation("failed to prepare folder stats query", error))?;
         let folder_rows = folder_stmt
@@ -323,35 +355,56 @@ impl StatsDatabase {
         let mut per_peer = BTreeMap::new();
         let mut peer_stmt = connection
             .prepare(
-                "SELECT peer, upload, download, connection_count
-             FROM bandwidth_peer WHERE period_start = ?1",
+                "SELECT peer,
+                        COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0)
+                 FROM bandwidth_events
+                 WHERE timestamp >= ?1
+                   AND accounting_scope IN ('transfer', 'legacy_peer')
+                   AND peer IS NOT NULL
+                 GROUP BY peer",
             )
             .map_err(|error| SyncwebError::operation("failed to prepare peer stats query", error))?;
         let peer_rows = peer_stmt
             .query_map(params![period_start], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
             })
             .map_err(|error| SyncwebError::operation("failed to query peer stats", error))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|error| SyncwebError::operation("failed to read peer stats", error))?;
-        for (peer, upload, download, conns) in peer_rows {
+        for (peer, upload, download) in peer_rows {
             per_peer.insert(
                 peer,
                 PeerStats {
                     upload: upload.cast_unsigned(),
                     download: download.cast_unsigned(),
-                    connection_count: conns.cast_unsigned(),
+                    connection_count: 0,
                 },
             );
         }
 
+        let mut connection_stmt = connection
+            .prepare(
+                "SELECT peer, COALESCE(SUM(connection_count), 0)
+                 FROM peer_connections
+                 WHERE timestamp >= ?1
+                 GROUP BY peer",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare connection stats query", error))?;
+        let connection_rows = connection_stmt
+            .query_map(params![period_start], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query connection stats", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read connection stats", error))?;
+        for (peer, connections) in connection_rows {
+            per_peer.entry(peer).or_default().connection_count = connections.cast_unsigned();
+        }
+
         drop(folder_stmt);
         drop(peer_stmt);
+        drop(connection_stmt);
         drop(connection);
         Ok(BandwidthStats {
             total_upload: total_upload.cast_unsigned(),
@@ -362,10 +415,8 @@ impl StatsDatabase {
         })
     }
 
-    /// Return bandwidth statistics aggregated from transfer events recorded on
-    /// or after `since_ts`. Unlike [`Self::current_stats`], the folder/peer
-    /// breakdowns are computed directly from `bandwidth_events`, so the window
-    /// can be any timestamp (not just a persisted hourly period bucket).
+    /// Return bandwidth statistics aggregated from transfer and connection
+    /// events recorded on or after `since_ts`.
     ///
     /// # Errors
     ///
@@ -380,7 +431,8 @@ impl StatsDatabase {
             .query_row(
                 "SELECT COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0)
-                 FROM bandwidth_events WHERE timestamp >= ?1",
+                 FROM bandwidth_events
+                 WHERE timestamp >= ?1 AND accounting_scope IN ('transfer', 'legacy_total')",
                 params![since_ts],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -394,7 +446,9 @@ impl StatsDatabase {
                         COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0),
                         COALESCE(SUM(files), 0)
                  FROM bandwidth_events
-                 WHERE timestamp >= ?1 AND folder_namespace IS NOT NULL
+                 WHERE timestamp >= ?1
+                   AND accounting_scope IN ('transfer', 'legacy_folder')
+                   AND folder_namespace IS NOT NULL
                  GROUP BY folder_namespace",
             )
             .map_err(|error| SyncwebError::operation("failed to prepare folder stats query", error))?;
@@ -427,36 +481,53 @@ impl StatsDatabase {
             .prepare(
                 "SELECT peer,
                         COALESCE(SUM(CASE WHEN direction='upload' THEN bytes ELSE 0 END), 0),
-                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0),
-                        COUNT(*)
+                        COALESCE(SUM(CASE WHEN direction='download' THEN bytes ELSE 0 END), 0)
                  FROM bandwidth_events
-                 WHERE timestamp >= ?1 AND peer IS NOT NULL
+                 WHERE timestamp >= ?1
+                   AND accounting_scope IN ('transfer', 'legacy_peer')
+                   AND peer IS NOT NULL
                  GROUP BY peer",
             )
             .map_err(|error| SyncwebError::operation("failed to prepare peer stats query", error))?;
         let peer_rows = peer_stmt
             .query_map(params![since_ts], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
             })
             .map_err(|error| SyncwebError::operation("failed to query peer stats", error))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|error| SyncwebError::operation("failed to read peer stats", error))?;
-        for (peer, upload, download, conns) in peer_rows {
+        for (peer, upload, download) in peer_rows {
             per_peer.insert(
                 peer,
                 PeerStats {
                     upload: upload.cast_unsigned(),
                     download: download.cast_unsigned(),
-                    connection_count: conns.cast_unsigned(),
+                    connection_count: 0,
                 },
             );
         }
         drop(peer_stmt);
+
+        let mut connection_stmt = connection
+            .prepare(
+                "SELECT peer, COALESCE(SUM(connection_count), 0)
+                 FROM peer_connections
+                 WHERE timestamp >= ?1
+                 GROUP BY peer",
+            )
+            .map_err(|error| SyncwebError::operation("failed to prepare connection stats query", error))?;
+        let connection_rows = connection_stmt
+            .query_map(params![since_ts], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|error| SyncwebError::operation("failed to query connection stats", error))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| SyncwebError::operation("failed to read connection stats", error))?;
+        for (peer, connections) in connection_rows {
+            per_peer.entry(peer).or_default().connection_count = connections.cast_unsigned();
+        }
+        drop(connection_stmt);
+
         drop(connection);
         Ok(BandwidthStats {
             total_upload: total_upload.cast_unsigned(),
@@ -559,14 +630,8 @@ impl StatsDatabase {
             .execute("DELETE FROM bandwidth_events", [])
             .map_err(|error| SyncwebError::operation("failed to clear bandwidth events", error))?;
         connection
-            .execute("DELETE FROM bandwidth_folder", [])
-            .map_err(|error| SyncwebError::operation("failed to clear folder bandwidth", error))?;
-        connection
-            .execute("DELETE FROM bandwidth_peer", [])
-            .map_err(|error| SyncwebError::operation("failed to clear peer bandwidth", error))?;
-        connection
-            .execute("DELETE FROM bandwidth_period", [])
-            .map_err(|error| SyncwebError::operation("failed to clear bandwidth periods", error))?;
+            .execute("DELETE FROM peer_connections", [])
+            .map_err(|error| SyncwebError::operation("failed to clear peer connections", error))?;
         drop(connection);
         Ok(())
     }
@@ -606,6 +671,9 @@ impl StatsDatabase {
         let deleted = connection
             .execute("DELETE FROM bandwidth_events WHERE timestamp < ?1", params![cutoff])
             .map_err(|error| SyncwebError::operation("failed to purge old bandwidth events", error))?;
+        connection
+            .execute("DELETE FROM peer_connections WHERE timestamp < ?1", params![cutoff])
+            .map_err(|error| SyncwebError::operation("failed to purge old peer connections", error))?;
         drop(connection);
         Ok(deleted)
     }
@@ -982,7 +1050,7 @@ fn migrate_network_events_schema(connection: &Connection) -> Result<()> {
         .optional()
         .map_err(|error| SyncwebError::operation("failed to inspect network event schema", error))?;
     let schema_sql = schema.unwrap_or_default();
-    if schema_sql.contains("'request_rejected'") {
+    if schema_sql.contains("'request_rejected'") && schema_sql.contains("'kicked'") {
         return Ok(());
     }
 
@@ -1053,12 +1121,130 @@ impl crate::storage::Vacuumable for StatsDatabase {
     }
 }
 
-fn find_or_create_period(connection: &Connection, now: i64) -> std::result::Result<i64, rusqlite::Error> {
-    let period_start = now.div_euclid(3600).saturating_mul(3600);
-    connection.execute(
-        "INSERT OR IGNORE INTO bandwidth_period(period_start, total_upload, total_download, closed)
-         VALUES (?1, 0, 0, 0)",
-        params![period_start],
+const fn current_period_start(now: i64) -> i64 {
+    now.div_euclid(3600).saturating_mul(3600)
+}
+
+fn table_exists(connection: &Connection, table: &str) -> std::result::Result<bool, rusqlite::Error> {
+    connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+        )",
+        params![table],
+        |row| row.get(0),
+    )
+}
+
+fn column_exists(connection: &Connection, table: &str, column: &str) -> std::result::Result<bool, rusqlite::Error> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn migrate_legacy_bandwidth_schema(connection: &mut Connection) -> std::result::Result<(), rusqlite::Error> {
+    let has_period = table_exists(connection, "bandwidth_period")?;
+    let has_folder = table_exists(connection, "bandwidth_folder")?;
+    let has_peer = table_exists(connection, "bandwidth_peer")?;
+    if !has_period && !has_folder && !has_peer {
+        return Ok(());
+    }
+    if !has_period {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let transaction = connection.transaction()?;
+    transaction.execute(
+        "INSERT INTO bandwidth_events(
+            timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+         )
+         SELECT period_start, 'upload', total_upload, 0, NULL, NULL, NULL, 'legacy_total'
+         FROM bandwidth_period
+         WHERE total_upload > 0",
+        [],
     )?;
-    Ok(period_start)
+    transaction.execute(
+        "INSERT INTO bandwidth_events(
+            timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+         )
+         SELECT period_start, 'download', total_download, 0, NULL, NULL, NULL, 'legacy_total'
+         FROM bandwidth_period
+         WHERE total_download > 0",
+        [],
+    )?;
+    if has_folder {
+        transaction.execute(
+            "INSERT INTO bandwidth_events(
+                timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+             )
+             SELECT period_start, 'upload', upload,
+                    CASE WHEN upload > 0 THEN files_transferred ELSE 0 END,
+                    folder_namespace, NULL, NULL, 'legacy_folder'
+             FROM bandwidth_folder
+             WHERE upload > 0",
+            [],
+        )?;
+        transaction.execute(
+            "INSERT INTO bandwidth_events(
+                timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+             )
+             SELECT period_start, 'download', download,
+                    CASE WHEN upload > 0 THEN 0 ELSE files_transferred END,
+                    folder_namespace, NULL, NULL, 'legacy_folder'
+             FROM bandwidth_folder
+             WHERE download > 0",
+            [],
+        )?;
+    }
+    if has_peer {
+        transaction.execute(
+            "INSERT INTO bandwidth_events(
+                timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+             )
+             SELECT period_start, 'upload', upload, 0, NULL, peer, NULL, 'legacy_peer'
+             FROM bandwidth_peer
+             WHERE upload > 0",
+            [],
+        )?;
+        transaction.execute(
+            "INSERT INTO bandwidth_events(
+                timestamp, direction, bytes, files, folder_namespace, peer, network_id, accounting_scope
+             )
+             SELECT period_start, 'download', download, 0, NULL, peer, NULL, 'legacy_peer'
+             FROM bandwidth_peer
+             WHERE download > 0",
+            [],
+        )?;
+
+        let mut statement = transaction.prepare(
+            "SELECT period_start, peer, connection_count
+             FROM bandwidth_peer
+             WHERE connection_count > 0",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        drop(statement);
+        for (timestamp, peer, connection_count) in rows {
+            transaction.execute(
+                "INSERT INTO peer_connections(timestamp, peer, connection_count)
+                 VALUES (?1, ?2, ?3)",
+                params![timestamp, peer, connection_count],
+            )?;
+        }
+    }
+    if has_folder {
+        transaction.execute("DROP TABLE bandwidth_folder", [])?;
+    }
+    if has_peer {
+        transaction.execute("DROP TABLE bandwidth_peer", [])?;
+    }
+    transaction.execute("DROP TABLE bandwidth_period", [])?;
+    transaction.commit()
 }

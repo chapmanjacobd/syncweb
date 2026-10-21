@@ -142,6 +142,9 @@ impl Importer {
                 format!("input path does not exist: {}", input.display()),
             )));
         }
+        // Note: the importer's root differs from `resolve_scan_root` for a file
+        // input — it scans the file's parent so the logical path stays relative
+        // to the containing directory, then retains only the file below.
         let root = self.root.clone().unwrap_or_else(|| {
             if input.is_dir() {
                 input.to_path_buf()

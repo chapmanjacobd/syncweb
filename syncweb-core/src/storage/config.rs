@@ -87,6 +87,19 @@ impl Config {
                 TimeWindow::parse(value)?;
                 value.clone_into(&mut self.schedule.active_hours);
             }
+            _ if key.starts_with("schedule.folders.") && key.ends_with(".active_hours") => {
+                let name = key
+                    .strip_prefix("schedule.folders.")
+                    .and_then(|rest| rest.strip_suffix(".active_hours"))
+                    .unwrap_or_default();
+                if name.is_empty() {
+                    return Err(SyncwebError::InvalidConfig(format!(
+                        "invalid schedule key {key:?}; expected schedule.folders.<name>.active_hours"
+                    )));
+                }
+                TimeWindow::parse(value)?;
+                self.schedule.folders.entry(name.to_owned()).or_default().active_hours = Some(value.to_owned());
+            }
             _ if key.starts_with("transfer_limits.") => {
                 if !self.transfer_limits.set(key, value)? {
                     return Err(SyncwebError::InvalidConfig(format!(
@@ -175,6 +188,7 @@ impl Config {
                 return Err(SyncwebError::InvalidConfig(format!(
                     "unsupported config key {key:?}; supported keys: \
                      bep.enabled, bep.relay_urls, bep.relay_timeout, bep.auto_fallback, schedule.active_hours, \
+                     schedule.folders.<name>.active_hours, \
                      transfer_limits.max_download_per_hour, transfer_limits.max_download_per_day, \
                      transfer_limits.max_download_per_month, transfer_limits.max_upload_per_hour, \
                      transfer_limits.max_upload_per_day, transfer_limits.max_upload_per_month, \

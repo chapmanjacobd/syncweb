@@ -6,7 +6,10 @@ use std::{
 use iroh::PublicKey;
 use iroh_blobs::Hash;
 
-use crate::{error::Result, provider_lease::ProviderLease};
+use crate::{
+    error::Result,
+    provider_lease::{ProviderCapabilities, ProviderLease},
+};
 
 /// The source of a provider availability observation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,6 +37,8 @@ pub struct ProviderObservation {
     pub source: ObservationSource,
     /// Confidence is an application-defined score from 0 through 100.
     pub confidence: u8,
+    /// Capabilities explicitly advertised by the provider.
+    pub capabilities: ProviderCapabilities,
 }
 
 /// Bounded transfer history for one provider.
@@ -230,6 +235,24 @@ impl PeerTracker {
         source: ObservationSource,
         confidence: u8,
     ) {
+        self.record_observation_with_capabilities(
+            blob_hash,
+            node_id,
+            source,
+            confidence,
+            ProviderCapabilities::default(),
+        );
+    }
+
+    /// Record an observation together with capabilities from a signed lease.
+    pub fn record_observation_with_capabilities(
+        &mut self,
+        blob_hash: Hash,
+        node_id: PublicKey,
+        source: ObservationSource,
+        confidence: u8,
+        capabilities: ProviderCapabilities,
+    ) {
         self.purge_negative();
         self.negative.remove(&(blob_hash, node_id));
         self.clock = self.clock.saturating_add(1);
@@ -244,6 +267,7 @@ impl PeerTracker {
         let metadata = ProviderObservation {
             source,
             confidence: confidence.min(100),
+            capabilities,
         };
         entry
             .peers
@@ -253,6 +277,8 @@ impl PeerTracker {
                     record.metadata.source = source;
                 }
                 record.metadata.confidence = record.metadata.confidence.max(metadata.confidence);
+                record.metadata.capabilities.supports_segments |= metadata.capabilities.supports_segments;
+                record.metadata.capabilities.supports_relay |= metadata.capabilities.supports_relay;
                 record.observed_at = observed_at;
             })
             .or_insert(ObservationRecord { metadata, observed_at });
@@ -282,9 +308,25 @@ impl PeerTracker {
         let provider = lease.provider_id()?;
         let hashes = lease.content_hashes()?;
         for hash in &hashes {
-            self.record_observation(*hash, provider, ObservationSource::Lease, 75);
+            self.record_observation_with_capabilities(
+                *hash,
+                provider,
+                ObservationSource::Lease,
+                75,
+                lease.capabilities,
+            );
         }
         Ok(hashes.len())
+    }
+
+    /// Return capabilities advertised by a fresh provider observation.
+    #[must_use]
+    pub fn provider_capabilities(&self, blob_hash: &Hash, node_id: &PublicKey) -> Option<ProviderCapabilities> {
+        let entry = self.entries.get(blob_hash)?;
+        if entry.last_seen.elapsed() > self.expiry || self.is_negative(blob_hash, node_id) {
+            return None;
+        }
+        entry.peers.get(node_id).map(|record| record.metadata.capabilities)
     }
 
     #[must_use]

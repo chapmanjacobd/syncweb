@@ -10,7 +10,6 @@ use iroh_blobs::Hash;
 use iroh_docs::NamespaceId;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use tracing;
 use uuid::Uuid;
 
 use crate::{
@@ -391,25 +390,38 @@ impl NodeDatabase {
         connection
             .execute_batch(Self::create_schema_sql())
             .map_err(|error| SyncwebError::operation("failed to initialize node database schema", error))?;
-        if let Err(error) = connection.execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT") {
-            tracing::debug!(%error, "migration: add doc_ticket (may already exist)");
+        if !Self::has_column(&connection, "networks", "doc_ticket")? {
+            connection
+                .execute_batch("ALTER TABLE networks ADD COLUMN doc_ticket TEXT")
+                .map_err(|error| SyncwebError::operation("failed to migrate network schema", error))?;
         }
-        for migration in [
-            "ALTER TABLE folder_status_reports ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'",
-            "ALTER TABLE folder_status_reports ADD COLUMN mode TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE folder_status_reports ADD COLUMN sync_count INTEGER NOT NULL DEFAULT 0",
+        for (column, migration) in [
+            (
+                "kind",
+                "ALTER TABLE folder_status_reports ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'",
+            ),
+            (
+                "mode",
+                "ALTER TABLE folder_status_reports ADD COLUMN mode TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "sync_count",
+                "ALTER TABLE folder_status_reports ADD COLUMN sync_count INTEGER NOT NULL DEFAULT 0",
+            ),
         ] {
-            if let Err(error) = connection.execute_batch(migration) {
-                tracing::debug!(%error, "migration: {migration} (may already exist)");
+            if !Self::has_column(&connection, "folder_status_reports", column)? {
+                connection
+                    .execute_batch(migration)
+                    .map_err(|error| SyncwebError::operation("failed to migrate folder status schema", error))?;
             }
         }
-        if let Err(error) = connection.execute_batch(
-            "CREATE INDEX IF NOT EXISTS idx_transfer_jobs_namespace ON transfer_jobs(namespace_id);
-             CREATE INDEX IF NOT EXISTS idx_transfer_jobs_state ON transfer_jobs(state);
-             CREATE INDEX IF NOT EXISTS idx_transfer_jobs_root ON transfer_jobs(root_id);",
-        ) {
-            tracing::debug!(%error, "migration: add transfer job indexes (may already exist)");
-        }
+        connection
+            .execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_transfer_jobs_namespace ON transfer_jobs(namespace_id);
+                 CREATE INDEX IF NOT EXISTS idx_transfer_jobs_state ON transfer_jobs(state);
+                 CREATE INDEX IF NOT EXISTS idx_transfer_jobs_root ON transfer_jobs(root_id);",
+            )
+            .map_err(|error| SyncwebError::operation("failed to initialize transfer job indexes", error))?;
 
         connection
             .execute(
@@ -715,6 +727,20 @@ impl NodeDatabase {
             drop(connection);
             Ok(None)
         }
+    }
+
+    fn has_column(connection: &Connection, table: &str, column: &str) -> Result<bool> {
+        connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1
+                    FROM pragma_table_info(?1)
+                    WHERE name = ?2
+                )",
+                params![table, column],
+                |row| row.get(0),
+            )
+            .map_err(|error| SyncwebError::operation("failed to inspect database schema", error))
     }
 
     /// Remove all daemon status data.

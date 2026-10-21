@@ -15,7 +15,8 @@ use crate::net::RelayManager;
 use crate::provider_lease::ProviderLease;
 use crate::storage::node_db::NodeDatabase;
 use crate::sync::{
-    EvictionStrategy, ObservationSource, PeerTracker, TransferRequest, TransferScheduler, TransferSchedulerConfig,
+    EvictionStrategy, ObservationSource, PeerTracker, SegmentChunk, TransferRequest, TransferScheduler,
+    TransferSchedulerConfig, TransferSegment,
 };
 
 use super::beacon_lookup::{BeaconAddressLookup, DEFAULT_BEACON_PORT};
@@ -605,6 +606,64 @@ impl IrohNode {
                 "blob fetch and provider observation failed",
                 format!("{fetch}; {observation_error}"),
             )),
+        }
+    }
+
+    /// Return whether a fresh signed provider observation advertises range
+    /// transfers for this blob and peer.
+    ///
+    /// Unknown providers deliberately return `false`, preserving the
+    /// whole-blob compatibility path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider registry mutex is poisoned.
+    pub fn provider_supports_segments(&self, hash: &Hash, peer: &iroh::PublicKey) -> Result<bool> {
+        Ok(self
+            .provider_registry_guard()?
+            .provider_capabilities(hash, peer)
+            .is_some_and(|capabilities| capabilities.supports_segments))
+    }
+
+    /// Fetch one verified byte range from a provider that advertised range
+    /// support.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is unavailable, the range cannot be
+    /// verified, or provider accounting cannot be updated.
+    pub async fn fetch_segment_from_peer(
+        &self,
+        peer: &iroh::EndpointAddr,
+        segment: TransferSegment,
+    ) -> Result<SegmentChunk> {
+        if !self.provider_registry_guard()?.should_try_peer(&segment.hash, &peer.id) {
+            return Err(SyncwebError::operation(
+                "provider temporarily unavailable",
+                "recent request failure is in the retry cooldown",
+            ));
+        }
+        let started = Instant::now();
+        let result = self
+            .blob_store
+            .fetch_segment_from_peer(&self.endpoint, peer, segment.hash, segment.offset, segment.length)
+            .await;
+        match result {
+            Ok(bytes) => {
+                let chunk = SegmentChunk::new(segment, bytes)?;
+                let mut registry = self.provider_registry_guard()?;
+                registry.record_transfer(peer.id, true, segment.length, started.elapsed());
+                registry.record_peer(segment.hash, peer.id);
+                drop(registry);
+                Ok(chunk)
+            }
+            Err(error) => {
+                let mut registry = self.provider_registry_guard()?;
+                registry.record_transfer(peer.id, false, 0, started.elapsed());
+                registry.record_failure(segment.hash, peer.id);
+                drop(registry);
+                Err(error)
+            }
         }
     }
 

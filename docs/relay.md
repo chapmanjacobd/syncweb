@@ -113,11 +113,8 @@ auto_fallback = true
 ### CLI Usage
 
 ```bash
-# Enable relay fallback globally
+# Enable relay fallback globally for every folder
 syncweb config set bep.enabled true
-
-# Or per-connection
-syncweb folders join --relay-fallback syncweb://folder-id#NODE-ID
 
 # Test relay connectivity
 syncweb network test-relay tcp://relay.syncthing.net:22270

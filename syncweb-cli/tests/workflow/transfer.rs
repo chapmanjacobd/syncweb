@@ -109,16 +109,16 @@ fn transfer_root_and_enqueue() -> anyhow::Result<()> {
         "job should be assigned to root: {assigned_job}"
     );
 
-    let _pause = run(alice, &["transfer", "pause", &job_id])?;
+    let _pause = run(alice, &["transfer", "set", &job_id, "pause"])?;
     ensure!(job_state(alice, "transfer info after pause")? == serde_json::Value::from("paused"));
 
-    let _resume = run(alice, &["transfer", "resume", &job_id])?;
+    let _resume = run(alice, &["transfer", "set", &job_id, "resume"])?;
     ensure!(job_state(alice, "transfer info after resume")? == serde_json::Value::from("queued"));
 
-    let _cancel = run(alice, &["transfer", "cancel", &job_id])?;
+    let _cancel = run(alice, &["transfer", "set", &job_id, "cancel"])?;
     ensure!(job_state(alice, "transfer info after cancel")? == serde_json::Value::from("cancelled"));
 
-    let _retry = run(alice, &["transfer", "retry", &job_id])?;
+    let _retry = run(alice, &["transfer", "set", &job_id, "retry"])?;
     ensure!(job_state(alice, "transfer info after retry")? == serde_json::Value::from("queued"));
 
     Ok(())

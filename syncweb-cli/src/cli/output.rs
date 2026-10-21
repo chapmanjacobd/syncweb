@@ -228,7 +228,7 @@ pub fn package_install_next_steps(collection: &str, version: &str) -> Vec<String
             "content is eager: {collection} {version} was fetched, verified, and materialized under the install root"
         ),
         format!("re-check integrity with `syncweb package verify {collection}`"),
-        "new versions install with `syncweb package upgrade <ticket>`; `syncweb package list` shows what is installed"
+        "new versions install with `syncweb package install <ticket>`; `syncweb package list` shows what is installed"
             .to_owned(),
     ]
 }

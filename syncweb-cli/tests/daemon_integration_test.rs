@@ -144,6 +144,15 @@ fn test_help_mentions_daemon_commands() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_start_help_mentions_background_restart_limit() -> anyhow::Result<()> {
+    let output = syncweb(&["start", "--help"])?;
+    ensure!(output.status.success());
+    let help = String::from_utf8(output.stdout).context("UTF-8 output")?;
+    ensure!(help.contains("no automatic restart supervision"));
+    Ok(())
+}
+
+#[test]
 fn test_no_daemon_flag_is_listed_in_help() -> anyhow::Result<()> {
     let output = syncweb(&["--help"])?;
     ensure!(output.status.success());
@@ -2581,9 +2590,17 @@ fn test_network_peers_returns_envelope_via_daemon() -> anyhow::Result<()> {
     ])?;
     ensure!(import.status.success(), "folders import should succeed");
 
-    // `network peers <ns> --json` must return the `{folder, peers, per_blob}`
+    // `network list --peers <ns> --json` must return the `{folder, peers, per_blob}`
     // envelope with a `peers` array and per-blob rows whose `% seeded` ≥ 0.
-    let peers = syncweb(&["--json", "--data-dir", data_dir_arg, "network", "peers", &namespace])?;
+    let peers = syncweb(&[
+        "--json",
+        "--data-dir",
+        data_dir_arg,
+        "network",
+        "list",
+        "--peers",
+        &namespace,
+    ])?;
     ensure!(
         peers.status.success(),
         "network peers should succeed: {}",
@@ -2617,10 +2634,18 @@ fn test_network_peers_returns_envelope_via_daemon() -> anyhow::Result<()> {
         ensure!(seeded >= 0.0, "pct_seeded should be >= 0: {value}");
     }
 
-    // `network peers` with no daemon must not guess: empty peers + per_blob.
+    // `network list --peers` with no daemon must not guess: empty peers + per_blob.
     let no_daemon_dir = cli_test_dir("network-peers-no-daemon")?;
     let no_daemon_arg = no_daemon_dir.to_str().context("UTF-8 path")?;
-    let empty = syncweb(&["--json", "--no-daemon", "--data-dir", no_daemon_arg, "network", "peers"])?;
+    let empty = syncweb(&[
+        "--json",
+        "--no-daemon",
+        "--data-dir",
+        no_daemon_arg,
+        "network",
+        "list",
+        "--peers",
+    ])?;
     ensure!(empty.status.success(), "network peers without daemon should succeed");
     let empty_value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&empty.stdout))
         .context("no-daemon network peers should be valid JSON")?;
@@ -3451,9 +3476,8 @@ fn test_inactive_schedule_window_pauses_folder() -> anyhow::Result<()> {
         data_arg,
         "--no-daemon",
         "config",
-        "schedule",
         "set",
-        "--active",
+        "schedule.active_hours",
         &window,
     ])?;
     ensure!(

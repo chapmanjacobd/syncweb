@@ -197,7 +197,7 @@ impl Device {
     }
 
     pub fn network_list(&self) -> anyhow::Result<Vec<String>> {
-        let output = self.run_ok(&["network", "status"])?;
+        let output = self.run_ok(&["network", "list", "--health"])?;
         Ok(output
             .stdout()
             .lines()

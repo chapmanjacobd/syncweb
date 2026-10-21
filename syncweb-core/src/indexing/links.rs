@@ -855,10 +855,10 @@ impl LinkResolver {
         let mut state = self.lock_state()?;
         let mirrors = state.mirrors.entry(mirror.hash).or_default();
         if !mirrors.iter().any(|existing| existing.ticket == mirror.ticket) {
-            mirrors.push(mirror.clone());
             if let Some(ref database) = self.database {
-                let _ = database.upsert_link_mirror(&mirror.ticket.to_string());
+                database.upsert_link_mirror(&mirror.ticket.to_string())?;
             }
+            mirrors.push(mirror);
         }
         drop(state);
         Ok(())
@@ -897,18 +897,20 @@ impl LinkResolver {
                 pointer.sequence, current.sequence
             )));
         }
+        if let Some(version) = &pointer.version
+            && history.versions.contains_key(version)
+        {
+            return Err(SyncwebError::InvalidConfig(format!(
+                "mutable link version {version:?} is already published"
+            )));
+        }
+        if let Some(ref database) = self.database {
+            database.upsert_link_pointer(pointer)?;
+        }
         if let Some(version) = &pointer.version {
-            if history.versions.contains_key(version) {
-                return Err(SyncwebError::InvalidConfig(format!(
-                    "mutable link version {version:?} is already published"
-                )));
-            }
             history.versions.insert(version.clone(), pointer.clone());
         }
         history.current = Some(pointer.clone());
-        if let Some(ref database) = self.database {
-            let _ = database.upsert_link_pointer(pointer);
-        }
         drop(state);
         Ok(())
     }

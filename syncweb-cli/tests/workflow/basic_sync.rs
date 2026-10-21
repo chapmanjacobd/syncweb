@@ -469,17 +469,20 @@ fn join_with_mode_receiveonly() -> anyhow::Result<()> {
 }
 
 #[test]
-fn create_with_relay_fallback() -> anyhow::Result<()> {
+fn create_and_join_with_network() -> anyhow::Result<()> {
     let world = World::new(&["alice"])?;
     let alice = world.device("alice")?;
 
-    let folder_dir = world.root().join("relay-folder");
+    let _network = alice.network_create("relay-net")?;
+
+    let folder_dir = world.root().join("network-folder");
     let info = alice.run_ok(&[
         "--json",
         "--no-daemon",
         "folders",
         "create",
-        "--relay-fallback",
+        "--network",
+        "relay-net",
         folder_dir.to_str().context("UTF-8 path")?,
     ])?;
     let value: serde_json::Value = serde_json::from_str(&info.stdout()).context("create should emit JSON")?;
@@ -489,25 +492,11 @@ fn create_with_relay_fallback() -> anyhow::Result<()> {
         info.stdout()
     );
 
-    Ok(())
-}
-
-#[test]
-fn join_with_relay_fallback() -> anyhow::Result<()> {
-    let world = World::new(&["alice", "bob"])?;
-    let alice = world.device("alice")?;
-    let bob = world.device("bob")?;
-
-    let folder_dir = world.root().join("relay-docs");
-    let info = alice.create(&folder_dir)?;
-
-    let bob_dir = world.root().join("bob-relay-docs");
-    bob.join_with_options(&["--relay-fallback"], &info.ticket, &bob_dir)?;
-
-    let folders = bob.folders()?;
+    let listed = alice.run_ok(&["--no-daemon", "network", "list", "relay-net"])?;
     ensure!(
-        folders.iter().any(|f| f.contains(&info.namespace)),
-        "bob should see the joined folder: {folders:?}"
+        listed.stdout().contains("Folders") && listed.stdout().contains('1'),
+        "created folder should be attached to the network: {}",
+        listed.stdout()
     );
 
     Ok(())
@@ -578,7 +567,7 @@ fn network_events_and_health() -> anyhow::Result<()> {
         events.stdout()
     );
 
-    let health = alice.run_ok(&["network", "status", id])?;
+    let health = alice.run_ok(&["network", "list", "--health", id])?;
     ensure!(
         health.stdout().contains("events:"),
         "should report event count: {}",

@@ -19,10 +19,10 @@ use cli::{
     commands::{
         AccessArgs, Command, ConfigCommand, ConflictCommand, ConflictListArgs, ConflictResolveArgs, ConflictShowArgs,
         FolderRetentionArgs, FoldersCommand, ImportArgs, ListingFlags, NetworkCommand, PackageCommand,
-        PackageExportMode, RestoreArgs, ScheduleCommand, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs,
-        SnapshotCommand, SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs,
-        StatsNetworkArgs, StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs,
-        TransferInfoArgs, TransferJobArgs, TransferMaterializeArgs, TransferRootArgs, VerifyArgs, WatchArgs,
+        PackageExportMode, RestoreArgs, SearchArgs, SearchKind, ShareArgs, ShareCommand, ShutdownArgs, SnapshotCommand,
+        SnapshotCreateArgs, SnapshotRestoreArgs, StartArgs, StatsCommand, StatsFilesArgs, StatsNetworkArgs,
+        StatsSeedingArgs, TransferAllocateArgs, TransferCommand, TransferEnqueueArgs, TransferInfoArgs,
+        TransferJobState, TransferMaterializeArgs, TransferRootArgs, TransferSetArgs, VerifyArgs, WatchArgs,
     },
     filter::{ContentFilter, ContentFilterArgs},
     output::{
@@ -49,14 +49,16 @@ use syncweb_core::{
         DropExporter, DropImportOptions, DropImporter, FolderLike, FolderManager, PackageManager, SyncMode,
         SyncwebFolder,
     },
-    fs::{FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner, Scanner},
+    fs::{
+        FileEntry, FileType, FsWatcher, Importer, ParallelImporter, ParallelScanner, ScanRootsRequest, Scanner,
+        scan_roots,
+    },
     init::open_node,
     net::{NetworkLogger, NetworkManager, NetworkOptions, RelayManager, RelayManagerOptions},
     node::{
         identity::{DeviceId, IdentityManager},
         iroh_node::IrohNode,
     },
-    schedule::ScheduleManager,
     search::{FindEngine, FindQuery, filter_entries},
     snapshot::SnapshotStore,
     sort::{SortConfig, SortEntry, Sorter},
@@ -76,7 +78,6 @@ use syncweb_core::{
 use tokio_util::sync::CancellationToken;
 
 const ERR_DAEMON_NOT_RUNNING: &str = "daemon is not running; start with `syncweb start`";
-const ERR_NO_FOLDERS: &str = "no synchronized folders are available";
 const DEFAULT_MEDIA_LISTEN: &str = "127.0.0.1:9193";
 
 async fn run_media_server(listen: std::net::SocketAddr, data_dir: &Path) -> Result<()> {
@@ -363,7 +364,7 @@ async fn execute_auxiliary_command(cli: Cli) -> Result<()> {
         return handle_config(&ctx, config).await;
     }
     if let Command::Db { command: db_cmd } = command {
-        return handle_db(&ctx, db_cmd);
+        return handle_db(&ctx, &db_cmd);
     }
     if let Command::Backup(args) = command {
         return handle_db_backup(ctx.data_dir, &args.output, args.include_blobs, ctx.output_json);
@@ -454,7 +455,6 @@ async fn handle_config(ctx: &CliContext<'_>, command: Option<ConfigCommand>) -> 
                 println!("{key} updated");
             }
         }
-        Some(ConfigCommand::Schedule { command: schedule }) => return handle_schedule(ctx, schedule),
     }
     Ok(())
 }
@@ -1053,24 +1053,22 @@ async fn handle_daemon_sync(ctx: &CliContext<'_>, namespace: Option<String>) -> 
 
 #[async_recursion]
 async fn resolve_namespace_via_daemon(client: &syncweb_core::daemon::IpcClient, selector: &str) -> Result<String> {
-    if let Ok(ns) = selector.parse::<iroh_docs::NamespaceId>() {
-        return Ok(ns.to_string());
-    }
-    let folders = client.list_folders().await?;
+    let folders: Vec<syncweb_core::folder::FolderMount> = client
+        .list_folders()
+        .await?
+        .into_iter()
+        .map(|folder| syncweb_core::folder::FolderMount::new(folder.namespace, Some(folder.path)))
+        .collect();
+    // A path selector resolves against the daemon's folder mounts.
     let path = std::path::Path::new(selector);
-    let matched = if path.exists() {
-        folders.iter().find(|f| f.path == path)
-    } else {
-        folders.iter().find(|f| f.namespace.starts_with(selector))
-    };
-    match matched {
-        Some(f) => Ok(f.namespace.clone()),
-        None => match folders.as_slice() {
-            [folder] => Ok(folder.namespace.clone()),
-            [] => anyhow::bail!("{ERR_NO_FOLDERS}"),
-            _ => anyhow::bail!("'{selector}' is not a namespace ID and more than one folder is available"),
-        },
+    if path.exists()
+        && let Ok(resolved) = syncweb_core::folder::resolve_selector(path, &folders)
+    {
+        return Ok(resolved.namespace);
     }
+    // Namespace ID, unique prefix, or the sole folder.
+    let namespaces: Vec<String> = folders.into_iter().map(|folder| folder.namespace).collect();
+    Ok(syncweb_core::folder::resolve_namespace(selector, &namespaces)?)
 }
 
 fn print_daemon_ok(message: &str, output_json: bool) {
@@ -1520,7 +1518,7 @@ async fn download_one(ctx: &CliContext<'_>, command: crate::cli::commands::Downl
 /// entries count, the shared content-filter group narrows the set client-side,
 /// and the peer/count constraints select the final candidates. Peer counts come
 /// from the daemon when one answers; otherwise they are unknown (zero) — the
-/// same honest empty state `network peers` reports without a daemon.
+/// same honest empty state `network list --peers` reports without a daemon.
 async fn preview_download(ctx: &CliContext<'_>, command: &crate::cli::commands::DownloadArgs) -> Result<()> {
     if command.source.as_os_str() == "-" {
         anyhow::bail!("download --dry-run with stdin is not supported; preview one folder at a time");
@@ -1866,10 +1864,7 @@ async fn handle_transfer(ctx: &CliContext<'_>, command: TransferCommand) -> Resu
         TransferCommand::Enqueue(args) => handle_transfer_enqueue(ctx, args).await,
         TransferCommand::Allocate(args) => handle_transfer_allocate(ctx, &args),
         TransferCommand::Materialize(args) => handle_transfer_materialize(ctx, args).await,
-        TransferCommand::Pause(args) => handle_transfer_state(ctx, &args, "paused", "paused"),
-        TransferCommand::Resume(args) => handle_transfer_state(ctx, &args, "queued", "resumed"),
-        TransferCommand::Cancel(args) => handle_transfer_state(ctx, &args, "cancelled", "cancelled"),
-        TransferCommand::Retry(args) => handle_transfer_retry(ctx, &args),
+        TransferCommand::Set(args) => handle_transfer_set(ctx, &args),
     }
 }
 
@@ -2235,8 +2230,26 @@ async fn handle_transfer_materialize(ctx: &CliContext<'_>, args: TransferMateria
     Ok(())
 }
 
-fn handle_transfer_state(ctx: &CliContext<'_>, args: &TransferJobArgs, state: &str, action: &str) -> Result<()> {
+fn handle_transfer_set(ctx: &CliContext<'_>, args: &TransferSetArgs) -> Result<()> {
     let db = open_node_db(ctx.data_dir)?;
+    if args.state == TransferJobState::Retry {
+        db.retry_transfer_job(&args.id)?;
+        println!(
+            "{}",
+            if ctx.output_json {
+                serde_json::json!({"status": "queued", "id": args.id}).to_string()
+            } else {
+                format!("requeued transfer job {}", args.id)
+            }
+        );
+        return Ok(());
+    }
+    let (state, action) = match args.state {
+        TransferJobState::Pause => ("paused", "paused"),
+        TransferJobState::Resume => ("queued", "resumed"),
+        TransferJobState::Cancel => ("cancelled", "cancelled"),
+        TransferJobState::Retry => unreachable!("retry is handled above"),
+    };
     db.update_transfer_job_state(&args.id, state, None)?;
     println!(
         "{}",
@@ -2244,20 +2257,6 @@ fn handle_transfer_state(ctx: &CliContext<'_>, args: &TransferJobArgs, state: &s
             serde_json::json!({"status": state, "id": args.id}).to_string()
         } else {
             format!("{action} transfer job {}", args.id)
-        }
-    );
-    Ok(())
-}
-
-fn handle_transfer_retry(ctx: &CliContext<'_>, args: &TransferJobArgs) -> Result<()> {
-    let db = open_node_db(ctx.data_dir)?;
-    db.retry_transfer_job(&args.id)?;
-    println!(
-        "{}",
-        if ctx.output_json {
-            serde_json::json!({"status": "queued", "id": args.id}).to_string()
-        } else {
-            format!("requeued transfer job {}", args.id)
         }
     );
     Ok(())
@@ -2906,52 +2905,6 @@ fn print_file_stats_report(
     Ok(())
 }
 
-fn handle_schedule(ctx: &CliContext<'_>, command: Option<ScheduleCommand>) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let node_db = open_node_db(data_dir)?;
-    let mut config = node_db.load_app_config()?;
-    match command {
-        None => {
-            ScheduleManager::from_config(&config.schedule)?;
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&config.schedule)?);
-            } else {
-                println!("{}", toml::to_string_pretty(&config.schedule)?);
-            }
-        }
-        Some(ScheduleCommand::Set { active }) => {
-            let Some(window) = active else {
-                anyhow::bail!("schedule set requires --active");
-            };
-            syncweb_core::schedule::TimeWindow::parse(&window)?;
-            config.schedule.active_hours = window;
-            ScheduleManager::from_config(&config.schedule)?;
-            node_db.save_app_config(&config)?;
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&config.schedule)?);
-            } else {
-                println!("schedule updated");
-            }
-        }
-        Some(ScheduleCommand::Folder { name, active }) => {
-            let Some(window) = active else {
-                anyhow::bail!("schedule folder requires --active");
-            };
-            syncweb_core::schedule::TimeWindow::parse(&window)?;
-            config.schedule.folders.entry(name).or_default().active_hours = Some(window);
-            ScheduleManager::from_config(&config.schedule)?;
-            node_db.save_app_config(&config)?;
-            if output_json {
-                println!("{}", serde_json::to_string_pretty(&config.schedule)?);
-            } else {
-                println!("schedule folder updated");
-            }
-        }
-    }
-    Ok(())
-}
-
 #[async_recursion]
 async fn handle_watch(ctx: &CliContext<'_>, command: WatchArgs) -> Result<()> {
     let data_dir = ctx.data_dir;
@@ -3241,6 +3194,9 @@ async fn handle_create(ctx: &CliContext<'_>, mut command: crate::cli::commands::
             }
         }
         let namespace = created_namespace.ok_or_else(|| anyhow::anyhow!("daemon create did not report a namespace"))?;
+        if let Some(network_name) = command.network.clone() {
+            add_folder_to_network(data_dir, &network_name, namespace.parse::<iroh_docs::NamespaceId>()?)?;
+        }
         let node_db = open_node_db(data_dir)?;
         node_db.upsert_folder_mount(&namespace, &command.path)?;
         if do_share {
@@ -3444,6 +3400,17 @@ async fn handle_join(ctx: &CliContext<'_>, command: crate::cli::commands::Folder
                     .with_metadata_only(command.metadata_only),
             )
             .await?;
+        if let Some(network_name) = command.network.clone() {
+            let namespace = message
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("joined: ")
+                        .or_else(|| line.strip_prefix("namespace: "))
+                })
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow::anyhow!("daemon join did not report a namespace"))?;
+            add_folder_to_network(data_dir, &network_name, namespace.parse::<iroh_docs::NamespaceId>()?)?;
+        }
         if output_json {
             println!(
                 "{}",
@@ -3674,7 +3641,7 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
     config.set_subscribe(&namespace_str, true, filters);
     node_db.save_app_config(&config)?;
     if let Ok(mount) = std::fs::canonicalize(selector) {
-        let _ = node_db.upsert_folder_mount(&namespace_str, &mount);
+        node_db.upsert_folder_mount(&namespace_str, &mount)?;
     }
     if output_json {
         println!(
@@ -3695,7 +3662,6 @@ async fn handle_join_existing(ctx: &CliContext<'_>, selector: &str, filters: &Su
 async fn handle_share(ctx: &CliContext<'_>, args: ShareArgs) -> Result<()> {
     match args.command {
         None => handle_share_add(ctx, &args).await,
-        Some(ShareCommand::List { path }) => handle_share_list(ctx, path.as_deref()).await,
         Some(ShareCommand::Provider { command }) => cli::indexing::handle_provider(ctx, command),
     }
 }
@@ -3788,48 +3754,6 @@ async fn handle_share_add(ctx: &CliContext<'_>, args: &ShareArgs) -> Result<()> 
         print_next_steps(&next_steps);
     }
     node.stop().await?;
-    Ok(())
-}
-
-async fn handle_share_list(ctx: &CliContext<'_>, filter: Option<&std::path::Path>) -> Result<()> {
-    let data_dir = ctx.data_dir;
-    let output_json = ctx.output_json;
-    let no_daemon = ctx.no_daemon;
-    if let Some(client) = daemon_client_or_start(data_dir, no_daemon, ctx.network).await? {
-        let message = client.share_list().await?;
-        print_daemon_ok(&message, output_json);
-        return Ok(());
-    }
-    let mut shares = open_node_db(data_dir)?.list_shares()?;
-    if let Some(selector) = filter
-        && selector.as_os_str() != "."
-    {
-        let node = open_node(data_dir).await?;
-        let manager = FolderManager::new(&node);
-        let wanted = manager
-            .resolve_namespace(&selector.to_string_lossy())
-            .await?
-            .to_string();
-        shares.retain(|(namespace, _, _)| namespace == &wanted);
-        node.stop().await?;
-    }
-    if shares.is_empty() {
-        println!("no shares");
-    } else {
-        for (namespace, access, ticket) in shares {
-            if output_json {
-                println!(
-                    "{}",
-                    serde_json::json!({"namespace": namespace, "access": access, "ticket": ticket})
-                );
-            } else {
-                println!("namespace: {namespace}");
-                println!("access: {access}");
-                println!("ticket: {ticket}");
-                println!();
-            }
-        }
-    }
     Ok(())
 }
 
@@ -4035,10 +3959,10 @@ async fn handle_access(ctx: &CliContext<'_>, args: AccessArgs) -> Result<()> {
 
     println!("{}", render_access_table(&rows, args.full));
     if !peers_surfaced {
-        println!("note: inbound peers (who joined a folder) are not surfaced yet; see `syncweb network peers`");
+        println!("note: inbound peers (who joined a folder) are not surfaced yet; see `syncweb network list --peers`");
     }
     println!(
-        "note: pin status is not shown (it needs a local node); `syncweb share --list` reports what was pinned at share time"
+        "note: pin status is not shown (it needs a local node); `syncweb folders pin` reports what was pinned at share time"
     );
     Ok(())
 }
@@ -4318,10 +4242,6 @@ async fn handle_package(ctx: &CliContext<'_>, command: PackageCommand) -> Result
             handle_package_archive_inspect(archive, output_json).await?;
         }
         PackageCommand::Install {
-            ticket: ticket_value,
-            path,
-        }
-        | PackageCommand::Upgrade {
             ticket: ticket_value,
             path,
         } => {
@@ -5327,7 +5247,7 @@ async fn handle_search(ctx: &CliContext<'_>, args: SearchArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<()> {
+fn handle_db(ctx: &CliContext<'_>, command: &cli::commands::DbCommand) -> Result<()> {
     let data_dir = ctx.data_dir;
     let output_json = ctx.output_json;
     let node_db = match NodeDatabase::open(data_dir.join("node.db")) {
@@ -5434,9 +5354,6 @@ fn handle_db(ctx: &CliContext<'_>, command: cli::commands::DbCommand) -> Result<
                 table.add_row(["stats.db", &format_bytes(stats_size), &stats_freelist.to_string()]);
                 println!("{table}");
             }
-        }
-        cli::commands::DbCommand::Backup(args) => {
-            handle_db_backup(data_dir, &args.output, args.include_blobs, output_json)?;
         }
     }
     Ok(())
@@ -5705,39 +5622,25 @@ fn copy_dir_contents(source: &std::path::Path, destination: &std::path::Path) ->
 }
 
 fn scan_single_root_entries(path: &std::path::Path) -> Result<Vec<CollectionEntry>> {
-    ParallelScanner::new(path, vec![], 0)
-        .scan()?
+    // Logical paths are relative to the scanned path itself: the source is the
+    // root, so `root_override` pins it rather than letting `scan_roots` derive
+    // the parent directory for a single directory input.
+    collection_entries_from_scanned(scan_roots(
+        &ScanRootsRequest::new(std::slice::from_ref(&path.to_path_buf())).with_root_override(path.to_path_buf()),
+    )?)
+}
+
+/// Build collection entries from a core scan, mapping each [`ScannedEntry`]
+/// into a validated [`CollectionEntry`].
+fn collection_entries_from_scanned(scan: syncweb_core::fs::ScanRootsResult) -> Result<Vec<CollectionEntry>> {
+    scan.entries
         .into_iter()
-        .filter(|entry| entry.file_type == FileType::File)
-        .map(|entry| {
-            CollectionEntry::new(
-                iroh_blobs::Hash::from_bytes(*entry.hash.as_bytes()),
-                entry.relative_path,
-                entry.size,
-            )
-            .map_err(anyhow::Error::from)
-        })
+        .map(|entry| CollectionEntry::new(entry.hash, entry.logical_path, entry.size).map_err(anyhow::Error::from))
         .collect()
 }
 
 fn resolve_package_root(paths: &[PathBuf], root_override: Option<PathBuf>) -> PathBuf {
-    if let Some(root) = root_override {
-        return root;
-    }
-    if paths.len() == 1 {
-        if let Some(path) = paths.first()
-            && path.is_file()
-        {
-            return path.clone();
-        }
-        let parent = paths
-            .first()
-            .and_then(|p| p.parent())
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| std::path::Path::new("."));
-        return parent.to_path_buf();
-    }
-    longest_common_ancestor(paths)
+    syncweb_core::fs::resolve_scan_root(paths, root_override)
 }
 
 fn package_entry_path(root: &Path, logical_path: &Path) -> PathBuf {
@@ -5748,75 +5651,17 @@ fn package_entry_path(root: &Path, logical_path: &Path) -> PathBuf {
     }
 }
 
-fn longest_common_ancestor(paths: &[PathBuf]) -> PathBuf {
-    let Some((first, rest)) = paths.split_first() else {
-        return PathBuf::new();
-    };
-    let mut common: Vec<_> = first.components().collect();
-    for path in rest {
-        let comps: Vec<_> = path.components().collect();
-        let shared = common.iter().zip(comps.iter()).take_while(|(a, b)| a == b).count();
-        common.truncate(shared);
-    }
-    common.into_iter().collect()
-}
-
 fn scan_collection_entries(
     paths: &[PathBuf],
     root_override: Option<PathBuf>,
 ) -> Result<(PathBuf, Vec<CollectionEntry>)> {
-    let root = resolve_package_root(paths, root_override);
-    if root.is_file() && paths.iter().any(|input| input != &root) {
-        anyhow::bail!("a file package root can contain only that file");
+    let mut request = ScanRootsRequest::new(paths);
+    if let Some(root) = root_override {
+        request = request.with_root_override(root);
     }
-    let mut entries: Vec<CollectionEntry> = Vec::new();
-    for input in paths {
-        let rel = if root.is_file() {
-            input
-                .file_name()
-                .map(PathBuf::from)
-                .context("single-file package root has no filename")?
-        } else {
-            input.strip_prefix(&root).unwrap_or(input.as_path()).to_path_buf()
-        };
-        let is_file = input.is_file();
-        let scanned = ParallelScanner::new(input, vec![], 0).scan()?;
-        for entry in scanned {
-            if entry.file_type != FileType::File {
-                continue;
-            }
-            let logical = if is_file {
-                rel.clone()
-            } else {
-                rel.join(&entry.relative_path)
-            };
-            entries.push(
-                CollectionEntry::new(
-                    iroh_blobs::Hash::from_bytes(*entry.hash.as_bytes()),
-                    logical,
-                    entry.size,
-                )
-                .map_err(anyhow::Error::from)?,
-            );
-        }
-    }
-    entries.sort_by(|left, right| left.logical_path.cmp(&right.logical_path));
-    let mut deduped: Vec<CollectionEntry> = Vec::with_capacity(entries.len());
-    for entry in entries {
-        if let Some(last) = deduped.last()
-            && last.logical_path == entry.logical_path
-        {
-            if last.content_id != entry.content_id {
-                anyhow::bail!(
-                    "conflicting inputs resolve to the same logical path: {}",
-                    entry.logical_path.display()
-                );
-            }
-            continue;
-        }
-        deduped.push(entry);
-    }
-    Ok((root, deduped))
+    let scan = syncweb_core::fs::scan_roots(&request)?;
+    let root = scan.root.clone();
+    Ok((root, collection_entries_from_scanned(scan)?))
 }
 
 fn print_network_created(name: &str, id: &str, output_json: bool) {
@@ -5903,7 +5748,15 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("left: {name}");
             }
         }
-        NetworkCommand::List { name } => handle_network_list(&manager, name, output_json)?,
+        NetworkCommand::List(args) => {
+            if let Some(peers) = args.peers {
+                handle_network_peers(ctx, peers.first().map(String::as_str)).await?;
+            } else if args.health {
+                handle_status_networks(data_dir, args.name.as_deref(), output_json)?;
+            } else {
+                handle_network_list(&manager, args.name, output_json)?;
+            }
+        }
         NetworkCommand::Invite { name, device } => {
             let id = network_id_by_name(&manager, &name)?;
             if let Some(node_id) = device.clone()
@@ -5954,8 +5807,12 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
                 println!("kicked: {device}");
             }
         }
-        NetworkCommand::Events { network_id, limit } => {
-            handle_network_events(data_dir, &network_id, limit, output_json)?;
+        NetworkCommand::Events { network, limit } => {
+            let resolved = manager
+                .get_by_name(&network)
+                .map(|found| found.id.to_string())
+                .unwrap_or(network);
+            handle_network_events(data_dir, &resolved, limit, output_json)?;
         }
         NetworkCommand::TestRelay { relay_url } => {
             let identity = IdentityManager::new(data_dir.join("identity.key"))?;
@@ -5974,15 +5831,6 @@ async fn handle_network(ctx: &CliContext<'_>, command: NetworkCommand) -> Result
             } else {
                 println!("{report}");
             }
-        }
-        NetworkCommand::Status { name } => {
-            handle_status_networks(data_dir, name.as_deref(), output_json)?;
-        }
-        NetworkCommand::Health { name } => {
-            handle_network_health(data_dir, &manager, name, output_json)?;
-        }
-        NetworkCommand::Peers { folder } => {
-            handle_network_peers(ctx, folder.as_deref()).await?;
         }
     }
     Ok(())
@@ -6751,14 +6599,7 @@ async fn attach_peer_counts(client: Option<&IpcClient>, namespace: &str, rows: &
 }
 
 fn canonical_path(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            cwd.join(path)
-        }
-    })
+    syncweb_core::folder::canonicalize(path)
 }
 
 fn normalize_logical_path(path: &str) -> String {
@@ -6807,146 +6648,39 @@ async fn resolve_selector_embedded(
         ));
     }
     let mounts = live_folder_mounts(data_dir, manager).await?;
-    let canonical = canonical_path(selector);
-    let mut best: Option<(PathBuf, PathBuf)> = None;
-    for (_, root) in &mounts {
-        let root_canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
-        if let Ok(remainder) = canonical.strip_prefix(&root_canonical) {
-            let better = best
-                .as_ref()
-                .is_none_or(|(best_root, _)| root_canonical.as_os_str().len() > best_root.as_os_str().len());
-            if better {
-                best = Some((root_canonical, remainder.to_path_buf()));
-            }
-        }
-    }
-    if let Some((root, remainder)) = best {
-        let Some(namespace) = mounts
-            .iter()
-            .find(|(_, mount)| std::fs::canonicalize(mount).unwrap_or_else(|_| mount.clone()) == root)
-            .map(|(namespace, _)| namespace.clone())
-        else {
-            // Fallback: try to find a live folder whose mount matches any recorded mount for that namespace,
-            // or whose mounted path (if we can infer) matches the root.
-            let mut found_fallback = None;
-            for folder in manager.list().await? {
-                let ns = folder.namespace_id().to_string();
-                if let Some((_, m)) = mounts.iter().find(|(n, _)| n == &ns) {
-                    let m_c = std::fs::canonicalize(m).unwrap_or_else(|_| m.clone());
-                    if m_c == root {
-                        found_fallback = Some((ns.clone(), folder));
-                        break;
-                    }
-                }
-                // Also check: if the manager knows about this folder and the canonical selector's
-                // best root came from nowhere? No. Try matching the remainder logic differently.
-                // Alternatively, if there's only one live folder and its mount equals selector,
-                // but we need to handle remainder. Easier: try to match by seeing if the folder's
-                // namespace corresponds to any live folder and the canonical path equals root.
-            }
-            // If still not found, try: for any live folder, see if its "mount" in the embedded context
-            // is this root? Not directly tracked; but in embedded joins we don't store in DB. Hmm.
-            if found_fallback.is_none() {
-                for folder in manager.list().await? {
-                    let ns = folder.namespace_id().to_string();
-                    // Try to see if any mount in DB for this ns equals root; also try the selector itself.
-                    if std::fs::canonicalize(selector).unwrap_or_else(|_| selector.to_path_buf()) == root
-                        || selector.canonicalize().unwrap_or_else(|_| selector.to_path_buf()) == root
-                    {
-                        // If the selector is the exact root and it's a live folder, use it.
-                        found_fallback = Some((ns, folder));
-                        break;
-                    }
-                }
-            }
-            if let Some((ns, folder)) = found_fallback {
-                return Ok((
-                    ResolvedFolder {
-                        namespace: ns,
-                        mount_root: Some(root),
-                        remainder: remainder.clone(),
-                    },
-                    folder,
-                ));
-            }
-            anyhow::bail!("folder mount root resolved to a departed folder");
-        };
-        let namespace_id = namespace
-            .parse::<iroh_docs::NamespaceId>()
-            .map_err(|error| anyhow::anyhow!("invalid stored namespace {namespace:?}: {error}"))?;
-        let folder = manager.get(namespace_id).await?;
-        return Ok((
-            ResolvedFolder {
-                namespace,
-                mount_root: Some(root),
-                remainder,
-            },
-            folder,
-        ));
-    }
-    anyhow::bail!(
-        "{} is not inside of a Syncweb folder — run `syncweb ls --local-only {}` to list the disk directly",
-        selector.display(),
-        selector.display()
-    );
+    let folders: Vec<syncweb_core::folder::FolderMount> = mounts
+        .iter()
+        .map(|(namespace, path)| syncweb_core::folder::FolderMount::new(namespace.clone(), Some(path.clone())))
+        .collect();
+    let resolved = syncweb_core::folder::resolve_selector(selector, &folders)?;
+    let namespace_id = resolved
+        .namespace
+        .parse::<iroh_docs::NamespaceId>()
+        .map_err(|error| anyhow::anyhow!("invalid stored namespace {:?}: {error}", resolved.namespace))?;
+    let folder = manager.get(namespace_id).await?;
+    Ok((
+        ResolvedFolder {
+            namespace: resolved.namespace,
+            mount_root: resolved.mount_root,
+            remainder: resolved.remainder,
+        },
+        folder,
+    ))
 }
 
 async fn resolve_selector_via_daemon(client: &IpcClient, selector: &Path) -> Result<ResolvedFolder> {
-    let folders = client.list_folders().await?;
-    let selector_str = selector.to_string_lossy();
-    if let Ok(_namespace_id) = selector_str.parse::<iroh_docs::NamespaceId>() {
-        let mount_root = folders
-            .iter()
-            .find(|folder| folder.namespace == selector_str)
-            .map(|folder| folder.path.clone());
-        return Ok(ResolvedFolder {
-            namespace: selector_str.into_owned(),
-            mount_root,
-            remainder: PathBuf::new(),
-        });
-    }
-    let canonical = canonical_path(selector);
-    let mut best: Option<(String, PathBuf, PathBuf)> = None;
-    for folder in &folders {
-        if folder.path.as_os_str().is_empty() {
-            continue;
-        }
-        let root = std::fs::canonicalize(&folder.path).unwrap_or_else(|_| folder.path.clone());
-        if let Ok(remainder) = canonical.strip_prefix(&root) {
-            let better = best
-                .as_ref()
-                .is_none_or(|(_, best_root, _)| root.as_os_str().len() > best_root.as_os_str().len());
-            if better {
-                best = Some((folder.namespace.clone(), root, remainder.to_path_buf()));
-            }
-        }
-    }
-    if let Some((namespace, root, remainder)) = best {
-        return Ok(ResolvedFolder {
-            namespace,
-            mount_root: Some(root),
-            remainder,
-        });
-    }
-    if !selector.exists() {
-        let matched = folders
-            .iter()
-            .find(|folder| folder.namespace.starts_with(&*selector_str))
-            .or_else(|| folders.first().filter(|_| folders.len() == 1))
-            .map(|folder| ResolvedFolder {
-                namespace: folder.namespace.clone(),
-                mount_root: (!folder.path.as_os_str().is_empty()).then(|| folder.path.clone()),
-                remainder: PathBuf::new(),
-            });
-        if let Some(resolved) = matched {
-            return Ok(resolved);
-        }
-    }
-    anyhow::bail!(
-        "{} is not inside of a Syncweb folder — run `syncweb ls --local-only {}` to list the disk directly",
-        selector.display(),
-        selector.display()
-    );
+    let folders: Vec<syncweb_core::folder::FolderMount> = client
+        .list_folders()
+        .await?
+        .into_iter()
+        .map(|folder| syncweb_core::folder::FolderMount::new(folder.namespace, Some(folder.path)))
+        .collect();
+    let resolved = syncweb_core::folder::resolve_selector(selector, &folders)?;
+    Ok(ResolvedFolder {
+        namespace: resolved.namespace,
+        mount_root: resolved.mount_root,
+        remainder: resolved.remainder,
+    })
 }
 
 /// Resolve a folder selector (namespace ID or managed mount path) to a

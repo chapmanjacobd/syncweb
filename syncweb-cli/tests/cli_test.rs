@@ -436,16 +436,15 @@ fn schedule_and_stats_commands_persist_state() -> anyhow::Result<()> {
             "--data-dir",
             &data_dir,
             "config",
-            "schedule",
             "set",
-            "--active",
+            "schedule.active_hours",
             "22:00-06:00",
         ])
         .output()
-        .context("run config schedule set")?;
+        .context("run config set schedule.active_hours")?;
     ensure!(
         schedule.status.success(),
-        "config schedule set failed: {}",
+        "config set schedule.active_hours failed: {}",
         String::from_utf8_lossy(&schedule.stderr)
     );
 
@@ -542,14 +541,13 @@ fn config_schedule_active_and_period() -> anyhow::Result<()> {
         "--data-dir",
         data_dir,
         "config",
-        "schedule",
         "set",
-        "--active",
+        "schedule.active_hours",
         "08:00-18:00",
     ])?;
     ensure!(
         set.status.success(),
-        "config schedule set: {}",
+        "config set schedule.active_hours: {}",
         String::from_utf8_lossy(&set.stderr)
     );
 
@@ -574,15 +572,13 @@ fn config_schedule_folder_override() -> anyhow::Result<()> {
         "--data-dir",
         data_dir,
         "config",
-        "schedule",
-        "folder",
-        "project",
-        "--active",
+        "set",
+        "schedule.folders.project.active_hours",
         "09:00-17:00",
     ])?;
     ensure!(
         set.status.success(),
-        "config schedule folder: {}",
+        "config set schedule.folders.project.active_hours: {}",
         String::from_utf8_lossy(&set.stderr)
     );
 
@@ -1184,16 +1180,15 @@ fn test_share_read_only_and_write() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "share",
-            "list",
+            "access",
         ])
         .output()
-        .context("run syncweb share list")?;
+        .context("run syncweb access")?;
     ensure!(list.status.success());
     let list_out = String::from_utf8(list.stdout).context("UTF-8 output")?;
     ensure!(
-        list_out.contains("access: read") && list_out.contains("access: write"),
-        "share list should show both shares: {list_out}"
+        list_out.contains("read:") && list_out.contains("write:"),
+        "access should show both shares: {list_out}"
     );
 
     let rm = Command::new(env!("CARGO_BIN_EXE_syncweb"))
@@ -1490,15 +1485,14 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "share",
-            "list",
+            "access",
         ])
         .output()
-        .context("run syncweb share list after aborted revoke")?;
+        .context("run syncweb access after aborted revoke")?;
     ensure!(
         String::from_utf8(list.stdout)
             .context("UTF-8 output")?
-            .contains("access: write"),
+            .contains("write:"),
         "access --revoke --write must not revoke write when confirmation is skipped"
     );
 
@@ -1522,15 +1516,14 @@ fn unshare_write_aborts_without_yes() -> anyhow::Result<()> {
             "--data-dir",
             data_dir.to_str().context("UTF-8 path")?,
             "--no-daemon",
-            "share",
-            "list",
+            "access",
         ])
         .output()
-        .context("run syncweb share list after revoke --yes")?;
+        .context("run syncweb access after revoke --yes")?;
     ensure!(
         !String::from_utf8(list_after.stdout)
             .context("UTF-8 output")?
-            .contains("access: write"),
+            .contains("write:"),
         "access --revoke --write --yes should revoke write access"
     );
 
@@ -1625,7 +1618,7 @@ fn network_commands_are_available() -> anyhow::Result<()> {
         .output()
         .context("run network help")?;
     let network_help = String::from_utf8(network.stdout).context("UTF-8 output")?;
-    for command in ["create", "join", "leave", "invite", "kick", "events", "peers"] {
+    for command in ["create", "join", "leave", "invite", "kick", "events", "list"] {
         ensure!(network_help.contains(command));
     }
     Ok(())
@@ -1645,7 +1638,7 @@ fn network_create_and_list_persist() -> anyhow::Result<()> {
         String::from_utf8_lossy(&create.stderr)
     );
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "status"])
+        .args(["--data-dir", data_dir, "network", "list"])
         .output()
         .context("list networks")?;
     std::fs::remove_dir_all(directory).context("cleanup")?;
@@ -1758,7 +1751,7 @@ fn network_list_inspects_single_network() -> anyhow::Result<()> {
     ensure!(create.status.success());
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "status", "inspect-me"])
+        .args(["--data-dir", data_dir, "network", "list", "--health", "inspect-me"])
         .output()
         .context("inspect network")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;
@@ -1878,7 +1871,7 @@ fn network_leave_removes_from_list() -> anyhow::Result<()> {
     );
 
     let list = Command::new(env!("CARGO_BIN_EXE_syncweb"))
-        .args(["--data-dir", data_dir, "network", "status"])
+        .args(["--data-dir", data_dir, "network", "list"])
         .output()
         .context("list after leave")?;
     std::fs::remove_dir_all(&directory).context("cleanup")?;

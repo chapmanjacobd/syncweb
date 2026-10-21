@@ -43,7 +43,7 @@ _arguments "${_arguments_options[@]}" : \
 '--beacon-port=[Base UDP port the beacon spreads network scopes over]:BEACON_PORT:_default' \
 '--discovery-interface=[Restrict the beacon to a single network interface by name]:DISCOVERY_INTERFACE:_default' \
 '--media-listen=[Media HTTP server listen address (e.g. 127.0.0.1\:9193)]:MEDIA_LISTEN:_default' \
-'--bg[Run in the background (daemon mode)]' \
+'--bg[Run in the background (daemon mode; no automatic restart supervision)]' \
 '--media-only[Run only the media HTTP server (standalone) and exit]' \
 '--no-relay[Disable Iroh relay mode (no relay server connections)]' \
 '--no-mdns[Disable mDNS local peer discovery]' \
@@ -151,7 +151,6 @@ _arguments "${_arguments_options[@]}" : \
 '--mode=[Sync mode\: sendreceive, receiveonly, or sendonly]:MODE:_default' \
 '--network=[Add the created folder to a named network]:NETWORK:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--import[Scan and import existing files in the directory]' \
 '(--import)--no-import[Skip scanning existing files in the directory]' \
 '--write[Grant write access on the share ticket (default\: read-only)]' \
@@ -179,7 +178,6 @@ _arguments "${_arguments_options[@]}" : \
 '--max-count=[]:MAX_COUNT:_default' \
 '--max-size=[]:MAX_SIZE:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--relay-fallback[Enable Syncthing relay fallback for this folder]' \
 '--subscribe[Track + enable live syncing (persisted subscribe-changes); off by default, idempotent on an existing folder]' \
 '--ingest-only[Only deliver entries ingested after live syncing is enabled]' \
 '--ignore-self[Ignore events emitted by this device'\''s own writes]' \
@@ -683,7 +681,7 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(pause)
+(set)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -692,51 +690,13 @@ _arguments "${_arguments_options[@]}" : \
 '--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
 '--embedded[Bypass the daemon and use an embedded node for supported commands]' \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
 ':id:_default' \
-&& ret=0
-;;
-(resume)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':id:_default' \
-&& ret=0
-;;
-(cancel)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':id:_default' \
-&& ret=0
-;;
-(retry)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':id:_default' \
+':state -- Target lifecycle state:((pause\:"Pause an in-flight job"
+resume\:"Resume a paused job"
+cancel\:"Cancel a job"
+retry\:"Retry a failed job"))' \
 && ret=0
 ;;
         esac
@@ -770,21 +730,7 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:syncweb-share-command-$line[2]:"
         case $line[2] in
-            (list)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path -- Folder path or namespace to filter persisted shares:_files' \
-&& ret=0
-;;
-(provider)
+            (provider)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
 '--verbose[Enable verbose structured logging]' \
@@ -1078,21 +1024,6 @@ _arguments "${_arguments_options[@]}" : \
 '::path -- Install root for the collection version (default\: the data directory'\''s packages directory):_files' \
 && ret=0
 ;;
-(upgrade)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':ticket:_default' \
-'::path -- Install root for the collection version (default\: the data directory'\''s packages directory):_files' \
-&& ret=0
-;;
 (remove)
 _arguments "${_arguments_options[@]}" : \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
@@ -1236,7 +1167,9 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (list)
 _arguments "${_arguments_options[@]}" : \
+'*--peers=[Show peer availability for a folder (path or namespace) instead of networks]::FOLDER:_default' \
 '--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
+'--health[Include connectivity health (events/sessions) for the network]' \
 '--verbose[Enable verbose structured logging]' \
 '--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
 '--yes[Assume yes to every destructive-operation prompt]' \
@@ -1245,7 +1178,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name -- Optional network name to inspect:_default' \
+'::name -- Optional network name or ID to inspect:_default' \
 && ret=0
 ;;
 (invite)
@@ -1290,7 +1223,7 @@ _arguments "${_arguments_options[@]}" : \
 '--no-color[Disable ANSI colors in interactive prompts and progress output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':network_id:_default' \
+':network:_default' \
 && ret=0
 ;;
 (test-relay)
@@ -1305,48 +1238,6 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':relay_url:_default' \
-&& ret=0
-;;
-(status)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::name -- Optional network name or ID to inspect:_default' \
-&& ret=0
-;;
-(health)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::name -- Optional network name or ID to inspect:_default' \
-&& ret=0
-;;
-(peers)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::folder -- Optional folder path or namespace to inspect:_default' \
 && ret=0
 ;;
         esac
@@ -1763,21 +1654,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(backup)
-_arguments "${_arguments_options[@]}" : \
-'--output=[]:OUTPUT:_files' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--include-blobs[Also copy the blob store (can be very large); off by default]' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
         esac
     ;;
 esac
@@ -1831,60 +1707,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 '::section:_default' \
 && ret=0
-;;
-(schedule)
-_arguments "${_arguments_options[@]}" : \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_syncweb__subcmd__config__subcmd__schedule_commands" \
-"*::: :->schedule" \
-&& ret=0
-
-    case $state in
-    (schedule)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:syncweb-config-schedule-command-$line[1]:"
-        case $line[1] in
-            (set)
-_arguments "${_arguments_options[@]}" : \
-'--active=[]:ACTIVE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(folder)
-_arguments "${_arguments_options[@]}" : \
-'--active=[]:ACTIVE:_default' \
-'--data-dir=[Directory used for persistent node identity and data]:DATA_DIR:_files' \
-'--verbose[Enable verbose structured logging]' \
-'--json[Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)]' \
-'--yes[Assume yes to every destructive-operation prompt]' \
-'--no-daemon[Bypass the daemon and use an embedded node for supported commands]' \
-'--embedded[Bypass the daemon and use an embedded node for supported commands]' \
-'--no-color[Disable ANSI colors in interactive prompts and progress output]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':name:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
 ;;
         esac
     ;;
@@ -2009,27 +1831,8 @@ _syncweb__subcmd__config_commands() {
     local commands; commands=(
 'set:Set a configuration value' \
 'show:Show configuration, optionally limited to a section' \
-'schedule:Show or update synchronization schedules' \
     )
     _describe -t commands 'syncweb config commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__schedule_commands] )) ||
-_syncweb__subcmd__config__subcmd__schedule_commands() {
-    local commands; commands=(
-'set:Update the global schedule' \
-'folder:Set schedule overrides for a named folder' \
-    )
-    _describe -t commands 'syncweb config schedule commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__schedule__subcmd__folder_commands] )) ||
-_syncweb__subcmd__config__subcmd__schedule__subcmd__folder_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb config schedule folder commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__config__subcmd__schedule__subcmd__set_commands] )) ||
-_syncweb__subcmd__config__subcmd__schedule__subcmd__set_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb config schedule set commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__config__subcmd__set_commands] )) ||
 _syncweb__subcmd__config__subcmd__set_commands() {
@@ -2071,14 +1874,8 @@ _syncweb__subcmd__db_commands() {
 'check:Run integrity check on all databases' \
 'vacuum:Run VACUUM to reclaim space in all databases' \
 'stats:Show database sizes and table statistics' \
-'backup:Back up databases, configuration, identity, and optionally blobs' \
     )
     _describe -t commands 'syncweb db commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__db__subcmd__backup_commands] )) ||
-_syncweb__subcmd__db__subcmd__backup_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb db backup commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__db__subcmd__check_commands] )) ||
 _syncweb__subcmd__db__subcmd__check_commands() {
@@ -2240,14 +2037,11 @@ _syncweb__subcmd__network_commands() {
 'create:Create a named network' \
 'join:Join a network from an invitation' \
 'leave:Leave a network' \
-'list:List networks, optionally limited to a single network by name' \
+'list:List networks, or inspect one network by name (--health, --peers) or folder peers' \
 'invite:Generate a network invitation' \
 'kick:Remove a device from a network' \
-'events:Show recent network events' \
+'events:Show recent network events (accepts a network name or ID)' \
 'test-relay:Test a Syncthing relay TCP connection' \
-'status:Show network membership and health, optionally limited to a single network by name' \
-'health:Show network connectivity health, optionally limited to a single network by name' \
-'peers:Show peer availability for a folder\: which peers joined and how seeded its blobs are' \
     )
     _describe -t commands 'syncweb network commands' commands "$@"
 }
@@ -2260,11 +2054,6 @@ _syncweb__subcmd__network__subcmd__create_commands() {
 _syncweb__subcmd__network__subcmd__events_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network events commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__health_commands] )) ||
-_syncweb__subcmd__network__subcmd__health_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network health commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__network__subcmd__invite_commands] )) ||
 _syncweb__subcmd__network__subcmd__invite_commands() {
@@ -2291,16 +2080,6 @@ _syncweb__subcmd__network__subcmd__list_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb network list commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__network__subcmd__peers_commands] )) ||
-_syncweb__subcmd__network__subcmd__peers_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network peers commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__network__subcmd__status_commands] )) ||
-_syncweb__subcmd__network__subcmd__status_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb network status commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__network__subcmd__test-relay_commands] )) ||
 _syncweb__subcmd__network__subcmd__test-relay_commands() {
     local commands; commands=()
@@ -2316,8 +2095,7 @@ _syncweb__subcmd__package_commands() {
 'import:Import and install a compressed CAR archive file' \
 'info:Show a collection manifest from a ticket or blob hash' \
 'inspect:Inspect and verify a compressed CAR archive without importing it' \
-'install:Verify, stage, and atomically install a collection version' \
-'upgrade:Install a newer collection manifest version via ticket' \
+'install:Verify, stage, and atomically install (or upgrade to) a collection version' \
 'remove:Remove a non-current installed collection version' \
 'verify:Verify an installed collection version' \
 'list:List locally installed collections' \
@@ -2381,11 +2159,6 @@ _syncweb__subcmd__package__subcmd__switch_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb package switch commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__package__subcmd__upgrade_commands] )) ||
-_syncweb__subcmd__package__subcmd__upgrade_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb package upgrade commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__package__subcmd__verify_commands] )) ||
 _syncweb__subcmd__package__subcmd__verify_commands() {
     local commands; commands=()
@@ -2414,15 +2187,9 @@ _syncweb__subcmd__search_commands() {
 (( $+functions[_syncweb__subcmd__share_commands] )) ||
 _syncweb__subcmd__share_commands() {
     local commands; commands=(
-'list:List persisted shares, optionally filtered by path' \
 'provider:Manage blob provider registrations' \
     )
     _describe -t commands 'syncweb share commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__share__subcmd__list_commands] )) ||
-_syncweb__subcmd__share__subcmd__list_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb share list commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__share__subcmd__provider_commands] )) ||
 _syncweb__subcmd__share__subcmd__provider_commands() {
@@ -2535,10 +2302,7 @@ _syncweb__subcmd__transfer_commands() {
 'enqueue:Enqueue an individually addressable file job' \
 'allocate:Allocate queued jobs to configured roots' \
 'materialize:Fetch and materialize assigned jobs through the daemon' \
-'pause:Pause a transfer job' \
-'resume:Resume a paused transfer job' \
-'cancel:Cancel a transfer job' \
-'retry:Retry a failed transfer job' \
+'set:Change a transfer job'\''s lifecycle state (pause, resume, cancel, retry)' \
     )
     _describe -t commands 'syncweb transfer commands' commands "$@"
 }
@@ -2546,11 +2310,6 @@ _syncweb__subcmd__transfer_commands() {
 _syncweb__subcmd__transfer__subcmd__allocate_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer allocate commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__cancel_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__cancel_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer cancel commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__transfer__subcmd__enqueue_commands] )) ||
 _syncweb__subcmd__transfer__subcmd__enqueue_commands() {
@@ -2567,30 +2326,20 @@ _syncweb__subcmd__transfer__subcmd__materialize_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer materialize commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__transfer__subcmd__pause_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__pause_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer pause commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__transfer__subcmd__remaining_commands] )) ||
 _syncweb__subcmd__transfer__subcmd__remaining_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer remaining commands' commands "$@"
 }
-(( $+functions[_syncweb__subcmd__transfer__subcmd__resume_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__resume_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer resume commands' commands "$@"
-}
-(( $+functions[_syncweb__subcmd__transfer__subcmd__retry_commands] )) ||
-_syncweb__subcmd__transfer__subcmd__retry_commands() {
-    local commands; commands=()
-    _describe -t commands 'syncweb transfer retry commands' commands "$@"
-}
 (( $+functions[_syncweb__subcmd__transfer__subcmd__root_commands] )) ||
 _syncweb__subcmd__transfer__subcmd__root_commands() {
     local commands; commands=()
     _describe -t commands 'syncweb transfer root commands' commands "$@"
+}
+(( $+functions[_syncweb__subcmd__transfer__subcmd__set_commands] )) ||
+_syncweb__subcmd__transfer__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'syncweb transfer set commands' commands "$@"
 }
 (( $+functions[_syncweb__subcmd__verify_commands] )) ||
 _syncweb__subcmd__verify_commands() {

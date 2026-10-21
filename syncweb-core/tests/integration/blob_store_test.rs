@@ -1,6 +1,9 @@
 use syncweb_core::node::identity::IdentityManager;
 use syncweb_core::node::iroh_node::{DiscoveryConfig, IrohNode, RelayMode};
-use syncweb_core::sync::{TransferRequest, fetch_blob_requests};
+use syncweb_core::{
+    ProviderCapabilities, ProviderContent, ProviderLease, ProviderLeaseOptions,
+    sync::{TransferRequest, TransferScheduler, TransferSchedulerConfig, TransferSegment, fetch_blob_requests},
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::test_utils::TestDirectory;
@@ -204,6 +207,62 @@ async fn test_segment_request_falls_back_to_whole_blob_peer() -> anyhow::Result<
         second.blob_store().get(hash).await? == payload.as_slice(),
         "compatibility fallback must verify and store the complete blob"
     );
+
+    first.stop().await?;
+    second.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_segment_request_uses_advertised_range_provider() -> anyhow::Result<()> {
+    let directory = TestDirectory::new("syncweb-range-transfer-test")?;
+    let (relay_map, _relay_url, _server) = iroh::test_utils::run_relay_server().await?;
+    let first = test_node(&directory, "first", Some(relay_map.clone())).await?;
+    let second = test_node(&directory, "second", Some(relay_map)).await?;
+    let payload = (0_u16..4096)
+        .map(|value| u8::try_from(value % 251).expect("remainder fits in u8"))
+        .collect::<Vec<_>>();
+    let hash = first.blob_store().add_bytes(&payload).await?;
+    let folder = iroh_docs::NamespaceId::from(&[9_u8; 32]);
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&first.endpoint().secret_key().to_bytes());
+    let mut lease = ProviderLease::new(
+        first.endpoint().id(),
+        ProviderLeaseOptions::new(
+            None,
+            folder,
+            None,
+            vec![ProviderContent::segment(hash, 123, 321)],
+            ProviderCapabilities::new(true, false),
+            10,
+            20,
+        ),
+    );
+    lease.sign(&signing_key)?;
+    anyhow::ensure!(second.accept_provider_lease(&lease, 15, None, &folder.to_string())? == 1);
+    anyhow::ensure!(second.provider_supports_segments(&hash, &first.endpoint().id())?);
+
+    let segment = TransferSegment::new(hash, 123, 321)?;
+    let chunk = second
+        .fetch_segment_from_peer(&first.endpoint().addr(), segment)
+        .await?;
+    let expected = payload
+        .get(123..444)
+        .ok_or_else(|| anyhow::anyhow!("requested test range is outside the payload"))?;
+    anyhow::ensure!(chunk.bytes == expected);
+
+    let request = TransferRequest::for_segment(
+        hash,
+        u64::try_from(payload.len())?,
+        123,
+        321,
+        vec![first.endpoint().addr()],
+    )?;
+    let scheduler = TransferScheduler::new(TransferSchedulerConfig::default())?;
+    let report = scheduler
+        .fetch(&second, vec![request], CancellationToken::new())
+        .await?;
+    anyhow::ensure!(report.completed == 1);
+    anyhow::ensure!(report.bytes == 321);
 
     first.stop().await?;
     second.stop().await?;

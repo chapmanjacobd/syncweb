@@ -340,13 +340,13 @@ impl DenylistService {
     /// Returns an error if the database cannot be read.
     pub fn with_database(database: IndexingDatabase) -> Result<Self> {
         let rules = database.load_denylist_rules()?;
-        let lists = database.load_filter_lists().unwrap_or_default();
+        let lists = database.load_filter_lists()?;
         let mut denylist = Denylist::new();
         for rule in rules {
             denylist.add(rule);
         }
         for list in &lists {
-            let _: std::result::Result<bool, _> = denylist.sync_filter_list(list);
+            denylist.sync_filter_list(list)?;
         }
         Ok(Self {
             denylist: Arc::new(RwLock::new(denylist)),
@@ -438,15 +438,21 @@ impl DenylistService {
     ///
     /// Returns an error if the denylist lock is poisoned or the list is invalid.
     pub fn sync_filter_list(&self, list: &FilterList) -> Result<bool> {
-        let changed = self
+        let mut denylist = self
             .denylist
             .write()
-            .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?
-            .sync_filter_list(list)?;
-        if changed && let Some(ref database) = self.database {
-            let _ = database.upsert_filter_list(list);
+            .map_err(|error| SyncwebError::operation("denylist lock poisoned", error))?;
+        list.verify_signature()?;
+        if denylist
+            .federated_sequence(&list.namespace_id)
+            .is_some_and(|sequence| list.sequence <= sequence)
+        {
+            return Ok(false);
         }
-        Ok(changed)
+        if let Some(ref database) = self.database {
+            database.upsert_filter_list(list)?;
+        }
+        denylist.sync_filter_list(list)
     }
 }
 

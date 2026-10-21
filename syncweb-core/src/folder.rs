@@ -6,6 +6,7 @@ pub mod collection;
 pub mod manager;
 pub mod package;
 pub mod public_subscription;
+pub mod selector;
 pub mod share;
 pub mod sync_mode;
 pub mod syncweb_folder;
@@ -25,6 +26,7 @@ pub use collection::{
 pub use manager::FolderManager;
 pub use package::PackageManager;
 pub use public_subscription::{EntryLike, FolderLike, PublicSubscription};
+pub use selector::{FolderMount, ResolvedSelector, canonicalize, resolve_namespace, resolve_selector};
 pub use share::{ShareOptions, ShareResult, share_folder};
 pub use sync_mode::SyncMode;
 pub use syncweb_folder::{Capability, SyncwebFolder};

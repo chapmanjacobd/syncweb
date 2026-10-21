@@ -87,10 +87,10 @@ impl TransferSchedulerConfig {
 
 /// One independently scheduled content request.
 ///
-/// The current Iroh compatibility path fetches complete blobs for segment
-/// requests. Segment-aware providers can use the same request boundary later
-/// without changing the scheduler's concurrency, retry, or cancellation
-/// policy.
+/// Segment requests use the verified Iroh range transport only for providers
+/// whose signed lease advertises range support. Unknown or legacy providers
+/// retain the whole-blob fallback without changing the scheduler's
+/// concurrency, retry, or cancellation policy.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct TransferRequest {
@@ -113,10 +113,9 @@ impl TransferRequest {
 
     /// Construct a request for a bounded, independently addressable blob range.
     ///
-    /// Segment requests use the whole-blob Iroh path until a peer advertises a
-    /// range protocol. The scheduler still tracks and deduplicates the range
-    /// independently, so transport support can be added without changing
-    /// callers.
+    /// Segment requests use the verified range path after a peer advertises
+    /// range support. The scheduler still tracks and deduplicates the range
+    /// independently, so legacy whole-blob providers remain compatible.
     ///
     /// # Errors
     ///
@@ -485,6 +484,24 @@ async fn fetch_request(
             &cancellation,
             config.max_provider_concurrent,
             |peer, _| async move {
+                if let Some(segment) = request.segment
+                    && node.provider_supports_segments(&request.hash, &peer.id)?
+                {
+                    match node.fetch_segment_from_peer(&peer, segment).await {
+                        Ok(chunk) => {
+                            return u64::try_from(chunk.bytes.len()).map_err(|error| {
+                                crate::error::SyncwebError::operation("segment payload length is invalid", error)
+                            });
+                        }
+                        Err(error) => {
+                            tracing::debug!(
+                                peer = %peer.id,
+                                %error,
+                                "range transfer failed; falling back to whole-blob transfer"
+                            );
+                        }
+                    }
+                }
                 node.force_fetch_from_peer(&peer, request.hash)
                     .await
                     .map(|()| request.size)

@@ -178,11 +178,6 @@ pub struct ConflictResolveArgs {
 /// Sub-operations for the `share` verb. Bare `share <path>` prints a ticket.
 #[derive(Debug, Subcommand)]
 pub enum ShareCommand {
-    #[command(about = "List persisted shares, optionally filtered by path")]
-    List {
-        #[arg(help = "Folder path or namespace to filter persisted shares")]
-        path: Option<PathBuf>,
-    },
     #[command(about = "Manage blob provider registrations")]
     Provider {
         #[command(subcommand)]
@@ -202,11 +197,6 @@ pub enum ConfigCommand {
     Set { key: String, value: String },
     #[command(about = "Show configuration, optionally limited to a section")]
     Show { section: Option<String> },
-    #[command(about = "Show or update synchronization schedules")]
-    Schedule {
-        #[command(subcommand)]
-        command: Option<ScheduleCommand>,
-    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -223,14 +213,8 @@ pub enum TransferCommand {
     Allocate(TransferAllocateArgs),
     #[command(about = "Fetch and materialize assigned jobs through the daemon")]
     Materialize(TransferMaterializeArgs),
-    #[command(about = "Pause a transfer job")]
-    Pause(TransferJobArgs),
-    #[command(about = "Resume a paused transfer job")]
-    Resume(TransferJobArgs),
-    #[command(about = "Cancel a transfer job")]
-    Cancel(TransferJobArgs),
-    #[command(about = "Retry a failed transfer job")]
-    Retry(TransferJobArgs),
+    #[command(about = "Change a transfer job's lifecycle state (pause, resume, cancel, retry)")]
+    Set(TransferSetArgs),
 }
 
 #[derive(Debug, Args)]
@@ -308,6 +292,25 @@ pub struct TransferJobArgs {
     pub id: String,
 }
 
+#[derive(Debug, Args)]
+pub struct TransferSetArgs {
+    pub id: String,
+    #[arg(value_enum, help = "Target lifecycle state")]
+    pub state: TransferJobState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum TransferJobState {
+    /// Pause an in-flight job.
+    Pause,
+    /// Resume a paused job.
+    Resume,
+    /// Cancel a job.
+    Cancel,
+    /// Retry a failed job.
+    Retry,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum DbCommand {
     #[command(about = "Run integrity check on all databases")]
@@ -316,8 +319,6 @@ pub enum DbCommand {
     Vacuum,
     #[command(about = "Show database sizes and table statistics")]
     Stats,
-    #[command(about = "Back up databases, configuration, identity, and optionally blobs")]
-    Backup(BackupArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -344,8 +345,6 @@ pub struct FolderCreate {
         help = "Sync mode: sendreceive, receiveonly, or sendonly"
     )]
     pub mode: String,
-    #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
-    pub relay_fallback: bool,
     #[arg(long, help = "Add the created folder to a named network")]
     pub network: Option<String>,
     #[arg(
@@ -386,8 +385,6 @@ pub struct FolderJoin {
     pub path: PathBuf,
     #[arg(long, default_value = "receiveonly")]
     pub mode: String,
-    #[arg(long, help = "Enable Syncthing relay fallback for this folder")]
-    pub relay_fallback: bool,
     #[arg(long, help = "Add the joined folder to a named network")]
     pub network: Option<String>,
     #[arg(
@@ -772,7 +769,11 @@ pub enum SnapshotCommand {
 
 #[derive(Debug, Args)]
 pub struct StartArgs {
-    #[arg(long, alias = "background", help = "Run in the background (daemon mode)")]
+    #[arg(
+        long,
+        alias = "background",
+        help = "Run in the background (daemon mode; no automatic restart supervision)"
+    )]
     pub bg: bool,
     #[arg(long, help = "Run only the media HTTP server (standalone) and exit")]
     pub media_only: bool,
@@ -834,21 +835,6 @@ pub struct VerifyArgs {
     pub fix: bool,
     #[command(flatten)]
     pub providers: super::filter::ProviderSelector,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ScheduleCommand {
-    #[command(about = "Update the global schedule")]
-    Set {
-        #[arg(long)]
-        active: Option<String>,
-    },
-    #[command(about = "Set schedule overrides for a named folder")]
-    Folder {
-        name: String,
-        #[arg(long)]
-        active: Option<String>,
-    },
 }
 
 #[derive(Debug, Args)]
@@ -1000,17 +986,8 @@ pub enum PackageCommand {
         #[arg(value_name = "ARCHIVE")]
         archive: PathBuf,
     },
-    #[command(about = "Verify, stage, and atomically install a collection version")]
+    #[command(about = "Verify, stage, and atomically install (or upgrade to) a collection version")]
     Install {
-        ticket: String,
-        #[arg(
-            value_name = "PATH",
-            help = "Install root for the collection version (default: the data directory's packages directory)"
-        )]
-        path: Option<PathBuf>,
-    },
-    #[command(about = "Install a newer collection manifest version via ticket")]
-    Upgrade {
         ticket: String,
         #[arg(
             value_name = "PATH",
@@ -1057,13 +1034,10 @@ pub enum NetworkCommand {
     #[command(about = "Leave a network")]
     Leave { name: String },
     #[command(
-        about = "List networks, optionally limited to a single network by name",
+        about = "List networks, or inspect one network by name (--health, --peers) or folder peers",
         alias = "ls"
     )]
-    List {
-        #[arg(help = "Optional network name to inspect")]
-        name: Option<String>,
-    },
+    List(NetworkListArgs),
     #[command(about = "Generate a network invitation")]
     Invite {
         name: String,
@@ -1072,9 +1046,9 @@ pub enum NetworkCommand {
     },
     #[command(about = "Remove a device from a network")]
     Kick { name: String, device: String },
-    #[command(about = "Show recent network events")]
+    #[command(about = "Show recent network events (accepts a network name or ID)")]
     Events {
-        network_id: String,
+        network: String,
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
@@ -1083,21 +1057,21 @@ pub enum NetworkCommand {
         #[arg(value_name = "RELAY_URL")]
         relay_url: String,
     },
-    #[command(about = "Show network membership and health, optionally limited to a single network by name")]
-    Status {
-        #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
-        name: Option<String>,
-    },
-    #[command(about = "Show network connectivity health, optionally limited to a single network by name")]
-    Health {
-        #[arg(value_name = "NAME", help = "Optional network name or ID to inspect")]
-        name: Option<String>,
-    },
-    #[command(about = "Show peer availability for a folder: which peers joined and how seeded its blobs are")]
-    Peers {
-        #[arg(value_name = "FOLDER", help = "Optional folder path or namespace to inspect")]
-        folder: Option<String>,
-    },
+}
+
+#[derive(Debug, Args)]
+pub struct NetworkListArgs {
+    #[arg(help = "Optional network name or ID to inspect")]
+    pub name: Option<String>,
+    #[arg(long, help = "Include connectivity health (events/sessions) for the network")]
+    pub health: bool,
+    #[arg(
+        long,
+        value_name = "FOLDER",
+        num_args = 0..=1,
+        help = "Show peer availability for a folder (path or namespace) instead of networks"
+    )]
+    pub peers: Option<Vec<String>>,
 }
 
 #[derive(Debug, Subcommand)]

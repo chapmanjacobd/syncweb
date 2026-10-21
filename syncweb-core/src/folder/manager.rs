@@ -311,21 +311,23 @@ impl FolderManager {
     }
 
     /// Resolve a string selector to a folder namespace ID. Accepts a namespace ID,
-    /// an existing managed path, or falls back to the sole managed folder.
+    /// a unique namespace prefix, or the sole managed folder, using the shared
+    /// selector rules.
     ///
     /// # Errors
     ///
     /// Returns an error when the selector cannot be resolved to a namespace.
     pub async fn resolve_namespace(&self, selector: &str) -> Result<NamespaceId> {
-        if let Ok(namespace_id) = selector.parse() {
-            return Ok(namespace_id);
-        }
-        let folders = self.list().await?;
-        match folders.as_slice() {
-            [folder] => Ok(folder.namespace_id()),
-            [] => Err(SyncwebError::NoFolders),
-            _ => Err(SyncwebError::AmbiguousFolderSelector(selector.to_owned())),
-        }
+        let namespaces: Vec<String> = self
+            .list()
+            .await?
+            .into_iter()
+            .map(|folder| folder.namespace_id().to_string())
+            .collect();
+        let resolved = super::resolve_namespace(selector, &namespaces)?;
+        resolved
+            .parse()
+            .map_err(|error| SyncwebError::operation(format!("invalid namespace {resolved:?}"), error))
     }
 
     /// # Errors

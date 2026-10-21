@@ -10,7 +10,6 @@ syncweb package add ./dataset --name climate-hourly --version 1.0.0
 syncweb package publish --namespace <namespace> ./dataset
 syncweb package info <manifest-ticket>
 syncweb package install <manifest-ticket>
-syncweb package upgrade <manifest-ticket>
 ```
 
 Use `package export`/`package import` when the manifest and content must move
@@ -551,7 +550,7 @@ syncweb package install syncweb://package/<node-id>?v=1.2.0 /path/to/install
 # Done -- climate-hourly 1.2.0 installed
 
 # Upgrade to latest version
-syncweb package upgrade climate-hourly
+syncweb package install climate-hourly
 # Queries publisher for latest, fetches delta, swaps symlink
 
 # Remove a package
@@ -795,7 +794,7 @@ changed byte ranges need to be transferred.
 
 ```bash
 # Upgrade with delta sync (default behavior)
-syncweb package upgrade climate-hourly
+syncweb package install climate-hourly
 # Output:
 # Fetching delta for data/observations.csv (10.0 GiB, 500 MiB changed)...
 # Fetching 3 new files...

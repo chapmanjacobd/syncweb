@@ -769,8 +769,15 @@ impl Daemon {
             deferred.drain().collect()
         };
         for namespace in to_clear {
-            if let Ok(folder) = self.folder_manager.get(namespace).await {
-                let _ = folder.clear_metadata_only().await;
+            match self.folder_manager.get(namespace).await {
+                Ok(folder) => {
+                    if let Err(error) = folder.clear_metadata_only().await {
+                        tracing::warn!(%namespace, %error, "failed to restore eager downloads");
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%namespace, %error, "failed to restore eager downloads");
+                }
             }
         }
         Ok(())

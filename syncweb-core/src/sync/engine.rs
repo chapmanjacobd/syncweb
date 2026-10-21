@@ -301,16 +301,16 @@ async fn run_intent(
             received_command = commands.recv() => {
                 let Some(command) = received_command else {
                     let _result = folder.doc().leave().await;
-                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                    finalize_checkpoint(checkpoint.as_ref(), &events, false);
                     return;
                 };
                 if !handle_command(&folder, command, &mut state.paused, &events).await {
-                    finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                    finalize_checkpoint(checkpoint.as_ref(), &events, false);
                     return;
                 }
             }
             () = &mut quiesce, if !config.mode.is_continuous() && state.sync_finished && state.sizes.is_empty() => {
-                finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                finalize_checkpoint(checkpoint.as_ref(), &events, state.sync_succeeded);
                 return;
             }
             () = &mut forced_quiesce, if !config.mode.is_continuous() && state.sync_finished => {
@@ -318,7 +318,7 @@ async fn run_intent(
                 if pending > 0 {
                     tracing::warn!(%pending, "forced quiesce: content for some blobs never arrived");
                 }
-                finalize_checkpoint(checkpoint.as_ref(), &state, &events);
+                finalize_checkpoint(checkpoint.as_ref(), &events, state.sync_succeeded);
                 return;
             }
             next_event = live_events.next(), if !state.paused => {
@@ -368,14 +368,14 @@ impl IntentEventProcessor<'_> {
     async fn process(self, next_event: Option<Result<LiveEvent>>) -> IntentEventOutcome {
         let Some(event_result) = next_event else {
             let _result = self.events.send(SyncEvent::Finished);
-            finalize_checkpoint(self.checkpoint, self.state, self.events);
+            finalize_checkpoint(self.checkpoint, self.events, self.state.sync_succeeded);
             return IntentEventOutcome::Finished;
         };
         let live_event = match event_result {
             Ok(event) => event,
             Err(error) => {
                 let _result = self.events.send(SyncEvent::Failed(error.to_string()));
-                finalize_checkpoint(self.checkpoint, self.state, self.events);
+                finalize_checkpoint(self.checkpoint, self.events, false);
                 return IntentEventOutcome::Finished;
             }
         };
@@ -407,12 +407,12 @@ impl IntentEventProcessor<'_> {
                 Ok(false) => {
                     let message = format!("content-ready blob {hash} is missing locally");
                     let _result = self.events.send(SyncEvent::Failed(message));
-                    finalize_checkpoint(self.checkpoint, self.state, self.events);
+                    finalize_checkpoint(self.checkpoint, self.events, false);
                     return IntentEventOutcome::Finished;
                 }
                 Err(error) => {
                     let _result = self.events.send(SyncEvent::Failed(error.to_string()));
-                    finalize_checkpoint(self.checkpoint, self.state, self.events);
+                    finalize_checkpoint(self.checkpoint, self.events, false);
                     return IntentEventOutcome::Finished;
                 }
             }
@@ -427,7 +427,7 @@ impl IntentEventProcessor<'_> {
         self.state
             .apply(live_event, &self.config.params, self.config.filter.as_ref());
         if !send_progress(self.events, self.state, self.started.elapsed()) {
-            finalize_checkpoint(self.checkpoint, self.state, self.events);
+            finalize_checkpoint(self.checkpoint, self.events, false);
             return IntentEventOutcome::Finished;
         }
         IntentEventOutcome::Applied
@@ -476,16 +476,16 @@ fn setup_intent_checkpoint(folder: &crate::folder::SyncwebFolder, node_db: Optio
     (state, quiesce, forced_quiesce, checkpoint, completed_keys)
 }
 
-fn finalize_checkpoint(
-    checkpoint: Option<&SyncCheckpoint>,
-    state: &IntentState,
-    events: &mpsc::UnboundedSender<SyncEvent>,
-) {
+fn finalize_checkpoint(checkpoint: Option<&SyncCheckpoint>, events: &mpsc::UnboundedSender<SyncEvent>, complete: bool) {
     if let Some(cp) = checkpoint {
-        if state.completed > 0 {
-            let _ = cp.complete();
+        if complete {
+            if let Err(error) = cp.complete() {
+                tracing::warn!(%error, session = %cp.session_id(), "failed to complete sync checkpoint");
+            }
         } else {
-            let _ = cp.leave_unfinished();
+            if let Err(error) = cp.leave_unfinished() {
+                tracing::warn!(%error, session = %cp.session_id(), "failed to preserve sync checkpoint");
+            }
         }
     }
     let _ = events.send(SyncEvent::Finished);
@@ -536,6 +536,7 @@ struct IntentState {
     area_count: u64,
     area_size: u64,
     sync_finished: bool,
+    sync_succeeded: bool,
 }
 
 impl IntentState {
@@ -559,9 +560,13 @@ impl IntentState {
                         self.completed = self
                             .completed
                             .saturating_add(u64::try_from(details.entries_received).unwrap_or(u64::MAX));
+                        self.sync_succeeded = true;
                     }
-                    Ok(_details) => {}
+                    Ok(_details) => {
+                        self.sync_succeeded = true;
+                    }
                     Err(error) => {
+                        self.sync_succeeded = false;
                         // A failed sync *attempt* is a normal, non-fatal event
                         // in a peer-to-peer swarm: the remote peer may be
                         // offline, busy, or already syncing. Tearing down the
@@ -710,5 +715,28 @@ mod tests {
             state.sync_finished,
             "the intent should still record that a sync round finished"
         );
+        assert!(
+            !state.sync_succeeded,
+            "a failed sync attempt must not complete a checkpoint"
+        );
+    }
+
+    #[test]
+    fn successful_empty_sync_can_complete_a_checkpoint() {
+        let event = LiveEvent::SyncFinished(SyncEvent {
+            peer: SecretKey::generate().public(),
+            origin: Origin::Accept,
+            started: SystemTime::now(),
+            finished: SystemTime::now(),
+            result: Ok(serde_json::from_value(serde_json::json!({
+                "entries_received": 0,
+                "entries_sent": 0,
+            }))
+            .expect("empty sync details should deserialize")),
+        });
+        let mut state = IntentState::default();
+        state.apply(event, &SubscribeParams::default(), None);
+        assert!(state.sync_finished);
+        assert!(state.sync_succeeded);
     }
 }

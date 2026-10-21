@@ -15,7 +15,7 @@ manage sharing and publishing explicitly.
 | Share | `share <path>` | Public, read-only access (default) | A read-only share URL anyone can use to fetch content. Persisted + pins folder blobs. |
 | Share | `share <path> --write` | Public, write access | A write-access share URL; holders can edit. Persisted + pins folder blobs. |
 | Share | `share <path> --blob <hash>` | Public, read-only access | An unauthenticated `blob_ticket` for a single content hash. Blobs are immutable (no `--write`), always pinned (no `--no-pin`), and never persisted (no `--no-persist`). |
-| Share | `share list` / `share list <path>` | — | List persisted shares, optionally filtered by a folder path/namespace. |
+| Share | `access` | — | List persisted shares and per-folder read/write tickets (the former `share list`). |
 | Unshare | `access --revoke <path>` / `access --revoke --blob <hash>` | — | Stop sharing a folder (unpins blobs) or remove a shared blob pin. |
 | Publish | `indexing publish <folder> --catalog <name>` | Public (metadata) | Folder metadata written to a catalog (iroh-docs) for indexing/search. |
 | Package | `package publish <path> --namespace <ns>` | Public (catalog) | A collection manifest + head announced on the package-catalog gossip topic. |
@@ -24,7 +24,7 @@ Key distinction: `folders create` provisions a folder and shares it by default, 
 `syncweb://folder/<ns>?ticket=...` URL. Hand a `--write` ticket only to collaborators you
 trust to edit; hand a read-only ticket to anyone who may fetch the content. Use
 `--no-share` when you only want a local folder. `share` persists the record (see
-`share list` / `access --revoke`) and pins the folder's blobs by default (`--no-pin` to skip,
+`access` / `access --revoke`) and pins the folder's blobs by default (`--no-pin` to skip,
 `--no-persist` to avoid saving). `share --blob` publishes a single immutable content hash
 (always pinned, never persisted). `folders join` accepts either the `syncweb://...` URL or a bare
 ticket.
@@ -85,14 +85,15 @@ syncweb package install <manifest-ticket> [install-root]
 # Publish a later version, then update an existing installation.
 syncweb package bump ./dataset --version 1.1.0 --changelog "New observations"
 syncweb package publish --namespace <namespace> ./dataset
-syncweb package upgrade <new-manifest-ticket>
+syncweb package install <new-manifest-ticket>
 ```
 
 Use `package export` and `package import` for a compressed offline archive.
 Use `package inspect` to verify an archive and print its roots, collection,
 version, block count, and verified byte count without importing it.
 Installations default to the local data directory's package store, or to an
-explicit install root when one is passed to `package install`/`package upgrade`.
+explicit install root when one is passed to `package install` (which also
+upgrades an existing installation).
 `--json` is available for automation on each step; package list-shaped results
 are wrapped under named keys rather than emitted as bare arrays.
 
@@ -482,9 +483,6 @@ syncweb folders create --mode sendreceive ./documents
 # Create with network membership
 syncweb folders create --network work ./documents
 
-# Create with relay fallback
-syncweb folders create --relay-fallback ./documents
-
 # Create and ingest an already-populated directory in one step (default; the
 # embedded mode scans and imports existing files automatically)
 syncweb folders create ./documents
@@ -511,9 +509,9 @@ syncweb share <ns> --write
 # Share a single content hash as an unauthenticated blob ticket
 syncweb share <ns> --blob <hash>
 
-# List persisted shares, optionally filtered by namespace/path selectors
-syncweb share list
-syncweb share list <ns>
+# List persisted shares and their tickets (the former `share list`)
+syncweb access
+syncweb access <ns>
 
 # Stop sharing a folder (unpins blobs) or remove a shared blob pin
 syncweb access --revoke --write ./documents
@@ -583,8 +581,7 @@ syncweb config set discovery.interface eth0
 | `version` | `version` | Show versions |
 | (implicit) | `folders import` | Import local files to blob store + doc entries |
 | | `share` | Share a folder: read-only access by default, `--write` for write access; persists + pins |
-| | `share list` | List persisted folder shares, optionally filtered by selectors |
-| | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets, network membership, and inbound peers (Devices column when the daemon answers); `access --revoke <path> [--read\|--write]` revokes in place |
+| | `access` | One dashboard of who can read/write each folder: mode, share capability, outbound share tickets (the former `share list`), network membership, and inbound peers (Devices column when the daemon answers); `access --revoke <path> [--read\|--write]` revokes in place |
 | | `share --blob` | Publish a single content hash as an unauthenticated blob ticket (always pinned, never persisted) |
 | | `access --revoke --blob` | Remove a shared blob pin |
 | | `indexing publish` | Publish folder metadata to a catalog |
@@ -597,8 +594,7 @@ syncweb config set discovery.interface eth0
 | | `package export` | Export package versions as compressed `.car.zst` drops |
 | | `package import` | Import and install a compressed `.car.zst` drop (`--no-seeding` keeps imported blocks local) |
 | | `package inspect` | Verify and inspect a compressed `.car.zst` drop without importing it |
-| | `package install` | Fetch + verify + install package |
-| | `package upgrade` | Update to latest version |
+| | `package install` | Fetch + verify + install (or upgrade to) a collection version |
 | | `package remove` | Remove installed package |
 | | `package verify` | Integrity check against manifest |
 | | `package list` | List locally installed packages |
@@ -614,23 +610,22 @@ syncweb config set discovery.interface eth0
 | | `transfer enqueue` | Queue an individually addressable blob/file job |
 | | `transfer allocate` | Dry-run or persist capacity-aware placement decisions |
 | | `transfer materialize` | Fetch and verify assigned jobs through the daemon |
-| | `transfer pause/resume/cancel/retry` | Control an individual durable transfer job |
+| | `transfer set <job> <pause\|resume\|cancel\|retry>` | Control an individual durable transfer job |
 | | `snapshot create` | Create content-addressed snapshot of folder |
 | | `snapshot restore` | Restore folder from snapshot |
 | | `snapshot list` | List available snapshots |
 | | `network create` | Create named network group |
-| | `network list` | List networks |
-| | `network status` | List networks and their health |
+| | `network list` | List networks, or inspect one by name; `--health` adds connectivity health (the former `network status`/`health`), `--peers [folder]` shows per-folder peer availability (the former `network peers`) |
 | | `network join` | Join a network via ticket |
 | | `network leave` | Leave a network |
 | | `network invite` | Invite device to a network |
 | | `network kick` | Remove device from a network |
-| | `network peers` | Show peer availability for a folder: inbound peers (who joined) and per-blob seeding (`--json` always available) |
 | | `stats network` | Bandwidth accounting per folder/peer |
 | | `stats files` | File-level statistics for synced folder content |
 
 | | `verify` | Integrity verification (re-check local blobs) |
-| | `config schedule` | Show/modify sync schedule |
+| | `config set schedule.active_hours <window>` | Set the global sync schedule (former `config schedule set`) |
+| | `config set schedule.folders.<name>.active_hours <window>` | Override the sync schedule for a named folder (former `config schedule folder`) |
 | | `watch` | Watch a folder, importing filesystem changes and honoring filter rules (`--filters`, `--dry-run`, `--show-filters`) |
 | | `network test-relay <relay-url>` | Test Syncthing relay connectivity |
 
@@ -654,12 +649,12 @@ syncweb stats network --since 24h --json   # Last 24h of transfer events as JSON
 syncweb stats network --follow             # Stream sync progress live
 syncweb stats network --follow --once      # One-shot snapshot (cron-safe) and exit
 syncweb --json network events <network-id> # Operational events under {"events":[...]}
-syncweb --json network health              # Network health with event_counts metrics
+syncweb --json network list --health      # Network health with event_counts metrics
 syncweb stats files --folder ./documents
 syncweb verify ./documents
-syncweb config schedule
-syncweb config schedule set --active "22:00-06:00"
-syncweb config schedule folder --active "01:00-05:00" media
+syncweb config show schedule
+syncweb config set schedule.active_hours "22:00-06:00"
+syncweb config set schedule.folders.media.active_hours "01:00-05:00"
 syncweb config set transfer_limits.max_download_per_day 20G
 
 # Download with limits (max entries)
@@ -703,9 +698,9 @@ syncweb share <namespace-id>
 syncweb share <namespace-id> --blob <hash>
 syncweb indexing publish --catalog <name> --tag music /path/to/folder
 
-# List and remove persisted shares; remove a shared blob pin
-syncweb share list
-syncweb share list <namespace-id>
+# List persisted shares; remove a shared blob pin
+syncweb access
+syncweb access <namespace-id>
 syncweb access --revoke --write /path/to/folder
 syncweb access --revoke <namespace-id> --blob <hash>
 

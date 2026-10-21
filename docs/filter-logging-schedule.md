@@ -236,9 +236,9 @@ impl ScheduleManager {
 ### CLI
 
 ```bash
-syncweb config schedule               # Show current schedule
-syncweb config schedule set --active "22:00-06:00"
-syncweb config schedule folder --active "01:00-05:00" media
+syncweb config show schedule          # Show current schedule
+syncweb config set schedule.active_hours "22:00-06:00"
+syncweb config set schedule.folders.media.active_hours "01:00-05:00"
 ```
 
 ---

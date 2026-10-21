@@ -6,7 +6,8 @@ use iroh_blobs::{
         Store as BlobApi,
         blobs::{AddPathOptions, BlobReader, BlobStatus, ExportMode, ExportOptions, ImportMode},
     },
-    protocol::GetRequest,
+    get::fsm,
+    protocol::{ChunkRanges, ChunkRangesExt, GetRequest},
     ticket::BlobTicket,
 };
 use n0_future::StreamExt;
@@ -14,6 +15,8 @@ use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::{Result, SyncwebError};
+
+const BLAKE3_CHUNK_SIZE: u64 = 1024;
 
 #[derive(Clone)]
 pub struct BlobStore {
@@ -401,6 +404,89 @@ impl BlobStore {
             .await
             .map_err(|error| SyncwebError::operation("failed to connect to peer", error))?;
         self.force_fetch_from_conn(conn, hash).await
+    }
+
+    /// Fetch and verify one byte range from a remote blob provider.
+    ///
+    /// The Iroh blobs protocol rounds requests to verified BLAKE3 chunks. The
+    /// returned bytes are trimmed back to the exact requested range before
+    /// being returned to the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider cannot be reached, the range is
+    /// unavailable, or the verified response does not cover the request.
+    pub async fn fetch_segment_from_peer(
+        &self,
+        endpoint: &Endpoint,
+        peer: &iroh::EndpointAddr,
+        hash: Hash,
+        offset: u64,
+        length: u64,
+    ) -> Result<Vec<u8>> {
+        if length == 0 {
+            return Err(SyncwebError::InvalidConfig(
+                "segment length must be non-zero".to_owned(),
+            ));
+        }
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| SyncwebError::InvalidConfig("segment range overflows u64".to_owned()))?;
+        self.address_lookup.add_endpoint_info(peer.clone());
+        let conn = endpoint
+            .connect(peer.id, iroh_blobs::protocol::ALPN)
+            .await
+            .map_err(|error| SyncwebError::operation("failed to connect to segment provider", error))?;
+        let request = GetRequest::builder().root(ChunkRanges::bytes(offset..end)).build(hash);
+        let connected = fsm::start(conn, request, fsm::RequestCounters::default())
+            .next()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to open segment request", error))?;
+        let next = connected
+            .next()
+            .await
+            .map_err(|error| SyncwebError::operation("failed to send segment request", error))?;
+        let (at_end, bytes) = match next {
+            fsm::ConnectedNext::StartRoot(at_start) => at_start
+                .next()
+                .concatenate_into_vec()
+                .await
+                .map_err(|error| SyncwebError::operation("failed to verify segment response", error))?,
+            fsm::ConnectedNext::StartChild(_) | fsm::ConnectedNext::Closing(_) => {
+                return Err(SyncwebError::operation(
+                    "failed to verify segment response",
+                    "provider returned no root blob",
+                ));
+            }
+        };
+        match at_end.next() {
+            fsm::EndBlobNext::Closing(at_closing) => at_closing
+                .next()
+                .await
+                .map_err(|error| SyncwebError::operation("failed to close segment response", error))?,
+            fsm::EndBlobNext::MoreChildren(_) => {
+                return Err(SyncwebError::operation(
+                    "failed to verify segment response",
+                    "provider returned an unexpected child blob",
+                ));
+            }
+        };
+
+        let aligned_offset = offset.saturating_sub(offset % BLAKE3_CHUNK_SIZE);
+        let trim = usize::try_from(offset.saturating_sub(aligned_offset))
+            .map_err(|error| SyncwebError::operation("segment offset is not addressable", error))?;
+        let requested = usize::try_from(length)
+            .map_err(|error| SyncwebError::operation("segment length is not addressable", error))?;
+        let end_index = trim
+            .checked_add(requested)
+            .ok_or_else(|| SyncwebError::InvalidConfig("segment response length overflows usize".to_owned()))?;
+        let exact = bytes.get(trim..end_index).ok_or_else(|| {
+            SyncwebError::operation(
+                "failed to verify segment response",
+                "provider returned fewer bytes than requested",
+            )
+        })?;
+        Ok(exact.to_vec())
     }
 
     async fn force_fetch_from_conn(&self, conn: iroh::endpoint::Connection, hash: Hash) -> Result<()> {

@@ -70,7 +70,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --beacon-port 'Base UDP port the beacon spreads network scopes over'
             cand --discovery-interface 'Restrict the beacon to a single network interface by name'
             cand --media-listen 'Media HTTP server listen address (e.g. 127.0.0.1:9193)'
-            cand --bg 'Run in the background (daemon mode)'
+            cand --bg 'Run in the background (daemon mode; no automatic restart supervision)'
             cand --media-only 'Run only the media HTTP server (standalone) and exit'
             cand --no-relay 'Disable Iroh relay mode (no relay server connections)'
             cand --no-mdns 'Disable mDNS local peer discovery'
@@ -161,7 +161,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --mode 'Sync mode: sendreceive, receiveonly, or sendonly'
             cand --network 'Add the created folder to a named network'
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --import 'Scan and import existing files in the directory'
             cand --no-import 'Skip scanning existing files in the directory'
             cand --write 'Grant write access on the share ticket (default: read-only)'
@@ -186,7 +185,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --max-count 'max-count'
             cand --max-size 'max-size'
             cand --data-dir 'Directory used for persistent node identity and data'
-            cand --relay-fallback 'Enable Syncthing relay fallback for this folder'
             cand --subscribe 'Track + enable live syncing (persisted subscribe-changes); off by default, idempotent on an existing folder'
             cand --ingest-only 'Only deliver entries ingested after live syncing is enabled'
             cand --ignore-self 'Ignore events emitted by this device''s own writes'
@@ -521,10 +519,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand enqueue 'Enqueue an individually addressable file job'
             cand allocate 'Allocate queued jobs to configured roots'
             cand materialize 'Fetch and materialize assigned jobs through the daemon'
-            cand pause 'Pause a transfer job'
-            cand resume 'Resume a paused transfer job'
-            cand cancel 'Cancel a transfer job'
-            cand retry 'Retry a failed transfer job'
+            cand set 'Change a transfer job''s lifecycle state (pause, resume, cancel, retry)'
         }
         &'syncweb;transfer;info'= {
             cand --namespace 'Limit display to a namespace'
@@ -611,7 +606,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;transfer;pause'= {
+        &'syncweb;transfer;set'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -619,41 +614,8 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
             cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
             cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;transfer;resume'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;transfer;cancel'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;transfer;retry'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
+            cand -h 'Print help (see more with ''--help'')'
+            cand --help 'Print help (see more with ''--help'')'
         }
         &'syncweb;share'= {
             cand --blob 'Share a single content hash as an unauthenticated blob ticket (blobs are immutable; always pinned, never persisted)'
@@ -670,19 +632,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand list 'List persisted shares, optionally filtered by path'
             cand provider 'Manage blob provider registrations'
-        }
-        &'syncweb;share;list'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
         }
         &'syncweb;share;provider'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -798,8 +748,7 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand import 'Import and install a compressed CAR archive file'
             cand info 'Show a collection manifest from a ticket or blob hash'
             cand inspect 'Inspect and verify a compressed CAR archive without importing it'
-            cand install 'Verify, stage, and atomically install a collection version'
-            cand upgrade 'Install a newer collection manifest version via ticket'
+            cand install 'Verify, stage, and atomically install (or upgrade to) a collection version'
             cand remove 'Remove a non-current installed collection version'
             cand verify 'Verify an installed collection version'
             cand list 'List locally installed collections'
@@ -913,17 +862,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;package;upgrade'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'syncweb;package;remove'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -993,14 +931,11 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand create 'Create a named network'
             cand join 'Join a network from an invitation'
             cand leave 'Leave a network'
-            cand list 'List networks, optionally limited to a single network by name'
+            cand list 'List networks, or inspect one network by name (--health, --peers) or folder peers'
             cand invite 'Generate a network invitation'
             cand kick 'Remove a device from a network'
-            cand events 'Show recent network events'
+            cand events 'Show recent network events (accepts a network name or ID)'
             cand test-relay 'Test a Syncthing relay TCP connection'
-            cand status 'Show network membership and health, optionally limited to a single network by name'
-            cand health 'Show network connectivity health, optionally limited to a single network by name'
-            cand peers 'Show peer availability for a folder: which peers joined and how seeded its blobs are'
         }
         &'syncweb;network;create'= {
             cand --label 'label'
@@ -1038,7 +973,9 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;network;list'= {
+            cand --peers 'Show peer availability for a folder (path or namespace) instead of networks'
             cand --data-dir 'Directory used for persistent node identity and data'
+            cand --health 'Include connectivity health (events/sessions) for the network'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
             cand --yes 'Assume yes to every destructive-operation prompt'
@@ -1083,39 +1020,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;network;test-relay'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;network;status'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;network;health'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;network;peers'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
@@ -1397,7 +1301,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand check 'Run integrity check on all databases'
             cand vacuum 'Run VACUUM to reclaim space in all databases'
             cand stats 'Show database sizes and table statistics'
-            cand backup 'Back up databases, configuration, identity, and optionally blobs'
         }
         &'syncweb;db;check'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1432,19 +1335,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'syncweb;db;backup'= {
-            cand --output 'output'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --include-blobs 'Also copy the blob store (can be very large); off by default'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'syncweb;config'= {
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
@@ -1457,7 +1347,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
             cand set 'Set a configuration value'
             cand show 'Show configuration, optionally limited to a section'
-            cand schedule 'Show or update synchronization schedules'
         }
         &'syncweb;config;set'= {
             cand --data-dir 'Directory used for persistent node identity and data'
@@ -1471,43 +1360,6 @@ set edit:completion:arg-completer[syncweb] = {|@words|
             cand --help 'Print help'
         }
         &'syncweb;config;show'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;config;schedule'= {
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-            cand set 'Update the global schedule'
-            cand folder 'Set schedule overrides for a named folder'
-        }
-        &'syncweb;config;schedule;set'= {
-            cand --active 'active'
-            cand --data-dir 'Directory used for persistent node identity and data'
-            cand --verbose 'Enable verbose structured logging'
-            cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
-            cand --yes 'Assume yes to every destructive-operation prompt'
-            cand --no-daemon 'Bypass the daemon and use an embedded node for supported commands'
-            cand --embedded 'Bypass the daemon and use an embedded node for supported commands'
-            cand --no-color 'Disable ANSI colors in interactive prompts and progress output'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'syncweb;config;schedule;folder'= {
-            cand --active 'active'
             cand --data-dir 'Directory used for persistent node identity and data'
             cand --verbose 'Enable verbose structured logging'
             cand --json 'Emit machine-readable JSON. Each command prints a single JSON object (arrays only inside a named key); streaming commands (stats network --follow) print one JSON object per line (NDJSON)'
